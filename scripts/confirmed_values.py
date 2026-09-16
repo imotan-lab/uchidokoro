@@ -680,11 +680,10 @@ def _validate_record(field: str, rec) -> list:
             toks = check_shape(base, rec["value"])
         except Exception:                                    # noqa: BLE001
             toks = []
-        for i, x in enumerate(src):
-            q = " ".join(str((x or {}).get("quote") or "").split())
-            for tk in toks:
-                if not token_in_quote(tk, q):
-                    ng.append(f"{field}: 値『{tk}』が出典{i + 1}の引用にありません")
+        # ★書き込みと同じ関数を通す★（2026-09-16・台帳#691）＝
+        #   ★別々に書くと、控えのファイルを手で書き換えたときに
+        #     書き方の控えが一度も確かめられずに効く★。
+        ng += wording_problems(field, toks, src)
     return ng
 
 
@@ -776,6 +775,34 @@ def parse_source(spec: str) -> dict:
     return {"publisher": pub, "url": url, "quote": quote}
 
 
+def _num_edge(q: str, i: int, step: int) -> bool:
+    """★位置 i の字が「数の続き」か★（step=-1 なら左へ、+1 なら右へ）
+
+    ★全角も見る★（2026-09-16・Codexの指摘）＝数の字は `isnumeric` が
+    全角も漢数字も拾うのに、区切りだけ半角を並べていたので
+    「１，６００」の中の「６００」が通っていた。
+    ★名簿を並べずに、同じ字へそろえてから比べる★（NFKC）。
+
+    ★★区切りは「その向こうにも数がある」ときだけ数の続き★★
+      （2026-09-16・Codexの指摘）
+      ★直す前★＝隣が「、」「．」なら無条件に別の数の一部と見ていたので、
+      ★句読点として使われただけの正常な引用まで断っていた★。実測＝
+        値 ６００ ／ 引用「天井は６００，恩恵はAT当選」→ 断っていた
+        値 600   ／ 引用「天井は600, 恩恵はAT当選」  → 断っていた
+      ＝これは#691そのものと同じ型（2AIが正しく決めても記録できない）。
+    """
+    if i < 0 or i >= len(q):
+        return False                       # ★文頭・文末は境目★
+    c = q[i]
+    if c.isnumeric():
+        return True
+    import unicodedata
+    if unicodedata.normalize("NFKC", c) not in ".,":
+        return False
+    j = i + step
+    return 0 <= j < len(q) and q[j].isnumeric()
+
+
 def token_in_quote(token: str, quote: str) -> bool:
     """★その値が、引用に**その値として**書かれているか★
 
@@ -792,32 +819,171 @@ def token_in_quote(token: str, quote: str) -> bool:
       （文字の値は今までどおり部分一致。機種名や恩恵は
         文の一部として書かれているのが普通なので）。
     ★3.1 と 3.10 は別の値として扱う★（末尾に数字が続くため）。
+
+    ★★2026-09-16・Codexの指摘（台帳#691）★★
+      ★直す前は「まるごと数の形の字」にしか境目を見ていなかった★ので、
+      **数で始まる／終わる言葉**が別の数の一部に一致した。実測＝
+
+        値 1000G        ／ 引用「天井は11000Gです」          → 通っていた
+        値 100ゲーム消化 ／ 引用「1100ゲーム消化からCZ」       → 通っていた
+        値 千ゲーム消化  ／ 引用「二千ゲーム消化からCZ」       → 通っていた
+
+      ＝★出典と違う数を、書かれていることにできた★（読者に出る数が変わる）。
+      ★境目は「その字の端が数かどうか」で見る★＝
+      先頭が数の字なら手前が、末尾が数の字なら後ろが、数でないこと。
+      ★漢数字も数★（`isnumeric`。二千の「二」で止める）。
     """
     t = str(token or "").strip()
     q = " ".join(str(quote or "").split())
     if not t:
         return False
-    if not _NUMBERISH.match(t):
-        return t in q                      # 文字の値は今までどおり
     for m in _re.finditer(_re.escape(t), q):
-        before = q[m.start() - 1] if m.start() > 0 else ""
-        after = q[m.end()] if m.end() < len(q) else ""
-        # ★★空文字は「どんな文字列にも含まれる」★★（2026-08-25・自分で踏んだ）
-        #   ★直す前は `before in "0123456789."` と書いていた★ので、
-        #   数字が**文頭または文末**にあると before/after が空文字になり、
-        #   Python では `"" in "0123..."` が真になって**必ず弾いていた**。
-        #   ＝引用に「600G」「天井は600」と書いてあっても照合できない
-        #     ＝★2AIが正しく確定した値を記録できない★（正しい答えが入らない経路）。
-        #   実測＝'600G' も '天井は600' も False だった。
-        # ★★けた区切りのカンマも数の一部★★（2026-08-25・Codexの21回目）
-        #   ★直す前はカンマを境界と見ていなかった★ので、
-        #   値 600 が引用「天井は1,600G」に一致した。
-        #   ＝出典に書かれていない数を、書かれていることにできる。
-        if (before and before in "0123456789.,") \
-                or (after and after in "0123456789.,"):
+        # ★端が数の字のときだけ、その側の境目を見る★（ここが唯一の判定）
+        #   ★★区切りは全角も見る★★（2026-09-16・Codexの指摘）
+        #     ★直す前★＝数の字は `isnumeric` で全角も漢数字も拾うのに、
+        #     区切りは半角の `.,` しか見ていなかった。実測＝
+        #       値 ６００ ／ 引用「天井は１，６００G」→ 通っていた
+        #       値 １     ／ 引用「天井は１．５G」   → 通っていた
+        #     天井の形は `^\d{1,5}$` で全角も入口を通るので、実在しうる。
+        #   ★★空文字は「どんな文字列にも含まれる」★★（2026-08-25・自分で踏んだ）
+        #     ★直す前は `before in "0123456789."` と書いていた★ので、
+        #     数字が**文頭または文末**にあると before/after が空文字になり、
+        #     Python では `"" in "0123..."` が真になって**必ず弾いていた**。
+        #     ＝引用に「600G」「天井は600」と書いてあっても照合できず、
+        #     ★2AIが正しく確定した値を記録できない★（正しい答えが入らない経路）。
+        #   ★★けた区切りのカンマも数の一部★★（2026-08-25・Codexの21回目）
+        #     ★直す前はカンマを境界と見ていなかった★ので、
+        #     値 600 が引用「天井は1,600G」に一致した。
+        if t[:1].isnumeric() and _num_edge(q, m.start() - 1, -1):
+            continue                       # ★別の数の一部★
+        if t[-1:].isnumeric() and _num_edge(q, m.end(), 1):
             continue                       # ★別の数の一部★
         return True
     return False
+
+MIN_WORDING_WHY = 15
+
+
+def _has_number(s) -> bool:
+    """★数を表す字を含むか★＝含むものは書き方の違いで通さない。
+
+    ★★`isdigit()` では足りない★★（2026-09-16・Codexの指摘）
+      ★直す前★＝`isdigit()` で見ていたので、漢数字とローマ数字が素通りした。
+      実測＝千・百・万・一・二・三・〇・零・Ⅲ はどれも `isdigit()` が偽で
+      `isnumeric()` が真。
+      ＝「千ゲーム消化 → 百ゲーム消化」を★書き方の違いとして通せた★。
+      これは表記ゆれではなく**別の数**なので、通してはいけない。
+    ★ここで止められないもの（正直に）★＝かな書き・英単語の数詞
+      （「せんゲーム」「one」）。★字の性質では判定できない★ので、
+      そこは2AIの判断と、記録に残る理由が受け持つ。
+      ★名簿（数詞の辞書）は作らない★＝意味の判断を機械にやらせる形になる。
+    """
+    return any(c.isnumeric() for c in str(s or ""))
+
+
+def wording_problems(field: str, toks, sources) -> list:
+    """★値が出典ごとに支えられているかを決める、唯一の場所★（台帳#691）
+
+    ★★なぜ要るか★★（2026-09-16・運営者の指示）
+      ＞ 2AIでは決まってるのにその後機械に渡すと弾かれてるみたいだけど
+      ＞ これじゃ意味ないじゃん 修正して更新できるようにして
+      2社が同じ事実を別の言葉で書いていると
+      （なな徹「レア小役」／ちょんぼりすた「レア役」）、
+      どちらを値にしてももう一方が落ち、
+      ★独立2出典を永久に満たせなかった★（実例＝dmm_5086）。
+
+    ★★この守り自体は正しいので外さない★★
+      2026-08-09に入れたもので、引用が「1000pt」なのに値を「1000G」と
+      書けた穴を塞いでいる。★開けるのは「数を含まない言葉」だけ★。
+
+    ★機械が決めること★＝①控えた書き方がその引用に実在するか
+      ②数が絡んでいないか ③値の字が、どれか1つの出典にそのまま在るか
+      ④理由が書いてあるか。
+    ★2AIが決めること★＝その2つが同じ意味かどうか（理由は機械が読まない）。
+
+    ★★「数が絡む」の線は、値ぜんたいで見る★★（2026-09-16・自分で踏んだ）
+      ★はじめ「その字が数を含むか」で見ていた★が、
+      値は字ごとに分かれて照合される（天井なら 1000 と pt が別の字）ので、
+      ★単位の字だけを pt → G と控えれば、数を含まないまま通った★
+      ＝2026-08-09に塞いだ穴がそのまま開く。
+      ★どれか1つの字が数を含めば、その値では書き方の違いを一切許さない★。
+
+    ★書き込み側と読み込み側で同じ関数を通す★（同じ規則を2か所に書かない）。
+    戻り値は問題の一覧（空なら合格）。
+    """
+    ng = []
+    toks = [str(t) for t in (toks or [])]
+    src = [s for s in (sources or []) if isinstance(s, dict)]
+    # ★★数が絡む値は、書き方の違いを一切許さない★★（この判定は値ぜんたい）
+    _measured = any(_has_number(t) for t in toks)
+    for i, s in enumerate(src):
+        who = str(s.get("publisher") or "") or f"出典{i + 1}"
+        q = " ".join(str(s.get("quote") or "").split())
+        wmap = s.get("wording")
+        if wmap is None:
+            wmap = {}
+        if not isinstance(wmap, dict):
+            ng.append(f"{field}: 出典{i + 1}の書き方の控えが組ではありません")
+            wmap = {}
+        # ★★控えは、使われるかどうかに関わらず全部確かめる★★
+        #   （2026-09-16・Codexの指摘）
+        #   ★直す前★＝値が引用にそのまま在ると、その字に付いた控えを
+        #   ★一度も見ずに保存していた★。＝「控えは全部確かめてある」という
+        #   約束になっていない。あとで値の書き方が変わった日に、
+        #   確かめていない控えが黙って効き始める。
+        _ok_wording = set()
+        for k, v in wmap.items():
+            alt = str(v or "").strip()
+            if str(k) not in toks:
+                # ★関係のない控えを残させない★
+                ng.append(f"{field}: 出典{i + 1}の書き方の控え『{k}』は"
+                          "この値の字ではありません")
+                continue
+            if not alt:
+                ng.append(f"{field}: 出典{i + 1}の書き方の控え『{k}』が空です")
+                continue
+            if _measured or _has_number(alt):
+                # ★ここが「単位や数の取り違え」と「表記ゆれ」の線★
+                ng.append(f"{field}: 数が絡む値は書き方の違いで通しません"
+                          f"（『{k}』↔『{alt}』・{who}）"
+                          "／★単位や恩恵の取り違えを止めるため★")
+                continue
+            if alt == str(k):
+                ng.append(f"{field}: 出典{i + 1}の書き方の控えが値と同じです")
+                continue
+            if not token_in_quote(alt, q):
+                ng.append(f"{field}: {who} の引用に『{alt}』がありません"
+                          "（★控えた書き方は、その引用に実在すること★）")
+                continue
+            if len(str(s.get("wording_why") or "").strip()) < MIN_WORDING_WHY:
+                ng.append(f"{field}: {who} の書き方の違いに理由がありません"
+                          f"（{MIN_WORDING_WHY}文字以上）")
+                continue
+            _ok_wording.add(str(k))        # ★全部通ったものだけ★
+        # ★値が、この出典で支えられているか★
+        for token in toks:
+            if token_in_quote(token, q):
+                continue
+            if str(token) in _ok_wording:
+                continue                   # 確かめた控えが支えている
+            if str(token) in wmap:
+                continue                   # 控えの問題は上で挙げている
+            ng.append(f"{field}: 値『{token}』が {who} の引用にありません"
+                      "（★出典ごとに同じ値を支えている必要があります★）")
+    # ★★値の字は、どれか1つの出典がそのまま書いていること★★
+    #   ★これが無いと★＝どこにも書かれていない言葉を値にして、
+    #   出典を全部「書き方の違い」で埋められる＝★2AIが値を作れる★。
+    for token in toks:
+        if not any(str(token) in (s.get("wording") or {})
+                   for s in src if isinstance(s.get("wording"), dict)):
+            continue                       # 控えを使っていない値は上で見た
+        if any(token_in_quote(token, " ".join(str(s.get("quote") or "").split()))
+               for s in src):
+            continue
+        ng.append(f"{field}: 値『{token}』を、そのまま書いている出典が"
+                  "1つもありません（★控えてよいのは書き方の違いだけ★）")
+    return ng
+
 
 # ★★出典1つでも確定してよい項目★★（2026-08-27・運営者の判断）
 #   ★数値ではない分類だけ★＝「この機種はボーナスタイプか」のように、
@@ -1127,13 +1293,10 @@ def record(slug: str, field: str, value, sources: list, by: list,
     # ★値の形を確かめ、引用と照合する表示値を決める★（依頼131 P0-3・P1）
     #   単位や恩恵まで照合しないと、引用が「1000pt」でも値を「1000G」にできた。
     toks = check_shape(field, value)
-    for s in sources:
-        q = " ".join(str(s["quote"]).split())
-        for token in toks:
-            if not token_in_quote(token, q):
-                raise ConfirmedError(
-                    f"値『{token}』が {s['publisher']} の引用にありません"
-                    "（★出典ごとに同じ値を支えている必要があります★）")
+    # ★照合は1か所★（2026-09-16・台帳#691）＝読み込み側と同じ関数を通す。
+    _wng = wording_problems(field, toks, sources)
+    if _wng:
+        raise ConfirmedError("／".join(_wng[:3]))
     # ★引用が本当にそのページにあるか・そのページがその機種かを確かめる★
     sources = [verify_source(dict(s), name, fetch) for s in sources]
     # ★控えが無いときは作らない★（2026-08-24・Codexの9回目）
@@ -1766,6 +1929,145 @@ def selftest() -> int:
               "（つなげて探していたので1出典だけでも通った）",
               lambda: rec(sources=[parse_source("https://chonborista.com/1|" + Q1),
                                    parse_source("https://nana-press.com/1|天井なし")]))
+        # ─── ★★2AIが決めた書き方の違いを受け取る★★（2026-09-16・台帳#691）
+        #   ★運営者の指示★＝「2AIでは決まってるのにその後機械に渡すと
+        #   弾かれてるみたいだけどこれじゃ意味ないじゃん 修正して更新できるように」
+        #   ★実例★＝なな徹「レア小役」／ちょんぼりすた「レア役」。
+        #   どちらを値にしてももう一方が落ち、独立2出典を満たせなかった。
+        _QA = "通常時は基本的にレア役や規定G数消化からCZを目指す流れです"
+        _QB = "通常時はレア小役や規定ゲーム数到達からCZを経由して当選します"
+
+        def _fetch_w(url):
+            q = _QA if "chonborista" in url else _QB
+            return ("<title>" + NAME + " スロット 新台 天井 | 解析</title>"
+                    "<body><h1>" + NAME + "</h1><p>" + q + "。"
+                    + ("説明。" * 30) + "</p></body>")
+
+        def _src_w(wording=None, why="レア小役はレア役の書き方の違いです"):
+            a = parse_source("https://chonborista.com/1|" + _QA)
+            b = parse_source("https://nana-press.com/1|" + _QB)
+            if wording is not None:
+                b["wording"] = wording
+                b["wording_why"] = why
+            return [a, b]
+
+        def _rec_w(**kw):
+            base = dict(field="gameplay#normal_cz",
+                        value={"trigger": "レア役", "leads_to": "CZ"},
+                        fetch=_fetch_w, sources=_src_w({"レア役": "レア小役"}))
+            base.update(kw)
+            return rec(**base)
+        t("★★2AIが「同じ意味だ」と決めれば、書き方が違っても記録できる★★"
+          "（★直す前は、どちらを値にしてももう一方が落ちて"
+          "独立2出典を永久に満たせなかった★）",
+          bool(_rec_w()))
+        stops("　（対照）控えが無ければ、今までどおり断る",
+              lambda: _rec_w(sources=_src_w()))
+        stops("　（対照）控えた書き方が、その引用に無ければ断る",
+              lambda: _rec_w(sources=_src_w({"レア役": "どこにも無い言葉"})))
+        stops("　（対照）なぜ同じ意味かを書かなければ断る",
+              lambda: _rec_w(sources=_src_w({"レア役": "レア小役"}, why="短い")))
+        # ★★数が絡む値は、書き方の違いを一切許さない★★
+        #   ★ここは「その字が数を含むか」では守れない★＝値は字ごとに
+        #   照合されるので、天井は 1000 と pt に分かれ、
+        #   ★単位の字だけを pt → G と控えれば数を含まないまま通る★。
+        #   ＝2026-08-09に塞いだ「引用が1000ptなのに値を1000G」がそのまま開く。
+        #   ★対照の作り★＝1つ目の出典は 1000pt をそのまま書いているので
+        #   隣の守り（引用に無い／どこにも無い字）では止まらない。
+        _QP = "この機種の天井は1000ptで、到達するとATに当選します"
+        _QG = "この機種の天井は1000Gで、到達するとATに当選します"
+
+        def _fetch_u(url):
+            q = _QP if "chonborista" in url else _QG
+            return ("<title>" + NAME + " スロット 新台 天井 | 解析</title>"
+                    "<body><h1>" + NAME + "</h1><p>" + q + "。"
+                    + ("説明。" * 30) + "</p></body>")
+        stops("★★数が絡む値は、書き方の違いで通さない★★"
+              "（★引用が1000ptなのに値を1000Gと書けた穴を残さない／"
+              "単位の字だけを控えれば「数を含まない」ので、"
+              "字ごとに見ていては守れない★）",
+              lambda: rec(value={"kind": "GAME", "amount": "1000",
+                                 "unit": "pt", "benefit": "AT"},
+                          fetch=_fetch_u,
+                          sources=[
+                              parse_source("https://chonborista.com/1|" + _QP),
+                              dict(parse_source(
+                                  "https://nana-press.com/1|" + _QG),
+                                  # ★理由は十分に長くする★（罠④＝短いと
+                                  #   理由の検査のほうが先に断り、
+                                  #   数の線を壊しても試験が赤くならない）
+                                  wording={"pt": "G"},
+                                  wording_why="どちらも同じ単位の書き方の"
+                                              "違いだと判断しました（嘘）")]))
+        # ★★漢数字・ローマ数字も「数」★★（2026-09-16・Codexの指摘）
+        #   ★直す前は isdigit() で見ていた★ので、千・百・一・Ⅲ・〇 が
+        #   どれも偽になり、★「千ゲーム消化 → 百ゲーム消化」を
+        #   書き方の違いとして通せた★＝表記ゆれではなく別の数。
+        _QK = "通常時は千ゲーム消化からCZに当選する仕組みです"
+        _QH = "通常時は百ゲーム消化からCZに当選する仕組みです"
+
+        def _fetch_k(url):
+            q = _QK if "chonborista" in url else _QH
+            return ("<title>" + NAME + " スロット 新台 天井 | 解析</title>"
+                    "<body><h1>" + NAME + "</h1><p>" + q + "。"
+                    + ("説明。" * 30) + "</p></body>")
+        stops("★★漢数字も『数』として断る★★"
+              "（★isdigit() では偽になるので、千 → 百 が"
+              "書き方の違いとして通っていた★）",
+              lambda: rec(
+                  field="gameplay#normal_cz",
+                  value={"trigger": "千ゲーム消化", "leads_to": "CZ"},
+                  fetch=_fetch_k,
+                  sources=[
+                      parse_source("https://chonborista.com/1|" + _QK),
+                      dict(parse_source("https://nana-press.com/1|" + _QH),
+                           wording={"千ゲーム消化": "百ゲーム消化"},
+                           wording_why="どちらも同じ消化数の書き方の違いだと"
+                                       "判断しました（嘘）")]))
+        # ★★控えは、使われるかどうかに関わらず全部確かめる★★（同・Codexの指摘）
+        #   ★直す前★＝値が引用にそのまま在ると、その字に付いた控えを
+        #   一度も見ずに保存していた。
+        stops("★★使われていない控えも確かめる★★"
+              "（★値が引用にそのまま在ると、その字の控えを一度も見ずに"
+              "保存していた＝「控えは全部確かめてある」という約束が崩れる★）",
+              lambda: _rec_w(sources=[
+                  parse_source("https://chonborista.com/1|" + _QA),
+                  dict(parse_source("https://nana-press.com/1|" + _QB),
+                       wording={"レア役": "レア小役",
+                                "CZ": "どこにも無い言葉"},
+                       wording_why="レア小役はレア役の書き方の違いです")]))
+        stops("★★どの出典もそのまま書いていない言葉は、値にできない★★"
+              "（★全部を控えで埋めると、2AIが値そのものを作れる★）",
+              lambda: _rec_w(
+                  value={"trigger": "まったく別の言葉", "leads_to": "CZ"},
+                  sources=[
+                      dict(parse_source("https://chonborista.com/1|" + _QA),
+                           wording={"まったく別の言葉": "レア役"},
+                           wording_why="同じ意味だと判断しました（嘘）"),
+                      dict(parse_source("https://nana-press.com/1|" + _QB),
+                           wording={"まったく別の言葉": "レア小役"},
+                           wording_why="同じ意味だと判断しました（嘘）")]))
+        t("★★読み込み側も同じ照合をする★★"
+          "（★控えのファイルを手で書き換えても、書き方の控えが効かない★）",
+          any("引用に『" in x for x in validate_record(
+              "gameplay#normal_cz",
+              {"value": {"trigger": "レア役", "leads_to": "CZ"},
+               "sources": [{"publisher": "chonborista",
+                            "url": "https://chonborista.com/1",
+                            "quote": _QA},
+                           {"publisher": "nana-press",
+                            "url": "https://nana-press.com/1",
+                            "quote": _QB,
+                            "wording": {"レア役": "どこにも無い言葉"},
+                            "wording_why": "同じ意味だと判断しました（嘘）"}],
+               "lineages": ["chonborista", "nana-press"],
+               "agreed_by": ["claude", "codex"],
+               "why": "同じ原文を読んで一致しました",
+               "decided_at": "2026-09-16",
+               "official_url": "https://m.example/products/slot/x/"})))
+        # ★あとの試験の材料を増やさない★（罠⑱＝共有の材料は元へ戻す）
+        forget("x", "gameplay#normal_cz")
+
         stops("★★受け取れない項目は断る★★（入れ先が決まっていないもの）",
               lambda: rec(field="なにか"))
         stops("★★公式URLが無ければ記録できない★★（機種の取り違えを断つ）",
@@ -2203,6 +2505,40 @@ def selftest() -> int:
                                ("100", "天井は1000G", False),
                                ("100", "天井は100G", True),
                                ("3.1", "純増は3.10枚/G", False),
+                               ("600", "天井は1,600G", False),
+                               ("600", "天井は600", True),
+                               # ★★数で始まる・終わる「言葉」も境目を見る★★
+                               #   （2026-09-16・Codexの指摘・台帳#691）
+                               #   ★直す前は「まるごと数の形」だけ見ていた★ので、
+                               #   下の3つが全部 True になっていた
+                               #   ＝出典と違う数を書けた（読者に出る数が変わる）。
+                               ("1000G", "天井は11000Gです", False),
+                               ("1000G", "天井は1000Gです", True),
+                               ("100ゲーム消化",
+                                "通常時は1100ゲーム消化からCZ", False),
+                               # ★漢数字も数★（二千の「二」で止める）
+                               ("千ゲーム消化",
+                                "通常時は二千ゲーム消化からCZ", False),
+                               ("千ゲーム消化",
+                                "通常時は千ゲーム消化からCZ", True),
+                               # ★★区切りは全角も見る★★
+                               #   （2026-09-16・Codexの指摘・台帳#691）
+                               #   ★数の字は isnumeric が全角も拾うのに、
+                               #   区切りだけ半角を並べていた★＝
+                               #   下の2つが True になっていた。
+                               #   天井の形は全角も入口を通るので実在しうる。
+                               ("６００", "天井は１，６００G", False),
+                               ("１", "天井は１．５G", False),
+                               ("６００", "天井は６００Gです", True),
+                               # ★★区切りは「その向こうにも数がある」ときだけ★★
+                               #   （2026-09-16・Codexの指摘・台帳#691）
+                               #   ★直す前★＝隣が「，」なら無条件に別の数の
+                               #   一部と見ていたので、★句読点として使われた
+                               #   だけの正常な引用まで断っていた★
+                               #   ＝#691そのものと同じ型
+                               #   （2AIが正しく決めても記録できない）。
+                               ("６００", "天井は６００，恩恵はAT当選", True),
+                               ("600", "天井は600, 恩恵はAT当選", True),
                                ("AT当選", "恩恵はAT当選です", True)):
             t(f"★数の照合：『{_tk}』と『{_q}』→ {_want}★",
               token_in_quote(_tk, _q) is _want)
@@ -3199,6 +3535,14 @@ def main() -> int:
                     help="URL|根拠の逐語引用|なぜ同じ機種と判断したか"
                          "（題が通称のサイト等。2AIが本文を読んで判断したとき。"
                          "根拠はそのページに実在する文＝機械が確かめる）")
+    ap.add_argument("--wording", action="append", default=[],
+                    help="URL|値の字|その出典での書き方"
+                         "（2AIが『同じ意味だ』と決めた表記ゆれ。"
+                         "★数を含むものは通しません★／"
+                         "控えた書き方がその引用に実在することは機械が確かめます）")
+    ap.add_argument("--wording-why-file", dest="wording_why_file", default="",
+                    help="なぜ同じ意味だと判断したか（%d文字以上・ファイルで渡す）"
+                         % MIN_WORDING_WHY)
     ap.add_argument("--by", default="", help="判断した人（claude,codex）")
     ap.add_argument("--why", default="")
     ap.add_argument("--selftest", action="store_true")
@@ -3243,13 +3587,38 @@ def main() -> int:
                           "の形です" % (MIN_QUOTE, MIN_WHY))
                     return 2
                 why_by_url[parts[0]] = (parts[1], parts[2])
+            # ★2AIが「同じ意味だ」と決めた書き方の違い★（台帳#691）
+            #   ★理由はファイルで渡す★（自由文をシェルに書かない・鉄則1c）
+            _w_why = ""
+            if a.wording_why_file:
+                try:
+                    _w_why = io.open(a.wording_why_file,
+                                     encoding="utf-8").read().strip()
+                except Exception as _ew:                     # noqa: BLE001
+                    print("--wording-why-file を読めません: " + str(_ew)[:120])
+                    return 2
+            wording_by_url = {}
+            for spec in a.wording:
+                parts = [x.strip() for x in str(spec).split("|", 2)]
+                if len(parts) != 3 or not all(parts):
+                    print("--wording は『URL|値の字|その出典の書き方』の形です")
+                    return 2
+                wording_by_url.setdefault(parts[0], {})[parts[1]] = parts[2]
             srcs = []
             for s in a.source:
                 one = parse_source(s)
                 if one["url"] in why_by_url:
                     proof, w = why_by_url.pop(one["url"])
                     one["identity_proof"], one["identity_why"] = proof, w
+                if one["url"] in wording_by_url:
+                    one["wording"] = wording_by_url.pop(one["url"])
+                    one["wording_why"] = _w_why
                 srcs.append(one)
+            if wording_by_url:
+                # ★どの出典にも結び付かない控えは黙って捨てない★
+                print("--wording のURLが --source にありません: "
+                      + ", ".join(wording_by_url))
+                return 2
             if why_by_url:
                 # ★どの出典にも結び付かない理由は黙って捨てない★
                 print("--source-identity のURLが --source にありません: "

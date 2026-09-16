@@ -1864,6 +1864,122 @@ MUTATIONS = [
         "after": "        _un = bool(scheduled)",
         "run": ["scripts/task_guard.py"],
     },
+    # ─── 2026-09-16・2AIが決めた書き方の違い（台帳#691）────────────
+    {
+        "why": "★控えた書き方が、その引用に実在するかを見ない"
+               "（★2AIが言うだけで通る＝出典に無い言葉で値を支えられる★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if not token_in_quote(alt, q):",
+        "after": "            if False:",
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [691],
+    },
+    {
+        "why": "★数が絡むかを、値ぜんたいではなくその字だけで見る"
+               "（★天井は 1000 と pt に分かれるので、単位の字だけを"
+               "pt → G と控えれば数を含まないまま通る＝"
+               "2026-08-09に塞いだ穴がそのまま開く★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if _measured or _has_number(alt):",
+        "after": "            if _has_number(k) or _has_number(alt):",
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [691],
+    },
+    {
+        "why": "★区切りの「向こう側」を見ずに、いつも数の続きとみなす"
+               "（★句読点として使われただけの正常な引用まで断る＝"
+               "2AIが正しく決めても記録できない・#691そのものと同じ型★"
+               "＝Codexの指摘）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "    j = i + step\n"
+                  "    return 0 <= j < len(q) and q[j].isnumeric()",
+        "after": "    return True",
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [691],
+    },
+    {
+        "why": "★数の境目に、全角の区切りを見ない"
+               "（★値 ６００ が引用「天井は１，６００G」に一致する＝"
+               "天井の形は全角も入口を通るので実在しうる★＝Codexの指摘）★",
+        "file": "scripts/confirmed_values.py",
+        "before": '    if unicodedata.normalize("NFKC", c) not in ".,":',
+        "after": '    if c not in ".,":',
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [691],
+    },
+    {
+        "why": "★境目を見るのを「まるごと数の形の字」だけに戻す"
+               "（★1000G が 11000G に、千ゲーム消化 が 二千ゲーム消化 に"
+               "一致する＝出典と違う数を書ける・読者に出る数が変わる★"
+               "＝Codexの指摘）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "        if t[:1].isnumeric() and _num_edge(q, m.start() - 1, -1):",
+        "after": "        if _NUMBERISH.match(t) and _num_edge(q, m.start() - 1, -1):",
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [691],
+    },
+    {
+        "why": "★後ろ側の境目を見ない"
+               "（★3.1 が 3.10 に、1000 が 10000 に一致する★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "        if t[-1:].isnumeric() and _num_edge(q, m.end(), 1):",
+        "after": "        if False and _num_edge(q, m.end(), 1):",
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [691],
+    },
+    {
+        "why": "★数の判定を『数字の字』だけに戻す"
+               "（★千・百・一・Ⅲ・〇 はどれも isdigit() が偽なので、"
+               "「千ゲーム消化 → 百ゲーム消化」が書き方の違いとして通る＝"
+               "表記ゆれではなく別の数★＝Codexの指摘）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "    return any(c.isnumeric() for c in str(s or \"\"))",
+        "after": "    return any(c.isdigit() for c in str(s or \"\"))",
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [691],
+    },
+    {
+        "why": "★使われていない控えを確かめない（値が引用にそのまま在る字の"
+               "控えを素通りさせる）"
+               "（★「控えは全部確かめてある」という約束が崩れ、"
+               "あとで値の書き方が変わった日に黙って効き始める★"
+               "＝Codexの指摘）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            alt = str(v or \"\").strip()",
+        "after": "            alt = str(v or \"\").strip()\n"
+                 "            if token_in_quote(str(k), q):\n"
+                 "                continue",
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [691],
+    },
+    {
+        "why": "★値の字を、どの出典もそのまま書いていなくてよいことにする"
+               "（★全部を控えで埋めれば、2AIが値そのものを作れる★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": '        ng.append(f"{field}: 値『{token}』を、そのまま書いている出典が"',
+        "after": '        pass  # noqa\n        _ = (f"{field}: 値『{token}』を、そのまま書いている出典が"',
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [691],
+    },
+    {
+        "why": "★同じ意味だと判断した理由を求めない"
+               "（★書き方の違いが、理由の無いまま永久に残る★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if len(str(s.get(\"wording_why\") or \"\").strip())"
+                  " < MIN_WORDING_WHY:",
+        "after": "            if False:",
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [691],
+    },
+    {
+        "why": "★読み込み側で、書き方の控えを確かめ直さない"
+               "（★控えのファイルを手で書き換えると、一度も検査されずに効く★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "        ng += wording_problems(field, toks, src)",
+        "after": "        ng += []",
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [691],
+    },
     # ─── 2026-08-26・確定値が検索の濃さに届くか（Codex35回目）────
     {
         "why": "★確定値に根拠を刻まない（第2出典を見つけても検索へ載らない）★",
@@ -2432,10 +2548,9 @@ MUTATIONS = [
     {
         "why": "数を部分一致で照合する（13.1の中の3.1が通る・Codex8回目）",
         "file": "scripts/confirmed_values.py",
-        "before": "    if not _NUMBERISH.match(t):\n"
-                  "        return t in q                      "
-                  "# 文字の値は今までどおり",
-        "after": "    if True:\n        return t in q",
+        "before": "    for m in _re.finditer(_re.escape(t), q):",
+        "after": "    if True:\n        return t in q\n"
+                 "    for m in _re.finditer(_re.escape(t), q):",
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -2851,8 +2966,8 @@ MUTATIONS = [
         "why": "けた区切りのカンマを数の境界と見ない"
                "（600 が 1,600G に一致する・Codex21回目）",
         "file": "scripts/confirmed_values.py",
-        "before": "        if (before and before in \"0123456789.,\") \\",
-        "after": "        if (before and before in \"0123456789.\") \\",
+        "before": '    if unicodedata.normalize("NFKC", c) not in ".,":',
+        "after": '    if unicodedata.normalize("NFKC", c) not in ".":',
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -2867,8 +2982,9 @@ MUTATIONS = [
         "why": "文頭・文末の数字を照合できなくする"
                "（2AIが正しく確定した値が記録できない・2026-08-25）",
         "file": "scripts/confirmed_values.py",
-        "before": "        if (before and before in \"0123456789.,\") \\",
-        "after": "        if (before in \"0123456789.,\") \\",
+        "before": "    if i < 0 or i >= len(q):\n"
+                  "        return False                       # ★文頭・文末は境目★",
+        "after": "    if i < 0 or i >= len(q):\n        return True",
         "run": ["scripts/confirmed_values.py"],
     },
     {
