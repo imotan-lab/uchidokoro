@@ -386,6 +386,19 @@ def page_is_machine(html: str, official_name: str,
                     # ★公式の照合では extra_tail_ok（社名・銘柄）を許す★
                     #   （2026-08-02・Codex27回目。検査を丸ごと外すと
                     #     派生機の公式URL「…（SP）|BELLCO」が通ってしまった）
+                    # ★★区切りの向こうの派生の印も、派生として名乗る★★
+                    #   （2026-09-16・台帳#690）
+                    #   ★直す前★＝「Lすーぱぁびん娘（SP）」は括弧が区切りなので
+                    #   SP は**別の断片**になり、後ろの断片をまとめて見る
+                    #   この検査が `tail_conflict` に倒していた。
+                    #   ＝★続編・SP版が「控えに残せる落ち方」で返っていた★。
+                    #   `_after_ok` は派生の印を "ng" と答えているのに、
+                    #   呼ぶ側がその理由を捨てていた（★落ちた理由を混ぜない★）。
+                    if _has_deriv_mark([_ci.normalize_core(w)
+                                        for a in after
+                                        for w in str(a).split()]):
+                        deriv_conflict = True
+                        continue
                     if not all(_after_ok(a, core, official_name, extra_tail_ok)
                                for a in after):
                         tail_conflict = True
@@ -397,18 +410,24 @@ def page_is_machine(html: str, official_name: str,
                     #   材料の解析サイトの題は別名を後ろに書くのが通例
                     #   （「…解析 東京グール | ちょんぼりすた」）で、
                     #   そこまで縛ると実在の出典を失う。
+                    # ★★派生の印は、どちらの道でも必ず見る★★
+                    #   （2026-09-16・台帳#690。夜のタスクが見つけた）
+                    #   ★直す前★＝この検査は `not strict_all_tail` の中にあり、
+                    #   しかも厳しい道は手前の `tail_conflict` で `continue` して
+                    #   いたので、★厳しい道では一度も動いていなかった★。
+                    #   ＝「Lすーぱぁびん娘（SP）」は DERIV_MARK_CONFLICT ではなく
+                    #   **TAIL_CONFLICT**（＝控えに残せる落ち方）で返り、
+                    #   ★続編・SP版のページを本体の材料として登録できた★。
+                    #   ★順番も直した★＝派生の判定を先に置かないと、
+                    #   厳しい道では手前で `continue` して届かない。
+                    if _has_deriv_mark(
+                            [_ci.normalize_core(w) for w in raw[j + 1:]]):
+                        deriv_conflict = True
+                        continue
                     if strict_all_tail and not _after_ok(
                             " ".join(raw[j + 1:]), core,
                             official_name, extra_tail_ok):
                         tail_conflict = True
-                        continue
-                    # ★材料の照合でも、明確な派生の印だけは拒む★
-                    #   （2026-08-02・Codex33回目。独立2つの解析サイトが
-                    #     「名前 新台 SP」でSP版の値を載せていると、
-                    #     2票一致も規格印も通ってしまうため）
-                    if not strict_all_tail and _has_deriv_mark(
-                            [_ci.normalize_core(w) for w in raw[j + 1:]]):
-                        deriv_conflict = True
                         continue
                     return True, "OK"
     # ★強い証拠から順に名乗る★（同時に立ちうるため）
@@ -693,7 +712,14 @@ def material_page_identity_ok(page, official_name: str, *,
     #   ★別機種・規格違い・派生機は今までどおり救わない★
     # ★救える落ち方は控えの側が正本★（2026-08-29・台帳#498）
     import maker_identity_cache as _mic_r
-    if not _mic_r.rescuable_reason(why):
+    # ★★救える落ち方は、控えが残せる落ち方と同じにする★★
+    #   （2026-09-16・台帳#690。夜のタスクが見つけた）
+    #   ★直す前★＝ここは名前の表（2種）しか知らなかったので、
+    #   採否の側が「判断が要るものは全部2AIへ」に変わっても、
+    #   ★控えを作った先で、材料を読む側が同じ理由でもう一度断って★いた。
+    #   ＝2AIが決めても、その機種は何も読めないまま止まり続ける。
+    #   ★正本は控えの側★（proof_needs が None でない落ち方だけ救える）。
+    if _mic_r.proof_needs([str(why or "").split(":")[0].split("（")[0]]) is None:
         return False, why
     if not grant:
         return False, why
@@ -703,11 +729,46 @@ def material_page_identity_ok(page, official_name: str, *,
         return False, "GRANT_NO_PAGE_FINGERPRINT"
     if _sha not in set(grant):
         return False, "GRANT_CONTENT_MISMATCH"
+    # ★★2AIがメーカー欄について決めた許可証なら、二度見しない★★
+    #   （2026-09-16・台帳#690／CodexのP1）
+    #   ★直す前★＝許可証は指紋の集合だけで「何を認めたか」を持たず、
+    #   ここで必ずメーカー欄を確かめ直していた。
+    #   ＝題が略称で、しかもメーカー欄が無いページ（複合の落ち方）は
+    #   ★控えを作っても GRANT_MAKER_UNREADABLE で必ず落ちた★
+    #   ＝2AIが決めても、その機種は何も読めないまま止まる。
+    #   ★守りは上へ移っただけ★＝控えを当てる側（verdict_for）が
+    #   **毎回いまの落ち方と本文の指紋を照合**するので、
+    #   メーカー欄が読めるようになった・別の社に変わった、はそこで外れる
+    #   （落ち方が変われば控えが効かない）。
+    #   ★ここで二度見すると、同じ規則を2か所に書くことになる★（罠③）。
+    _granted = (grant or {}).get(_sha) if isinstance(grant, dict) else None
+    _g_codes = (_granted.get("reason_codes")
+                if isinstance(_granted, dict) else (_granted or ()))
+    _g_expected = (str(_granted.get("expected") or "")
+                   if isinstance(_granted, dict) else "")
+    # ★★許可証は「そのとき期待していた社」の外では、そもそも効かない★★
+    #   （2026-09-16・CodexのP1・2回目）
+    #   ★直す前★＝一致するかどうかは下の _maker_decided の条件にしか
+    #   使っていなかったので、★食い違っても許可証そのものは拒まなかった★。
+    #   ＝メーカー欄が読めるページなら、その欄に合う**別の社**を
+    #   期待して渡すだけで、同じ許可証が題の不一致を救ってしまう。
+    #   ★実測★＝許可証は sanslay 向け／本文の欄は SANYO のとき、
+    #   expected_maker="sanyo_bussan" で (True, "OK_BY_GRANT") が返っていた。
+    #   ★メーカー欄の再照合では代わりにならない★＝許可証が救っているのは
+    #   「題が合わないこと」なので、欄が合うことは何の代わりにもならない。
+    if isinstance(_granted, dict) and (
+            not expected_maker or _g_expected != expected_maker):
+        return False, "GRANT_EXPECTED_MAKER_MISMATCH"
+    # ★ここで期待する社を二度見しない★（罠③）＝上の硬い拒否が唯一の場所。
+    _maker_decided = any(
+        str(c).startswith("DIRECTORY_MAKER_") for c in (_g_codes or ()))
     # ★このページを使うと決めた前提（メーカー欄が合う）が今も成り立つか★
     mk = extract_maker_name(html)
     if not mk:
+        if _maker_decided:
+            return True, "OK_BY_GRANT"
         return False, "GRANT_MAKER_UNREADABLE"
-    if expected_maker:
+    if expected_maker and not _maker_decided:
         owners = _maker_core_owners(
             _ci.normalize_core(mk).replace("株式会社", ""))
         # ★★控えと同じ物差しにする★★（2026-09-12・Codexの指摘）
@@ -1015,20 +1076,35 @@ def decision_of(look, expected_maker: str = "") -> str:
     d = str(r.get("decision") or "")
     if d:
         return d
+    return decision_for(codes_of(r, expected_maker))
+
+
+def codes_of(look, expected_maker: str = "") -> list:
+    """★1つの名鑑ページの「落ち方の並び」を返す唯一の場所★
+    （2026-09-16・台帳#690）
+
+    ★本番の lookup は自分で入れる★ので、そこはそのまま返す。
+    ★入っていないとき（古い形・試験の作り物）だけ、同じ表で導く★。
+    ★分類（decision_of）と許可証（grant_for）が同じものを見るように、
+      ここへ寄せた★＝別々に導くと、片方だけ空になって静かにずれる
+      （実際に、許可証が落ち方を運べていなかった）。
+    """
+    r = look or {}
     codes = list(r.get("reason_codes") or [])
-    if not codes:
-        if not r.get("identity_ok"):
-            # ★理由の文の頭は符丁そのもの★（「NAME_CORE_MISMATCH（…）」の形）
-            head = str(r.get("reason") or "").split("（")[0].split(":")[0]
-            codes = [head.strip()] if head.strip() else ["FETCH_FAILED"]
+    if codes:
+        return codes
+    if not r.get("identity_ok"):
+        # ★理由の文の頭は符丁そのもの★（「NAME_CORE_MISMATCH（…）」の形）
+        head = str(r.get("reason") or "").split("（")[0].split(":")[0]
+        codes = [head.strip()] if head.strip() else ["FETCH_FAILED"]
+    else:
+        st = str((r.get("maker_check") or {}).get("state") or "")
+        if expected_maker and not st:
+            codes = ["DIRECTORY_MAKER_UNREADABLE"]
         else:
-            st = str((r.get("maker_check") or {}).get("state") or "")
-            if expected_maker and not st:
-                codes = ["DIRECTORY_MAKER_UNREADABLE"]
-            else:
-                c = _STATE_TO_CODE.get(st, "")
-                codes = [c] if c else []
-    return decision_for(codes)
+            c = _STATE_TO_CODE.get(st, "")
+            codes = [c] if c else []
+    return codes
 
 
 def _page_shape_ok(url: str) -> bool | None:
@@ -1940,6 +2016,157 @@ def selftest() -> int:
     t("★★純増などの共用ルールは広げていない★★（型式名専用に切り分けた）",
       not _CODE_OK.match("Lやじきた道中記参る!BG"))
 
+    # ─── ★★派生機は「控えに残せない落ち方」で返す★★（台帳#690） ──────
+    #   ★夜のタスクが見つけた★＝直す前は「Lすーぱぁびん娘（SP）」が
+    #   TAIL_CONFLICT（＝控えに残せる落ち方）で返っていた。
+    #   ＝★続編・SP版のページを本体の材料として登録できた★
+    #   （2AIが認める操作は要るが、そもそも聞いてはいけない類の問い）。
+    #   ★原因は2つ★＝①派生の検査が `not strict_all_tail` の中にあった
+    #   ②括弧は区切りなので、SP は「後ろの断片」になり、
+    #     断片をまとめて見る検査が tail に倒していた（落ちた理由を混ぜていた）。
+    t("★★派生の印つきの題は、派生として名乗る（控えに残せない側）★★"
+      "（★TAIL_CONFLICT だと控えに残せてしまう★）",
+      page_is_machine("<title>Lすーぱぁびん娘（SP） | P-WORLD</title>",
+                      "Lすーぱぁびん娘", strict_all_tail=True)
+      == (False, "DERIV_MARK_CONFLICT"))
+    t("　ゆるい道でも同じ（★片方だけ直すと材料側でもう一度落ちる★）",
+      page_is_machine("<title>Lすーぱぁびん娘（SP） | P-WORLD</title>",
+                      "Lすーぱぁびん娘")
+      == (False, "DERIV_MARK_CONFLICT"))
+    t("　その落ち方は硬い側＝2AIへ回さないし控えにも残せない",
+      decision_for(["DERIV_MARK_CONFLICT"]) == "HARD_REJECT")
+    t("★★同じ断片の後ろに付いた派生の印も、派生として名乗る★★"
+      "（★区切りの向こう側とは別の道＝こちらは厳しい道でしか通らない★）",
+      page_is_machine("<title>Lすーぱぁびん娘 新台解析 SP</title>",
+                      "Lすーぱぁびん娘", strict_all_tail=True)
+      == (False, "DERIV_MARK_CONFLICT"))
+    t("　（対照）飾りだけの題は今までどおり通る",
+      page_is_machine("<title>Lすーぱぁびん娘 スロット 新台 天井 解析"
+                      " | ちょんぼりすた</title>",
+                      "Lすーぱぁびん娘", strict_all_tail=True)[0] is True)
+
+    # ─── ★★材料側の救える落ち方は、控えが残せる落ち方と同じ★★（台帳#690）
+    #   ★直す前★＝材料を読む側は名前の表（2種）しか知らなかったので、
+    #   採否の側が「判断が要るものは全部2AIへ」に変わっても、
+    #   ★控えを作った先で、材料を読む側が同じ理由でもう一度断って★いた。
+    _NOTITLE = "<div>機種名 L試験機</div><div>メーカー サミー</div>"
+    t("★★控えが残せる落ち方は、材料側でも救いの道に入る★★"
+      "（★入らないと、2AIが決めても何も読めないまま止まる★）",
+      material_page_identity_ok(
+          _NOTITLE, "L試験機", expected_maker="sammy",
+          grant={"どれでもよい"})[1] == "GRANT_NO_PAGE_FINGERPRINT")
+    # ★★題も落ち、メーカー欄も無いページ（複合の落ち方）★★（CodexのP1）
+    #   ★直す前★＝許可証が「何を認めたか」を運ばず、材料を読む側が
+    #   メーカー欄をもう一度確かめて GRANT_MAKER_UNREADABLE で必ず断った。
+    #   ＝2AIが決めて控えを作っても、その機種は何も読めないまま止まる。
+    import fetched_page as _fp690
+    _CMP690 = ("<title>【略称だけの題】解析</title>"
+               "<div>機種名 L試験機</div><div>導入日 2026年10月5日</div>")
+    _PG690 = _fp690.FetchedPage("https://chonborista.com/slot/x/1/",
+                                "https://chonborista.com/slot/x/1/", _CMP690)
+    t("★★認めた落ち方を運ぶ許可証なら、メーカー欄が無くても通る★★"
+      "（★運ばないと、複合の落ち方が材料側で必ず落ちる★）",
+      material_page_identity_ok(
+          _PG690, "L試験機", expected_maker="sammy",
+          url=_PG690.requested_url,
+          grant={_PG690.sha256: {
+              "expected": "sammy",
+              "reason_codes": ("NAME_CORE_MISMATCH",
+                               "DIRECTORY_MAKER_UNREADABLE")}})[0] is True)
+    t("　（対照）落ち方を運ばない許可証では、今までどおり断る",
+      material_page_identity_ok(
+          _PG690, "L試験機", expected_maker="sammy",
+          url=_PG690.requested_url,
+          grant={_PG690.sha256: {"expected": "sammy",
+                                 "reason_codes": ()}})[1]
+      == "GRANT_MAKER_UNREADABLE")
+    # ★★許可証は「そのとき期待していた社」の外では効かない★★
+    #   （2026-09-16・CodexのP1・2回目）
+    #   ★対照は「本文のメーカー欄と一致する別の社」で打つ★＝
+    #   欄と噛み合わない社（架空の名前）だと、★メーカー欄の再照合のほうが
+    #   先に断る★ので、硬い拒否を消しても試験が赤くならない（罠④）。
+    _MKOK690 = ("<title>【略称だけの題】解析</title>"
+                "<div>機種名 L試験機</div><div>メーカー SANYO</div>"
+                "<div>導入日 2026年10月5日</div>")
+    _PGM690 = _fp690.FetchedPage("https://chonborista.com/slot/x/2/",
+                                 "https://chonborista.com/slot/x/2/", _MKOK690)
+    _GR690 = {_PGM690.sha256: {
+        "expected": "sanslay",
+        "reason_codes": ("NAME_CORE_MISMATCH", "DIRECTORY_MAKER_MISMATCH")}}
+    t("★★同じ許可証でも、期待する社が違えば通さない★★（2026-09-16・CodexのP1）"
+      "（★許可証が救うのは「題が合わないこと」なので、"
+      "メーカー欄が合うことは代わりにならない★）",
+      material_page_identity_ok(
+          _PGM690, "L試験機", expected_maker="sanyo_bussan",
+          url=_PGM690.requested_url, grant=_GR690)[1]
+      == "GRANT_EXPECTED_MAKER_MISMATCH")
+    t("　（対照）本文のメーカー欄は、その別の社と噛み合っている"
+      "（＝欄の再照合では止まらない材料であること）",
+      _maker_core_owners(
+          _ci.normalize_core(extract_maker_name(_PGM690.cleaned_html))
+          .replace("株式会社", "")) == {"sanyo_bussan"})
+    t("　（対照）そのとき期待していた社で呼べば、今までどおり通る",
+      material_page_identity_ok(
+          _PGM690, "L試験機", expected_maker="sanslay",
+          url=_PGM690.requested_url, grant=_GR690)[0] is True)
+    # ★★メーカー欄の再照合も、今までどおり効いていること★★
+    #   ★なぜ要るか★＝上の硬い拒否を足したので、期待する社が食い違う道は
+    #   そこで終わるようになった。★そのままだと、欄の食い違いを断る道を
+    #   一度も通らない試験だけが残る★（罠㊳＝守りを外すと、その守りが
+    #   「ついでに」見ていたものまで外れる）。
+    _OTHER690 = ("<title>【略称だけの題】解析</title>"
+                 "<div>機種名 L試験機</div><div>メーカー サミー</div>"
+                 "<div>導入日 2026年10月5日</div>")
+    _PGO690 = _fp690.FetchedPage("https://chonborista.com/slot/x/3/",
+                                 "https://chonborista.com/slot/x/3/", _OTHER690)
+    t("　（対照）許可証の社は合っていても、本文のメーカー欄が別の社なら断る",
+      material_page_identity_ok(
+          _PGO690, "L試験機", expected_maker="sanslay",
+          url=_PGO690.requested_url,
+          grant={_PGO690.sha256: {
+              "expected": "sanslay",
+              "reason_codes": ("NAME_CORE_MISMATCH",)}})[1]
+      == "GRANT_MAKER_MISMATCH")
+    # ★★期待する社を渡さない呼び方でも、辞書型の許可証は効かない★★
+    #   （2026-09-16・CodexのP1・3回目）
+    #   ★直す前★＝硬い拒否に「社を渡しているとき」という条件を付けていたので、
+    #   ★渡さなければ素通りし、メーカー欄の無いページがそのまま通った★。
+    #   ★控え側（verdict_for）は「社が無ければ答えない」で揃えてある★ので、
+    #   ここだけ緩いと同じ不変条件が2つの強さで存在することになる。
+    t("★★期待する社を渡さない呼び方では、辞書型の許可証は効かない★★"
+      "（2026-09-16・CodexのP1）",
+      material_page_identity_ok(
+          _PG690, "L試験機", url=_PG690.requested_url,
+          grant={_PG690.sha256: {
+              "expected": "sammy",
+              "reason_codes": ("NAME_CORE_MISMATCH",
+                               "DIRECTORY_MAKER_UNREADABLE")}})[1]
+      == "GRANT_EXPECTED_MAKER_MISMATCH")
+    t("　（同上）許可証の側も社を名乗っていないときも、効かせない"
+      "（★どちらも空なら「食い違っていない」ので、一致だけを見る形では"
+      "素通りする★＝控え側の『社が無ければ答えない』とそろえる）",
+      material_page_identity_ok(
+          _PG690, "L試験機", url=_PG690.requested_url,
+          grant={_PG690.sha256: {
+              "expected": "",
+              "reason_codes": ("NAME_CORE_MISMATCH",
+                               "DIRECTORY_MAKER_UNREADABLE")}})[1]
+      == "GRANT_EXPECTED_MAKER_MISMATCH")
+    t("　（対照）メーカー欄が無いページでも、期待する社が違えば通さない",
+      material_page_identity_ok(
+          _PG690, "L試験機", expected_maker="zenzen_chigau",
+          url=_PG690.requested_url,
+          grant={_PG690.sha256: {
+              "expected": "sammy",
+              "reason_codes": ("NAME_CORE_MISMATCH",
+                               "DIRECTORY_MAKER_UNREADABLE")}})[1]
+      == "GRANT_EXPECTED_MAKER_MISMATCH")
+    t("　（対照）控えが残せない落ち方は、その落ち方のまま断る",
+      material_page_identity_ok(
+          "<title>Lすーぱぁびん娘（SP） | P-WORLD</title>",
+          "Lすーぱぁびん娘", expected_maker="sammy",
+          grant={"どれでもよい"})[1] == "DERIV_MARK_CONFLICT")
+
     # ─── ★★落ち方の3分類★★（2026-09-15・台帳#675） ───────────────
     t("★★何も落ちていなければ ACCEPT★★",
       decision_for([]) == "ACCEPT")
@@ -1968,7 +2195,7 @@ def selftest() -> int:
     # ★ここで見るのは lookup が使う2つの同定★（許可証・材料側は別の呼び出し）
     _not_lookup = {"REDIRECTED", "GRANT_NO_PAGE_FINGERPRINT",
                    "GRANT_CONTENT_MISMATCH", "GRANT_MAKER_UNREADABLE",
-                   "GRANT_MAKER_MISMATCH"}
+                   "GRANT_MAKER_MISMATCH", "GRANT_EXPECTED_MAKER_MISMATCH"}
     _unclassified = sorted(
         c for c in _ret
         if c not in _not_lookup

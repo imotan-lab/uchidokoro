@@ -855,6 +855,122 @@ MUTATIONS = [
                  "if s[\"mode\"] == \"通常\"]",
         "run": ["scripts/recheck.py"],
     },
+    # ─── 2026-09-16・派生機と、材料側の救える落ち方（台帳#690） ──────────
+    {
+        "why": "★許可証から「そのとき期待していた社」を落とす"
+               "（★同じ許可証が、別の期待する社と一緒に渡しても通る★"
+               "＝CodexのP1）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '            "expected": str(_n.get("expected") or ""),',
+        "after": '            "expected": "",',
+        "run": ["scripts/model_code_lookup.py", "scripts/add_machine_run.py"],
+        "issues": [690],
+    },
+    {
+        "why": "★読取器が、許可証の「期待していた社」を照合しない"
+               "（★メーカー欄が読めるページなら、その欄に合う別の社を"
+               "期待して渡すだけで、同じ許可証が題の不一致を救う★"
+               "＝CodexのP1・2回目）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": ("    if isinstance(_granted, dict) and (" + chr(10)
+                   + "            not expected_maker"
+                   + " or _g_expected != expected_maker):" + chr(10)
+                   + '        return False, "GRANT_EXPECTED_MAKER_MISMATCH"'),
+        "after": "    if False:" + chr(10) + "        pass",
+        "run": ["scripts/model_code_lookup.py"],
+        "issues": [690],
+    },
+    {
+        "why": "★期待する社を渡さない呼び方を、硬い拒否から外す"
+               "（★渡さなければ素通りし、メーカー欄の無いページが"
+               "そのまま通る。控え側は「社が無ければ答えない」なので、"
+               "同じ不変条件が2つの強さで存在することになる★"
+               "＝CodexのP1・3回目）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": "            not expected_maker"
+                  " or _g_expected != expected_maker):",
+        "after": "            _g_expected != expected_maker):",
+        "run": ["scripts/model_code_lookup.py"],
+        "issues": [690],
+    },
+    {
+        "why": "★許可証の社が合っていれば、本文のメーカー欄の食い違いを見ない"
+               "（★硬い拒否を足したので、欄を見る道を一度も通らない試験だけが"
+               "残りかけた＝罠㊳★）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": '            return False, "GRANT_MAKER_MISMATCH"',
+        "after": "            pass",
+        "run": ["scripts/model_code_lookup.py"],
+        "issues": [690],
+    },
+    {
+        "why": "★控えを「そのとき期待していた社」に結び付けない"
+               "（★DMM側のメーカー表記があとから訂正されても、"
+               "ページも落ち方も変わらないので古い控えがそのまま効く★"
+               "＝CodexのP1）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": '            if not expected or rec.get("expected") != expected:',
+        "after": "            if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [690],
+    },
+    {
+        "why": "★許可証から「2AIが認めた落ち方」を落とす"
+               "（★題も落ちてメーカー欄も無いページ＝複合の落ち方が、"
+               "控えを作っても材料側で必ず断られる★＝CodexのP1）★",
+        "file": "scripts/add_machine_run.py",
+        "before": ('            "reason_codes": tuple(' + chr(10)
+                   + '                _n.get("reason_codes_seen") or _n.get("reason_codes") or ()),'),
+        "after": '            "reason_codes": (),',
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [690],
+    },
+    {
+        "why": "★認めた落ち方を無視して、メーカー欄を二度見する"
+               "（★同じ規則を2か所に書く＝控えが効いても読取器が断る★）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": ("        if _maker_decided:" + chr(10)
+                   + '            return True, "OK_BY_GRANT"'),
+        "after": ("        if False:" + chr(10)
+                  + '            return True, "OK_BY_GRANT"'),
+        "run": ["scripts/model_code_lookup.py", "scripts/add_machine_run.py"],
+        "issues": [690],
+    },
+    {
+        "why": "★派生の印の検査を、ゆるい道だけに戻す"
+               "（★厳しい道は手前で continue するので一度も動かない＝"
+               "続編・SP版のページが『控えに残せる落ち方』で返り、"
+               "本体の材料として登録できる★）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": ("                    if _has_deriv_mark(" + chr(10)
+                   + "                            [_ci.normalize_core(w) for w in raw[j + 1:]]):"),
+        "after": ("                    if not strict_all_tail and _has_deriv_mark(" + chr(10)
+                  + "                            [_ci.normalize_core(w) for w in raw[j + 1:]]):"),
+        "run": ["scripts/model_code_lookup.py"],
+        "issues": [690],
+    },
+    {
+        "why": "★区切りの向こうの派生の印を、また tail に倒す"
+               "（★括弧は区切りなので「（SP）」はここを通る＝"
+               "落ちた理由を混ぜると、控えに残せる側へ落ちる★）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": ("                    if _has_deriv_mark([_ci.normalize_core(w)" + chr(10)
+                   + "                                        for a in after" + chr(10)
+                   + "                                        for w in str(a).split()]):"),
+        "after": "                    if False:",
+        "run": ["scripts/model_code_lookup.py"],
+        "issues": [690],
+    },
+    {
+        "why": "★材料側の救える落ち方を、名前の表（2種）に戻す"
+               "（★控えを作った先で、材料を読む側が同じ理由でもう一度断る＝"
+               "2AIが決めても何も読めないまま止まる★）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": '    if _mic_r.proof_needs([str(why or "").split(":")[0].split("（")[0]]) is None:',
+        "after": "    if not _mic_r.rescuable_reason(why):",
+        "run": ["scripts/model_code_lookup.py"],
+        "issues": [690],
+    },
     # ─── 2026-09-15・落ち方を3分類にして2AIへ回す（台帳#675） ──────────
     {
         "why": "★DMM側の明白な食い違いを、硬い落ち方から外す"
@@ -1557,8 +1673,8 @@ MUTATIONS = [
         "why": "★許可証を空にする（採否で「使う」と決めたのに、読取器へ何も渡らず、その機種は材料を1つも読めない）★"
                "／★手作りの許可証で試験していると気づけない接続部分★",
         "file": "scripts/add_machine_run.py",
-        "before": "    return frozenset(pages[u].sha256",
-        "after": "    return frozenset() if True else frozenset(pages[u].sha256",
+        "before": '    return {pages[u].sha256: _meta.get(u, {"expected": "",',
+        "after": '    return {} if True else {pages[u].sha256: _meta.get(u, {"expected": "",',
         "run": ["scripts/add_machine_run.py"],
         "issues": [607],
     },

@@ -858,6 +858,16 @@ def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,
             #   ＝観測と控えが同じページを見ていることまで機械が確かめる。
             if not isinstance(look, dict):
                 return None                # ★渡さなければ効かない（fail-closed）★
+            # ★★控えは「そのとき期待していた社」に結び付ける★★
+            #   （2026-09-16・CodexのP1）
+            #   ★直す前★＝並び型は本文の指紋と落ち方しか見ていなかった。
+            #   ＝★DMM側のメーカー表記があとから訂正されても★、
+            #   ページも落ち方も変わらないので古い控えがそのまま効いた
+            #   （メーカー欄が読めないページでは特に気づけない）。
+            #   ★「ページが別の社へ変わった」は指紋で捕まるが、
+            #     「期待する社が変わった」は指紋にも落ち方にも出ない★。
+            if not expected or rec.get("expected") != expected:
+                return None
             if canonical_reason_codes(look.get("reason_codes")) != \
                     canonical_reason_codes(rec.get("reason_codes")):
                 return None                # ★落ち方が変わったら控えは効かない★
@@ -2460,8 +2470,9 @@ def selftest() -> int:
     t("★★控えられない落ち方は、書く側でも断る★★",
       _ok4(store=_empty(), reason_codes=["GEN_MARK_CONFLICT"]) != "")
 
-    def _ask4(look, store=None, page=None):
-        return verdict_for("dmm_5086", _EXPECTED, "",
+    def _ask4(look, store=None, page=None, expected=None):
+        return verdict_for("dmm_5086",
+                           _EXPECTED if expected is None else expected, "",
                            store if store is not None else _st4, _fetch,
                            material_url=_C, machine_name=_MN,
                            release_date=_REL,
@@ -2472,6 +2483,10 @@ def selftest() -> int:
     _look_same = {"reason_codes": ["DIRECTORY_MAKER_UNREADABLE"],
                   "observed_maker": "", "body_sha256": "abc"}
     t("★★同じ落ち方なら控えが効く★★", _ask4(_look_same) == "ACCEPT_MATERIAL")
+    t("★★期待する社が変わったら控えは効かない★★（2026-09-16・CodexのP1）"
+      "（★DMM側のメーカー表記が訂正されても、ページも落ち方も変わらないので"
+      "古い控えがそのまま効いていた★）",
+      _ask4(_look_same, expected="zenzen_chigau_kaisha") is None)
     t("★★いまの観測を渡さなければ効かない★★（fail-closed・Codexの指摘2）"
       "（★型の名前だけを信じると、配線を間違えた日に古い控えが効く★）",
       _ask4(None) is None)

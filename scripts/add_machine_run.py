@@ -491,7 +491,7 @@ _SEEN_RELEASE_HINT = (
     "読者に出る導入日はDMMの値だけなので、古い月が記事に出ることはありません。")
 
 
-def grant_for(decision, pages) -> frozenset:
+def grant_for(decision, pages) -> dict:
     """★控えで「使う」と決めたページの許可証★（2026-09-12・Codexの指摘）
 
     ★本番と試験が同じものを通るように切り出した★＝
@@ -503,10 +503,28 @@ def grant_for(decision, pages) -> frozenset:
     結び直しが必要になり、同じ型の穴が5回続いた。
     指紋なら「確かめた本文そのもの」以外は通らない。
     """
+    # ★★何を認めた許可証かも一緒に渡す★★（2026-09-16・台帳#690／CodexのP1）
+    #   ★直す前は指紋の集合だけ★だったので、材料を読む側は
+    #   「2AIが何を認めたのか」を知らず、★メーカー欄をもう一度確かめて断って★いた。
+    #   ＝題が略称で、しかもメーカー欄が無いページ（複合の落ち方）は、
+    #   控えを作っても GRANT_MAKER_UNREADABLE で必ず落ちる。
+    #   ★落ち方は控えの側が正本★なので、決めたときの落ち方をそのまま渡す。
+    # ★★「そのとき期待していた社」も一緒に運ぶ★★（2026-09-16・CodexのP1）
+    #   ★落ち方だけだと足りない★＝メーカー欄が無いページでは、
+    #   同じ許可証を**別の期待する社**と一緒に渡しても通ってしまう
+    #   （読取器はメーカー系の符丁があると照合を飛ばすため）。
     pages = pages or {}
-    return frozenset(pages[u].sha256
-                     for u in ((decision or {}).get("accepted") or ())
-                     if u in pages)
+    _meta = {}
+    for _n in ((decision or {}).get("relation_checks") or ()):
+        _meta[str(_n.get("url") or "")] = {
+            "expected": str(_n.get("expected") or ""),
+            "reason_codes": tuple(
+                _n.get("reason_codes_seen") or _n.get("reason_codes") or ()),
+        }
+    return {pages[u].sha256: _meta.get(u, {"expected": "",
+                                           "reason_codes": ()})
+            for u in ((decision or {}).get("accepted") or ())
+            if u in pages}
 
 
 def _maker_related(expected: str, seen: str) -> bool:
@@ -689,7 +707,13 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
     for r in looks or []:
         _url = str(r.get("url") or "")
         mc = r.get("maker_check") or {}
+        # ★型を選ぶのは「控えが名乗る落ち方」★＝ここで導いた値を使うと、
+        #   古い型（名前の表）の控えが選ばれなくなる（実際に7本落ちた）。
         _codes = _mic.canonical_reason_codes(r.get("reason_codes"))
+        # ★許可証が運ぶのは「実際の落ち方」★（2026-09-16・台帳#690）＝
+        #   古い形の look（reason だけ）でも、materialを読む側が
+        #   「2AIが何を認めたか」を知れるようにする。
+        _codes_seen = _mic.canonical_reason_codes(_mcl_d.codes_of(r, maker))
         # ★①「使わない」と決めた控えは、状態によらず必ず効かせる★
         #   （2026-08-17・Codex依頼230の指摘1）
         #   名簿を直して同じ表記が MATCH になった瞬間に、
@@ -732,6 +756,7 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                      "verdict": "ACCEPT_MATERIAL",
                      "proof_profile": _prof_want,
                      "reason_codes": _codes,
+                     "reason_codes_seen": _codes_seen,
                      "relationship_verified": False,
                      "basis_scope": _mic.BASIS_SCOPE,
                      "eligible_at_collection_end": None,
@@ -4447,7 +4472,18 @@ def _selftest_body() -> int:
         _grant3 = grant_for(_dec3, _pages3)
         t("★★本番の許可証生成が、採否の結果から許可証を作る★★"
           "（手作りの許可証で試すと、ここを空に壊しても気づけない）",
-          _grant3 == frozenset({_pg3.sha256}))
+          set(_grant3) == {_pg3.sha256})
+        # ★★許可証は「何を認めたか」も運ぶ★★（2026-09-16・台帳#690）
+        #   ★持たせないと★＝材料を読む側がメーカー欄を二度見して、
+        #   題も落ちてメーカー欄も無いページ（複合の落ち方）を必ず断る。
+        t("★★許可証は、2AIが認めた落ち方も一緒に運ぶ★★"
+          "（★運ばないと、複合の落ち方が材料側で必ず落ちる★）",
+          isinstance(_grant3, dict)
+          and "NAME_CORE_MISMATCH" in
+          ((_grant3.get(_pg3.sha256) or {}).get("reason_codes") or ()))
+        t("★★許可証は、そのとき期待していた社も運ぶ★★（2026-09-16・CodexのP1）"
+          "（★運ばないと、同じ許可証が別の社の期待でも通る★）",
+          (_grant3.get(_pg3.sha256) or {}).get("expected") == "sanslay")
         # ★★問いに「名鑑の導入日がDMMと違うときの控え方」を必ず書く★★
         #   （2026-09-13・台帳#657）＝これが落ちると、2AIは正しい逐語を
         #   出しているのに登録のところで断られ続ける（実際に13回空振りした）。
@@ -4485,9 +4521,11 @@ def _selftest_body() -> int:
           all(v.get("ok") for v in _rd3.values()))
         t("　（対照）許可証が無ければ、同じページは通らない",
           not _rd3_ng.get("ok"))
-        t("　（対照）別の社を期待しているときは、許可証でも通らない",
+        t("　（対照）別の社を期待しているときは、許可証でも通らない"
+          "（★2026-09-16・CodexのP1＝許可証は「そのとき期待していた社」の"
+          "外では、メーカー欄を見るより先に断る★）",
           not _rd3_other.get("ok")
-          and _rd3_other.get("reason") == "GRANT_MAKER_MISMATCH")
+          and _rd3_other.get("reason") == "GRANT_EXPECTED_MAKER_MISMATCH")
 
         # --- ★問いの文が許可条件とそろっているか★（2026-09-12・Codexの指摘） --
         #   ★直す前★＝控えは「関係のある社（RELATED）でも通す」に変わったのに、
