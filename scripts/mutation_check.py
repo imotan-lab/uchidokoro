@@ -5712,13 +5712,6 @@ MUTATIONS = [
         "run": ["scripts/open_issues.py"],
     },
     {
-        "why": "★壊れた要素があると、登録し直す道具そのものが落ちる（直す手が無くなる）★",
-        "file": "scripts/open_issues.py",
-        "before": "             if isinstance(c, dict)\n             and _cond_key(c, slug) == _cond_key(new, slug)]",
-        "after": "             if _cond_key(c, slug) == _cond_key(new, slug)]",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
         "why": "★版が変わった条件の知らせに、直し方を書かない（案内どおりに登録し直すと、古いほうが残って同じ輪に戻る）★",
         "file": "scripts/ledger_sweep.py",
         "before": "                f\"（条件 {cond.get('version')} / いま {meta.get('version')}）。\"\n                \"中身を読み直したうえで、\" + _oi_mod.REPAIR_STEPS]",
@@ -5744,6 +5737,34 @@ MUTATIONS = [
         "file": "scripts/open_issues.py",
         "before": "        return (f\"閉じる条件の {len(bad)} 件が壊れています\"\n                f\"（{bad[:3]} 番目）。\" + REPAIR_STEPS)",
         "after": "        return (f\"閉じる条件の {len(bad)} 件が壊れています\"\n                f\"（{bad[:3]} 番目）\")",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★直し方の案内から python scripts/ を落とす（そのまま打っても動かず、無人タスクがその場で止まる）★",
+        "file": "scripts/open_issues.py",
+        "before": "    \" ④python scripts/ledger_sweep.py --slug <機種> --close <番号>\"",
+        "after": "    \" ④ledger_sweep.py --slug <機種> --close <番号>\"",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★封のやり直しの案内から python scripts/ を落とす★",
+        "file": "scripts/open_issues.py",
+        "before": "SEAL_AGAIN = (\"★直し方★＝python scripts/open_issues.py seal --id <番号> \"",
+        "after": "SEAL_AGAIN = (\"★直し方★＝open_issues.py seal --id <番号> \"",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★壊れた一覧のままでも条件を登録する（壊れた要素が残るので、閉じる側は結局ずっと断る）★",
+        "file": "scripts/open_issues.py",
+        "before": "    _ngbox = conditions_broken(row)\n    if _ngbox:",
+        "after": "    _ngbox = \"\"\n    if _ngbox:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★案件を出すときに、壊れた一覧を「未登録」「その分だけ」と見せる（案内どおり登録しても、壊れた要素が残って閉じられない）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    ngb = _oi_mod.conditions_broken(row or {})",
+        "after": "    ngb = \"\"",
         "run": ["scripts/ledger_sweep.py"],
     },
 ]

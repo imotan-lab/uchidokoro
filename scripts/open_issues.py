@@ -702,6 +702,29 @@ def selftest() -> int:
       bool(_condition_binds_row(_other, _hit)))
     t("　★いまの歴史にあるコミットなら通る★", is_ancestor(_headsha) is True)
     t("　★40桁でないものは通さない★", is_ancestor("abc") is False)
+    # ★★案内は「そのまま打てる形」であること★★（2026-09-17・Codexの指摘）
+    #   ★私の試験は「共有元が各出口に入っているか」しか見ていなかった★ので、
+    #   ★共有元そのものが間違っていても全部通った★
+    #   （実際、最後の1つが `ledger_sweep.py --slug …` で
+    #     `python scripts/` が抜けており、そのまま打つと動かなかった）。
+    #   ★形を機械で固定する★＝道具の名前を書いたら、必ず
+    #   「python scripts/<実在するファイル>」の形で書く。
+    _SCR = Path(__file__).resolve().parent
+    for _txt, _nm in ((REPAIR_STEPS, "直し方"), (SEAL_AGAIN, "封のやり直し")):
+        _cmds = re.findall(r"\S+\.py", _txt)
+        _bad = [c for c in _cmds
+                if not c.startswith("scripts/")
+                or not (_SCR / c.split("/", 1)[1]).is_file()
+                or ("python " + c) not in _txt]
+        t(f"★★{_nm}の案内は、そのまま打てる形で書く★★"
+          f"（打てない案内は、無人タスクをその場で止める）"
+          + (f"／★打てない: {_bad}★" if _bad else ""),
+          bool(_cmds) and not _bad)
+        t(f"　★{_nm}の案内は python から始まる★",
+          all(x.startswith("python scripts/")
+              for x in re.findall(r"python \S+\.py", _txt))
+          and _txt.count(".py") == _txt.count("python scripts/"))
+
     # ★★壊れた条件を黙って捨てない★★（2026-09-17・Codexの補足）
     #   ★直す前は辞書でない要素を落として読んでいた★ので、
     #   壊れた要素が1つ混ざっていても残りだけで閉じられた（fail-open）。
@@ -793,6 +816,8 @@ def selftest() -> int:
           _rC != 0 and _n() == 0 and "いま落ちていません" in _mC)
 
         # ★★条件を足したら、前の封を外す★★（そろっていないのに閉じられる）
+        _reg_out = []          # ★直前の呼び出しが何を言ったか★
+
         def _reg_ok(**kw):
             """★検査を落ちた扱いにして、書き込む道だけを通す★"""
             _keep_c, _keep_r = _rcT.repo_clean, _rcT.run
@@ -805,6 +830,7 @@ def selftest() -> int:
                     return _reg(**kw)
             finally:
                 _rcT.repo_clean, _rcT.run = _keep_c, _keep_r
+                _reg_out[:] = [_b.getvalue()]
 
         _fresh()
         _reg_ok()
@@ -902,16 +928,28 @@ def selftest() -> int:
             _stuck = bool(_condition_binds_row(
                 json.loads(_cled.read_text(encoding="utf-8"))["issues"][0],
                 _hit))
-            # ★白紙に戻す前に、登録し直す道具が落ちないことを見る★
-            #   （落ちると、白紙に戻す前の段階で手が止まる）
+            # ★白紙に戻す前に、登録の道具がどう振る舞うかを見る★
+            #   ①落ちない（落ちると、白紙に戻す前の段階で手が止まる）
+            #   ②★壊れた一覧のままでは登録しない★（残ると結局閉じられない）
+            #   ③★そのとき直し方まで言う★（言わないと同じ輪に戻る）
             try:
-                _reg_ok()
+                _rc0 = _reg_ok()
                 _blew0 = ""
             except Exception as e:                           # noqa: BLE001
-                _blew0 = f"{type(e).__name__}: {e}"
-            t(f"　★{_name}のままでも、登録の道具は落ちない★"
-              + (f"／★落ちた: {_blew0[:60]}★" if _blew0 else ""),
-              not _blew0)
+                _rc0, _blew0 = 0, f"{type(e).__name__}: {e}"
+            _m0 = (_reg_out or [""])[0]
+            _n0 = len(json.loads(_cled.read_text(encoding="utf-8"))
+                      ["issues"][0].get("resolution_conditions") or [])
+            if _name == "壊れた要素が混ざった一覧":
+                t("★★壊れた一覧のままでは登録しない★★"
+                  "（登録できても壊れた要素が残り、閉じる側は結局ずっと断る）"
+                  + (f"／★落ちた: {_blew0[:60]}★" if _blew0 else ""),
+                  not _blew0 and _rc0 != 0 and _n0 == 1
+                  and REPAIR_STEPS in _m0)
+            else:
+                t(f"　★{_name}のままでも、登録の道具は落ちない★"
+                  + (f"／★落ちた: {_blew0[:60]}★" if _blew0 else ""),
+                  not _blew0)
             # ★封を戻してから白紙にする★＝登録し直すと封は外れるので、
             #   そのままだと「白紙にすると封が消える」を試験できない（罠④）
             _pre = json.loads(_cled.read_text(encoding="utf-8"))["issues"][0]
@@ -1523,9 +1561,10 @@ def seal_problem(row: dict) -> str:
                 "--why-file <理由> --by claude,codex で封をしてください")
     ng = judges_problem(seal.get("by"))
     if ng:
-        return "封の" + ng
+        return "封の" + ng + "。" + SEAL_AGAIN
     if len(str(seal.get("why") or "").strip()) < 10:
-        return "封に、なぜ全部を覆ったと言えるのかが書かれていません"
+        return ("封に、なぜ全部を覆ったと言えるのかが書かれていません。"
+                + SEAL_AGAIN)
     return ""
 
 
@@ -1551,13 +1590,24 @@ def row_conditions(row: dict) -> list:
 #   ★詰まりを知らせる文は「登録し直してください」のままだった★。
 #   無人タスクは案内どおりに動くので、★同じ輪に戻るだけ★だった
 #   （版が上がった条件は、登録し直しても古いほうが残る）。
+#   ★★案内は「そのまま打てる形」で書く★★（2026-09-17・Codexの指摘）
+#   ★直す前は最後の1つを `ledger_sweep.py --slug …` と書いていた★
+#   ＝そのまま打つと**動かない**（`python scripts/` が抜けている）。
+#   ★私の試験は「共有元が各出口に入っているか」しか見ていなかった★ので、
+#   ★共有元そのものが間違っていても全部通った★（下で形を固定した）。
 REPAIR_STEPS = (
-    "★直し方★＝"
-    "python scripts/open_issues.py condition-reset --id <番号> "
+    "★直し方★＝①python scripts/open_issues.py condition-reset "
+    "--id <番号> --why-file <理由> --by claude,codex"
+    " ②python scripts/open_issues.py condition --id <番号> "
+    "--check <検査名> --why-file <理由> --by claude,codex"
+    " ③python scripts/open_issues.py seal --id <番号> "
     "--why-file <理由> --by claude,codex"
-    " → condition（登録し直す）→ seal（封をする）→ "
-    "ledger_sweep.py --slug <機種> --close <番号>"
+    " ④python scripts/ledger_sweep.py --slug <機種> --close <番号>"
 )
+
+# ★封がずれただけのときは、封をし直すだけでよい★（白紙に戻す必要がない）
+SEAL_AGAIN = ("★直し方★＝python scripts/open_issues.py seal --id <番号> "
+              "--why-file <理由> --by claude,codex")
 
 
 def conditions_broken(row: dict) -> str:
@@ -1668,15 +1718,12 @@ def _condition_binds_row(row: dict, conds: list) -> str:
     if str(seal.get("issue_digest") or "") != issue_digest(row):
         return ("封をしたあとに案件の本文が書き換わっています"
                 "（覆っているか分からないので、封をし直してください）。"
-                "python scripts/open_issues.py seal --id <番号> "
-                "--why-file <理由> --by claude,codex")
+                + SEAL_AGAIN)
     keys = sorted(json.dumps(_cond_key(c, slug), ensure_ascii=False)
                   for c in want)
     if list(seal.get("condition_keys") or []) != keys:
         return ("封をしたときの条件と、いまの条件が違います"
-                "（封をし直してください）。"
-                "python scripts/open_issues.py seal --id <番号> "
-                "--why-file <理由> --by claude,codex")
+                "（封をし直してください）。" + SEAL_AGAIN)
     have = {_cond_key(c.get("condition") or {}) for c in conds
             if isinstance(c, dict)}          # ★受領証はそのまま見る★
     for w in want:
@@ -1915,22 +1962,25 @@ def cmd_condition(path, args):
               "close --owner-decision で閉じてください")
         return 1
 
-    box = row.setdefault("resolution_conditions", [])
-    if not isinstance(box, list):
-        print("★登録しません★ 登録済みの条件の形が壊れています")
+    # ★★壊れた一覧のままでは登録しない★★（2026-09-17・Codexの指摘）
+    #   ★直す前★＝一覧でないときは直し方を言わずに断り、
+    #   壊れた要素が混ざっているときは★そのまま「登録しました」と出していた★
+    #   （残った壊れた要素のせいで、閉じる側は結局ずっと断る）。
+    _ngbox = conditions_broken(row)
+    if _ngbox:
+        print("★登録しません★ " + _ngbox)
         return 1
+    box = row.setdefault("resolution_conditions", [])
     new = {"check": args.check, "version": meta["version"], "args": cargs,
            "set_at": _today(), "set_by": by, "why": why,
            "result_when_set": got.get("result"),
            "failed_at_commit": _head0,
            "failed_digest": got.get("observation_digest")}
     slug = str(row.get("slug") or "")
-    # ★壊れた要素があっても、この道具が落ちない★（落ちると直す手が無くなる）
-    #   ★ただし読み飛ばしでは解決しない★＝残っている限り閉じる側が断るので、
-    #   直す道は `--reset`（下）。ここは「例外で止まらない」ためだけ。
+    # ★ここに来る時点で、一覧に壊れた要素は無い★
+    #   （conditions_broken が手前で断っている＝同じ規則を2か所に書かない）
     _same = [i for i, c in enumerate(box)
-             if isinstance(c, dict)
-             and _cond_key(c, slug) == _cond_key(new, slug)]
+             if _cond_key(c, slug) == _cond_key(new, slug)]
     if _same:
         # ★★使えない古い条件は、登録し直せる★★（2026-09-17・Codexの指摘）
         #   ★直す前は「同じ条件です」で終わっていた★ので、

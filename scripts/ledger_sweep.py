@@ -345,6 +345,38 @@ def conditions_for_row(slug: str, row, head: str = "") -> list:
     return out
 
 
+def due_condition_lines(row) -> list:
+    """★閉じる回で、その案件について何を知らせるか★（2026-09-17）
+
+    ★★切り出してある理由★★＝画面へ印字する処理の中に埋めていると、
+      ★そこを壊しても試験が緑のまま★になる（罠③）。
+
+    ★★壊れた一覧を「無い」「少ない」と見せない★★（Codexの指摘）＝
+      `row_conditions` は辞書でない要素を落として読むので、
+      ★一覧でなければ「未登録」、混ざっていれば「その分だけ」に見えた★。
+      その案内どおり登録しても、壊れた要素が残るので結局閉じられない。
+    ★詰まりを知らせたら、その場で直し方まで言う★
+      （言わないと、案内どおりに登録し直して同じ輪に戻る）。
+    """
+    out = []
+    ngb = _oi_mod.conditions_broken(row or {})
+    if ngb:
+        out.append("★" + ngb + "★")
+    cs = row_conditions(row)
+    if not cs and not ngb:
+        out.append("★閉じる条件は未登録★（登録しないと閉じられません）")
+    stale = False
+    for cond in cs:
+        out.append(f"★登録ずみの閉じる条件★ {cond.get('check')} "
+                   f"{cond.get('args')}（{cond.get('why')}）")
+        for w in condition_stale(cond):
+            out.append("★" + w + "★")
+            stale = True
+    if stale:
+        out.append("★この案件は、登録し直すだけでは直りません★")
+    return out
+
+
 def stale_conditions(row) -> list:
     """★登録した条件のうち、いま使えないもの★（理由の文の一覧）"""
     out = []
@@ -758,21 +790,8 @@ def main() -> int:
             print(f"\n  #{r.get('id')} [{r.get('severity') or '-'}] "
                   f"{r.get('slug')}: {str(r.get('title'))[:100]}")
             print(f"    {str(r.get('detail') or '')[:400]}")
-            _cs = row_conditions(r)
-            if not _cs:
-                print("    ★閉じる条件は未登録★"
-                      "（登録しないと閉じられません）")
-            _stale_here = False
-            for cond in _cs:
-                print(f"    ★登録ずみの閉じる条件★ {cond.get('check')} "
-                      f"{cond.get('args')}（{cond.get('why')}）")
-                for _w in condition_stale(cond):
-                    print("    ★" + _w + "★")
-                    _stale_here = True
-            if _stale_here:
-                # ★詰まりを知らせたら、その場で直し方まで言う★
-                #   （言わないと、案内どおりに登録し直して同じ輪に戻る）
-                print("    ★この案件は、登録し直すだけでは直りません★")
+            for _ln in due_condition_lines(r):
+                print("    " + _ln)
         if got:
             print("\n★記事を読んで、直っているなら閉じてください★")
             print("★★①「これが通れば直っている」を案件に登録します★★"
@@ -1156,6 +1175,26 @@ def selftest() -> int:
           {"resolution_conditions": [{"check": "x"}, "壊れた要素"]})
       and _RE in _oi_mod.conditions_broken(
           {"resolution_conditions": "ただの文字列"}))
+
+    # ★★案件を出すときにも、壊れた一覧をそのまま知らせる★★
+    #   （2026-09-17・Codexの指摘）＝★直す前は「未登録」「その分だけ」に見えた★。
+    #   その案内どおり登録しても、壊れた要素が残るので結局閉じられない。
+    t("★★一覧ですらない条件を「未登録」と見せない★★",
+      any(_RE in x for x in
+          due_condition_lines({"resolution_conditions": "ただの文字列"}))
+      and not any("未登録" in x for x in
+                  due_condition_lines(
+                      {"resolution_conditions": "ただの文字列"})))
+    t("★★壊れた要素が混ざった一覧を「その分だけ」と見せない★★",
+      any(_RE in x for x in due_condition_lines(
+          {"resolution_conditions": [{"check": "model_code_gone",
+                                      "version": 1, "args": {}},
+                                     "壊れた要素"]})))
+    t("　★登録が無い案件は、今までどおり「未登録」と言う★",
+      any("未登録" in x for x in due_condition_lines({})))
+    t("　★古くなった条件は「登録し直すだけでは直りません」と言う★",
+      any("登録し直すだけでは直りません" in x for x in due_condition_lines(
+          {"resolution_conditions": [dict(_live, version=999)]})))
     t("★★検査の版が変わった条件は、その場で知らせる★★"
       "（その案件だけ、理由の分からないまま閉じられなくなる）",
       bool(condition_stale(dict(_live, version=999))))
