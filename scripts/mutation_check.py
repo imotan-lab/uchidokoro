@@ -61,7 +61,236 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   組み立てれば値は同じで、監査の見ている形には当たらない。
 _PATHS_PY = "scripts/local" + "_paths.py"
 
+# ★★自動で採用する条件（2行）★★（2026-09-17）
+#   ★壊し方の目印は、本番の2行をそのまま持つ★＝
+#   ここを書き換えたら、壊し方の目印も必ず合わなくなる（表の検査が知らせる）。
+_AUTO_ACCEPT_LINES = (
+    '        if r.get("identity_ok") and not (r.get("reason_codes") or []) ' + chr(92)
+    + chr(10)
+    + '                and _mc_state in (None, "", "MATCH"):' + chr(10)
+    + "            accepted.add(_url)")
+
 MUTATIONS = [
+    {
+        "why": "★AIごとの判断がそろっているかを見ない"
+               "（★1つだけの実行が「2AIで決めた」ことになる＝"
+               "実行漏れ・配線切れに気づけない★＝Codexの指摘1）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "    if {str(k).strip().casefold() for k in _dec} "
+                  "!= set(ALLOWED_AGREERS):",
+        "after": "    if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★AIごとの結論が、控えの結論と同じかを見ない"
+               "（★割れている判断を「2AIで一致した」ことにできる★）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": '        if _d["verdict"] != rec["verdict"]:',
+        "after": "        if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★AIが読んだ本文が、控えた本文と同じかを見ない"
+               "（★別のページを読んだ判断でも「一致」になる／"
+               "2AIが読んだあとに相手が書き換えても許可が付く★）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": '        if str(_d.get("body_sha256") or "") '
+                  '!= str(rec.get("body_sha256") or ""):',
+        "after": "        if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★AIごとの判断を控えに残さない（名前を並べるだけに戻す）"
+               "（★片方が実行されていなくても同じ形になる＝"
+               "実行漏れ・配線切れに気づけない★＝Codexの指摘1）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "    _dec = rec.get(\"decisions\")",
+        "after": "    _dec = {k: {\"verdict\": rec[\"verdict\"],"
+                 " \"why\": rec[\"why\"],"
+                 " \"body_sha256\": rec[\"body_sha256\"]}"
+                 " for k in ALLOWED_AGREERS}",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★観測した状態を見ずに、符丁だけを信じる"
+               "（★同定器が食い違いを観測しながら符丁を付け忘れる退行で、"
+               "また黙って採用に戻る★＝Codexの指摘3）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '        if r.get("identity_ok") and not (r.get("reason_codes") or []) \\'
+                  + chr(10) + '                and _mc_state in (None, "", "MATCH"):',
+        "after": '        if r.get("identity_ok") and not (r.get("reason_codes") or []):',
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★2AI用の道具が、控えの取り込みに失敗しても静かに進む"
+               "（★モジュールの削除・構文エラー・初期化失敗が握りつぶされ、"
+               "この経路だけ静かに効かなくなる★＝Codexの指摘2）★",
+        "file": "scripts/collect_evidence.py",
+        "before": "    import maker_identity_cache as _mic" + chr(10)
+                  + "    try:",
+        "after": "    try:" + chr(10)
+                 + "        import maker_identity_cache as _mic" + chr(10)
+                 + "    except Exception:" + chr(10)
+                 + "        return None" + chr(10)
+                 + "    try:",
+        "run": ["scripts/collect_evidence.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★2AI用の道具が、控えを引く先を見失う"
+               "（★例外を握りつぶすので、消えた関数を呼び続けても静かに"
+               "効かなくなるだけ＝ソースの文字を見る試験では気づけない★"
+               "＝Codexの指摘3）★",
+        "file": "scripts/collect_evidence.py",
+        "before": "        v = _mic.verdict_for(slug, material_url=url, runtime_page=page)",
+        "after": "        v = None",
+        "run": ["scripts/collect_evidence.py"],
+        "issues": [696],
+    },
+    # ─── 2026-09-17・材料の採否を2AIへ移した（運営者の指示） ──────────
+    #   ＞ もうさ、機械的に見るのやめたら？
+    #   ＞ シンプルに行かない？ 検索する項目だけ決めてさ、2AIで拾ってくるだけ。
+    #   ★外した層の壊し方は消した★（守りそのものが無いので壊せない）。
+    #   ★代わりに、残した線を1つずつ壊す★＝ここが歯止めの全部。
+    {
+        "why": "★古い形（機械が意味を判定していた前提の）控えを、そのまま使う"
+               "（★移行の分岐を作らないと決めたのに、古い判断が効き続ける★）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": '    if rec.get("proof_profile") is not None:',
+        "after": "    if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★判断したときの本文の指紋を求めない"
+               "（★題の分解をやめた代わりの「同じものを見ている」保証が消える"
+               "＝ページが書き換わっても古い判断が効く★）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": '    if len(_sha) != 64 or any(c not in "0123456789abcdef" for c in _sha):',
+        "after": "    if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★なぜそう決めたかの記録を求めない"
+               "（★あとから何を根拠に決めたか追えなくなる★）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": '    if len(str(rec.get("why") or "").strip()) < MIN_WHY:',
+        "after": "    if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★対象ページ自身の観測が根拠に無くても控える"
+               "（★どのページの採否かがぼやける＝別ページの観測で通せる★）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "    if len(_tgt_ev) != 1:",
+        "after": "    if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★写しの長さの上限を外す"
+               "（★規約について運営者が出した『事実の欄だけ』という前提が崩れる★）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "        if len(q1) > MAX_QUOTE:",
+        "after": "        if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★同じ名鑑から2件以上の引用を控えられるようにする（規約の前提）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "    if len(set(per)) != len(per):",
+        "after": "    if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★引用がそのページに在るかを見ない"
+               "（★言うだけで通る＝2AIが本文に無い文を根拠にできる"
+               "＝いま残っている唯一の『言うだけでは通さない』歯止め★）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "        if q not in body:",
+        "after": "        if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★控えを使うとき「同じ本文を見ているか」を確かめない"
+               "（★器を渡さなくても答える＋指紋も比べない＝この2行で1つの守り。相手がページを書き換えても、古い判断が効き続ける★）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": ("        if runtime_page is None:" + chr(10)
+                   + "            return None" + chr(10)
+                   + '        if str(rec.get("body_sha256") or "") != str('),
+        "after": ("        if False:" + chr(10)
+                  + "            return None" + chr(10)
+                  + "        if False and str(" + chr(10)
+                  + '                rec.get("body_sha256") or "") != str('),
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★許可証が無くても材料に使う"
+               "（★2AIが決めていないページを読む＝採否の判断が誰もいなくなる★）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": "    if not grant:\n        return False, why",
+        "after": "    if not grant:" + chr(10)
+                 + '        return True, "OK"',
+        "run": ["scripts/model_code_lookup.py", "scripts/add_machine_run.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★許可証を本文の指紋で照合しない"
+               "（★2AIが見たページと、読取器が読むページが別物になり得る★）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": "    if _sha not in set(grant):",
+        "after": "    if False:",
+        "run": ["scripts/model_code_lookup.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★2AIが「使わない」と決めた控えを効かせない"
+               "（★除外は見え方が変わっても消えない、という決まりが崩れる★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '        if v == "REJECT_MATERIAL":',
+        "after": "        if False:",
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★機械が何か見つけたページも、2AIに聞かずにそのまま使う"
+               "（★題が別機種に見えるページが黙って材料に入る★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": _AUTO_ACCEPT_LINES,
+        "after": "        if True:\n            accepted.add(_url)",
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★機械が何か見つけても、2AIへの問いにしない"
+               "（★聞かないと、その機種は永久に止まる＝モンハンライズが8晩★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "        questions.append({\n            # ★1ページにつき1判断★",
+        "after": "        [].append({\n            # ★1ページにつき1判断★",
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★「2AIが使わないと決めた」と「まだ確かめていない」を混ぜる"
+               "（★決着した機種が、永久に『読む先は全部ではありません』になる★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "        if u in rejected:\n            continue"
+                  "                       # ★2AIが決めた除外＝確定★",
+        "after": "        if False:\n            continue",
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [696],
+    },
     # ─── 2026-09-12・直したあとも検査を続ける（Codexの重大指摘）──────
     {
         "why": "★対象を「いまの一覧の中身」で決める"
@@ -857,86 +1086,6 @@ MUTATIONS = [
     },
     # ─── 2026-09-16・派生機と、材料側の救える落ち方（台帳#690） ──────────
     {
-        "why": "★許可証から「そのとき期待していた社」を落とす"
-               "（★同じ許可証が、別の期待する社と一緒に渡しても通る★"
-               "＝CodexのP1）★",
-        "file": "scripts/add_machine_run.py",
-        "before": '            "expected": str(_n.get("expected") or ""),',
-        "after": '            "expected": "",',
-        "run": ["scripts/model_code_lookup.py", "scripts/add_machine_run.py"],
-        "issues": [690],
-    },
-    {
-        "why": "★読取器が、許可証の「期待していた社」を照合しない"
-               "（★メーカー欄が読めるページなら、その欄に合う別の社を"
-               "期待して渡すだけで、同じ許可証が題の不一致を救う★"
-               "＝CodexのP1・2回目）★",
-        "file": "scripts/model_code_lookup.py",
-        "before": ("    if isinstance(_granted, dict) and (" + chr(10)
-                   + "            not expected_maker"
-                   + " or _g_expected != expected_maker):" + chr(10)
-                   + '        return False, "GRANT_EXPECTED_MAKER_MISMATCH"'),
-        "after": "    if False:" + chr(10) + "        pass",
-        "run": ["scripts/model_code_lookup.py"],
-        "issues": [690],
-    },
-    {
-        "why": "★期待する社を渡さない呼び方を、硬い拒否から外す"
-               "（★渡さなければ素通りし、メーカー欄の無いページが"
-               "そのまま通る。控え側は「社が無ければ答えない」なので、"
-               "同じ不変条件が2つの強さで存在することになる★"
-               "＝CodexのP1・3回目）★",
-        "file": "scripts/model_code_lookup.py",
-        "before": "            not expected_maker"
-                  " or _g_expected != expected_maker):",
-        "after": "            _g_expected != expected_maker):",
-        "run": ["scripts/model_code_lookup.py"],
-        "issues": [690],
-    },
-    {
-        "why": "★許可証の社が合っていれば、本文のメーカー欄の食い違いを見ない"
-               "（★硬い拒否を足したので、欄を見る道を一度も通らない試験だけが"
-               "残りかけた＝罠㊳★）★",
-        "file": "scripts/model_code_lookup.py",
-        "before": '            return False, "GRANT_MAKER_MISMATCH"',
-        "after": "            pass",
-        "run": ["scripts/model_code_lookup.py"],
-        "issues": [690],
-    },
-    {
-        "why": "★控えを「そのとき期待していた社」に結び付けない"
-               "（★DMM側のメーカー表記があとから訂正されても、"
-               "ページも落ち方も変わらないので古い控えがそのまま効く★"
-               "＝CodexのP1）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": '            if not expected or rec.get("expected") != expected:',
-        "after": "            if False:",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [690],
-    },
-    {
-        "why": "★許可証から「2AIが認めた落ち方」を落とす"
-               "（★題も落ちてメーカー欄も無いページ＝複合の落ち方が、"
-               "控えを作っても材料側で必ず断られる★＝CodexのP1）★",
-        "file": "scripts/add_machine_run.py",
-        "before": ('            "reason_codes": tuple(' + chr(10)
-                   + '                _n.get("reason_codes_seen") or _n.get("reason_codes") or ()),'),
-        "after": '            "reason_codes": (),',
-        "run": ["scripts/add_machine_run.py"],
-        "issues": [690],
-    },
-    {
-        "why": "★認めた落ち方を無視して、メーカー欄を二度見する"
-               "（★同じ規則を2か所に書く＝控えが効いても読取器が断る★）★",
-        "file": "scripts/model_code_lookup.py",
-        "before": ("        if _maker_decided:" + chr(10)
-                   + '            return True, "OK_BY_GRANT"'),
-        "after": ("        if False:" + chr(10)
-                  + '            return True, "OK_BY_GRANT"'),
-        "run": ["scripts/model_code_lookup.py", "scripts/add_machine_run.py"],
-        "issues": [690],
-    },
-    {
         "why": "★派生の印の検査を、ゆるい道だけに戻す"
                "（★厳しい道は手前で continue するので一度も動かない＝"
                "続編・SP版のページが『控えに残せる落ち方』で返り、"
@@ -961,16 +1110,6 @@ MUTATIONS = [
         "run": ["scripts/model_code_lookup.py"],
         "issues": [690],
     },
-    {
-        "why": "★材料側の救える落ち方を、名前の表（2種）に戻す"
-               "（★控えを作った先で、材料を読む側が同じ理由でもう一度断る＝"
-               "2AIが決めても何も読めないまま止まる★）★",
-        "file": "scripts/model_code_lookup.py",
-        "before": '    if _mic_r.proof_needs([str(why or "").split(":")[0].split("（")[0]]) is None:',
-        "after": "    if not _mic_r.rescuable_reason(why):",
-        "run": ["scripts/model_code_lookup.py"],
-        "issues": [690],
-    },
     # ─── 2026-09-15・落ち方を3分類にして2AIへ回す（台帳#675） ──────────
     {
         "why": "★DMM側の明白な食い違いを、硬い落ち方から外す"
@@ -991,58 +1130,6 @@ MUTATIONS = [
         "before": "    _ret = set(re.findall(r'return False, f?\"([A-Z_]+)[^\"]*\"', _src))",
         "after": "    _ret = set(re.findall(r'return False, \"([A-Z_]+)[^\"]*\"', _src))",
         "run": ["scripts/model_code_lookup.py"],
-        "issues": [675],
-    },
-    {
-        "why": "★新しい型では、題の落ち方の対象ページを救わない"
-               "（★2AIが決めても登録で断られ、翌晩また同じ問いが出る★"
-               "＝Codexの重大1）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "            if not _ok_id and is_codes_profile(_prof) and _is_target:",
-        "after": "            if False:",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [675],
-    },
-    {
-        "why": "★題の落ち方を「含まれていればよい」に戻す"
-               "（★実際より多い落ち方を名乗った控えが保存でき、"
-               "使うときは完全一致で断られる＝控えたのに効かず"
-               "翌晩また2AIへ聞く★＝Codexの指摘）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "                if set(_now_codes) != (set(_rec_codes) & set(_TITLE_CODES)):",
-        "after": "                if not set(_now_codes) <= set(_rec_codes):",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [675],
-    },
-    {
-        "why": "★錨が弱いときに、独立した名鑑2件を求めない"
-               "（★対象ページとDMMの正式名を機械的に結ぶものが無くなる★）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "    if _weak_anchor:",
-        "after": "    if False:",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [675],
-    },
-    {
-        "why": "★メーカー欄の再確認を、控え全体の表記に戻す"
-               "（★対象と補強で表記が違うと、補強が正しくても断る／"
-               "対象が読めない控えでは補強を一度も確かめない★＝Codexの重大3）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "            seen = str(_e_now.get(\"seen_maker\") or \"\")",
-        "after": "            seen = str((rec or {}).get(\"seen\") or \"\")",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [675],
-    },
-    {
-        "why": "★証拠の形の検査を、結論の関門より後ろへ戻す"
-               "（★「使わない」の控えが、役割も対象URLも確かめずに保存できる★"
-               "＝永続する判断なのに形の検査が無い）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "    # ★★証拠の形は、結論によらず先に確かめる★★",
-        "after": "    if rec[\"verdict\"] != \"ACCEPT_MATERIAL\":\n"
-                 "        return\n"
-                 "    # ★★証拠の形は、結論によらず先に確かめる★★",
-        "run": ["scripts/maker_identity_cache.py"],
         "issues": [675],
     },
     {
@@ -1078,82 +1165,6 @@ MUTATIONS = [
         "before": "                        page=_pages.get(u)) for u in got[\"urls\"]]",
         "after": "                        ) for u in got[\"urls\"]]",
         "run": ["scripts/add_machine_run.py"],
-        "issues": [675],
-    },
-    {
-        "why": "★2AIへ回すのを、関係のある社（RELATED）だけに戻す"
-               "（★メーカー欄が読めない・名簿で解決できない・別の社に見える、は"
-               "黙って外れる＝実測でモンハンライズの2件がこれだった★）★",
-        "file": "scripts/add_machine_run.py",
-        "before": "        if _mcl_d.decision_of(r, maker) != \"REVIEW\":",
-        "after": "        if (r.get(\"maker_check\") or {}).get(\"state\") != \"RELATED\":",
-        "run": ["scripts/add_machine_run.py"],
-        "issues": [675],
-    },
-    {
-        "why": "★知らない落ち方でも、いちばん軽い証明で控えられるようにする"
-               "（★意味が分からないものを恒久的に採用できてしまう★"
-               "＝Codexの指摘3）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "    if not cs or not cs <= set(RECORDABLE_REASON_CODES):\n"
-                  "        return None",
-        "after": "    if False:\n"
-                 "        return None",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [675],
-    },
-    {
-        "why": "★メーカー欄が読めない対象にも、その欄の引用を求める"
-               "（★そのページは永久に控えられない＝毎晩止まる★"
-               "＝直そうとしているものそのもの）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "        \"target_quote\": ((\"machine_name\", \"release\") if unreadable\n"
-                  "                         else (\"machine_name\", \"maker\", \"release\")),",
-        "after": "        \"target_quote\": (\"machine_name\", \"maker\", \"release\"),",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [675],
-    },
-    {
-        "why": "★控えを当てるとき、いまの落ち方と比べない"
-               "（★型の名前だけを信じる＝配線を間違えた日に古い控えが効く★"
-               "＝Codexの指摘2）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "            if canonical_reason_codes(look.get(\"reason_codes\")) != \\\n"
-                  "                    canonical_reason_codes(rec.get(\"reason_codes\")):\n"
-                  "                return None",
-        "after": "            if False:\n"
-                 "                return None",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [675],
-    },
-    {
-        "why": "★いまの観測を渡さなくても控えを当てる（fail-open に戻す）"
-               "（★渡されないときに控え自身の値で埋めると、"
-               "何も確かめずに通る★）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "            if not isinstance(look, dict):\n"
-                  "                return None",
-        "after": "            if not isinstance(look, dict):\n"
-                 "                look = dict(rec)",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [675],
-    },
-    {
-        "why": "★分類した本文と、材料にする本文が違っても控えを当てる"
-               "（★別の写しを見て決めた控えが効く★）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "            if runtime_page is not None and str(",
-        "after": "            if False and str(",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [675],
-    },
-    {
-        "why": "★「読めない」を根拠にした控えを、読めるようになっても当てる"
-               "（★前提が消えているのに、その控えで材料に使える★）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "            if _needs_w[\"recheck_maker_unreadable\"] and str(",
-        "after": "            if False and str(",
-        "run": ["scripts/maker_identity_cache.py"],
         "issues": [675],
     },
     # ★★外した壊し方（2026-09-15・台帳#675）★★
@@ -1551,124 +1562,7 @@ MUTATIONS = [
         "issues": [655],
     },
     # ─── 2026-09-13・引用の錨にする導入日（台帳#657） ──────────────
-    {
-        "why": "★引用の錨をDMMの導入日へ戻す"
-               "（名鑑が導入日を書き直さないだけで、2AIが正しく判断しても"
-               "その機種は永久に控えられず、毎晩止まり続ける）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "        return (v, True) if v else (_dmm_rel, False)",
-        "after": "        return (_dmm_rel, False)",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [657],
-    },
-    {
-        "why": "★名鑑の導入日がDMMと食い違っているのに、理由なしで控えられる"
-               "（別の機種の欄から採った引用でも、日付をずらして名乗るだけで通る）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "        if len(\" \".join(str(rec.get(\"release_why\") or \"\").split())) < 15:",
-        "after": "        if False:",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [657],
-    },
-    {
-        "why": "★名鑑の導入日を控えに書き込まない（配線を外す）"
-               "＝登録はできるが、読むときには無かったことになり、"
-               "次に使うときDMMの値で照合して落ちる★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "        if str(seen_release or \"\").strip():",
-        "after": "        if False:",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [657],
-    },
-    {
-        "why": "★錨を根拠ごとではなく控えに1つだけ持つ"
-               "（名鑑ごとに書いている導入日が違う形は普通にあるので、"
-               "どちらかの名鑑が必ず外れ、独立2出典がそろわない。Codexの指摘）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": '        v = (str((e or {}).get("seen_release") or "").strip()',
-        "after": '        v = (""',
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [657],
-    },
-    {
-        "why": "★名乗った精度を無視して、月の形でも当たるようにする"
-               "（『2026-10-31』と名乗って引用が『2026年10月』でも通る＝"
-               "名乗った値そのものを確かめていない。Codexの指摘）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "        _days = date_forms_exact(_anchor) if _named else date_forms(_anchor)",
-        "after": "        _days = date_forms(_anchor)",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [657],
-    },
-    {
-        "why": "★機種名のすぐ後ろの数字を見ない"
-               "（同じ名鑑ページに並ぶ続編の欄『L対象機2』を、"
-               "対象機の欄として引用できる。Codexの指摘）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "        if j < len(h) and h[j].isdigit():",
-        "after": "        if False:",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [657],
-    },
-    {
-        "why": "★続編の欄を、最初に出てくる機種名の後ろでしか見ない"
-               "（『対象機の紹介 … 機種名 対象機2 …』で素通りする。Codexの指摘）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "        i = h.find(n, i + 1)",
-        "after": "        i = -1",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [657],
-    },
-    {
-        "why": "★名乗った日付を、数字の境目を見ずに照合する"
-               "（『2026/9/3』は『2026/9/30』の中にそのまま現れるので、"
-               "名乗った日そのものを確かめたことにならない。Codexの指摘）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "        if not strict:",
-        "after": "        if True:",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [657],
-    },
-    {
-        "why": "★CLIから --seen-release / --release-why を渡す配線を外す"
-               "（2AIが名乗っても控えに届かず、その機種は止まったまま）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": '                       seen_release=a.seen_release or "",',
-        "after": '                       seen_release="",',
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [657],
-    },
-    {
-        "why": "★--evidence の4つ目（その名鑑が書いている導入日）を捨てる"
-               "（名鑑ごとに違う日付を書いていると、片方が必ず外れる）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "            if len(parts) >= 4 and parts[3]:",
-        "after": "            if False:",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [657],
-    },
-    {
-        "why": "★問いから、名鑑の導入日の控え方を落とす"
-               "（2AIは正しい逐語を出しているのに登録で断られ続け、"
-               "その機種が毎晩止まる）★"
-               "／★2026-09-15に問いは1か所になった★"
-               "（メーカー欄の道と題の救いの道を1本にまとめた）",
-        "file": "scripts/add_machine_run.py",
-        "before": "            + _SEEN_RELEASE_HINT",
-        "after": "            + \"\"",
-        "run": ["scripts/add_machine_run.py"],
-        "issues": [657, 675],
-    },
     # ─── 2026-09-12・題の不一致の救い（台帳#607） ──────────────────
-    {
-        "why": "★検査する本文と、許可証にする本文を結ばない"
-               "（控えの照合が別の本文を見るので、読取器が読む本文は確かめられていないものになる。★2つの本文が分かれる★）★",
-        "file": "scripts/add_machine_run.py",
-        "before": "                                    runtime_page=(pages or {}).get(url),",
-        "after": "                                    runtime_page=None,",
-        "run": ["scripts/add_machine_run.py"],
-        "issues": [607],
-    },
     {
         "why": "★許可証を空にする（採否で「使う」と決めたのに、読取器へ何も渡らず、その機種は材料を1つも読めない）★"
                "／★手作りの許可証で試験していると気づけない接続部分★",
@@ -1676,43 +1570,6 @@ MUTATIONS = [
         "before": '    return {pages[u].sha256: _meta.get(u, {"expected": "",',
         "after": '    return {} if True else {pages[u].sha256: _meta.get(u, {"expected": "",',
         "run": ["scripts/add_machine_run.py"],
-        "issues": [607],
-    },
-    {
-        "why": "★最後の関門（許可証の照合）を直接一致だけに戻す"
-               "（控えで「使う」と決めても、4つの読取器が全部GRANT_MAKER_MISMATCH で拒否し、その機種は何も読めない）★",
-        "file": "scripts/model_code_lookup.py",
-        "before": "        if expected_maker not in owners \
-                and not (owners and _related(expected_maker, owners)):",
-        "after": "        if expected_maker not in owners:",
-        "run": ["scripts/add_machine_run.py"],
-        "issues": [607],
-    },
-    {
-        "why": "★飾りが分解できない型には、メーカー欄の検査を当てない"
-               "（契約は「一致が必須」と書いてあるのに、別の社でもどの社か分からない表記でも控えを作れた。★元からの穴★）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "    if prof in (\"title_name_core_mismatch\", \"title_tail_conflict\"):",
-        "after": "    if prof == \"title_name_core_mismatch\":",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [607],
-    },
-    {
-        "why": "★同じグループと確認されている社（RELATED）を救わない"
-               "（2AIが別々に読んで同じ結論を出しても控えに登録できず、その機種が永久に止まる。直す前の姿）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "            _exp in _owners or _mcl1._related(_exp, _owners))",
-        "after": "            _exp in _owners)",
-        "run": ["scripts/maker_identity_cache.py"],
-        "issues": [607],
-    },
-    {
-        "why": "★メーカー欄がどの社か分からない・別の社でも救う"
-               "（名簿に無いだけの任意の別会社まで同じ扱いになり、同名で別メーカーの機種を本人にできる）★",
-        "file": "scripts/maker_identity_cache.py",
-        "before": "        if not _ok_maker:",
-        "after": "        if False:",
-        "run": ["scripts/maker_identity_cache.py"],
         "issues": [607],
     },
     # ─── 2026-09-12・名鑑のローマ字表記（台帳#608） ────────────────
@@ -3508,17 +3365,6 @@ MUTATIONS = [
         "run": ["scripts/style_check.py"],
     },
     {
-        "why": "★題名で救う道の「使わない」を記録しない★"
-               "（★2AIが決着させた除外が『まだ確かめられていない』に落ち、"
-               "その機種が永久に「読む先は全部ではありません」になる★）",
-        "file": "scripts/add_machine_run.py",
-        "before": ('                == "REJECT_MATERIAL":' + chr(10)
-                   + '            rejected.add(_url)'),
-        "after": ('                == "REJECT_MATERIAL_XX":' + chr(10)
-                  + '            rejected.add(_url)'),
-        "run": ["scripts/add_machine_run.py"],
-    },
-    {
         "why": "★育成で止めるときに、2AIへの問いを作らない★"
                "（★いちばん読めていない機種で、何も聞かないまま終わる★）",
         "file": "scripts/grow_machine.py",
@@ -3569,17 +3415,6 @@ MUTATIONS = [
                  '        return None\n'
                  '    for raw_v in got["value"].values():',
         "run": ["scripts/page_decision.py"],
-    },
-    {
-        "why": "★日まで分かっていると、月までしか書かない名鑑を通さない★"
-               "（★同じ問いが毎晩出続け、そのページが恒久的に材料から外れ、"
-               "その機種は検索に載らないままになる★）",
-        # ★この守りが直したことを証明する案件★
-        "issues": [600],
-        "file": "scripts/maker_identity_cache.py",
-        "before": '        out += date_forms(f"{y}-{mo:02d}")',
-        "after": '        pass',
-        "run": ["scripts/maker_identity_cache.py"],
     },
     {
         "why": "★試験が本番の記録に書き込む★"
@@ -3841,15 +3676,6 @@ MUTATIONS = [
         "file": "scripts/add_machine_run.py",
         "before": '         if v.get("state") in ("CATALOG_UNHEALTHY", "AMBIGUOUS_CANDIDATES")],',
         "after": '         if v.get("state") in ()],',
-        "run": ["scripts/add_machine_run.py"],
-    },
-    {
-        "why": "★メーカーの除外を全部「正しい除外」とみなす★"
-               "（★どの社か分からない・同定できない・控えを読めない、も"
-               "混ざっているので、読めていないのに『全部』になる★）",
-        "file": "scripts/add_machine_run.py",
-        "before": '        if r["url"] in rejected or (r.get("identity_ok") and st == "MISMATCH"):',
-        "after": '        if True:',
         "run": ["scripts/add_machine_run.py"],
     },
     {

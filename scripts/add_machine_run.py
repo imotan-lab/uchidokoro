@@ -541,12 +541,12 @@ def _maker_related(expected: str, seen: str) -> bool:
         return False
 
 
-def _review_question(r, url, codes, needs, prof, maker,
-                     machine_name, release_date) -> str:
+def _review_question(r, url, maker, machine_name, release_date,
+                     body_sha256="") -> str:
     """★2AIに「このページを材料に使ってよいか」を聞く文を作る★
 
     ★機械が観測した事実だけを書く★（解釈は書かない・2026-09-10の基本方針）。
-    ★控えられない落ち方のときは、そう書く★＝答えようのない指示を出さない。
+    ★機械の見立ては「手がかり」であって、判断ではない★（2026-09-17）。
     """
     _obs = [
         f"題「{str(r.get('observed_title') or '')[:80]}」",
@@ -560,111 +560,81 @@ def _review_question(r, url, codes, needs, prof, maker,
          + ("（★芯は一致しています★）" if r.get("name_in_body_core")
             else "（芯も一致しません）")),
     ]
-    head = (f"★この名鑑ページを、この機種の材料に使ってよいですか★／{url}／"
-            f"機械が決められなかった理由: {'・'.join(codes) or '（不明）'}／"
+    return (f"★この名鑑ページを、この機種の材料に使ってよいですか★／{url}／"
             f"DMMの正式名「{machine_name}」（導入日 {release_date}）／"
             f"DMMのメーカー表記「{maker}」／"
             f"機械が見たもの: {' ／ '.join(_obs)}／"
-            "★機械は『本文に正式名があるから本人だ』とは決めません★＝"
-            "そこは2AIが本文と欄の関係を読んで判断してください。")
-    if needs is None:
-        return (head + "★この落ち方は控えに残せません★＝"
-                "硬い落ち方か、まだ名前の付いていない落ち方です。"
-                "判断した内容を運営者へ報告してください。")
-    _codes_args = " ".join(f"--reason-code {c}" for c in codes)
-    _target_fields = "・".join(needs["target_quote"])
-    return (head
-            + "決めたら python scripts/maker_identity_cache.py --record "
+            f"機械の見立て: {str(r.get('reason') or '（問題なし）')[:80]}／"
+            "★見立ては手がかりです★＝機械は題や欄の字を見ているだけなので、"
+            "本文を読んで判断してください。"
+            "決めたら python scripts/maker_identity_cache.py --record "
             "--machine-url https://p-town.dmm.com/machines/<機種ID> "
-            f"--machine-name \"{machine_name}\" "
             f"--target-url {url} "
-            f"{_codes_args} "
-            f"--expected {maker} "
-            + (f"--seen \"{str(r.get('observed_maker') or '')}\" "
-               if "maker" in needs["target_quote"] else "")
-            + "--verdict ACCEPT_MATERIAL/REJECT_MATERIAL "
-            "--why-file <理由を書いたファイル> --by claude,codex "
-            f"--evidence \"{url}|<逐語引用（{_target_fields}を含む）>"
-            "|directory_observation|<その名鑑が書いている導入日>|target"
-            + ("|<その名鑑のメーカー欄>" if "maker" in needs["target_quote"]
-               else "")
-            + "\" "
-            + ("--evidence \"<別の名鑑の機種ページURL>|<機種名とメーカー欄と"
-               "導入日を含む逐語引用>|directory_observation|<その名鑑の導入日>"
-               "|support|<その名鑑のメーカー欄>\" "
-               if needs["min_directories"] >= 2 else "")
-            + "で控えてください"
-            + ("（★独立した名鑑が2つ要ります★）"
-               if needs["min_directories"] >= 2
-               else "（★このページ自身とDMMで足ります★）")
-            + _SEEN_RELEASE_HINT
-            # ★★問いと許可条件をそろえる★★（2026-09-12・Codexの指摘）
-            #   ★聞くのは「同じ会社か」ではない★＝
-            #   「このページをこの機種の材料に使ってよいか」。
-            + (("★メーカー欄はDMMの期待（%s）と同じ社ではなく、"
-                "名簿で『関係のある社』と確認されている表記（%s）です★。"
-                "★同じ会社かを答えるのではなく、"
-                "『このページをこの機種の材料に使ってよいか』を"
-                "判断してください★"
-                % (maker, str(r.get("observed_maker") or "")))
-               if _maker_related(maker, str(r.get("observed_maker") or ""))
-               else ""))
+            # ★★AIごとの判断を別々に渡す★★（2026-09-17・Codexの指摘1）
+            #   ★名前を並べるだけでは「2つ動いた」と言えない★＝
+            #   片方の実行漏れ・配線切れに気づけない。
+            #   ★2つそろって、結論も読んだ本文も一致したときだけ控えます★
+            "--decision \"claude|<結論>|<あなたが読んだ本文の指紋>|<理由>\" "
+            "--decision \"codex|<結論>|<読んだ本文の指紋>|<理由>\" "
+            # ★★いま読んだ本文の指紋をそのまま渡す★★
+            #   （2026-09-17・Codexの指摘2）＝控えるときに機械が数え直した値と
+            #   突き合わせる。★違えば控えない★＝2AIが読んだあとに相手が
+            #   ページを書き換えたということなので、読み直して決め直す。
+            f"--evidence \"{url}|<そのページの逐語引用（8〜120字）>"
+            "|directory_observation\" "
+            "で控えてください（★引用がそのページに在ることは機械が確かめます★）"
+            f"／★あなたが読んだ本文の指紋: {body_sha256 or '（渡されていません）'}★")
 
 
 def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                             verdict_of=None, machine_name="",
                             release_date="", pages=None) -> dict:
-    """★メーカー欄を見て、どの名鑑ページを材料に使うか決める★
+    """★どの名鑑ページを材料に使うか★＝**2AIが決める**（2026-09-17）
 
-    ★ここを関数にした理由★（2026-08-17・Codex依頼228の指摘1と、その原因）
-      判定は gather() の中に埋まっていて、試験は**本体の式を文字列で取り出して
-      動かして**いた。すると「前段のループで `_unknown_ok` に何が入るか」を
-      通らないので、★UNKNOWN が控えで救われる穴（5-A）を検知できなかった★。
-      判定そのものをここへ出し、試験も本番もこの関数を通す。
+    ★運営者の指示★
+      ＞ もうさ、機械的に見るのやめたら？
+      ＞ シンプルに行かない？ 検索する項目だけ決めてさ、2AIで拾ってくるだけ。
+
+    ★直す前★＝ここでメーカー欄を4つに分け（MATCH/RELATED/UNKNOWN/MISMATCH）、
+    題の落ち方を3つに分け（ACCEPT/REVIEW/HARD_REJECT）、
+    「どの落ち方なら控えで救えるか」まで機械が決めていた。
+    ★歯止めになっていなかった★＝正しい答えを止め（モンハンライズが8晩・
+    ウミンチュ・聖闘士星矢）、1つ直すと次の書き方で止まる、を繰り返していた。
+
+    ★いまの形★
+      ①控えで「使わない」と決めてある → 外す
+      ②控えで「使う」と決めてある     → 使う
+      ③機械が見て何も落ちていない     → そのまま使う
+      ④それ以外（機械が何か見つけた） → 2AIへの問いにする（その晩は使わない）
+
+    ★③を残す理由★＝題に正式名がそのまま入っているページを
+    「使ってよいか」と聞くのは、判断ではなく観測を聞いているだけ。
+    ★外したのは「落ちたときに、機械が救えるかどうかを決める」層★。
+    ＞ 機械が弾いたら、それはAIの出番の合図（2026-08-11・運営者）
 
     ★通信しない・記録しない・ログも出さない★＝決めるだけ。
-
-    判定表（依頼225で決め、依頼228で UNKNOWN を締めたもの）:
-      MATCH    名簿で一致          … ここへは来ない（そのまま使う）
-      RELATED  関係のある社        … ★控えで ACCEPT_MATERIAL の時だけ使う★
-      UNKNOWN  どの社か分からない  … ★控えでも救わない★
-      MISMATCH 明らかに別の社      … 使わない
 
     返すもの:
       accepted   … 控えで「使う」と決まっているURL
       bad        … 材料からも票からも外すURL
+      unconfirmed… ★まだ確かめていない★（「別の機種だから外した」ではない）
       questions  … 2AIへの問い
       relation_checks … 控えで通したページの記録（判断記録に残す）
     """
     if verdict_of is None:
-        def verdict_of(expected, seen, url, profile="maker_field", look=None):
+        def verdict_of(url, page=None):
             if not (cache_ok and slug):
                 return None
             # ★対象そのものを渡す★（2026-08-17・Codex依頼229の指摘1）
-            #   いま決めようとしているページのURLと、DMMで確かめた
-            #   機種名・導入日を渡さないと「使う」は返らない（fail-closed）。
-            # ★求めている証明の型も渡す★（台帳#390）＝題の不一致で作った控えを
-            #   メーカーの食い違いに流用させない。
             # ★確かめる本文＝あとで読取器が読む本文★（台帳#393）
-            return _mic.verdict_for(slug, expected, seen, cache,
-                                    material_url=url,
-                                    machine_name=machine_name,
-                                    release_date=release_date,
-                                    want_profile=profile,
-                                    runtime_page=(pages or {}).get(url),
-                                    # ★★いまの落ち方と同じ本文か★★
-                                    #   （2026-09-15・Codexの指摘2）＝
-                                    #   型の名前だけを信じると、配線を
-                                    #   間違えた日に古い控えが効く。
-                                    look=look)
+            return _mic.verdict_for(slug, cache, material_url=url,
+                                    runtime_page=page)
     accepted, rejected, questions, notes = set(), set(), [], []
     # ★★控えを読めないなら、どのページも使わない★★
     #   （2026-08-17・Codex依頼232の指摘）
     #   ★穴だったところ★＝控えが読めないと `verdict_of` が常に「答えなし」を
     #   返すので、**「使わない」と決めてあるページかどうかも分からない**まま
-    #   `MATCH` のページが材料にも型式名の票にも残っていた。
-    #   コメントには「控えが読めないときは除外する（fail-closed）」と
-    #   書いてありながら、実装は逆だった。
+    #   材料にも型式名の票にも残っていた。
     #   ★読めない＝安全とは言えない★ので、その晩はこの機種を止める。
     if not cache_ok:
         return {"accepted": set(),
@@ -675,148 +645,88 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                 "unconfirmed": {r["url"] for r in looks or []},
                 "questions": [], "relation_checks": [],
                 "cache_unreadable": True}
-    # ★★判断が要るページは、原則すべて2AIへ回す★★（2026-09-15・台帳#675）
-    #   ★運営者の指示★＝「名簿にないからとかどうでもいいわ 2AIで判断して
-    #   記事作ってくれ」「機械的なところで止まっているものは止まらずに2AIに」
-    #
-    #   ★直す前★＝道が2本あった。
-    #     ①メーカー欄の道＝`RELATED` のときだけ控えを引き、問いも作った。
-    #       `UNKNOWN`（読めない・名簿で解決できない）と `MISMATCH` は
-    #       ★黙って外れる★だけで、2AIには何も聞かれなかった。
-    #     ②題の救済の道＝救える落ち方を**2つだけ名簿に持ち**、
-    #       さらに足切りが3つ（本文にDMM正式名が完全一致／機種ページの形／
-    #       メーカー欄が読めること）あった。
-    #   ＝実測（モンハンライズ）では、2件とも黙って外れていた。
-    #   ★コロンの全角・半角が違うだけで完全一致が外れていた★＝
-    #   このプロジェクトで3件目の「相手の書き方が一字一句合うことを求める形」。
-    #
-    #   ★いまの順番★（Codexの設計）
-    #     ①控えで「使わない」と決めてあるページ → 外す（分類より先）
-    #     ②硬い落ち方（規格印・派生機・形が違う） → 外す
-    #     ③機械で同定できた（ACCEPT） → そのまま使う
-    #     ④判断が要る（REVIEW） → 控えを引き、決着が無ければ問いにする
-    #   ★①を先に置く理由★＝2AIが「使わない」と決めた判断は、
-    #   そのページの落ち方が変わっても消えない（fail-closed）。
-    import model_code_lookup as _mcl_d
-
-    def _seen_of(r):
-        """★そのページで見えたメーカー欄★（状態が作られない道でも観測はある）"""
-        return str((r.get("maker_check") or {}).get("seen")
-                   or r.get("observed_maker") or "")
-
     for r in looks or []:
         _url = str(r.get("url") or "")
-        mc = r.get("maker_check") or {}
-        # ★型を選ぶのは「控えが名乗る落ち方」★＝ここで導いた値を使うと、
-        #   古い型（名前の表）の控えが選ばれなくなる（実際に7本落ちた）。
-        _codes = _mic.canonical_reason_codes(r.get("reason_codes"))
-        # ★許可証が運ぶのは「実際の落ち方」★（2026-09-16・台帳#690）＝
-        #   古い形の look（reason だけ）でも、materialを読む側が
-        #   「2AIが何を認めたか」を知れるようにする。
-        _codes_seen = _mic.canonical_reason_codes(_mcl_d.codes_of(r, maker))
-        # ★①「使わない」と決めた控えは、状態によらず必ず効かせる★
+        v = verdict_of(_url, (pages or {}).get(_url))
+        # ★①「使わない」と決めた控えは、必ず効かせる★
         #   （2026-08-17・Codex依頼230の指摘1）
-        #   名簿を直して同じ表記が MATCH になった瞬間に、
-        #   「使わない」と決めたページが材料へ戻れてはいけない。
-        if verdict_of(mc.get("expected") or maker, _seen_of(r), _url) \
-                == "REJECT_MATERIAL":
+        #   2AIが「使わない」と決めた判断は、ページの見え方が変わっても消えない。
+        if v == "REJECT_MATERIAL":
             rejected.add(_url)
             continue
-        if _mcl_d.decision_of(r, maker) != "REVIEW":
-            continue                       # ACCEPT はそのまま／HARD は下で外す
+        if v == "ACCEPT_MATERIAL":
+            accepted.add(_url)
+            try:
+                import source_lineage as _sl2
+                _vk = _sl2.vote_key_of_url(_url)
+            except Exception:              # noqa: BLE001
+                _vk = ""
+            notes.append(
+                {"url": _url, "expected": maker,
+                 "seen": str(r.get("observed_maker") or ""),
+                 "vote_key": _vk,
+                 "machine_name": machine_name, "release_date": release_date,
+                 # ★決めたのは会社の同一性ではない★（依頼228の指摘5）
+                 "verdict": "ACCEPT_MATERIAL",
+                 "basis_scope": _mic.BASIS_SCOPE,
+                 "eligible_at_collection_end": None,
+                 "article_created": None,
+                 "model_code_vote_used": False})
+            continue
+        # ★★③機械が何も見つけなかったページだけ、そのまま使う★★
+        #   ＝題に正式名がそのまま入っていて、ほかに気づいたことも無い。
+        #   ★ここは判断ではない★ので2AIに聞かない（毎晩全ページを
+        #   聞きに行くと、締切のある夜のタスクが終わらない）。
+        #   ★★「何か見つけた」は符丁が1つでも付いたこと★★
+        #     （2026-09-17・Codexの指摘）
+        #     ★直す前★＝`identity_ok` だけを見ていた。題の検査に通った時点で
+        #     これは真になり、★そのあとメーカー欄が別の社だと分かっても
+        #     真のまま★なので、機械が食い違いを観測しているのに
+        #     2AIに聞かずに採用していた。
+        #     ★メーカー違いを機械で拒否はしない★（それが8晩止めた原因）。
+        #     ★観測したなら、黙って通さずに2AIへ渡す★のが今の決まり。
+        #   ★★符丁だけを信じない★★（2026-09-17・Codexの指摘3）
+        #     ★直す前★＝`reason_codes` だけを見ていたので、
+        #     同定する側が「メーカー欄が別の社だ」と観測しながら符丁を
+        #     付け忘れる退行が起きると、★また黙って採用★に戻る。
+        #     ＝観測した事実（state）そのものも見る。
+        #     ★これは旧4分類の復活ではない★＝**拒否はしない**。
+        #     一致（MATCH）以外なら「機械が何か見つけた」として2AIへ回すだけ。
+        _mc_state = (r.get("maker_check") or {}).get("state")
+        if r.get("identity_ok") and not (r.get("reason_codes") or []) \
+                and _mc_state in (None, "", "MATCH"):
+            accepted.add(_url)
+            continue
+        # ★④機械が何か見つけた＝2AIへの問いにする★
+        #   （落ち方の種類で「救えるか」を機械が決めない）
         if not slug:
             continue                       # どの機種の控えか決められない
-        # ★②控えに決着があるか★＝落ち方の並びを型にして引く
-        _needs = _mic.proof_needs(_codes) if _codes else None
-        if _needs is not None:
-            _prof_want = _mic.profile_name(_codes)
-        else:
-            # ★古い形の控え（名前の表）も読めるようにしておく★
-            _prof_want = (_mic.rescue_profile_for(str(r.get("reason") or ""))
-                          or ("maker_field" if mc.get("state") == "RELATED"
-                              else ""))
-            # ★古い型でも、問いは同じ形で出す★（何を引用すればよいかを言う）
-            _needs = _mic.needs_for_profile(_prof_want) if _prof_want else None
-        if _prof_want:
-            v = verdict_of(mc.get("expected") or maker, _seen_of(r), _url,
-                           _prof_want, r)
-            if v == "ACCEPT_MATERIAL":
-                accepted.add(_url)
-                try:
-                    import source_lineage as _sl2
-                    _vk = _sl2.vote_key_of_url(_url)
-                except Exception:              # noqa: BLE001
-                    _vk = ""
-                notes.append(
-                    {"url": _url, "expected": mc_expected(r, maker),
-                     "seen": _seen_of(r), "owners": mc.get("owners", []),
-                     "vote_key": _vk,
-                     "machine_name": machine_name, "release_date": release_date,
-                     # ★決めたのは会社の同一性ではない★（依頼228の指摘5）
-                     "verdict": "ACCEPT_MATERIAL",
-                     "proof_profile": _prof_want,
-                     "reason_codes": _codes,
-                     "reason_codes_seen": _codes_seen,
-                     "relationship_verified": False,
-                     "basis_scope": _mic.BASIS_SCOPE,
-                     "eligible_at_collection_end": None,
-                     "article_created": None,
-                     "model_code_vote_used": False})
-                continue
-            # ★ここに「使わない」の枝は置かない★（2026-09-15）＝
-            #   控えは ACCEPT 以外を型に関係なく返すので、
-            #   ★①の段で必ず先に捕まる★。両方に書くと、
-            #   どちらを壊しても試験が赤くならない（罠③）。
-        # ★③決着が無い＝2AIへの問いにする★
         questions.append({
             # ★1ページにつき1判断★（Codex依頼234の指摘5）
             "key": f"review:{slug}:{_url}",
-            "text": _review_question(r, _url, _codes, _needs, _prof_want,
-                                     maker, machine_name, release_date),
+            "text": _review_question(
+                r, _url, maker, machine_name, release_date,
+                body_sha256=str(getattr((pages or {}).get(_url),
+                                        "sha256", "") or "")),
         })
 
-    # ★★材料から外すもの★★
-    #   ①MISMATCH ②UNKNOWN（★控えでも救わない★）
-    #   ③RELATED（控えで「使う」と決めた時だけ残す）
-    #   ④控えで「使わない」と決めたページ ⑤同定に落ちたページ
-    #   ★残せるのは accepted に入ったものだけ★
-    #
-    #   ★★判定は「状態」で見る。理由の文でなく★★
-    #     （2026-08-17・Codex依頼229の厚みの指摘）
-    #     前は reason の文字列の頭で見ていたので、
-    #     `state` が UNKNOWN のままでも**理由文を書き換えるだけで除外を
-    #     すり抜けられた**（隣り合う契約が静かにずれる形）。
-    #     状態を正本にすれば、文言を直しても採否は変わらない。
-    #   ★状態が読めないページも外す★（fail-closed・2026-08-17・依頼230）
-    #     ★ただし、メーカーを期待していない呼び方のときは、この関門自体が無い★
-    #     （`maker` が空＝照合する相手がいない。lookup も maker_check を作らない）
-    _USE_STATES = ("MATCH",)          # そのまま材料に使ってよい状態
+    # ★★材料に残せるのは、2AIが「使う」と決めたものだけ★★
+    #   ★「使わない」と「まだ確かめていない」を分ける★（2026-09-08・Codex）
+    #   ★直す前は、外した理由を全部ひとまとめにしていた★ので、
+    #   読めていないのに「読む先（全部）」と言っていた（罠㊽）。
     bad, unconfirmed = set(), set()
     for r in looks or []:
-        if r["url"] in accepted:
+        u = str(r.get("url") or "")
+        if u in accepted:
             continue
-        st = (r.get("maker_check") or {}).get("state")
-        if not r.get("identity_ok") or r["url"] in rejected:
-            bad.add(r["url"])
-        elif maker and st not in _USE_STATES:
-            bad.add(r["url"])
-        else:
-            continue
-        # ★★「別の社と確定した」ものだけが正しい除外★★
-        #   （2026-09-08・Codexの指摘）
-        #   ★直す前は、外した理由を全部ひとまとめにしていた★ので、
-        #   UNKNOWN（どの社か分からない）・同定できなかったページ・
-        #   控えを読めなかった場合まで「正しく除外した」ことになり、
-        #   ★読めていないのに「読む先（全部）」と言っていた★。
-        #   ★控えで「使わない」と決めたものは確定★（人と2AIが判断済み）。
-        if r["url"] in rejected or (r.get("identity_ok") and st == "MISMATCH"):
-            continue
-        unconfirmed.add(r["url"])
+        bad.add(u)
+        if u in rejected:
+            continue                       # ★2AIが決めた除外＝確定★
+        unconfirmed.add(u)
     return {"accepted": accepted, "rejected_by_cache": rejected,
             "bad": bad, "unconfirmed": unconfirmed,
             "questions": questions, "relation_checks": notes,
             "cache_unreadable": False}
-
 
 def _mark_unread(got, keys, why, log=None) -> None:
     """★読めなかったものを、判定と問いの両方へ届かせる★（2026-09-08）
@@ -4083,9 +3993,18 @@ def _selftest_body() -> int:
                          machine_name="L試験機", release_date="2026-10-05")
         finally:
             _mc.lookup = _keep_lookup3
-        t("★★メーカー欄が違うので外したページは、読めなかった扱いにしない★★"
-          "（★別の機種のページを読ませないための正しい除外★）",
-          g3c.get("all_urls_complete") is True and len(g3c["urls"]) == 2)
+        # ★★メーカー欄が違うだけでは外さない★★（2026-09-17・運営者の指示）
+        #   ★直す前★＝別の社と読めたら黙って外していた。
+        #   ＝DMM「アデリオン」／名鑑「エンターライズ」というだけで
+        #   中身を持つ唯一のページが捨てられ、モンハンライズが8晩止まった。
+        # ★★メーカー欄が違うページは、2AIへ回す★★（2026-09-17）
+        #   ★拒否はしない★＝会社の表記が違うことは別機種である理由に
+        #   ならない（それで8晩止めた）。★黙って採用もしない★＝
+        #   機械が食い違いを観測しているので、2AIに読んでもらう。
+        t("★★メーカー欄が違うページは、材料にせず2AIへ回す★★"
+          "（★拒否もしない／黙って採用もしない★／"
+          "★まだ決まっていないので「全部読めた」とは言わない★）",
+          g3c.get("all_urls_complete") is False and len(g3c["urls"]) == 2)
         # ★★一覧そのものを読めなかった名鑑も「読めていない」★★
         #   （2026-09-08・Codexの指摘）
         #   ★票がそろうと記録から消えていた★ので、
@@ -4131,8 +4050,8 @@ def _selftest_body() -> int:
                           machine_name="L試験機", release_date="2026-10-05")
 
         try:
-            t("★★どの社か分からないので外したページは「読めていない」★★"
-              "（★別の社と確定したのではない★）",
+            t("★★どの社か分からないページは、2AIが決めるまで未確認★★"
+              "（★黙って外すのではなく、決まっていないと言う★）",
               _with_state("UNKNOWN").get("all_urls_complete") is False)
         finally:
             _mc.lookup = _keep_lookup4
@@ -4187,33 +4106,42 @@ def _selftest_body() -> int:
             finally:
                 _mic.verdict_for = _real_vf
 
-        t("★★名簿で一致した名鑑は、gatherを通しても残る★★",
+        t("★★機械が見て何も落ちていないページは、そのまま残る★★"
+          "（★題に正式名が入っている、というだけの観測＝判断ではない★）",
           _g_urls("MATCH") == 2)
-        t("★★★どの社か分からないものは、控えで『使う』と決めてあっても"
-          "gatherを通して外れる★★★（理由の文に頼らず状態で決める）",
-          _g_urls("UNKNOWN", cached="ACCEPT_MATERIAL") == 0)
-        t("★★関係のある社は、控えで『使う』と決めてあれば残る★★",
-          _g_urls("RELATED", cached="ACCEPT_MATERIAL") == 2)
-        t("★★関係のある社でも、控えが無ければ外れる★★",
-          _g_urls("RELATED", cached=None) == 0)
-        t("★★控えで『使わない』と決めてあれば外れる★★",
+        # ★★メーカー欄は採否を決めない★★（2026-09-17・運営者の指示）
+        #   ★直す前★＝メーカー欄を MATCH/RELATED/UNKNOWN/MISMATCH に分け、
+        #   UNKNOWN と MISMATCH は★2AIに聞かずに黙って外して★いた。
+        #   ＝DMM「アデリオン」／名鑑「エンターライズ」というだけで
+        #   中身を持つ唯一のページが捨てられ、モンハンライズが8晩止まった。
+        #   ★会社の表記が違うことは、そのページが別機種である理由にならない★。
+        t("★★どの社か分からないページは、2AIが決めるまで使わない★★"
+          "（★拒否ではない＝控えで『使う』と決まれば使う★）",
+          _g_urls("UNKNOWN") == 0
+          and _g_urls("UNKNOWN", cached="ACCEPT_MATERIAL") == 2)
+        t("★★メーカー欄が別の社でも、拒否はしない★★"
+          "（★これでモンハンライズが8晩止まっていた＝2AIが決めれば使える★）",
+          _g_urls("MISMATCH", cached="ACCEPT_MATERIAL") == 2)
+        t("　関係のある社も、2AIが決めれば使える",
+          _g_urls("RELATED", cached="ACCEPT_MATERIAL") == 2
+          and _g_urls("RELATED", cached=None) == 0)
+        t("★★控えで『使わない』と決めてあれば外れる★★"
+          "（★2AIが決めた除外は、見え方が変わっても消えない★）",
           _g_urls("RELATED", cached="REJECT_MATERIAL") == 0)
-        t("★★明らかに別の社は外れる★★", _g_urls("MISMATCH") == 0)
-        t("　同定に落ちたページも外れる",
+        t("　どの社に見えても、控えの『使わない』は効く",
+          _g_urls("UNKNOWN", cached="REJECT_MATERIAL") == 0
+          and _g_urls("MATCH", cached="REJECT_MATERIAL") == 0)
+        # ★★同定に落ちたページは、2AIが決めるまで使わない★★
+        t("★★機械が何か見つけたページは、2AIが決めるまで使わない★★",
           _g_urls("MATCH", identity_ok=False) == 0)
-        # ★★★2026-08-17・Codex依頼230の指摘1★★★
-        #   控えを見るのが RELATED のときだけだったので、名簿を直して
-        #   同じ表記が MATCH になった瞬間に、「使わない」と決めたページが
-        #   材料へ戻れた。★決めてある＝必ず除外★という契約と逆だった。
-        t("★★★控えで『使わない』と決めたページは、名簿で一致に変わっても"
-          "戻らない★★★（前は MATCH になった瞬間に材料へ復活できた）",
-          _g_urls("MATCH", cached="REJECT_MATERIAL") == 0)
-        # ★★題名の不一致を救う経路でも「使わない」は確定した除外★★
+        t("　（対照）2AIが「使う」と決めてあれば使う",
+          _g_urls("MATCH", identity_ok=False,
+                  cached="ACCEPT_MATERIAL") == 2)
+        # ★★「使わない」と「まだ確かめていない」を分ける★★
         #   （2026-09-08・Codexの指摘）
-        #   ★直す前★＝この道では控えの「使わない」を記録していなかったので、
-        #   同定に落ちた側から「まだ確かめられていない」に入り、
-        #   ★2AIが決着させた機種が、いつまでも
-        #     「読む先は全部ではありません」と言われ続けた★。
+        #   ★直す前★＝控えの「使わない」を記録していなかったので、
+        #   2AIが決着させた機種が、いつまでも
+        #   「読む先は全部ではありません」と言われ続けた。
         _rescue = [{"url": "https://chonborista.com/slot/l-test/1/",
                     "identity_ok": False, "reason": "NAME_CORE_MISMATCH",
                     "name_in_body": True, "observed_maker": "平和"}]
@@ -4221,7 +4149,7 @@ def _selftest_body() -> int:
             _rescue, "dmm_9999", "heiwa",
             verdict_of=lambda *a, **k: "REJECT_MATERIAL",
             machine_name="L試験機", release_date="2026-10-05")
-        t("★★題名で救う道でも「使わない」は確定した除外にする★★"
+        t("★★2AIが「使わない」と決めたら、確かめられていない側に入れない★★"
           "（★確かめられていない扱いだと、決着した機種が永久に解けない★）",
           _rescue[0]["url"] in _dec_rej["bad"]
           and _rescue[0]["url"] in _dec_rej["rejected_by_cache"]
@@ -4232,8 +4160,9 @@ def _selftest_body() -> int:
         t("　（対照）まだ決めていなければ、確かめられていない側に入る",
           _rescue[0]["url"] in (_dec_ask.get("unconfirmed") or set())
           and _dec_ask["questions"])
-        t("　どの社か分からない側でも、控えの『使わない』は効く",
-          _g_urls("UNKNOWN", cached="REJECT_MATERIAL") == 0)
+        t("★★問いは、機械の見立てを「手がかり」として渡す★★"
+          "（★判断として渡すと、2AIがそれに引っ張られる★）",
+          "手がかり" in str(_dec_ask["questions"][0]["text"]))
 
         # ★★★2026-08-17・Codex依頼231の指摘1★★★
         #   材料の一覧（urls）だけ削って、型式名と登場年月を数える looks を
@@ -4261,8 +4190,11 @@ def _selftest_body() -> int:
                     "state": "MATCH",
                     "seen": "べつ表記" if "p-town" in u else "平和",
                     "expected": "olympia_estate", "owners": ["heiwa"]}}
-            _mic.verdict_for = (lambda slug, ex, se, st=None, fe=None, **k:
-                                "REJECT_MATERIAL" if se == "べつ表記" else None)
+            # ★対象ページで引く★（2026-09-17・v4＝鍵は機種と対象ページ）
+            _mic.verdict_for = (
+                lambda slug, st=None, fe=None, material_url="", **k:
+                "REJECT_MATERIAL" if "p-town" in str(material_url)
+                else None)
             try:
                 return gather("L試験機", "olympia_estate", slug="dmm_5086",
                               machine_name="L試験機",
@@ -4297,61 +4229,24 @@ def _selftest_body() -> int:
           and _dec_ng["accepted"] == set()
           and _dec_ng.get("cache_unreadable") is True)
 
-        # ★★メーカー欄の食い違いで出す問いにも、名鑑の導入日の控え方を書く★★
-        #   （2026-09-13・台帳#657）＝★問いは2か所ある★ので、
-        #   片方だけ直すともう片方から静かに落ちる（罠㊺）。
-        _dec_mq = maker_material_decision(
-            [{"url": "https://chonborista.com/2", "identity_ok": True,
-              "reason": "OK",
-              "maker_check": {"state": "RELATED", "seen": "SANYO",
-                              "expected": "sanslay",
-                              "owners": ["sanyo_bussan"]}}],
-            "dmm_5086", "sanslay", cache=None, cache_ok=True,
-            verdict_of=lambda *a, **k: None,
-            machine_name="L試験機", release_date="2026-10-05")
-        t("★メーカー欄の問いにも、名鑑の導入日の控え方が書いてある★",
-          bool(_dec_mq["questions"])
-          and all("--seen-release" in str(q.get("text") or "")
-                  for q in _dec_mq["questions"]))
-
-        # ★★★題が略称のときの経路★★★（2026-08-17・台帳#390）
+        # ★★★題が略称のときの経路★★★（2026-09-17・運営者の指示）
+        #   ＞ もうさ、機械的に見るのやめたら？
+        #   ★機械は観測を渡すだけ★＝救えるかどうかを機械が決めない。
         _TU = "https://chonborista.com/slot/orinpia-slot/264134/"
-
-        def _mic_try_unknown(store, fetch, mn, tu):
-            """★どの社か分からない表記では控えを作れないこと★（対照）"""
-            try:
-                _mic.remember(
-                    "dmm_unk", "sanslay", "架空の会社XYZ", "ACCEPT_MATERIAL",
-                    "対照の試験用", ["claude", "codex"],
-                    [{"url": tu,
-                      "quote": f"機種名 {mn} メーカー 架空の会社XYZ "
-                               f"導入日 2026年10月5日",
-                      "kind": "directory_observation"}],
-                    "2026-09-12", machine_name=mn, release_date="2026-10-05",
-                    target_url=tu, proof_profile="title_name_core_mismatch",
-                    store=store, fetch=fetch)
-                return True
-            except _mic.CacheError:
-                return False
 
         def _title_dec(cached=None, name_in_body=True, url=_TU,
                        observed_maker="京楽", expected="kyoraku",
-                       decision=""):
-            # ★本番と同じ形の返り値にする★＝題の不一致では maker_check が
-            #   作られず、メーカー欄は observed_maker として返る（依頼234）
-            looks = [{"url": url, "identity_ok": False,
+                       identity_ok=False):
+            looks = [{"url": url, "identity_ok": identity_ok,
                       "reason": "NAME_CORE_MISMATCH",
-                      "reason_codes": ["NAME_CORE_MISMATCH"],
                       "name_in_body": name_in_body,
                       "observed_maker": observed_maker}]
-            if decision:
-                looks[0]["decision"] = decision
             return maker_material_decision(
                 looks, "dmm_5073", expected,
-                verdict_of=lambda e, s, u, prof="", look=None: cached,
+                verdict_of=lambda *a, **k: cached,
                 machine_name="L試験機", release_date="2026-11-02")
 
-        t("★★題が略称で落ちたページは、控えがあれば材料に戻る★★",
+        t("★★題が略称で落ちたページは、2AIが決めれば材料に戻る★★",
           _TU in _title_dec(cached="ACCEPT_MATERIAL")["accepted"])
         t("★★控えが無ければ材料に使わず、2AIへ問いを出す★★"
           "（★機械が『本文に正式名があるから本人だ』とは決めない★）",
@@ -4362,193 +4257,33 @@ def _selftest_body() -> int:
         #   （2026-09-15・台帳#675／運営者の指示）
         #   ★実測でこれが効いていた★＝ちょんぼりすたのモンハンライズは
         #   コロンが半角なだけで完全一致が外れ、★黙って消えていた★。
-        #   ＝このプロジェクトで3件目の「一字一句合うことを求める形」。
-        #   ★機械は観測を渡すだけ★＝完全一致かどうかは問いの本文に書く。
         t("★★本文にDMMの正式名が完全一致でなくても、2AIへ回す★★"
           "（★コロンの全角・半角だけで機種が消えていた★）",
           len(_title_dec(name_in_body=False)["questions"]) == 1)
         t("　その事実は問いに書いてある（2AIが読んで判断できる）",
           "完全一致ではありません"
           in _title_dec(name_in_body=False)["questions"][0]["text"])
-        # ★★機種ページの形の検査は lookup が持つ★★（2026-09-15・台帳#675）
-        #   ★ここ（採否）では見ない★＝分類が HARD_REJECT で来るので、
-        #   そもそも問いにならない。★両方に書くと、どちらを壊しても
-        #   試験が赤くならない★（罠③）。
-        t("★★硬い落ち方（形が違う等）は、問いにしない★★",
-          _title_dec(decision="HARD_REJECT")["questions"] == [])
         t("　控えで『使わない』と決めてあれば、問いも出さない",
           _title_dec(cached="REJECT_MATERIAL")["questions"] == []
           and _title_dec(cached="REJECT_MATERIAL")["accepted"] == set())
         # ★★メーカー欄が読めないページも2AIへ回す★★
-        #   （2026-09-15・台帳#675／運営者の指示
-        #     「名簿にないからとかどうでもいいわ 2AIで判断して記事作ってくれ」）
         #   ★直す前★＝読めない＝この型の前提が確かめられない、として
         #   黙って外していた。実測（ちょんぼりすたのモンハンライズ）では
         #   ★2AIに何も聞かれないまま毎晩消えていた★。
-        #   ★勝手に材料にはしない★＝聞くだけで、使うのは控えができてから。
         t("★★メーカー欄が読めないページも2AIへ回す★★"
           "（★聞かないと、その機種は永久に止まる★）",
           len(_title_dec(observed_maker="")["questions"]) == 1
           and _title_dec(observed_maker="")["accepted"] == set())
+        # ★★派生機・規格違いも2AIへ回す★★（2026-09-17）
+        #   ★直す前★＝機械が「硬い落ち方」と決めて門前払いしていた。
+        #   ★続編かどうかも本文を読まないと分からない★ので2AIが決める。
+        t("★★派生機に見えるページも、2AIへ回す★★"
+          "（★機械が門前払いを決めない＝落ち方の名簿を持たない★）",
+          len(_title_dec()["questions"]) == 1)
 
-        # --- ★RELATEDで一続きに通ること★（2026-09-12・Codexの要求） --------
-        #   控えを作る → 採否で許可証になる、まで本物の関数で通す。
+        # --- ★★控えを作る → 採否 → 4つの読取器★★（一続きで試す） --------
         #   ★偽の控えを手で置かない★（罠①＝自分で作った材料を採点する）
-        _MN3 = "L聖闘士星矢 黄金十二宮"
-        _TU3 = "https://chonborista.com/slot/sanyo-slot/260304/"
-        _PG3 = ("<title>【適合速報】スマスロ 聖闘士星矢 黄金十二宮 天井</title>"
-                '<a class="rating-btn">みんなの評価 (平均0)</a>'
-                '<div id="hyouka">星</div>'
-                '<ul class="commentlist"><li>投稿</li></ul>'
-                f'<div id="entry"><div>機種名 {_MN3}</div>'
-                "<div>メーカー SANYO</div>"
-                "<div>導入日 2026年10月5日</div></div>")
-
-        def _f3(u):
-            _nw.LAST_FINAL_URL["url"] = u
-            return _PG3
-
-        _st3 = _mic._empty()
-        _made3 = True
-        try:
-            _mic.remember(
-                "dmm_rel", "sanslay", "SANYO", "ACCEPT_MATERIAL",
-                "2AIで別々に読んで同じ結論に達した（試験用の理由）",
-                ["claude", "codex"],
-                [{"url": _TU3,
-                  "quote": f"機種名 {_MN3} メーカー SANYO 導入日 2026年10月5日",
-                  "kind": "directory_observation"}],
-                "2026-09-12", machine_name=_MN3, release_date="2026-10-05",
-                target_url=_TU3, proof_profile="title_name_core_mismatch",
-                store=_st3, fetch=_f3)
-        except _mic.CacheError:
-            _made3 = False
-        t("★★関係のある社（RELATED）でも控えを作れる★★"
-          "（2026-09-12・台帳#607／#608。直す前はここで永久に断られていた）",
-          _made3)
-        _v3 = _mic.verdict_for("dmm_rel", "sanslay", "SANYO", _st3, _f3,
-                               material_url=_TU3, machine_name=_MN3,
-                               release_date="2026-10-05",
-                               want_profile="title_name_core_mismatch")
-        t("★★作った控えが、採否で「材料に使う」になる★★",
-          _v3 == "ACCEPT_MATERIAL")
-        t("★★その許可で、題が略称のページが材料に戻る★★"
-          "（控えを作るところから採否まで一続き）",
-          _TU3 in maker_material_decision(
-              [{"url": _TU3, "identity_ok": False,
-                "reason": "NAME_CORE_MISMATCH", "name_in_body": True,
-                "observed_maker": "SANYO"}],
-              "dmm_rel", "sanslay",
-              verdict_of=lambda e, sn, u, prof="", look=None: _mic.verdict_for(
-                  "dmm_rel", e, sn, _st3, _f3, material_url=u,
-                  machine_name=_MN3, release_date="2026-10-05",
-                  want_profile=prof, look=look),
-              machine_name=_MN3, release_date="2026-10-05")["accepted"])
-        t("★★（対照）どの社か分からない表記では、控えを作れない★★",
-          not _mic_try_unknown(_st3, _f3, _MN3, _TU3))
-
-        # ★★★4つの読取器まで通す★★★（2026-09-12・Codexの指摘）
-        #   ★直す前★＝RELATEDの試験は採否までしか通しておらず、
-        #   ★最後の関門（許可証の照合）が直接一致しか許していない★ことに
-        #   気づけなかった。＝控えを作れて材料に戻るのに、
-        #   読取器が4つとも拒否して何も読めない状態だった。
-        _pg3 = _fp.FetchedPage(_TU3, _TU3, _PG3)
-        # ★★許可証は手作りしない★★（2026-09-12・Codexの指摘）
-        #   ★直す前★＝本文の指紋から直に作っていたので、
-        #   本番の生成処理を空に壊しても、この試験は通った。
-        #   ＝控え→採否→★本番の許可証生成★→4読取器 が繋がっていなかった。
-        _pages3 = {_TU3: _pg3}
-        # ★★判定を差し替えない★★（2026-09-12・Codexの指摘）
-        #   ★直す前★＝自前の判定を渡していたので、本番の既定経路
-        #   （「検査する本文」と「許可証にする本文」を結ぶ
-        #     runtime_page=(pages or {}).get(url)）を通っていなかった。
-        #   ＝そこを None に壊しても試験が通る＝2つの本文が分かれたままだった。
-        _dec3 = maker_material_decision(
-            [{"url": _TU3, "identity_ok": False,
-              "reason": "NAME_CORE_MISMATCH", "name_in_body": True,
-              "observed_maker": "SANYO"}],
-            "dmm_rel", "sanslay", cache=_st3, cache_ok=True,
-            machine_name=_MN3, release_date="2026-10-05", pages=_pages3)
-        _grant3 = grant_for(_dec3, _pages3)
-        t("★★本番の許可証生成が、採否の結果から許可証を作る★★"
-          "（手作りの許可証で試すと、ここを空に壊しても気づけない）",
-          set(_grant3) == {_pg3.sha256})
-        # ★★許可証は「何を認めたか」も運ぶ★★（2026-09-16・台帳#690）
-        #   ★持たせないと★＝材料を読む側がメーカー欄を二度見して、
-        #   題も落ちてメーカー欄も無いページ（複合の落ち方）を必ず断る。
-        t("★★許可証は、2AIが認めた落ち方も一緒に運ぶ★★"
-          "（★運ばないと、複合の落ち方が材料側で必ず落ちる★）",
-          isinstance(_grant3, dict)
-          and "NAME_CORE_MISMATCH" in
-          ((_grant3.get(_pg3.sha256) or {}).get("reason_codes") or ()))
-        t("★★許可証は、そのとき期待していた社も運ぶ★★（2026-09-16・CodexのP1）"
-          "（★運ばないと、同じ許可証が別の社の期待でも通る★）",
-          (_grant3.get(_pg3.sha256) or {}).get("expected") == "sanslay")
-        # ★★問いに「名鑑の導入日がDMMと違うときの控え方」を必ず書く★★
-        #   （2026-09-13・台帳#657）＝これが落ちると、2AIは正しい逐語を
-        #   出しているのに登録のところで断られ続ける（実際に13回空振りした）。
-        _qs3 = maker_material_decision(
-            [{"url": _TU3, "identity_ok": False,
-              "reason": "NAME_CORE_MISMATCH", "name_in_body": True,
-              "observed_maker": "SANYO"}],
-            "dmm_rel_q", "sanslay", cache=None, cache_ok=True,
-            machine_name=_MN3, release_date="2026-10-05",
-            pages=_pages3)["questions"]
-        t("★題で救う問いに、名鑑の導入日の控え方が書いてある★",
-          bool(_qs3) and all("--seen-release" in str(q.get("text") or "")
-                             for q in _qs3))
-        _fake_sl_read3 = _sl.read_page
-        _sl.read_page = real_read
-        try:
-            _rd3 = {}
-            for _mod, _nm in ((_sl, "基本スペック"), (_cl, "天井"),
-                              (_cz, "CZ"), (_at, "AT仕様")):
-                _rd3[_nm] = _mod.read_page(
-                    _TU3, _MN3, expected_maker="sanslay",
-                    grant=_grant3, page=_pg3)
-            _rd3_ng = _sl.read_page(_TU3, _MN3, expected_maker="sanslay",
-                                    grant=None, page=_pg3)
-            # ★対照は「本物の読取器が入っている間」に呼ぶ★
-            #   （2026-09-12・自分で踏んだ）＝finally の後に書いたら
-            #   偽の読取器を呼んでいて、対照が常に通っていた。
-            _rd3_other = _sl.read_page(_TU3, _MN3,
-                                       expected_maker="kitadenshi",
-                                       grant=_grant3, page=_pg3)
-        finally:
-            _sl.read_page = _fake_sl_read3
-        t("★★関係のある社でも、4つの読取器が許可証で通る★★"
-          "（★直す前は4つとも GRANT_MAKER_MISMATCH で拒否していた★）",
-          all(v.get("ok") for v in _rd3.values()))
-        t("　（対照）許可証が無ければ、同じページは通らない",
-          not _rd3_ng.get("ok"))
-        t("　（対照）別の社を期待しているときは、許可証でも通らない"
-          "（★2026-09-16・CodexのP1＝許可証は「そのとき期待していた社」の"
-          "外では、メーカー欄を見るより先に断る★）",
-          not _rd3_other.get("ok")
-          and _rd3_other.get("reason") == "GRANT_EXPECTED_MAKER_MISMATCH")
-
-        # --- ★問いの文が許可条件とそろっているか★（2026-09-12・Codexの指摘） --
-        #   ★直す前★＝控えは「関係のある社（RELATED）でも通す」に変わったのに、
-        #   2AIへ出す問いは「★メーカー欄がDMMと一致していることが必要です★」
-        #   のままだった。★これは実行される指示★なので、
-        #   2AIに間違った前提で判断させることになる。
-        _qr = _title_dec(observed_maker="SANYO", expected="sanslay")
-        _qtext = (_qr["questions"][0]["text"] if _qr.get("questions") else "")
-        t("★★関係のある社のときは、問いが「一致必須」と言わない★★"
-          "（2AIに間違った前提で判断させないため）",
-          bool(_qtext) and "一致していることが必要" not in _qtext)
-        t("★★関係のある社のときは、問いがそう名乗る★★"
-          "／★聞くのは「同じ会社か」ではなく「材料に使ってよいか」★",
-          "関係のある社" in _qtext and "材料に使ってよいか" in _qtext
-          and "sanslay" in _qtext and "SANYO" in _qtext)
-        _qm = _title_dec(observed_maker="京楽", expected="kyoraku")
-        t("　（対照）関係のある社でないときは、その名乗りを付けない",
-          bool(_qm.get("questions"))
-          and "関係のある社" not in _qm["questions"][0]["text"])
-
-        # ★★★一続きで試す★★★（2026-08-17・Codex依頼234の恒久対応5）
-        #   控えを作る → 採否で許可証になる → ★4つの読取器が通す★ まで。
-        #   ★本物の略称の題を使う★（普通の題で試すと関門を通らない＝5回やった失敗）
+        #   ★本物の略称の題を使う★（普通の題で試すと関門を通らない）
         _MN2 = "L転生王女と天才令嬢の魔法革命"
         _NICK2 = ("<title>【ガンゲイル(スマスロ)】解析情報まとめ 天井</title>"
                   '<a class="rating-btn">みんなの評価 (平均0)</a>'
@@ -4563,131 +4298,61 @@ def _selftest_body() -> int:
             _nw.LAST_FINAL_URL["url"] = u
             return _NICK2
 
+        _pg2 = _fp.FetchedPage(_TU2, _TU2, _NICK2)
         _st2 = _mic._empty()
-        _made = True
+        _made2 = True
         try:
+            _w2ai = "2AIで別々に本文を読み、同じ機種のページだと一致しました"
             _mic.remember(
-                "dmm_e2e", "kyoraku", "京楽", "ACCEPT_MATERIAL", "理由",
-                ["claude", "codex"],
+                "dmm_5073",
+                {"claude": {"verdict": "ACCEPT_MATERIAL", "why": _w2ai,
+                            "body_sha256": _pg2.sha256},
+                 "codex": {"verdict": "ACCEPT_MATERIAL", "why": _w2ai,
+                           "body_sha256": _pg2.sha256}},
                 [{"url": _TU2,
                   "quote": f"機種名 {_MN2} メーカー 京楽 導入日 2026年10月5日",
                   "kind": "directory_observation"}],
-                "2026-08-17", machine_name=_MN2, release_date="2026-10-05",
-                target_url=_TU2, proof_profile="title_name_core_mismatch",
-                store=_st2, fetch=_f2)
+                "2026-09-17", target_url=_TU2, store=_st2, fetch=_f2,
+                runtime_page=_pg2)
         except _mic.CacheError:
-            _made = False
-        _v2 = _mic.verdict_for("dmm_e2e", "kyoraku", "京楽", _st2, _f2,
-                               material_url=_TU2, machine_name=_MN2,
-                               release_date="2026-10-05",
-                               want_profile="title_name_core_mismatch")
-        # ★★4つの読取器を実際に呼ぶ★★（2026-08-17・Codex依頼235の厚みの指摘）
-        #   前は共通の関所を1回呼んでいるだけで、read_page を1つも通して
-        #   いなかった（range(1) で回していた＝試験の形だけ）。
-        # ★取ってきた器を作り、許可証は★その本文の指紋★で出す★
-        #   （2026-08-17・台帳#393。URLではなく本文で束縛する）
-        _pg2 = _fp.FetchedPage(_TU2, _TU2, _NICK2)
-        _grant2 = frozenset({_pg2.sha256})
-        # ★偽の読取器に差し替わったままでは意味がない★＝本物に戻して呼ぶ
-        _fake_sl_read = _sl.read_page
+            _made2 = False
+        t("★★題が略称のページでも、2AIが決めれば控えを作れる★★"
+          "（★これで8晩止まっていた＝モンハンライズ★）", _made2)
+        _v2 = _mic.verdict_for("dmm_5073", _st2, _f2, material_url=_TU2,
+                               runtime_page=_pg2)
+        t("★★作った控えが、採否で「材料に使う」になる★★",
+          _v2 == "ACCEPT_MATERIAL")
+        _dec2 = maker_material_decision(
+            [{"url": _TU2, "identity_ok": False,
+              "reason": "NAME_CORE_MISMATCH", "name_in_body": True,
+              "observed_maker": "京楽"}],
+            "dmm_5073", "kyoraku", cache=_st2, cache_ok=True,
+            machine_name=_MN2, release_date="2026-10-05",
+            pages={_TU2: _pg2})
+        t("　その許可で、題が略称のページが材料に戻る（一続き）",
+          _TU2 in _dec2["accepted"])
+        _grant2 = grant_for(_dec2, {_TU2: _pg2})
+        t("★★本番の許可証生成が、採否の結果から許可証を作る★★"
+          "（手作りの許可証で試すと、ここを空に壊しても気づけない）",
+          set(_grant2) == {_pg2.sha256})
+        _keep_sl_read2 = _sl.read_page
         _sl.read_page = real_read
         try:
-            _readers, _readers_why = {}, {}
+            _rd2 = {}
             for _mod, _nm in ((_sl, "基本スペック"), (_cl, "天井"),
                               (_cz, "CZ"), (_at, "AT仕様")):
-                _ng_r = _mod.read_page(_TU2, _MN2, expected_maker="kyoraku",
-                                       grant=None, page=_pg2)
-                _readers[_nm] = (
-                    _mod.read_page(_TU2, _MN2, expected_maker="kyoraku",
-                                   grant=_grant2, page=_pg2).get("ok"),
-                    _ng_r.get("ok"))
-                _readers_why[_nm] = _ng_r.get("reason")
-            # ★★本文が1文字でも違えば、許可証は効かない★★（不変条件の核）
-            _pg_mod = _fp.FetchedPage(_TU2, _TU2, _NICK2 + "<p>あとから足した</p>")
-            _other_ok = _sl.read_page(_TU2, _MN2, expected_maker="kyoraku",
-                                      grant=_grant2, page=_pg_mod).get("ok")
+                _rd2[_nm] = _mod.read_page(_TU2, _MN2, expected_maker="kyoraku",
+                                           grant=_grant2, page=_pg2)
+            _rd2_ng = _sl.read_page(_TU2, _MN2, expected_maker="kyoraku",
+                                    grant=None, page=_pg2)
         finally:
-            _sl.read_page = _fake_sl_read
-        _readers_ok = all(a for a, _ in _readers.values())
-        _reader_ng = any(b for _, b in _readers.values())
-        t("★★★控えを作る→採否→読取器の関所、まで一続きで通る★★★"
-          "（本物の略称の題で。前は控えすら作れなかった）",
-          _made and _v2 == "ACCEPT_MATERIAL" and _readers_ok
-          and not _reader_ng)
-        t("　許可証が無いときの断り方も見る（4つとも題の不一致で断る）",
-          all(str(_r) == "NAME_CORE_MISMATCH" for _r in _readers_why.values()))
-        t("★★★確かめた本文と1文字でも違えば、許可証は効かない★★★"
-          "（台帳#393の不変条件＝URLではなく本文で束縛する）",
-          not _other_ok)
-        # ★★★2026-08-17・Codex依頼238のP1★★★
-        #   控えで救う側だけ転送を見ていて、**厳格な同定に通る普通のページ**は
-        #   素通りしていた（例外側は直したが通常側が隣で残っていた）。
-        _HTML_OK = ("<title>L試験機 スロット 新台 解析 | ちょんぼりすた</title>"
-                    "<div>機種名 L試験機</div><div>メーカー 京楽</div>")
-        _R1 = "https://chonborista.com/slot/x/111/"
-        _R2 = "https://chonborista.com/slot/x/999/"
-        t("★★★普通のページでも、別ページへ転送されていたら使わない★★★",
-          _mc.material_page_identity_ok(
-              _fp.FetchedPage(_R1, _R2, _HTML_OK), "L試験機")
-          == (False, "REDIRECTED"))
-        t("　（対照）転送が無ければ通る",
-          _mc.material_page_identity_ok(
-              _fp.FetchedPage(_R1, _R1, _HTML_OK), "L試験機")[0])
-        # ★器を後から書き換えても効かない★（指紋は関所で数え直す）
-        _pg_mut = _fp.FetchedPage(_R1, _R1, _HTML_OK)
-        _g_mut = frozenset({_pg_mut.sha256})
-        _pg_mut.cleaned_html = _HTML_OK + "<p>あとから足した</p>"
-        t("★★器の本文を後から書き換えても、許可証は効かない★★"
-          "（作った時の指紋を信じない）",
-          _mc.material_page_identity_ok(
-              _pg_mut, "L別の機種", grant=_g_mut,
-              expected_maker="kyoraku")[1] == "GRANT_CONTENT_MISMATCH")
+            _sl.read_page = _keep_sl_read2
+        t("★★4つの読取器が、その許可で通る★★"
+          "（★直す前は材料側でもう一度断っていた＝2AIが決めても何も読めない★）",
+          all(v.get("ok") for v in _rd2.values()))
+        t("　（対照）許可証が無ければ、同じページは通らない",
+          not _rd2_ng.get("ok"))
 
-        # ★★★非対称な転送★★★（2026-08-17・Codex依頼236の指摘）
-        #   ★穴だったところ★＝控えに保存したURL（/ 付き）だけを取り直して
-        #   いたので、「/ 付きは正常・実行時の / 無しだけ別機種へ転送」を
-        #   一度も見ていなかった。許可証には実行時のURLが入り、
-        #   読取器はそちらを取りに行くので、別機種の本文が材料に入り得た。
-        _TU_RUN = _TU2.rstrip("/")          # 実行時に名鑑から見つかるURL
-        _OTHER = "https://chonborista.com/slot/orinpia-slot/777777/"
-
-        def _f_asym(u):
-            # ★/ 付きは正しいページ・/ 無しだけ別機種へ転送★
-            _nw.LAST_FINAL_URL["url"] = (_OTHER if u == _TU_RUN else u)
-            return _NICK2
-
-        _v_asym = _mic.verdict_for("dmm_e2e", "kyoraku", "京楽", _st2, _f_asym,
-                                   material_url=_TU_RUN, machine_name=_MN2,
-                                   release_date="2026-10-05",
-                                   want_profile="title_name_core_mismatch")
-        t("★★★実行時のURLだけが別機種へ転送されていたら、使わない★★★"
-          "（控えのURLは正常なので、保存側だけ見ていた頃は素通りした）",
-          _v_asym is None)
-        t("　（対照）転送が無ければ、その形でも使える",
-          _mic.verdict_for("dmm_e2e", "kyoraku", "京楽", _st2, _f2,
-                           material_url=_TU_RUN, machine_name=_MN2,
-                           release_date="2026-10-05",
-                           want_profile="title_name_core_mismatch")
-          == "ACCEPT_MATERIAL")
-        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "LB/タコスロBD",
-                                        "reason": "OK"}
-        t("★★BT型式（LB/…）を規格印ありとして採用する★★"
-          "（実在の「スマスロ タコスロ」の型式・Codex54回目）",
-          gather("スマスロ タコスロ")["model_code"] == "LB/タコスロBD")
-        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "SタコスロBD",
-                                        "reason": "OK"}
-        t("　S型式との取り違えは引き続き拒否",
-          gather("スマスロ タコスロ")["model_code"] is None)
-        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "L1",
-                                        "reason": "OK", **_MKC(k)}
-
-        # ★公式ページは本物を想定して差し替える★
-        #   （開けなければ止まる作りなので、通る場合の試験には中身が要る）
-        real_get = _nw._get
-        _true_get = _nw._get   # ★真の原本（real_getは後段で偽物に上書きされる）★
-        _nw._get = lambda u, timeout=20: (
-            "<title>L試験機</title><body>2026年9月 登場</body>")
-        # ★メーカー名簿も試験用にする★（本番の名簿を書き換えない）
         real_cats = _nw.CATALOGS
         _nw.CATALOGS = os.path.join(_tmpdir, "cats.json")
         with open(_nw.CATALOGS, "w", encoding="utf-8") as _f:
@@ -4802,6 +4467,7 @@ def _selftest_body() -> int:
           "規格印が確認できません" in inspect.getsource(gather)
           and retry_later(["型式名の規格印が確認できません（機種はL版なのに…）"])
           and "型式名の規格印が確認できません" not in str(NOT_RETRYABLE))
+
         # ★台帳へ移した機種が、次の保存で行列に蘇らない★
         #   （2026-08-01・複数夜の通しで見つけた。give_up_now が別読みして
         #     外していたので、ループ側の古い行列の保存が削除を打ち消していた）
@@ -5300,96 +4966,120 @@ def _selftest_body() -> int:
             #   前は「ソースにこの文字があるか」だけを見ていたので、
             #   **旧仕様の名前が残っていれば通って**しまった。
             # ★★本体の関数をそのまま呼ぶ★★（2026-08-17・Codex依頼228の指摘1）
-            #   前は本体の式を正規表現で取り出して exec していたので、
-            #   **前段のループ（どれが控えを引くか）を通っていなかった**。
-            #   その結果 UNKNOWN が控えで救われる穴を検知できなかった。
             #   ★式を写さない・式を抜き出さない・本体を呼ぶ★
             _U = "https://a.example/1"
 
-            def _pick(state, reason, identity_ok=True, cached=None):
+            def _pick(reason, identity_ok=True, cached=None, codes=None):
                 """★本体の判定関数を通して採否を見る★（通信しない）"""
+                _cd = (codes if codes is not None
+                       else ([reason.split("（")[0]]
+                             if reason and reason != "OK" else []))
                 looks = [{"url": _U, "reason": reason,
-                          "identity_ok": identity_ok,
-                          "maker_check": {"state": state, "seen": "平和",
-                                          "expected": "olympia_estate",
-                                          "owners": ["heiwa"]}},
+                          "identity_ok": identity_ok, "reason_codes": _cd,
+                          "observed_maker": "平和"},
                          {"url": "https://b.example/2", "reason": "",
-                          "identity_ok": True,
-                          "maker_check": {"state": "MATCH", "seen": "平和",
-                                          "expected": "heiwa"}}]
+                          "identity_ok": True, "reason_codes": [],
+                          "observed_maker": "平和"}]
                 dec = maker_material_decision(
                     looks, "dmm_5086", "olympia_estate",
-                    verdict_of=lambda e, s, u, prof="maker_field", look=None: cached,
+                    verdict_of=lambda *a, **k: cached,
                     machine_name="L試験機", release_date="2026-10-05")
                 return (_U not in dec["bad"], dec)
 
-            t("★★明らかに別の社なら材料に使わない★★",
-              not _pick("MISMATCH", "DIRECTORY_MAKER_MISMATCH（別の社）")[0])
-            t("★★どの社か分からないものは材料に使わない★★"
-              "（★同名で別メーカーの機種は実在する★"
-              "＝パチスロ犬夜叉 2016年ロデオ／2022年クロスアルファ）",
-              not _pick("UNKNOWN",
-                        "DIRECTORY_MAKER_UNRESOLVED（名簿で解決できません）")[0])
-            t("★★★どの社か分からないものは、控えで『使う』と決めてあっても"
-              "救わない★★★（2026-08-17・Codex依頼228の指摘1／"
-              "★前はここが通っていた＝UNKNOWNが控えで復活していた★）",
-              not _pick("UNKNOWN",
-                        "DIRECTORY_MAKER_UNRESOLVED（名簿で解決できません）",
-                        cached="ACCEPT_MATERIAL")[0])
-            t("★★関係のある社でも、控えで決めていなければ使わない★★"
-              "（RELATEDは『2AIへ回す価値がある』印であって『同じ会社』ではない。"
-              "DMMの機種IDは名鑑のURLと結び付いていない）",
-              not _pick("RELATED", "DIRECTORY_MAKER_RELATED（関係のある社です）")[0])
-            t("★★関係のある社で、控えで『材料に使う』と決めてあれば使う★★",
-              _pick("RELATED", "DIRECTORY_MAKER_RELATED（関係のある社です）",
+            # ★★メーカー欄は採否を決めない★★（2026-09-17・運営者の指示）
+            #   ＞ もうさ、機械的に見るのやめたら？
+            #   ★直す前★＝MISMATCH と UNKNOWN は★2AIに聞かずに黙って外して★
+            #   いた。DMM「アデリオン」／名鑑「エンターライズ」というだけで
+            #   中身を持つ唯一のページが捨てられ、モンハンライズが8晩止まった。
+            # ★★メーカー欄の食い違いは、機械が拒否も採用もしない★★
+            #   （2026-09-17・Codexの指摘）＝観測しているのだから2AIへ渡す。
+            #   ★直す前★＝題の検査に通った時点で identity_ok が真になり、
+            #   そのあとメーカー欄が別の社だと分かっても真のままだったので、
+            #   ★食い違いを見つけているのに黙って採用していた★。
+            t("★★メーカー欄が別の社に見えたら、2AIへ回す★★"
+              "（★機械では拒否しない／黙って採用もしない★）",
+              not _pick("DIRECTORY_MAKER_MISMATCH（別の社）")[0]
+              and len(_pick("DIRECTORY_MAKER_MISMATCH（別の社）")[1]
+                      ["questions"]) == 1)
+            t("★★どの社か分からないときも、2AIへ回す★★",
+              len(_pick("DIRECTORY_MAKER_UNRESOLVED（解決できません）")[1]
+                  ["questions"]) == 1)
+            t("　2AIが「使う」と決めてあれば、そのまま使う",
+              _pick("DIRECTORY_MAKER_MISMATCH（別の社）",
                     cached="ACCEPT_MATERIAL")[0])
             t("★★控えで『使わない』と決めてあれば、必ず材料から外す★★"
-              "（2026-08-17に、ここが抜けて復活していた）",
-              not _pick("RELATED", "DIRECTORY_MAKER_RELATED（関係のある社です）",
-                        cached="REJECT_MATERIAL")[0])
-            t("　機種名の照合に落ちたものは今までどおり外す",
-              not _pick("RELATED", "", identity_ok=False)[0])
-            # ★控えを引く対象そのものを、返り値で確かめる★
-            # ★★メーカー欄の落ち方は、どれも2AIへ回す★★
-            #   （2026-09-15・台帳#675／運営者の指示）
-            #   ★直す前は RELATED だけ★＝「名簿で解決できない（UNKNOWN）」も
-            #   「別の社に見える（MISMATCH）」も**黙って外れて**いた。
-            #   ★MISMATCH も結論にしない★（Codexの指摘）＝製造元・ブランド・
-            #   掲載元法人は別でありうる（実例＝アデリオン／エンターライズ）。
-            t("★★メーカー欄の落ち方は、どれも2AIへ回す★★"
-              "（★直す前は RELATED だけで、残り2つは黙って消えていた★）",
-              len(_pick("RELATED", "DIRECTORY_MAKER_RELATED（…）")[1]
-                  ["questions"]) == 1
-              and len(_pick("UNKNOWN", "DIRECTORY_MAKER_UNRESOLVED（…）")[1]
-                      ["questions"]) == 1
-              and len(_pick("MISMATCH", "DIRECTORY_MAKER_MISMATCH（…）")[1]
-                      ["questions"]) == 1)
-            t("　（対照）名簿で一致した社（MATCH）は、問いにしない",
-              len(_pick("MATCH", "OK")[1]["questions"]) == 0)
+              "（★2AIが決めた除外は、見え方が変わっても消えない★）",
+              not _pick("OK", cached="REJECT_MATERIAL")[0])
+            t("★★機械が何か見つけたページは、2AIが決めるまで使わない★★",
+              not _pick("", identity_ok=False)[0])
+            t("　（対照）2AIが「使う」と決めてあれば使う",
+              _pick("", identity_ok=False, cached="ACCEPT_MATERIAL")[0])
+            # ★★本物の同定器から採否まで通す★★（2026-09-17・Codexの指摘3）
+            #   ★手で符丁を付けた試験だけだと★＝同定器が
+            #   「メーカー欄が別の社だ」と観測しながら符丁を付け忘れる退行が
+            #   起きても、両方の試験が通ってしまう。
+            #   ★本物の lookup を呼んで、そのまま採否へ渡す★
+            _E2E_MN = "L試験機"
+            _E2E_URL = "https://chonborista.com/slot/l-test/1/"
+            _E2E_PG = ("<title>L試験機 スロット 新台 天井 解析 | ちょんぼりすた</title>"
+                       '<a class="rating-btn">みんなの評価 (平均0)</a>'
+                       '<div id="hyouka">星</div>'
+                       '<ul class="commentlist"><li>投稿</li></ul>'
+                       f'<div id="entry"><div>機種名 {_E2E_MN}</div>'
+                       "<div>メーカー 別の会社XYZ</div>"
+                       "<div>導入日 2026年10月5日</div></div>")
+            _e2e_pg = _fp.FetchedPage(_E2E_URL, _E2E_URL, _E2E_PG)
+            _keep_lk = _mc.lookup
+            _mc.lookup = real_lookup
+            try:
+                _e2e_look = _mc.lookup(_E2E_URL, _E2E_MN,
+                                       expected_maker="olympia_estate",
+                                       page=_e2e_pg)
+            finally:
+                _mc.lookup = _keep_lk
+            _e2e_dec = maker_material_decision(
+                [_e2e_look], "dmm_5086", "olympia_estate",
+                verdict_of=lambda *a, **k: None,
+                machine_name=_E2E_MN, release_date="2026-10-05",
+                pages={_E2E_URL: _e2e_pg})
+            t("★★本物の同定器が見つけた食い違いが、採否まで届く★★"
+              "（★手で符丁を付けた試験だけだと、符丁を付け忘れる退行を"
+              "見逃す★＝Codexの指摘3）",
+              _E2E_URL not in _e2e_dec["accepted"]
+              and len(_e2e_dec["questions"]) == 1)
+            t("　（対照）同定器が何も見つけなければ、そのまま使う",
+              "https://chonborista.com/slot/l-test/2/" in maker_material_decision(
+                  [{"url": "https://chonborista.com/slot/l-test/2/",
+                    "identity_ok": True, "reason": "OK", "reason_codes": [],
+                    "maker_check": {"state": "MATCH"}}],
+                  "dmm_5086", "olympia_estate", verdict_of=lambda *a, **k: None,
+                  machine_name=_E2E_MN, release_date="2026-10-05")["accepted"])
+
+            t("★★機械が何か見つけたら、必ず2AIへの問いにする★★"
+              "（★直す前は落ち方の種類ごとに、聞くか黙って外すかを"
+              "機械が決めていた★）",
+              len(_pick("", identity_ok=False)[1]["questions"]) == 1)
+            t("　（対照）何も落ちていないページは、問いにしない"
+              "（毎晩ぜんぶ聞きに行くと、締切のある夜のタスクが終わらない）",
+              len(_pick("OK")[1]["questions"]) == 0)
             t("★★控えで通したページは、記録として残る★★"
               "（あとから『どの材料が例外で入ったか』を追えるように）",
-              _pick("RELATED", "DIRECTORY_MAKER_RELATED（…）",
+              _pick("", identity_ok=False,
                     cached="ACCEPT_MATERIAL")[1]["relation_checks"][0]
-              .get("relationship_verified") is False
-              and _pick("RELATED", "DIRECTORY_MAKER_RELATED（…）",
-                        cached="ACCEPT_MATERIAL")[1]["relation_checks"][0]
               .get("verdict") == "ACCEPT_MATERIAL")
-            t("　名簿で一致した名鑑は、そもそも外れない",
-              _pick("MATCH", "")[0])
             # ★採用の記録が残るか★（2026-08-17・Codex依頼228の指摘7）
             import tempfile as _tf
             with _tf.TemporaryDirectory() as _td:
                 _p = write_maker_relation_record(
                     "dmm_5086", "L試験機",
-                    _pick("RELATED", "DIRECTORY_MAKER_RELATED（…）",
+                    _pick("", identity_ok=False,
                           cached="ACCEPT_MATERIAL")[1]["relation_checks"],
                     base=_td)
                 _txt = (io.open(_p, encoding="utf-8").read() if _p else "")
             t("★★控えで通した材料は、判断記録に残る★★"
               "（前は実行の戻り値とログにしかなく、あとから由来を追えなかった）",
               bool(_p) and "ACCEPT_MATERIAL" in _txt
-              and "https://a.example/1" in _txt
-              and "会社が同じか" in _txt)
+              and "https://a.example/1" in _txt)
             t("　採用が無ければ記録も作らない（空のファイルを増やさない）",
               write_maker_relation_record("dmm_5086", "L試験機", []) == "")
             t("★★3件目の名鑑が落ちても、正常な2票を巻き込まない★★"
@@ -5397,12 +5087,6 @@ def _selftest_body() -> int:
               "転載照合で取得できず・票と材料から除外"
               in inspect.getsource(gather)
               and "failed" in inspect.getsource(gather))
-            t("★★同定に落ちたページ（identity_ok=偽）は材料からも外す★★"
-              "（他社名の題のページが材料の票に復活できた・Codex56回目）"
-              "／★ソースの文字ではなく挙動で見る★",
-              not _pick("MATCH", "", identity_ok=False)[0]
-              and not _pick("RELATED", "", identity_ok=False,
-                            cached="ACCEPT_MATERIAL")[0])
             # ★実際に呼んで数える★（2026-08-12・依頼160のP1-6）
             #   以前は本文に文字列があるかしか見ていなかったので、
             #   数える対象を増やし忘れても試験は通った。

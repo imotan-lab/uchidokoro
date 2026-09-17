@@ -140,50 +140,34 @@ def quotes(text: str, topic: str, limit: int = PER_SOURCE) -> dict:
 
 
 def _material_verdict(slug: str, url: str, why: str, html: str, page):
-    """★本番と同じ渡し方で、控えの答えを引く★（2026-08-29・台帳#498）
+    """★本番と同じ渡し方で、控えの答えを引く★（2026-09-17・v4）
 
     ★渡すもの★（どれか1つでも欠けたら答えない＝fail-closed）
       ・対象のURL
-      ・★DMMで確かめた★機種名と導入日（`--name` の自己申告は使わない）
-      ・落ち方に対応する控えの型（対応表は控えの側が正本）
-      ・期待する社と、いま読んだ本文のメーカー欄
       ・★いま取ってきた本文そのもの★（別取得にしない）
+
+    ★★v4で渡さなくなったもの★★＝証明の型・期待する社・名鑑のメーカー欄・
+      DMMの機種名と導入日。どれも「機械が意味を判定する」ための材料で、
+      2026-09-17に外した（運営者の指示）。控えの鍵は
+      ★機種と対象ページ★で、効く条件は★同じ本文か★と★引用が実在するか★。
+
+    ★例外を握りつぶさない★＝握りつぶしたせいで、置き場所を間違えていたことに
+      気づけなかった（2026-08-29・自分で踏んだ）。
+      ★同じことがまた起きた★（2026-09-17・Codexの指摘）＝
+      消した関数を呼び続けていたのに、例外が握りつぶされて
+      **この経路だけ静かに効かなくなっていた**。
+      いまは「控えが読めない」だけを握りつぶす。
     """
+    # ★★取り込みは握りつぶさない★★（2026-09-17・Codexの指摘2）
+    #   ★直す前★＝ここも例外を握りつぶしていたので、
+    #   ★消えた・壊れた・読み込みに失敗した★ときに静かに None になり、
+    #   「配線が切れたら上へ出す」と書いた説明と実装が食い違っていた。
+    import maker_identity_cache as _mic
     try:
-        import maker_identity_cache as _mic
-        import pending_machines as _pm
-    except Exception:                      # noqa: BLE001
-        return None
-    prof = _mic.rescue_profile_for(why) or "maker_field"
-    # ★DMMで確かめた値だけを使う★（待ち行列は本番と同じ出どころ）
-    hit = None
-    try:
-        pend = _pm.load()
-        for it in (pend or {}).get("items", {}).values():
-            if str((it or {}).get("source_machine_id") or "") \
-                    and f"dmm_{it['source_machine_id']}" == slug:
-                hit = it
-                break
-    except Exception:                      # noqa: BLE001
-        return None
-    if not hit or not hit.get("name") or not hit.get("release"):
-        return None                        # ★確かめた値が無ければ救わない★
-    # ★メーカー欄は読取器のものを使う★（本番と同じ関数）
-    #   ★例外を握りつぶさない★＝握りつぶしたせいで、置き場所を
-    #   間違えていたことに気づけなかった（2026-08-29・自分で踏んだ）。
-    import model_code_lookup as _mcl
-    seen = _mcl.extract_maker_name(html) or ""
-    try:
-        v = _mic.verdict_for(slug, hit.get("maker") or "", seen,
-                             material_url=url,
-                             machine_name=hit.get("name") or "",
-                             release_date=hit.get("release") or "",
-                             want_profile=prof,
-                             runtime_page=page)
-    except Exception:                      # noqa: BLE001
+        v = _mic.verdict_for(slug, material_url=url, runtime_page=page)
+    except _mic.CacheError:
         return None                        # ★控えが読めないなら救わない★
     return (v or {}).get("verdict") if isinstance(v, dict) else v
-
 
 def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
     """1機種ぶん集める。★取れなかった出典も理由つきで残す★
@@ -697,11 +681,90 @@ def selftest() -> int:
     t("★★2AI用の道具が、本番と同じ控えを見ている★★"
       "／★見ていないと、2AIは本番と違う材料で判断する★",
       "maker_identity_cache" in _src_mv and "runtime_page" in _src_mv)
-    t("　救済の型は控えの側の表から引く（同じ規則を2か所に書かない）",
-      "rescue_profile_for" in _src_mv)
-    t("★★機種名と導入日は、DMMで確かめた値だけを使う★★"
-      "／★--name の自己申告で控えを通してはいけない★",
-      "pending_machines" in _src_mv and "source_machine_id" in _src_mv)
+    # ★★ソースの文字ではなく、本物の控えで通す★★（2026-09-17・Codexの指摘）
+    #   ★直す前★＝ここは「ソースにこの関数名があるか」しか見ていなかったので、
+    #   ★その関数を消しても緑のまま★で、この経路だけ静かに効かなくなっていた
+    #   （例外を握りつぶしていたので実行時にも気づけない）。
+    #   ★本物の控えを作って、ACCEPT と REJECT の両方が返ることまで見る★
+    import maker_identity_cache as _mic_t
+    import user_area as _ua_t
+    _MV_URL = "https://chonborista.com/slot/orinpia-slot/264134/"
+    _MV_MN = "L転生王女と天才令嬢の魔法革命"
+    _MV_HTML = ("<title>【略称】解析情報まとめ 天井</title>"
+                '<a class="rating-btn">みんなの評価 (平均0)</a>'
+                '<div id="hyouka">星</div>'
+                '<ul class="commentlist"><li>投稿</li></ul>'
+                f'<div id="entry"><div>機種名 {_MV_MN}</div>'
+                "<div>メーカー 京楽</div>"
+                "<div>導入日 2026年10月5日</div></div>")
+
+    class _MvPg:
+        def __init__(self, url, html):
+            import hashlib
+            self.requested_url = url
+            self.final_url = url
+            self.cleaned_html = html
+            self.sha256 = hashlib.sha256(html.encode("utf-8")).hexdigest()
+
+    def _mv_fetch(u):
+        import new_machine_watch as _w_t
+        _w_t.LAST_FINAL_URL["url"] = u
+        return _MV_HTML
+
+    _mv_pg = _MvPg(_MV_URL, _ua_t.clean_html(_MV_HTML, _MV_URL))
+    _mv_ev = [{"url": _MV_URL,
+               "quote": f"機種名 {_MV_MN} メーカー 京楽 導入日 2026年10月5日",
+               "kind": "directory_observation"}]
+    _mv_ok = {"ACCEPT_MATERIAL": None, "REJECT_MATERIAL": None}
+    for _vd in list(_mv_ok):
+        _mv_st = _mic_t._empty()
+        try:
+            _w_mv = "2AIで別々に本文を読み、同じ結論に達しました（試験用）"
+            _mic_t.remember(
+                "dmm_5073",
+                {"claude": {"verdict": _vd, "why": _w_mv,
+                            "body_sha256": _mv_pg.sha256},
+                 "codex": {"verdict": _vd, "why": _w_mv,
+                           "body_sha256": _mv_pg.sha256}},
+                _mv_ev, "2026-09-17",
+                target_url=_MV_URL, store=_mv_st, fetch=_mv_fetch,
+                runtime_page=_mv_pg)
+        except _mic_t.CacheError:
+            _mv_ok[_vd] = "控えを作れませんでした"
+            continue
+        _keep_load = _mic_t.load
+        _mic_t.load = lambda: _mv_st
+        try:
+            _mv_ok[_vd] = _material_verdict(
+                "dmm_5073", _MV_URL, "NAME_CORE_MISMATCH", _MV_HTML, _mv_pg)
+        finally:
+            _mic_t.load = _keep_load
+    t("★★2AI用の道具が、本物の控えの『使う』を受け取る★★"
+      "（★ソースの文字を見るだけだと、消えた関数を呼び続けても緑だった★）",
+      _mv_ok["ACCEPT_MATERIAL"] == "ACCEPT_MATERIAL")
+    t("★★『使わない』も受け取る★★",
+      _mv_ok["REJECT_MATERIAL"] == "REJECT_MATERIAL")
+    # ★★控えが取り込めないときは、黙って進まず上へ出す★★
+    #   （2026-09-17・Codexの指摘2）
+    #   ★直す前★＝取り込みの例外も握りつぶしていたので、
+    #   モジュールが消えた・壊れた・初期化に失敗した、が
+    #   ★静かに「決めていない」になっていた★（配線切れに気づけない）。
+    import sys as _sys_mv
+    _keep_mod = _sys_mv.modules.get("maker_identity_cache")
+    _sys_mv.modules["maker_identity_cache"] = None
+    _raised = False
+    try:
+        _material_verdict("dmm_5073", _MV_URL, "NAME_CORE_MISMATCH",
+                          _MV_HTML, _mv_pg)
+    except Exception:                      # noqa: BLE001
+        _raised = True
+    finally:
+        if _keep_mod is None:
+            _sys_mv.modules.pop("maker_identity_cache", None)
+        else:
+            _sys_mv.modules["maker_identity_cache"] = _keep_mod
+    t("★★控えを取り込めないときは、黙って進まない★★"
+      "（★握りつぶすと、この経路だけ静かに効かなくなる★）", _raised)
     t("★★『使わない』と決めた控えは、題で同定できるページにも効く★★",
       "REJECT_MATERIAL" in _src_co)
     t("★★取ってくるのは1回だけ★★"
