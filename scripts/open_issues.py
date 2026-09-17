@@ -533,7 +533,7 @@ def selftest() -> int:
     _bound["resolution_condition"] = {
         "check": "confirmed_value_recorded", "version": 1,
         "args": {"field": "gameplay#normal_cz"}}
-    _hit = [{"condition": {"check": "confirmed_value_recorded",
+    _hit = [{"condition": {"check": "confirmed_value_recorded", "version": 1,
                            "args": {"slug": "dmm_5086",
                                     "field": "gameplay#normal_cz"}},
              "observation_digest": "d"}]
@@ -552,6 +552,21 @@ def selftest() -> int:
                                   "args": {"slug": "dmm_5086",
                                            "field": "別の項目"}},
                     "observation_digest": "d"}])))
+    # ★★登録した版と違う版で確かめた受領証では閉じない★★
+    #   （2026-09-17・Codexの指摘②）＝直す前は検査名と引数しか見ていなかった。
+    _hitv = [{"condition": {"check": "confirmed_value_recorded",
+                            "version": 1,
+                            "args": {"slug": "dmm_5086",
+                                     "field": "gameplay#normal_cz"}},
+              "observation_digest": "d"}]
+    t("　★登録した版と同じなら通る★",
+      _condition_binds_row(_bound, _hitv) == "")
+    t("★★検査の版が上がったのに、登録し直さずに閉じない★★"
+      "（「中身を読み直して登録し直す」が守られなくても止まらなかった）",
+      bool(_condition_binds_row(
+          dict(_row, resolution_condition={
+              "check": "confirmed_value_recorded", "version": 2,
+              "args": {"field": "gameplay#normal_cz"}}), _hitv)))
     t("★★機種は案件の行から固定する★★"
       "（受領証の自己申告だと、別の機種の控えで通せる）",
       bool(_condition_binds_row(
@@ -569,11 +584,13 @@ def selftest() -> int:
     t("★★登録した条件が別の機種を名乗っていても、案件の機種で照合する★★",
       bool(_condition_binds_row(
           _sneak, [{"condition": {"check": "confirmed_value_recorded",
+                                  "version": 1,
                                   "args": {"slug": "hokuto",
                                            "field": "gameplay#normal_cz"}},
                     "observation_digest": "d"}]))
       and _condition_binds_row(
           _sneak, [{"condition": {"check": "confirmed_value_recorded",
+                                  "version": 1,
                                   "args": {"slug": "dmm_5086",
                                            "field": "gameplay#normal_cz"}},
                     "observation_digest": "d"}]) == "")
@@ -1087,10 +1104,18 @@ def _condition_binds_row(row: dict, conds: list) -> str:
         cond = c.get("condition") or {}
         if str(cond.get("check") or "") != w_check:
             continue
+        # ★★登録した版と同じ版で確かめたか★★（2026-09-17・Codexの指摘②）
+        #   ★直す前は検査名と引数しか見ていなかった★ので、
+        #   条件を v1 で登録したあと検査が v2 になっても、
+        #   v2 の受領証を作れば閉じられた
+        #   ＝「中身を読み直して登録し直す」が守られなくても止まらなかった。
+        if cond.get("version") != want.get("version"):
+            continue
         if dict(cond.get("args") or {}) == w_args:
             return ""
-    return (f"この案件には閉じる条件（{w_check}）が登録されています。"
-            "受領証にその検査がありません")
+    return (f"この案件には閉じる条件（{w_check} / 版 {want.get('version')}）が"
+            "登録されています。受領証に、その検査を同じ版で確かめた記録が"
+            "ありません")
 
 
 def cmd_close(path, args):

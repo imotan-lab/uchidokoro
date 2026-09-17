@@ -305,6 +305,58 @@ def args_for_check(check: str, slug: str, row=None) -> dict:
     return a
 
 
+def version_for_check(check: str, row=None) -> int:
+    """★その検査を、どの版で確かめるか★（2026-09-17・Codexの指摘②）
+
+    ★★直す前は、いつも「いまの版」を入れていた★★＝
+      登録した条件が v1 でも、検査が v2 に変わっていれば
+      ★黙って v2 で確かめて閉じていた★。
+      `condition_stale` の警告は**表示だけ**で関門になっていなかった。
+      ＝「中身を読み直して条件を登録し直す」という決まりが、
+      守られなくても誰も止めなかった。
+    ★登録した版をそのまま入れる★＝`recheck.closeable` が
+      版の食い違いで断るので、必ず登録し直すことになる。
+    """
+    want = (row or {}).get("resolution_condition")
+    if isinstance(want, dict) and str(want.get("check") or "") == check:
+        return want.get("version")
+    meta = _rc.CHECKS.get(check) or {}
+    return meta.get("version")
+
+
+def checks_bound_to_issue(row, checks, texts, guards) -> tuple:
+    """★その検査が、この案件と結び付いているか★ → (ok, 理由)
+
+    ★★何が起きていたか★★（2026-09-17・Codexの指摘①・再現済み）
+      ★同じ機種で通る、案件と何の関係もない検査を1つ挙げるだけで閉じられた★。
+      実際に、ヤメ時の書き方の案件を `model_code_gone`（型式名が消えたか）で
+      閉じられることを確かめた。
+
+    ★結び付け方は3つ。どれか1つあればよい★
+      ① 案件に登録した条件（`resolution_condition`）を通している
+      ② 消えた逐語（`--text`）＝その案件の本文に在る文字（`texts_from_issue`）
+      ③ 壊し方（`--guard-mutation`）＝その壊し方が案件の番号を名乗っている
+    ★どれも無ければ閉じない★＝「通る検査を探してくる」だけで閉じられてしまう。
+
+    ★登録した条件が1つでも足りる理由★＝ほかに挙げた検査は**足し算**
+      （全部通らないと閉じない）なので、閉じやすくはならない。
+      1つの案件に問題が2つ書いてある場合も、片方を登録して
+      もう片方を `--check` で足せば、結び付きは保たれる。
+    """
+    want = (row or {}).get("resolution_condition")
+    if isinstance(want, dict):
+        return True, "案件に登録した条件で結び付いています"
+    if texts:
+        return True, "案件の本文にある逐語で結び付いています"
+    if guards:
+        return True, "案件の番号を名乗る壊し方で結び付いています"
+    return False, ("この案件には、閉じる条件が登録されていません。"
+                   "検査名だけでは、その案件が直った証拠になりません"
+                   "（同じ機種で通る無関係な検査でも閉じられてしまうため）。"
+                   "python scripts/open_issues.py condition --id <番号> "
+                   "--check <検査名> … で先に登録してください")
+
+
 def condition_stale(cond) -> list:
     """★登録した条件が、いまも使えるか★ → 使えない理由（無ければ空）
 
@@ -377,7 +429,8 @@ def run_checks(slug: str, checks, texts, head: str = "",
             return False, whys + [f"知らない検査です: {check}"], done
         if not meta.get("closeable"):
             return False, whys + [f"観測どまりの検査です: {check}"], done
-        if not _one({"check": check, "version": meta.get("version"),
+        if not _one({"check": check,
+                     "version": version_for_check(check, row),
                      "args": args_for_check(check, slug, row),
                      "expected_commit": head}, check):
             return False, whys, done
@@ -581,6 +634,19 @@ def close_issue(issue_id: int, slug: str, checks, texts, why_extra="",
     if not ok:
         print("★閉じません★")
         return 1
+    ok, why = checks_bound_to_issue(row, checks, texts, guards)
+    print("  " + why)
+    if not ok:
+        print("★閉じません★")
+        return 1
+    # ★★古くなった条件では閉じない★★（2026-09-17・Codexの指摘②）
+    #   ★直す前は、ここで知らせるだけだった★＝
+    #   登録した版と違う版で確かめて、そのまま閉じていた。
+    _st = condition_stale(row.get("resolution_condition"))
+    if _st:
+        print("  " + _st[0])
+        print("★閉じません★（登録し直してから閉じてください）")
+        return 1
     if _dirty():
         print("★閉じません★ 未コミットの変更があります"
               "（いまの記事で確かめたと言えないため）")
@@ -691,9 +757,17 @@ def main() -> int:
                 for _w in condition_stale(cond):
                     print("    ★" + _w + "★")
         if got:
-            print("\n★記事を読んで、直っているなら閉じる検査を名指ししてください★")
+            print("\n★記事を読んで、直っているなら閉じてください★")
+            print("★★先に「これが通れば直っている」を案件に登録します★★"
+                  "（検査名だけでは、その案件が直った証拠になりません）")
+            print("  python scripts/open_issues.py condition --id <番号> "
+                  "--check <検査名> --arg <名前>=<値> "
+                  "--why-file <理由を書いたファイル> --by claude,codex")
             print("  python scripts/ledger_sweep.py --slug <機種> "
                   "--close <番号> --check <検査名> …")
+            print("★消えた逐語（--text）や壊し方（--guard-mutation）で"
+                  "閉じるときは、登録は要りません★"
+                  "（それ自体が案件と結び付いているため）")
             print("★直っていなければ、その回を数えます★")
             print("  python scripts/open_issues.py attempt --id <番号> "
                   "--round <この回の名前> --note \"試したこと\"")
@@ -890,6 +964,14 @@ def selftest() -> int:
                 {"id": 9003, "slug": "tokyo_ghoul", "status": "open",
                  "kind": "external_value", "title": "試験用: 裏取り待ち",
                  "detail": "『裏取り待ちの逐語』が未確定です"},
+                {"id": 9004, "slug": "tokyo_ghoul", "status": "open",
+                 "kind": "quality", "title": "試験用: 古い条件つき",
+                 "detail": "条件を古い版で登録したまま",
+                 "resolution_condition": {
+                     "check": "model_code_gone", "version": 999,
+                     "args": {}, "set_at": "2026-08-01",
+                     "set_by": ["claude", "codex"],
+                     "why": "型式名が消えていれば直り"}},
             ]}, ensure_ascii=False))
         globals()["LEDGER"] = _fake
 
@@ -913,7 +995,31 @@ def selftest() -> int:
           "（CIの機械には書類フォルダがありません）",
           isinstance(_rows(), list))
         t("　★その機種の開いている案件だけを出す★",
-          [r["id"] for r in for_slug("tokyo_ghoul")["open"]] == [9001, 9003])
+          [r["id"] for r in for_slug("tokyo_ghoul")["open"]]
+          == [9001, 9003, 9004])
+
+        # ★★閉じる本体を通す★★（罠③＝関数だけを試すと呼び出しを消せる）
+        #   ★この2つの関門は、未コミットかどうかを見るより手前にある★ので、
+        #   木が汚れていても本当に通せる。
+        #   ★断った理由の文まで見る★（罠㉚＝奥にも守りがあるため）
+        import contextlib as _ctx3
+        import io as _io3
+
+        def _close_says(issue_id, checks, texts=(), guards=()):
+            _b = _io3.StringIO()
+            with _ctx3.redirect_stdout(_b):
+                _r = close_issue(issue_id, "tokyo_ghoul", list(checks),
+                                 list(texts), "試験", guards=list(guards))
+            return _r, _b.getvalue()
+
+        _r1, _m1 = _close_says(9001, ["model_code_gone"])
+        t("★★条件が無い案件を、検査名だけでは閉じない★★"
+          "（同じ機種で通る無関係な検査を1つ挙げるだけで閉じられていた）",
+          _r1 != 0 and "閉じる条件が登録されていません" in _m1)
+        _r2, _m2 = _close_says(9004, ["model_code_gone"])
+        t("★★古い版の条件のままでは閉じない★★"
+          "（登録し直さなくても、いまの版で確かめて閉じられていた）",
+          _r2 != 0 and "版が変わりました" in _m2)
     finally:
         globals()["LEDGER"] = _keep_ledger
         shutil.rmtree(_tmpdir, ignore_errors=True)
@@ -948,6 +1054,42 @@ def selftest() -> int:
                          "check": "confirmed_value_recorded",
                          "args": {"slug": "hokuto", "field": "f"}}})
       == {"slug": "dmm_5086", "field": "f"})
+
+    # ★★検査は、この案件と結び付いていないと使えない★★
+    #   （2026-09-17・Codexの指摘①・実際に再現した）
+    #   ★ヤメ時の書き方の案件を、型式名の検査で閉じられた★
+    #   ＝同じ機種で通る検査を1つ探してくるだけで閉じられていた。
+    _plain = {"id": 7, "slug": "hokuto", "kind": "quality",
+              "title": "ヤメ時の説明", "detail": "ヤメ時の節が読みにくい"}
+    t("★★条件が無い案件を、検査名だけで閉じない★★"
+      "（同じ機種で通る無関係な検査で閉じられていた）",
+      checks_bound_to_issue(_plain, ["model_code_gone"], [], [])[0] is False)
+    t("　★案件の本文にある逐語があれば通る★（それ自体が結び付き）",
+      checks_bound_to_issue(_plain, ["model_code_gone"], ["ヤメ時の節"],
+                            [])[0] is True)
+    t("　★案件の番号を名乗る壊し方があれば通る★",
+      checks_bound_to_issue(_plain, ["model_code_gone"], [],
+                            ["壊し方の名前"])[0] is True)
+    t("　★登録した条件があれば通る★",
+      checks_bound_to_issue(
+          dict(_plain, resolution_condition={"check": "model_code_gone"}),
+          ["model_code_gone"], [], [])[0] is True)
+
+    # ★★登録した版で確かめる★★（2026-09-17・Codexの指摘②・実際に再現した）
+    #   ★直す前は、いつも「いまの版」を入れていた★ので、
+    #   条件を古い版で登録したまま、新しい版で確かめて閉じられた。
+    _oldv = {"slug": "hokuto", "resolution_condition": {
+        "check": "model_code_gone", "version": 999, "args": {}}}
+    t("★★登録した条件の版を、そのまま検査に入れる★★"
+      "（いまの版を入れると、登録し直さなくても閉じられる）",
+      version_for_check("model_code_gone", _oldv) == 999)
+    t("　★条件を持たない検査は、いまの版で確かめる★",
+      version_for_check("model_code_gone", _plain)
+      == _rc.CHECKS["model_code_gone"]["version"])
+    t("　★古い版の条件では、検査そのものが通らない★"
+      "（`closeable` が版の食い違いで断る）",
+      run_checks("hokuto", ["model_code_gone"], [], _head(),
+                 row=_oldv)[0] is False)
 
     # ★★登録した条件は静かに古くなる★★（2026-09-17）
     #   版が上がると閉じられなくなるのに、理由がどこにも出なかった。

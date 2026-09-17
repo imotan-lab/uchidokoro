@@ -5443,15 +5443,18 @@ MUTATIONS = [
     {
         "why": "★検査に渡す引数を、案件の行から組まない（機種のほかに引数が要る検査は、名簿に足しても呼べない）★",
         "file": "scripts/ledger_sweep.py",
-        "before": "    want = (row or {}).get(\"resolution_condition\")",
-        "after": "    want = None",
+        "before": "    a = {\"slug\": slug}\n"
+                  "    want = (row or {}).get(\"resolution_condition\")",
+        "after": "    a = {\"slug\": slug}\n    want = None",
         "run": ["scripts/ledger_sweep.py"],
     },
     {
         "why": "★検査の名前を見ずに、どの検査へも条件の引数を混ぜる★",
         "file": "scripts/ledger_sweep.py",
-        "before": "    if isinstance(want, dict) and str(want.get(\"check\") or \"\") == check:",
-        "after": "    if isinstance(want, dict):",
+        "before": "    if isinstance(want, dict) and str(want.get(\"check\") or \"\") == check:\n"
+                  "        extra = want.get(\"args\")",
+        "after": "    if isinstance(want, dict):\n"
+                 "        extra = want.get(\"args\")",
         "run": ["scripts/ledger_sweep.py"],
     },
     {
@@ -5512,6 +5515,41 @@ MUTATIONS = [
         "before": "    if not meta.get(\"closeable\"):\n        return [f\"登録した検査（{name}）は、いまは観測どまりです\"",
         "after": "    if False:\n        return [f\"登録した検査（{name}）は、いまは観測どまりです\"",
         "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★案件と結び付いていない検査でも閉じる（同じ機種で通る無関係な検査を1つ挙げるだけで閉じられる）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    if texts:\n        return True, \"案件の本文にある逐語で結び付いています\"",
+        "after": "    if True:\n        return True, \"案件の本文にある逐語で結び付いています\"",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★結び付きの関門を、閉じるときに呼ばない（関数だけの試験は緑のまま）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    ok, why = checks_bound_to_issue(row, checks, texts, guards)",
+        "after": "    ok, why = True, \"飛ばしました\"",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★古くなった条件のまま閉じる（登録し直さなくても通る）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    _st = condition_stale(row.get(\"resolution_condition\"))",
+        "after": "    _st = []",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★登録した版ではなく、いまの版で検査する（検査が変わっても登録し直さずに閉じられる）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "        return want.get(\"version\")",
+        "after": "        pass",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★受領証の版を、登録した条件と見比べない（条件をv1で登録したあと、v2の受領証で閉じられる）★",
+        "file": "scripts/open_issues.py",
+        "before": "        if cond.get(\"version\") != want.get(\"version\"):",
+        "after": "        if False:",
+        "run": ["scripts/open_issues.py"],
     },
 ]
 
