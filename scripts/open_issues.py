@@ -42,6 +42,8 @@ import datetime
 import hashlib
 import json
 import os
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -537,8 +539,15 @@ def selftest() -> int:
     # ★★案件と検査を構造で結び付ける★★（2026-09-17・Codexの指摘）
     #   ★直す前★＝閉じる側は番号・機種・状態しか見ていなかったので、
     #   ★その案件と何の関係もない検査でも、通りさえすれば閉じられた★。
+    # ★本物の証拠つきで組み立てる★（閉じる側が証拠まで見るため）
+    _headsha = subprocess.run(["git", "rev-parse", "HEAD"],
+                              cwd=str(Path(__file__).resolve().parent.parent),
+                              capture_output=True, text=True).stdout.strip()
+
     def _cond(check="confirmed_value_recorded", version=1, **a):
-        return {"check": check, "version": version, "args": dict(a)}
+        return {"check": check, "version": version, "args": dict(a),
+                "result_when_set": "FAIL", "failed_at_commit": _headsha,
+                "failed_digest": "e" * 64}
 
     def _rcpt(check="confirmed_value_recorded", version=1, **a):
         return {"condition": _cond(check, version, **a),
@@ -550,7 +559,7 @@ def selftest() -> int:
         sl = str(r.get("slug") or "")
         r["conditions_sealed"] = {
             "at": "2026-09-17", "by": ["claude", "codex"],
-            "why": "この条件で案件の全部を覆いました",
+            "why": "この条件で案件の全部を覆いました（試験）",
             "issue_digest": issue_digest(r),
             "condition_keys": sorted(
                 json.dumps(_cond_key(c, sl), ensure_ascii=False)
@@ -633,6 +642,66 @@ def selftest() -> int:
       "（条件が無いことの検査を消しても、封の検査は素通りする＝罠④）",
       bool(_condition_binds_row(_seal(dict(_row,
                                            resolution_conditions=[])), _hit)))
+
+    # ★★「2AIが決めた」を、1AIでは名乗れない★★（2026-09-17・Codexの指摘）
+    #   ★直す前は「2つあればよい」だった★ので `--by claude,claude` が通り、
+    #   ★1AIだけで2AIの宣言を作れた★。
+    t("★★同じ判断者を2つ並べても通さない★★（--by claude,claude）",
+      bool(judges_problem(["claude", "claude"])))
+    t("　★大文字小文字の違いでは別人にならない★",
+      bool(judges_problem(["Claude", "CLAUDE"])))
+    t("　★claude と codex の両方なら通る★",
+      judges_problem(["Claude", "Codex"]) == "")
+    t("　★契約に無い名前は通さない★", bool(judges_problem(["claude", "gpt"])))
+    _badby = _seal(_nosealed)
+    _badby["conditions_sealed"]["by"] = ["claude", "claude"]
+    t("★★閉じる側でも封の判断者を見る★★"
+      "（指紋だけを持つ辞書でも封として通っていた）",
+      bool(_condition_binds_row(_badby, _hit)))
+    _nowhy = _seal(_nosealed)
+    _nowhy["conditions_sealed"]["why"] = "短い"
+    t("　★封に理由が書かれていなければ通さない★",
+      bool(_condition_binds_row(_nowhy, _hit)))
+    t("　★封の中身が辞書ですらなければ通さない★",
+      bool(seal_problem(dict(_row, conditions_sealed="ただの文字列"))))
+
+    # ★★「確かに落ちていた」証拠を、閉じるときにも見る★★
+    #   ★直す前は登録のときに記録するだけだった★ので、
+    #   証拠を持たない古い条件に封を付ければ、そのまま閉じられた。
+    t("★★落ちていた記録が無い条件では閉じない★★",
+      bool(evidence_problem({"check": "x"})))
+    t("　★落ちていたコミットが無ければ通さない★",
+      bool(evidence_problem({"result_when_set": "FAIL",
+                             "failed_digest": "e" * 64})))
+    t("　★落ちていた指紋が無ければ通さない★",
+      bool(evidence_problem({"result_when_set": "FAIL",
+                            "failed_at_commit": _headsha})))
+    t("　★そろっていれば通る★",
+      evidence_problem({"result_when_set": "FAIL",
+                        "failed_at_commit": _headsha,
+                        "failed_digest": "e" * 64}) == "")
+    _old = _seal(dict(_row, resolution_conditions=[
+        {"check": "confirmed_value_recorded", "version": 1,
+         "args": {"field": "gameplay#normal_cz"}}]))
+    t("★★証拠を持たない古い条件は、封を付けても閉じられない★★",
+      bool(_condition_binds_row(_old, _hit)))
+    # ★★狙った1件だけが効く形で見る★★（罠④＝隣の守りに助けられない）
+    #   コミットは正しい歴史の中にあるが、落ちていた記録だけが無い形。
+    _noresult = _seal(dict(_row, resolution_conditions=[
+        {"check": "confirmed_value_recorded", "version": 1,
+         "args": {"field": "gameplay#normal_cz"},
+         "failed_at_commit": _headsha, "failed_digest": "e" * 64}]))
+    t("　★落ちていた記録だけが無くても閉じない★"
+      "（コミットの祖先の検査に助けられていないこと）",
+      bool(_condition_binds_row(_noresult, _hit)))
+    _other = _seal(dict(_row, resolution_conditions=[
+        _cond(field="gameplay#normal_cz")]))
+    _other["resolution_conditions"][0]["failed_at_commit"] = "0" * 40
+    t("★★別の枝で落としたコミットは証拠にしない★★"
+      "（いまの歴史の中に無いものを持ってこられる）",
+      bool(_condition_binds_row(_other, _hit)))
+    t("　★いまの歴史にあるコミットなら通る★", is_ancestor(_headsha) is True)
+    t("　★40桁でないものは通さない★", is_ancestor("abc") is False)
 
     # -------------------------------------- 登録の関門（いま落ちていること）
     # ★★案件の説明文そのものを条件にできた★★（2026-09-17・Codexの指摘・再現済み）
@@ -734,6 +803,26 @@ def selftest() -> int:
           "（そろっていないのに閉じられる状態へ戻る）",
           _row3.get("conditions_sealed") is None
           and len(_row3.get("resolution_conditions") or []) == 2)
+
+        # ★★証拠を持たない古い条件は、登録し直せる★★
+        #   ★直す前は「同じ条件です」で終わっていた★ので、
+        #   ★汚れた木で登録した条件を、道具からは直せなかった★。
+        _fresh()
+        _r4 = json.loads(_cled.read_text(encoding="utf-8"))["issues"][0]
+        _r4["resolution_conditions"] = [
+            {"check": "text_gone", "version": 1,
+             "args": {"text": "どこにも無い文XYZ"}}]      # ★証拠なし★
+        _r4["conditions_sealed"] = {"at": "2026-09-17"}
+        _cled.write_text(json.dumps({"next_id": 2, "issues": [_r4]},
+                                    ensure_ascii=False), encoding="utf-8")
+        _reg_ok()
+        _r5 = json.loads(_cled.read_text(encoding="utf-8"))["issues"][0]
+        _got5 = (_r5.get("resolution_conditions") or [{}])[0]
+        t("★★証拠を持たない古い条件は、いまの証拠で上書きできる★★"
+          "（できないと、汚れた木で登録した条件を道具から直せない）",
+          len(_r5.get("resolution_conditions") or []) == 1
+          and evidence_problem(_got5) == ""
+          and _r5.get("conditions_sealed") is None)
         _fresh()
         t("　★判断者が2つ無ければ登録できない★",
           _stops_ret(lambda: _reg(by="claude")) and _n() == 0)
@@ -1247,6 +1336,78 @@ def _receipt_problems(rec, issue_id: int, row: dict) -> str:
     return ""
 
 
+# ★★判断者の契約は、確定値の控えと同じものを読む★★（罠③＝2か所に書かない）
+#   ★直す前は「2つあればよい」だった★ので `--by claude,claude` が通り、
+#   ★1AIだけで「2AIが決めた」ことにできた★（2026-09-17・Codexの指摘）。
+def judges_problem(by) -> str:
+    """★判断者が claude と codex の両方そろっているか★ → 問題の文（無ければ空）"""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import confirmed_values as _cv
+        need = set(_cv.REQUIRED_JUDGES)
+    except Exception:                                        # noqa: BLE001
+        return "判断者の契約を読めません"
+    got = {str(x).strip().casefold() for x in (by or []) if str(x).strip()}
+    if got != need:
+        return (f"判断者は {'/'.join(sorted(need))} の2つが要ります"
+                f"（いまは {','.join(sorted(got)) or 'なし'}）")
+    return ""
+
+
+def evidence_problem(cond: dict) -> str:
+    """★その条件が「確かに落ちていた」証拠を持っているか★ → 問題の文
+
+    ★★閉じるときにも見る★★（2026-09-17・Codexの指摘）＝
+      ★直す前は登録のときに記録するだけで、閉じる側は見ていなかった★。
+      ＝証拠を持たない古い条件に封を付ければ、そのまま閉じられた。
+    """
+    if str(cond.get("result_when_set") or "") != "FAIL":
+        return "登録したときに落ちていた記録がありません"
+    if not re.fullmatch(r"[0-9a-f]{40}", str(cond.get("failed_at_commit")
+                                             or "")):
+        return "落ちていたときのコミットが記録されていません"
+    if not re.fullmatch(r"[0-9a-f]{64}", str(cond.get("failed_digest") or "")):
+        return "落ちていたときの指紋が記録されていません"
+    return ""
+
+
+def is_ancestor(sha: str, tip: str = "HEAD") -> bool:
+    """★そのコミットが、いまの先端の祖先か★（★読めなければ False★）
+
+    ★なぜ要るか★＝「落ちていた状態から直った」と言うには、
+      落ちていたコミットが**いまの歴史の中にある**ことが要る。
+      別の枝で落としたものを持ってきても証拠にならない。
+    """
+    if not re.fullmatch(r"[0-9a-f]{40}", str(sha or "")):
+        return False
+    try:
+        r = subprocess.run(["git", "merge-base", "--is-ancestor", sha, tip],
+                           cwd=str(Path(__file__).resolve().parent.parent),
+                           capture_output=True, text=True, timeout=30)
+    except Exception:                                        # noqa: BLE001
+        return False
+    return r.returncode == 0
+
+
+def seal_problem(row: dict) -> str:
+    """★封そのものが、2AIの宣言として形を満たしているか★ → 問題の文
+
+    ★閉じる側でも見る★（2026-09-17・Codexの指摘）＝
+      ★直す前は中身を見ていなかった★ので、指紋だけを持つ辞書でも封として通った。
+    """
+    seal = row.get("conditions_sealed")
+    if not isinstance(seal, dict):
+        return ("この案件には「これで全部を覆った」という封がありません。"
+                "python scripts/open_issues.py seal --id <番号> "
+                "--why-file <理由> --by claude,codex で封をしてください")
+    ng = judges_problem(seal.get("by"))
+    if ng:
+        return "封の" + ng
+    if len(str(seal.get("why") or "").strip()) < 10:
+        return "封に、なぜ全部を覆ったと言えるのかが書かれていません"
+    return ""
+
+
 def row_conditions(row: dict) -> list:
     """★その案件に登録されている「閉じる条件」を全部返す★（2026-09-17）
 
@@ -1329,11 +1490,20 @@ def _condition_binds_row(row: dict, conds: list) -> str:
     # ★★「これで案件の全部を覆った」という封があること★★
     #   （2026-09-17・Codexの指摘＝条件が1件あるだけでは、
     #     案件に書かれた問題を全部登録したことにならない）
+    ng = seal_problem(row)
+    if ng:
+        return ng
+    # ★★条件が「確かに落ちていた」証拠を持っているか★★（閉じるときにも見る）
+    for w in want:
+        ng = evidence_problem(w)
+        if ng:
+            return (f"登録した条件（{w.get('check')}）は{ng}"
+                    "。綺麗なコミットで登録し直してください")
+        if not is_ancestor(str(w.get("failed_at_commit") or "")):
+            return (f"登録した条件（{w.get('check')}）が落ちていたコミットは、"
+                    "いまの歴史の中にありません"
+                    "（別の枝で落としたものは証拠になりません）")
     seal = row.get("conditions_sealed")
-    if not isinstance(seal, dict):
-        return ("この案件には「これで全部を覆った」という封がありません。"
-                "python scripts/open_issues.py seal --id <番号> "
-                "--why-file <理由> --by claude,codex で封をしてください")
     if str(seal.get("issue_digest") or "") != issue_digest(row):
         return ("封をしたあとに案件の本文が書き換わっています"
                 "（覆っているか分からないので、封をし直してください）")
@@ -1469,8 +1639,9 @@ def cmd_condition(path, args):
     if len(why) < 10:
         raise SystemExit("★なぜその検査で直ったと言えるかを10字以上で★")
     by = [s.strip() for s in str(args.by or "").split(",") if s.strip()]
-    if len(by) < 2:
-        raise SystemExit("★判断者が2つ要ります★（--by claude,codex）")
+    _ngby = judges_problem(by)
+    if _ngby:
+        raise SystemExit("★" + _ngby + "★")
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import recheck as _rc
@@ -1540,8 +1711,20 @@ def cmd_condition(path, args):
            "failed_at_commit": _head0,
            "failed_digest": got.get("observation_digest")}
     slug = str(row.get("slug") or "")
-    if any(_cond_key(c, slug) == _cond_key(new, slug) for c in box):
-        print(f"#{args.id} には同じ条件がもう登録されています")
+    _same = [i for i, c in enumerate(box)
+             if _cond_key(c, slug) == _cond_key(new, slug)]
+    if _same:
+        # ★★証拠を持たない古い条件は、登録し直せる★★（2026-09-17・Codexの指摘）
+        #   ★直す前は「同じ条件です」で終わっていた★ので、
+        #   ★汚れた木で登録した条件を、道具からは直せなかった★。
+        if not evidence_problem(box[_same[0]]):
+            print(f"#{args.id} には同じ条件がもう登録されています")
+            return 0
+        box[_same[0]] = new
+        row.pop("conditions_sealed", None)
+        _save(path, data)
+        print(f"#{args.id} の条件を、いまの証拠で登録し直しました"
+              f"（落ちていたコミット {_head0[:12]}）")
         return 0
     box.append(new)
     # ★条件を足したら、前の「全部そろった」宣言は無効にする★
@@ -1581,8 +1764,9 @@ def cmd_seal(path, args):
     if len(why) < 10:
         raise SystemExit("★なぜこれで案件の全部を覆ったのかを10字以上で★")
     by = [s.strip() for s in str(args.by or "").split(",") if s.strip()]
-    if len(by) < 2:
-        raise SystemExit("★判断者が2つ要ります★（--by claude,codex）")
+    _ngby = judges_problem(by)
+    if _ngby:
+        raise SystemExit("★" + _ngby + "★")
     data = _load(path)
     row = next((i for i in data["issues"] if i["id"] == args.id), None)
     if row is None:

@@ -5593,8 +5593,14 @@ MUTATIONS = [
     {
         "why": "★条件を足したときに、前の封を残す（そろっていないのに閉じられる状態へ戻る）★",
         "file": "scripts/open_issues.py",
-        "before": "    row.pop(\"conditions_sealed\", None)",
-        "after": "    pass",
+        "before": ('    box.append(new)\n'
+                   '    # ★条件を足したら、前の「全部そろった」宣言は無効にする★\n'
+                   '    #   （そろっていないのに閉じられる状態に戻さないため）\n'
+                   '    row.pop("conditions_sealed", None)'),
+        "after": ('    box.append(new)\n'
+                  '    # ★条件を足したら、前の「全部そろった」宣言は無効にする★\n'
+                  '    #   （そろっていないのに閉じられる状態に戻さないため）\n'
+                  '    pass'),
         "run": ["scripts/open_issues.py"],
     },
     {
@@ -5604,6 +5610,63 @@ MUTATIONS = [
                    '        print("★登録しません★ 未コミットの変更があります"'),
         "after": ('    if False:\n'
                   '        print("★登録しません★ 未コミットの変更があります"'),
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★判断者を「2つあればよい」に緩める（--by claude,claude が通り、1AIだけで2AIの宣言を作れる）★",
+        "file": "scripts/open_issues.py",
+        "before": "    if got != need:",
+        "after": "    if len(got) < 2:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★判断者を大文字小文字のまま見る（同じ名前が別人に見える）★",
+        "file": "scripts/open_issues.py",
+        "before": "    got = {str(x).strip().casefold() for x in (by or []) if str(x).strip()}",
+        "after": "    got = {str(x).strip() for x in (by or []) if str(x).strip()}",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★封の判断者を見ない（1AIが2回名乗るだけで2AIの宣言になる）★",
+        "file": "scripts/open_issues.py",
+        "before": "    ng = judges_problem(seal.get(\"by\"))\n"
+                  "    if ng:\n        return \"封の\" + ng",
+        "after": "    ng = \"\"\n    if ng:\n        return \"封の\" + ng",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★封に理由が書かれていなくても通す★",
+        "file": "scripts/open_issues.py",
+        "before": "    if len(str(seal.get(\"why\") or \"\").strip()) < 10:",
+        "after": "    if False:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★閉じるときに「確かに落ちていた」証拠を見ない（証拠を持たない古い条件に封を付ければ、そのまま閉じられる）★",
+        "file": "scripts/open_issues.py",
+        "before": "        ng = evidence_problem(w)\n        if ng:",
+        "after": "        ng = \"\"\n        if ng:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★落ちていたときの指紋を見ない★",
+        "file": "scripts/open_issues.py",
+        "before": "    if not re.fullmatch(r\"[0-9a-f]{64}\", str(cond.get(\"failed_digest\") or \"\")):",
+        "after": "    if False:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★落ちていたコミットが、いまの歴史の中にあるかを見ない（別の枝で落としたものを証拠にできる）★",
+        "file": "scripts/open_issues.py",
+        "before": "        if not is_ancestor(str(w.get(\"failed_at_commit\") or \"\")):",
+        "after": "        if False:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★証拠を持たない古い条件を、登録し直せないままにする（汚れた木で登録した条件を、道具からは直せない）★",
+        "file": "scripts/open_issues.py",
+        "before": "        if not evidence_problem(box[_same[0]]):",
+        "after": "        if True:",
         "run": ["scripts/open_issues.py"],
     },
 ]
