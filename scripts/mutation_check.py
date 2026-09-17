@@ -4692,15 +4692,10 @@ MUTATIONS = [
     {
         "why": "★検査を1つも渡されなくても通す（空で閉じられる）★",
         "file": "scripts/ledger_sweep.py",
-        # ★目印は行末まで含める★（2026-09-17・Codexの助言）＝
-        #   部分一致だと、返す値の形を変えたことに目印が気づかない。
-        "before": ('    if not checks and not texts and not guards '
-                   'and not row_conditions(row):\n'
-                   '        return False, ["確かめる検査が1件もありません"], []'
-                   '\n'),
-        "after": ('    if not checks and not texts and not guards '
-                  'and not row_conditions(row):\n'
-                  '        return True, [], []\n'),
+        "before": ('    if not checks and not texts and not guards:\n'
+                   '        return False, ["確かめる検査が1件もありません"]'),
+        "after": ('    if not checks and not texts and not guards:\n'
+                  '        return True, []'),
         "run": ["scripts/ledger_sweep.py"],
     },
     {
@@ -5390,13 +5385,6 @@ MUTATIONS = [
         "run": ["scripts/open_issues.py"],
     },
     {
-        "why": "★検査が1件も書かれていない受領証で閉じる（空で閉じられる）★",
-        "file": "scripts/open_issues.py",
-        "before": "    if not isinstance(conds, list) or not conds:",
-        "after": "    if not isinstance(conds, list):",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
         "why": "★確かめた時の指紋が無い受領証で閉じる（台帳の外にある控えは、コミットの照合では覆えない）★",
         "file": "scripts/open_issues.py",
         "before": "        if not str(c.get(\"observation_digest\") or \"\"):",
@@ -5455,165 +5443,7 @@ MUTATIONS = [
         "run": ["scripts/recheck.py"],
     },
     {
-        "why": "★登録した条件の版が変わっても黙っている（その案件だけ、理由の分からないまま閉じられなくなる）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "    if cond.get(\"version\") != meta.get(\"version\"):",
-        "after": "    if False:",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★名簿から消えた検査の条件を、生きているものとして扱う★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "    meta = _rc.CHECKS.get(name)",
-        "after": "    meta = _rc.CHECKS.get(name) or "
-                 "{\"version\": cond.get(\"version\"), \"closeable\": True}",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★観測どまりに変わった検査の条件を、閉じられるものとして扱う★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "    if not meta.get(\"closeable\"):\n        return [f\"登録した検査（{name}）は、いまは観測どまりです。\"",
-        "after": "    if False:\n        return [f\"登録した検査（{name}）は、いまは観測どまりです。\"",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★案件と結び付いていない検査でも閉じる（同じ機種で通る無関係な検査を1つ挙げるだけで閉じられる）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "    if row_conditions(row):",
-        "after": "    if True:",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★結び付きの関門を、閉じるときに呼ばない（関数だけの試験は緑のまま）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "    ok, why = checks_bound_to_issue(row, checks, texts, guards)",
-        "after": "    ok, why = True, \"飛ばしました\"",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★古くなった条件のまま閉じる（登録し直さなくても通る）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "    _st = stale_conditions(row)",
-        "after": "    _st = []",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★受領証の版を、登録した条件と見比べない（条件をv1で登録したあと、v2の受領証で閉じられる）★",
-        "file": "scripts/open_issues.py",
-        "before": "    return (str(cond.get(\"check\") or \"\"), cond.get(\"version\"),",
-        "after": "    return (str(cond.get(\"check\") or \"\"), None,",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★登録した条件を1件も持たない案件でも閉じる（登録が無ければ素通り＝台帳の全件がそうだった）★",
-        "file": "scripts/open_issues.py",
-        "before": "    if not want:\n        return (\"この案件には、閉じる条件が1件も登録されていません。\"",
-        "after": "    if False:\n        return (\"この案件には、閉じる条件が1件も登録されていません。\"",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★登録した条件のうち1件でも確かめれば閉じる（問題が2つある案件を、片方の検査だけで閉じられる）★",
-        "file": "scripts/open_issues.py",
-        "before": "    for w in want:\n        if _cond_key(w, slug) not in have:",
-        "after": "    for w in []:\n        if _cond_key(w, slug) not in have:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★受領証の側の機種も、案件の行で書き換えてしまう（別の機種で動かした結果を、この案件の証拠として受け取る）★",
-        "file": "scripts/open_issues.py",
-        "before": "    have = {_cond_key(c.get(\"condition\") or {}) for c in conds\n",
-        "after": "    have = {_cond_key(c.get(\"condition\") or {}, slug) for c in conds\n",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★いま落ちていない検査でも条件として登録する（案件の説明文そのものを逐語にでき、1文字も直さずに閉じられる）★",
-        "file": "scripts/open_issues.py",
-        "before": "    if got.get(\"result\") != _rc.FAIL:",
-        "after": "    if False:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★登録ぶんを、呼び出し側が渡した検査だけに任せる（必要な検査を全部渡したかを誰も見ていない状態に戻る）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "    for want in row_conditions(row):",
-        "after": "    for want in []:",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★登録した条件の機種を、案件の行から固定しない（登録の側で別の機種に差し替えられる）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "        a = _oi_mod.pin_slug(_c, want.get(\"args\") or {}, slug)",
-        "after": "        a = dict(want.get(\"args\") or {})",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★登録した条件の版ではなく、いまの版で確かめる（検査が変わっても登録し直さずに閉じられる）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "        out.append({\"check\": _c, \"version\": want.get(\"version\"), \"args\": a,",
-        "after": "        out.append({\"check\": _c, \"version\": (_rc.CHECKS.get(_c) or {}).get(\"version\"), \"args\": a,",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★機種を取らない検査にも機種を渡す（機種に紐づかない案件＝実測111件が条件を登録すらできない）★",
-        "file": "scripts/open_issues.py",
-        "before": "    if \"slug\" in (meta.get(\"args_spec\") or {}):",
-        "after": "    if True:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★封（これで案件の全部を覆ったという宣言）が無くても閉じる（条件1件だけ登録して、もう片方の問題を直さずに閉じられる）★",
-        "file": "scripts/open_issues.py",
-        "before": ('    seal = row.get("conditions_sealed")\n'
-                   '    if not isinstance(seal, dict):'),
-        "after": ('    seal = {}\n'
-                  '    if not isinstance(seal, dict):'),
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★封をしたあと案件の本文が書き換わっても気づかない（覆っているか分からないまま閉じる）★",
-        "file": "scripts/open_issues.py",
-        "before": "    if str(seal.get(\"issue_digest\") or \"\") != issue_digest(row):",
-        "after": "    if False:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★封をしたあと条件を足しても気づかない（封の時点と違う顔ぶれで閉じられる）★",
-        "file": "scripts/open_issues.py",
-        "before": "    if list(seal.get(\"condition_keys\") or []) != keys:",
-        "after": "    if False:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★閉じる側が、封の有無を見ない（台帳側だけの検査になり、片方を消せる）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "        if not isinstance(_seal, dict):",
-        "after": "        if False:",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★条件を足したときに、前の封を残す（そろっていないのに閉じられる状態へ戻る）★",
-        "file": "scripts/open_issues.py",
-        "before": ('    box.append(new)\n'
-                   '    # ★条件を足したら、前の「全部そろった」宣言は無効にする★\n'
-                   '    #   （そろっていないのに閉じられる状態に戻さないため）\n'
-                   '    row.pop("conditions_sealed", None)'),
-        "after": ('    box.append(new)\n'
-                  '    # ★条件を足したら、前の「全部そろった」宣言は無効にする★\n'
-                  '    #   （そろっていないのに閉じられる状態に戻さないため）\n'
-                  '    pass'),
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★未コミットのままでも条件を登録できる（一時の書き換えで検査を落として登録し、戻せば何も直さずに閉じられる）★",
-        "file": "scripts/open_issues.py",
-        "before": ('    if not _rc.repo_clean():\n'
-                   '        print("★登録しません★ 未コミットの変更があります"'),
-        "after": ('    if False:\n'
-                  '        print("★登録しません★ 未コミットの変更があります"'),
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★判断者を「2つあればよい」に緩める（--by claude,claude が通り、1AIだけで2AIの宣言を作れる）★",
+        "why": "★判断者を件数で数える（--by claude,claude が通り、1AIだけで「2AIが決めた」ことにできる）★",
         "file": "scripts/open_issues.py",
         "before": "    if got != need:",
         "after": "    if len(got) < 2:",
@@ -5627,144 +5457,31 @@ MUTATIONS = [
         "run": ["scripts/open_issues.py"],
     },
     {
-        "why": "★封の判断者を見ない（1AIが2回名乗るだけで2AIの宣言になる）★",
+        "why": "★受領証の2AI合意を見ない（Claudeひとりで閉じられる）★",
         "file": "scripts/open_issues.py",
-        "before": "    ng = judges_problem(seal.get(\"by\"))\n"
-                  "    if ng:\n        return \"封の\" + ng",
-        "after": "    ng = \"\"\n    if ng:\n        return \"封の\" + ng",
+        "before": "    ng = judges_problem(rec.get(\"by\"))\n    if ng:\n        return \"受領証の\" + ng",
+        "after": "    ng = \"\"\n    if ng:\n        return \"受領証の\" + ng",
         "run": ["scripts/open_issues.py"],
     },
     {
-        "why": "★封に理由が書かれていなくても通す★",
-        "file": "scripts/open_issues.py",
-        "before": "    if len(str(seal.get(\"why\") or \"\").strip()) < 10:",
+        "why": "★閉じるときに2AIの合意を見ない（Claudeひとりで閉じられる）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    ng = _oi_mod.judges_problem(by)",
+        "after": "    ng = \"\"",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★理由を書かずに閉じられる（なぜ直ったかが残らない）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    if len(str(why_extra or \"\").strip()) < 15:",
         "after": "    if False:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★閉じるときに「確かに落ちていた」証拠を見ない（証拠を持たない古い条件に封を付ければ、そのまま閉じられる）★",
-        "file": "scripts/open_issues.py",
-        "before": "        ng = evidence_problem(w)\n        if ng:",
-        "after": "        ng = \"\"\n        if ng:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★落ちていたときの指紋を見ない★",
-        "file": "scripts/open_issues.py",
-        "before": "    if not re.fullmatch(r\"[0-9a-f]{64}\", str(cond.get(\"failed_digest\") or \"\")):",
-        "after": "    if False:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★落ちていたコミットが、いまの歴史の中にあるかを見ない（別の枝で落としたものを証拠にできる）★",
-        "file": "scripts/open_issues.py",
-        "before": "        if not is_ancestor(str(w.get(\"failed_at_commit\") or \"\")):",
-        "after": "        if False:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★証拠を持たない古い条件を、登録し直せないままにする（汚れた木で登録した条件を、道具からは直せない）★",
-        "file": "scripts/open_issues.py",
-        "before": "        _old = box[_same[0]]",
-        "after": "        _old = dict(new)",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★登録し直すとき、いまの歴史に在るコミットかを見ない（閉じるときは断られ、直すこともできず、その案件は永久に詰まる）★",
-        "file": "scripts/open_issues.py",
-        "before": "        if (not evidence_problem(_old)\n                and is_ancestor(str(_old.get(\"failed_at_commit\") or \"\"))):",
-        "after": "        if not evidence_problem(_old):",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★条件の一覧に壊れた要素が混ざっていても、残りだけで閉じる（壊れているのに『そろっている』と読む）★",
-        "file": "scripts/open_issues.py",
-        "before": "    bad = [i for i, c in enumerate(got) if not isinstance(c, dict)]",
-        "after": "    bad = []",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★閉じるときに、条件の一覧が壊れていないかを見ない★",
-        "file": "scripts/open_issues.py",
-        "before": "    ng = conditions_broken(row)          # ★壊れた要素を黙って捨てない★\n    if ng:\n        return ng",
-        "after": "    ng = \"\"\n    if ng:\n        return ng",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★白紙に戻しても条件が残る（詰まった案件の唯一の出口がふさがり、人がJSONを触るまで直せない）★",
-        "file": "scripts/open_issues.py",
-        "before": "    row.pop(\"resolution_conditions\", None)\n    row.pop(\"conditions_sealed\", None)\n    _save(path, data)",
-        "after": "    _save(path, data)",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★白紙に戻すときに封を残す（覆う条件が無いのに封だけ生き残る）★",
-        "file": "scripts/open_issues.py",
-        "before": "    row.pop(\"resolution_conditions\", None)\n    row.pop(\"conditions_sealed\", None)",
-        "after": "    row.pop(\"resolution_conditions\", None)",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★白紙に戻したものを控えない（何を消したか追えなくなる）★",
-        "file": "scripts/open_issues.py",
-        "before": "    box = row.setdefault(\"condition_resets\", [])",
-        "after": "    box = []",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★版が変わった条件の知らせに、直し方を書かない（案内どおりに登録し直すと、古いほうが残って同じ輪に戻る）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "                f\"（条件 {cond.get('version')} / いま {meta.get('version')}）。\"\n                \"中身を読み直したうえで、\" + _oi_mod.REPAIR_STEPS]",
-        "after": "                f\"（条件 {cond.get('version')} / いま {meta.get('version')}）。\"\n                \"中身を読み直して条件を登録し直してください\"]",
         "run": ["scripts/ledger_sweep.py"],
     },
     {
-        "why": "★名簿から消えた検査の知らせに、直し方を書かない★",
+        "why": "★検査を挙げたのに、木が汚れたまま確かめる（いまの記事で確かめたと言えない）★",
         "file": "scripts/ledger_sweep.py",
-        "before": "        return [f\"登録した検査（{name}）は、いまの名簿にありません。\"\n                + _oi_mod.REPAIR_STEPS]",
-        "after": "        return [f\"登録した検査（{name}）は、いまの名簿にありません\"]",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★観測どまりに変わった検査の知らせに、直し方を書かない★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "        return [f\"登録した検査（{name}）は、いまは観測どまりです。\"\n                + _oi_mod.REPAIR_STEPS]",
-        "after": "        return [f\"登録した検査（{name}）は、いまは観測どまりです\"]",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★壊れた条件の知らせに、直し方を書かない（読み飛ばしても残る限り断られるので、白紙に戻すしかない）★",
-        "file": "scripts/open_issues.py",
-        "before": "        return (f\"閉じる条件の {len(bad)} 件が壊れています\"\n                f\"（{bad[:3]} 番目）。\" + REPAIR_STEPS)",
-        "after": "        return (f\"閉じる条件の {len(bad)} 件が壊れています\"\n                f\"（{bad[:3]} 番目）\")",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★直し方の案内から python scripts/ を落とす（そのまま打っても動かず、無人タスクがその場で止まる）★",
-        "file": "scripts/open_issues.py",
-        "before": "    \" ④python scripts/ledger_sweep.py --slug <機種> --close <番号>\"",
-        "after": "    \" ④ledger_sweep.py --slug <機種> --close <番号>\"",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★封のやり直しの案内から python scripts/ を落とす★",
-        "file": "scripts/open_issues.py",
-        "before": "SEAL_AGAIN = (\"★直し方★＝python scripts/open_issues.py seal --id <番号> \"",
-        "after": "SEAL_AGAIN = (\"★直し方★＝open_issues.py seal --id <番号> \"",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★壊れた一覧のままでも条件を登録する（壊れた要素が残るので、閉じる側は結局ずっと断る）★",
-        "file": "scripts/open_issues.py",
-        "before": "    _ngbox = conditions_broken(row)\n    if _ngbox:",
-        "after": "    _ngbox = \"\"\n    if _ngbox:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★案件を出すときに、壊れた一覧を「未登録」「その分だけ」と見せる（案内どおり登録しても、壊れた要素が残って閉じられない）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "    ngb = _oi_mod.conditions_broken(row or {})",
-        "after": "    ngb = \"\"",
+        "before": "        if _dirty():\n            print(\"★閉じません★ 未コミットの変更があります\"",
+        "after": "        if False:\n            print(\"★閉じません★ 未コミットの変更があります\"",
         "run": ["scripts/ledger_sweep.py"],
     },
 ]

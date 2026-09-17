@@ -284,134 +284,6 @@ def _html_ready(slug: str) -> bool:
     return os.path.exists(os.path.join(BASE, "machines", slug, "index.html"))
 
 
-def row_conditions(row) -> list:
-    """★その案件に登録されている「閉じる条件」を全部★（読み方は台帳側に1つ）"""
-    return _oi_mod.row_conditions(row or {})
-
-
-def checks_bound_to_issue(row, checks, texts, guards) -> tuple:
-    """★その案件に、閉じる条件が登録されているか★ → (ok, 理由)
-
-    ★★何が起きていたか★★（2026-09-17・Codexの指摘・どちらも再現した）
-      ①★同じ機種で通る、案件と無関係な検査を1つ挙げるだけで閉じられた★
-        （ヤメ時の書き方の案件を、型式名の検査で閉じられた）。
-      ②★案件の説明文そのものを「消えた逐語」にできた★
-        （「ヤメ時の説明が読みづらい」という説明文は**もともと記事に無い**ので、
-          `text_gone` が必ず通る＝1文字も直さずに閉じられた）。
-
-    ★★だから結び付けは「登録」の1本だけにした★★
-      ＝逐語も壊し方も、条件として**登録**してから使う。
-      登録の時点で「いまはまだ通らない」ことを機械が確かめるので、
-      あとで通ったことが**変化の証拠**になる（②はここで落ちる）。
-    ★登録した条件は全部通す★（①はここで落ちる）。
-    """
-    if row_conditions(row):
-        # ★封（これで案件の全部を覆ったという宣言）も要る★
-        #   ＝条件が1件あるだけでは、案件に書かれた問題を
-        #   全部登録したことにならない（2026-09-17・Codexの指摘）。
-        #   ★中身の照合は台帳側に1つ★（`_condition_binds_row`）。
-        _seal = (row or {}).get("conditions_sealed")
-        if not isinstance(_seal, dict):
-            return False, ("この案件には「これで全部を覆った」という封が"
-                           "ありません。python scripts/open_issues.py seal "
-                           "--id <番号> --why-file <理由> --by claude,codex")
-        return True, "案件に登録した条件と封で結び付いています"
-    return False, ("この案件には、閉じる条件が1件も登録されていません。"
-                   "検査名や逐語だけでは、その案件が直った証拠になりません"
-                   "（同じ機種で通る無関係な検査でも、"
-                   "案件の説明文そのものを逐語にしても閉じられてしまうため）。"
-                   "python scripts/open_issues.py condition --id <番号> "
-                   "--check <検査名> … で先に登録してください")
-
-
-def conditions_for_row(slug: str, row, head: str = "") -> list:
-    """★案件に登録した条件を、そのまま動かせる形にする★（2026-09-17）
-
-    ★機種は必ず案件の行から固定する★＝登録の側に別の機種が書いてあっても、
-      その機種の記事や控えで通してしまわない。
-    ★版も登録したものをそのまま入れる★＝検査が変わったら
-      `recheck.closeable` が版の食い違いで断るので、必ず登録し直すことになる。
-    ★切り出してある理由★＝木が汚れていても、
-      「何をどう組み立てたか」だけを試験で直接見られるようにするため
-      （合否は `closeable` が未コミットを見るので、手元では当てにできない）。
-    """
-    out = []
-    for want in row_conditions(row):
-        _c = str(want.get("check") or "")
-        # ★機種は行から固定★（★ただし機種を取る検査だけ★＝規則は台帳側に1つ）
-        a = _oi_mod.pin_slug(_c, want.get("args") or {}, slug)
-        out.append({"check": _c, "version": want.get("version"), "args": a,
-                    "expected_commit": head or _head()})
-    return out
-
-
-def due_condition_lines(row) -> list:
-    """★閉じる回で、その案件について何を知らせるか★（2026-09-17）
-
-    ★★切り出してある理由★★＝画面へ印字する処理の中に埋めていると、
-      ★そこを壊しても試験が緑のまま★になる（罠③）。
-
-    ★★壊れた一覧を「無い」「少ない」と見せない★★（Codexの指摘）＝
-      `row_conditions` は辞書でない要素を落として読むので、
-      ★一覧でなければ「未登録」、混ざっていれば「その分だけ」に見えた★。
-      その案内どおり登録しても、壊れた要素が残るので結局閉じられない。
-    ★詰まりを知らせたら、その場で直し方まで言う★
-      （言わないと、案内どおりに登録し直して同じ輪に戻る）。
-    """
-    out = []
-    ngb = _oi_mod.conditions_broken(row or {})
-    if ngb:
-        out.append("★" + ngb + "★")
-    cs = row_conditions(row)
-    if not cs and not ngb:
-        out.append("★閉じる条件は未登録★（登録しないと閉じられません）")
-    stale = False
-    for cond in cs:
-        out.append(f"★登録ずみの閉じる条件★ {cond.get('check')} "
-                   f"{cond.get('args')}（{cond.get('why')}）")
-        for w in condition_stale(cond):
-            out.append("★" + w + "★")
-            stale = True
-    if stale:
-        out.append("★この案件は、登録し直すだけでは直りません★")
-    return out
-
-
-def stale_conditions(row) -> list:
-    """★登録した条件のうち、いま使えないもの★（理由の文の一覧）"""
-    out = []
-    for c in row_conditions(row):
-        out += condition_stale(c)
-    return out
-
-
-def condition_stale(cond) -> list:
-    """★登録した条件が、いまも使えるか★ → 使えない理由（無ければ空）
-
-    ★★なぜ要るか★★（2026-09-17）＝登録した条件は**静かに古くなる**。
-      検査の版が上がると `recheck.closeable` が版の食い違いで断るので、
-      ★その案件だけが、理由の分からないまま閉じられなくなる★。
-      名簿から検査が消えたときも同じ。
-      ＝閉じる回で案件を出すときに、その場で言う。
-    ★ここでは直さない★（勝手に版を上げると「確かめた」の中身が変わる）。
-    """
-    if not isinstance(cond, dict):
-        return []
-    name = str(cond.get("check") or "")
-    meta = _rc.CHECKS.get(name)
-    if meta is None:
-        return [f"登録した検査（{name}）は、いまの名簿にありません。"
-                + _oi_mod.REPAIR_STEPS]
-    if not meta.get("closeable"):
-        return [f"登録した検査（{name}）は、いまは観測どまりです。"
-                + _oi_mod.REPAIR_STEPS]
-    if cond.get("version") != meta.get("version"):
-        return [f"登録した検査（{name}）の版が変わりました"
-                f"（条件 {cond.get('version')} / いま {meta.get('version')}）。"
-                "中身を読み直したうえで、" + _oi_mod.REPAIR_STEPS]
-    return []
-
-
 def run_checks(slug: str, checks, texts, head: str = "",
                guards=None, row=None) -> tuple:
     """2AIが名指しした検査を**全部**やり直す → (ok, 一件ずつの記録, 受領証の中身)
@@ -429,7 +301,7 @@ def run_checks(slug: str, checks, texts, head: str = "",
     checks = list(checks or [])
     texts = list(texts or [])
     guards = list(guards or [])
-    if not checks and not texts and not guards and not row_conditions(row):
+    if not checks and not texts and not guards:
         return False, ["確かめる検査が1件もありません"], []
 
     # ★これだけでは閉じられない検査★は、逐語の確認と組でなければ通さない
@@ -451,25 +323,12 @@ def run_checks(slug: str, checks, texts, head: str = "",
                              str((got or {}).get("observation_digest") or "")})
         return ok
 
-    # ★★案件に登録した条件は、呼び出し側が何を渡しても必ず全部やり直す★★
-    #   （2026-09-17・Codexの指摘①・再現済み）
-    #   ★直す前は「渡された検査を全部やる」だけだった★ので、
-    #   「必要な検査を全部渡したか」は誰も見ていなかった
-    #   ＝1つの案件に問題が2つ書いてあるとき、
-    #   ★片方を登録して片方の検査だけ渡せば閉じられた★。
-    for want, cond in zip(row_conditions(row),
-                          conditions_for_row(slug, row, head)):
-        if not _one(cond, f"登録した条件[{want.get('check')}]"):
-            return False, whys, done
-
     for check in checks:
         meta = _rc.CHECKS.get(check)
         if not meta:
             return False, whys + [f"知らない検査です: {check}"], done
         if not meta.get("closeable"):
             return False, whys + [f"観測どまりの検査です: {check}"], done
-        if any(str(w.get("check") or "") == check for w in row_conditions(row)):
-            continue                 # ★登録ぶんはもう上でやり直している★
         if not _one({"check": check, "version": meta.get("version"),
                      "args": {"slug": slug},
                      "expected_commit": head}, check):
@@ -642,16 +501,32 @@ def guards_from_issue(row, guards) -> tuple:
 
 
 def close_issue(issue_id: int, slug: str, checks, texts, why_extra="",
-                guards=None) -> int:
+                guards=None, by=None) -> int:
     """★案件を閉じる唯一の入口★ 0=閉じた / それ以外=閉じなかった
 
-    ★★番号・機種・検査を結び付ける★★（2026-08-30・Codexの指摘2）
-      直す前は番号を見ずに逐語だけ確かめていたので、
-      ★別の機種で「存在しない文」を指定すれば、どの案件でも閉じられた★。
-    ★★書き込む直前にもう一度確かめる★★（同・指摘3）
-      検査と台帳の書き換えの間に別のコミットが入ると、
-      「いまの記事で確かめた」と言えなくなる。
+    ★★★2AIが決めたことは事実として扱う★★★（2026-09-17・運営者の指示）
+      ＞ 2AIで決めればそれが事実ってことで良くない？
+      ＞ Claudeとコーデックスが判断したんでしょ。Claudeだけじゃないでしょ？ 十分でしょ
+
+      ★何をやめたか★＝**2AIが嘘をついていないかを機械が見張る層**。
+      封（全部を覆ったという宣言の照合）／落ちていた証拠とコミットの系譜／
+      条件の事前登録と版の固定／判断者の契約の再検査、を全部外した。
+      ★理由★＝今朝、材料に使うページの採否で同じ層を外したのと同じ。
+      疑う層を足すほど、その層自体の穴が出て、
+      ★詰まって閉じられない案件が増えるだけだった★（実測で4通りできていた）。
+
+      ★機械が残ってやること★（今朝の分担と同じ）
+        ・2AIが**検査の名前を挙げたときは、それを実際にやり直す**
+          （＝引用がそのページに在るかを確かめるのと同じ役割）
+        ・案件が実在して開いていること／機種が合っていること
+        ・未コミットのうちは閉じない（いまの記事で確かめたと言うため）
+        ・誰が何を根拠に閉じたかを記録する
+      ★挙げられなくても閉じられる★＝2AIの合意と理由があればよい。
+      ★これが無いと★＝機械の検査を当てられない案件
+      （サイト全体の話・実測111件）は**永久に閉じられない**。
     """
+    by = sorted({str(x).strip().casefold() for x in (by or [])
+                 if str(x).strip()})
     ok, why = precheck_close(issue_id, slug)
     print("  " + why)
     if not ok:
@@ -674,48 +549,61 @@ def close_issue(issue_id: int, slug: str, checks, texts, why_extra="",
     if not ok:
         print("★閉じません★")
         return 1
-    ok, why = checks_bound_to_issue(row, checks, texts, guards)
-    print("  " + why)
-    if not ok:
-        print("★閉じません★")
+    # ★★2AIの合意は必ず要る★★（機械の検査があってもなくても）
+    #   ★片方だけでは閉じない★＝「2AIが決めた」と言えるのは
+    #   claude と codex の両方がそろったときだけ。
+    ng = _oi_mod.judges_problem(by)
+    if ng:
+        print(f"★閉じません★ {ng}（--by claude,codex）")
         return 1
-    # ★★古くなった条件では閉じない★★（2026-09-17・Codexの指摘②）
-    #   ★直す前は、ここで知らせるだけだった★＝
-    #   登録した版と違う版で確かめて、そのまま閉じていた。
-    _st = stale_conditions(row)
-    if _st:
-        print("  " + _st[0])
-        print("★閉じません★ " + _oi_mod.REPAIR_STEPS)
-        return 1
-    if _dirty():
-        print("★閉じません★ 未コミットの変更があります"
-              "（いまの記事で確かめたと言えないため）")
+    if len(str(why_extra or "").strip()) < 15:
+        print("★閉じません★ なぜ直っていると言えるのかを15字以上で"
+              "（--why）")
         return 1
 
     head0 = _head()
-    ok, whys, done = run_checks(slug, checks, texts, head0, guards=guards,
-                                row=row)
-    for w in whys:
-        print("  " + w[:130])
-    if not ok:
-        print("★閉じません★（1件でも通らなければ閉じない）")
-        return 1
+    if checks or texts or guards:
+        # ★★検査を当てるときだけ、木が綺麗であることを求める★★
+        #   ★理由★＝「いまの記事で確かめた」と言うため。
+        #   ★当てないときは求めない★＝何も照合していないので、
+        #   木の状態は関係がない。求めると、記事を直した日には
+        #   ★仕組みの話の案件が一切閉じられなくなる★。
+        if _dirty():
+            print("★閉じません★ 未コミットの変更があります"
+                  "（いまの記事で確かめたと言えないため）")
+            return 1
+        ok, whys, done = run_checks(slug, checks, texts, head0, guards=guards,
+                                    row=row)
+        for w in whys:
+            print("  " + w[:130])
+        if not ok:
+            print("★閉じません★（1件でも通らなければ閉じない）")
+            return 1
+    else:
+        # ★★機械の検査を当てられない案件★★（サイト全体の話など）
+        #   ★2AIの合意と理由で閉じる★＝機械には確かめようがないので、
+        #   ★確かめたふりをしない★（何を根拠に閉じたかは記録に残る）。
+        whys = ["機械の検査は当てていません（2AIの合意で閉じます）"]
+        done = []
+        print("  " + whys[0])
 
     # ★書き込む直前に、検査したときと同じ状態のままかを見る★
-    if _head() != head0 or _dirty():
+    #   （★検査を当てたときだけ★＝当てていなければ照合するものが無い）
+    if done and (_head() != head0 or _dirty()):
         print("★閉じません★ 確かめている間にリポジトリが動きました")
         return 1
 
     ops = _lp.doc("ops")
     os.makedirs(ops, exist_ok=True)
     p = os.path.join(ops, f"close_{issue_id}.txt")
-    lines = ["2AIがこの案件を読み、直っていれば通るはずの検査を決めました。",
-             "機械がその検査を全部やり直し、通ったので閉じます。",
+    lines = ["2AIがこの案件を読み、直っていると判断しました。",
+             f"判断者: {'/'.join(by)}",
              f"機種: {slug} ／ コミット: {head0[:12]}"]
     lines += ["  " + w for w in whys]
-    if why_extra:
-        lines.append("2AIの理由: " + why_extra)
-    lines.append("★AIの宣言ではなく、機械が確かめた結果です★")
+    lines.append("2AIの理由: " + why_extra)
+    lines.append("★検査を挙げたぶんは、機械がやり直して通っています★"
+                 if done else
+                 "★機械の検査は当てていません（2AIの判断で閉じました）★")
     io.open(p, "w", encoding="utf-8", newline="\n").write(
         "\n".join(lines) + "\n")
 
@@ -728,6 +616,7 @@ def close_issue(issue_id: int, slug: str, checks, texts, why_extra="",
         json.dumps({"schema": RECEIPT_SCHEMA, "issue_id": int(issue_id),
                     "slug": slug, "commit": head0,
                     "issued_at": datetime.now().isoformat(timespec="seconds"),
+                    "by": by, "machine_checked": bool(done),
                     "conditions": done}, ensure_ascii=False, indent=1))
 
     # ★どの台帳を書くかを明示して渡す★（2026-09-17）
@@ -769,7 +658,9 @@ def main() -> int:
                     help="同上。★名前に記号が入るときはこちら★"
                          "（自由文をシェルに書かない・鉄則1c）")
     ap.add_argument("--why", default="",
-                    help="2AIがそう決めた理由（記録に残す）")
+                    help="2AIがそう決めた理由（15字以上・記録に残す）")
+    ap.add_argument("--by", default="",
+                    help="判断者（claude,codex）★2AIの合意が要る★")
     ap.add_argument("--due", action="store_true",
                     help="★閉じる回で読む案件を出す★"
                          "（機種の段階によらず・未提示→最後に出した日の古い順）")
@@ -790,29 +681,18 @@ def main() -> int:
             print(f"\n  #{r.get('id')} [{r.get('severity') or '-'}] "
                   f"{r.get('slug')}: {str(r.get('title'))[:100]}")
             print(f"    {str(r.get('detail') or '')[:400]}")
-            for _ln in due_condition_lines(r):
-                print("    " + _ln)
         if got:
-            print("\n★記事を読んで、直っているなら閉じてください★")
-            print("★★①「これが通れば直っている」を案件に登録します★★"
-                  "（★登録できるのは、いま実際に落ちている検査だけ★）")
-            print("  python scripts/open_issues.py condition --id <番号> "
-                  "--check <検査名> --arg <名前>=<値> "
-                  "--why-file <理由を書いたファイル> --by claude,codex")
-            print("★★②「これで案件の全部を覆った」と封をします★★"
-                  "（問題が2つ書いてあるなら、2つとも登録してから）")
-            print("  python scripts/open_issues.py seal --id <番号> "
-                  "--why-file <理由を書いたファイル> --by claude,codex")
-            print("★★③閉じます★★"
-                  "（登録した条件は、渡さなくても機械が全部やり直します）")
+            print("\n★2AIが記事や仕組みを読んで、直っているなら閉じてください★")
             print("  python scripts/ledger_sweep.py --slug <機種> "
-                  "--close <番号>")
+                  "--close <番号> --why \"<なぜ直ったと言えるか>\" "
+                  "--by claude,codex")
+            print("★機械の検査を当てられるなら、名前を挙げてください★"
+                  "（機械がやり直します）")
+            print("  … --check <検査名> --text \"<消えた逐語>\"")
+            print("★挙げられなくても閉じられます★＝2AIの合意と理由があればよい")
             print("★直っていなければ、その回を数えます★")
             print("  python scripts/open_issues.py attempt --id <番号> "
                   "--round <この回の名前> --note \"試したこと\"")
-            print("★★「条件が使えません」と言われたら、登録し直すのではなく"
-                  "白紙に戻します★★")
-            print("  " + _oi_mod.REPAIR_STEPS)
         if a.record and got:
             mark_shown([r.get("id") for r in got], today)
             print(f"次は後ろへ回します: {[r.get('id') for r in got]}")
@@ -830,8 +710,9 @@ def main() -> int:
             except Exception as e:                           # noqa: BLE001
                 print(f"★閉じません★ 壊し方の名前を読めません: {_p}（{e}）")
                 return 1
+        _by = [x.strip() for x in str(a.by or "").split(",") if x.strip()]
         return close_issue(a.close, a.slug, a.check, a.text, a.why,
-                           guards=_guards)
+                           guards=_guards, by=_by)
 
     got = for_slug(a.slug)
     print(f"{a.slug}: 開いている案件 {got['checked']} 件")
@@ -1006,15 +887,6 @@ def selftest() -> int:
                 {"id": 9003, "slug": "tokyo_ghoul", "status": "open",
                  "kind": "external_value", "title": "試験用: 裏取り待ち",
                  "detail": "『裏取り待ちの逐語』が未確定です"},
-                {"id": 9004, "slug": "tokyo_ghoul", "status": "open",
-                 "kind": "quality", "title": "試験用: 古い条件つき",
-                 "detail": "条件を古い版で登録したまま",
-                 "resolution_conditions": [{
-                     "check": "model_code_gone", "version": 999,
-                     "args": {}, "set_at": "2026-08-01",
-                     "set_by": ["claude", "codex"],
-                     "why": "型式名が消えていれば直り"}],
-                 "conditions_sealed": {"at": "2026-08-01"}},
             ]}, ensure_ascii=False))
         globals()["LEDGER"] = _fake
 
@@ -1038,35 +910,7 @@ def selftest() -> int:
           "（CIの機械には書類フォルダがありません）",
           isinstance(_rows(), list))
         t("　★その機種の開いている案件だけを出す★",
-          [r["id"] for r in for_slug("tokyo_ghoul")["open"]]
-          == [9001, 9003, 9004])
-
-        # ★★閉じる本体を通す★★（罠③＝関数だけを試すと呼び出しを消せる）
-        #   ★この2つの関門は、未コミットかどうかを見るより手前にある★ので、
-        #   木が汚れていても本当に通せる。
-        #   ★断った理由の文まで見る★（罠㉚＝奥にも守りがあるため）
-        import contextlib as _ctx3
-        import io as _io3
-
-        def _close_says(issue_id, checks, texts=(), guards=()):
-            _b = _io3.StringIO()
-            with _ctx3.redirect_stdout(_b):
-                _r = close_issue(issue_id, "tokyo_ghoul", list(checks),
-                                 list(texts), "試験", guards=list(guards))
-            return _r, _b.getvalue()
-
-        _r1, _m1 = _close_says(9001, ["model_code_gone"])
-        t("★★条件が無い案件を、検査名だけでは閉じない★★"
-          "（同じ機種で通る無関係な検査を1つ挙げるだけで閉じられていた）",
-          _r1 != 0 and "閉じる条件が1件も登録されていません" in _m1)
-        _r1b, _m1b = _close_says(9001, [], ["試験用の逐語です"])
-        t("★★案件の本文にある逐語だけでも閉じない★★"
-          "（案件の説明文そのものを渡せば、記事に無いので必ず通ってしまう）",
-          _r1b != 0 and "閉じる条件が1件も登録されていません" in _m1b)
-        _r2, _m2 = _close_says(9004, ["model_code_gone"])
-        t("★★古い版の条件のままでは閉じない★★"
-          "（登録し直さなくても、いまの版で確かめて閉じられていた）",
-          _r2 != 0 and "版が変わりました" in _m2)
+          [r["id"] for r in for_slug("tokyo_ghoul")["open"]] == [9001, 9003])
     finally:
         globals()["LEDGER"] = _keep_ledger
         shutil.rmtree(_tmpdir, ignore_errors=True)
@@ -1079,131 +923,6 @@ def selftest() -> int:
       os.path.basename(_state_path()) != "state.json")
     t("　★専用の置き場を使う★",
       os.path.basename(_state_path()) == "ledger_site_state.json")
-
-    # ★★結び付けは「登録」の1本だけ★★
-    #   （2026-09-17・Codexの指摘①②・どちらも実際に再現した）
-    #   ①★ヤメ時の書き方の案件を、型式名の検査で閉じられた★
-    #     ＝同じ機種で通る検査を1つ探してくるだけでよかった。
-    #   ②★案件の説明文そのものを「消えた逐語」にできた★
-    #     ＝もともと記事に無い文字なので、必ず「消えている」と出た。
-    _plain = {"id": 7, "slug": "hokuto", "kind": "quality",
-              "title": "ヤメ時の説明", "detail": "ヤメ時の説明が読みづらい"}
-    t("★★条件が無い案件を、検査名だけで閉じない★★"
-      "（同じ機種で通る無関係な検査で閉じられていた）",
-      checks_bound_to_issue(_plain, ["model_code_gone"], [], [])[0] is False)
-    t("★★案件の本文にある逐語も、それだけでは結び付きにしない★★"
-      "（案件の説明文そのものを渡せば、記事に無いので必ず通る）",
-      checks_bound_to_issue(_plain, [], ["ヤメ時の説明が読みづらい"],
-                            [])[0] is False)
-    t("　★壊し方だけでも結び付きにしない★",
-      checks_bound_to_issue(_plain, [], [], ["壊し方の名前"])[0] is False)
-    t("　★条件はあるが封が無ければ通さない★"
-      "（条件1件だけで、案件の片方の問題を直さずに閉じられた）",
-      checks_bound_to_issue(
-          dict(_plain, resolution_conditions=[{"check": "model_code_gone"}]),
-          [], [], [])[0] is False)
-    t("　★条件と封がそろえば通る★",
-      checks_bound_to_issue(
-          dict(_plain, resolution_conditions=[{"check": "model_code_gone"}],
-               conditions_sealed={"at": "2026-09-17"}),
-          [], [], [])[0] is True)
-
-    # ★★登録した条件は、呼び出し側が何を渡しても全部やり直す★★
-    #   ★直す前は「渡された検査を全部やる」だけ★で、
-    #   「必要な検査を全部渡したか」を誰も見ていなかった
-    #   ＝問題が2つ書いてある案件を、片方の検査だけで閉じられた。
-    #   ★木が汚れていても分かる形にする★＝「何を先にやり直したか」で見る
-    #   （合否は `closeable` が未コミットを見るので、手元では当てにできない）
-    _two = {"slug": "hokuto", "resolution_conditions": [
-        {"check": "text_gone", "version": _rc.CHECKS["text_gone"]["version"],
-         "args": {"text": "登録ぶんの逐語XYZ"}}]}
-    _ok2, _w2, _d2r = run_checks("hokuto", ["model_code_gone"], [], _head(),
-                                 row=_two)
-    t("★★渡していない登録ぶんを、呼び出し側が省けない★★"
-      "（問題が2つある案件を、片方の検査だけで閉じられた）",
-      bool(_w2) and "登録した条件[text_gone]" in _w2[0])
-
-    # ★★組み立てた条件そのものを見る★★（木が汚れていても分かる形）
-    _mix = {"slug": "hokuto", "resolution_conditions": [
-        {"check": "text_gone", "version": 7,
-         "args": {"slug": "yajikita_mairu", "text": "ある文"}}]}
-    _built = conditions_for_row("hokuto", _mix, "0" * 40)
-    t("★★登録の側が別の機種を名乗っても、案件の機種で動かす★★"
-      "（その機種の記事で通してしまう）",
-      _built[0]["args"]["slug"] == "hokuto")
-    t("★★登録した版をそのまま入れる★★"
-      "（いまの版を入れると、登録し直さなくても閉じられる）",
-      _built[0]["version"] == 7)
-    t("　★引数はそのまま運ぶ★",
-      _built[0]["args"]["text"] == "ある文")
-
-    # ★★登録した版で確かめる★★（2026-09-17・Codexの指摘②・実際に再現した）
-    #   ★直す前は、いつも「いまの版」を入れていた★ので、
-    #   条件を古い版で登録したまま、新しい版で確かめて閉じられた。
-    _oldv = {"slug": "hokuto", "resolution_conditions": [
-        {"check": "model_code_gone", "version": 999, "args": {}}]}
-    t("★★古い版の条件では、検査そのものが通らない★★"
-      "（いまの版を入れると、登録し直さなくても閉じられた）",
-      run_checks("hokuto", ["model_code_gone"], [], _head(),
-                 row=_oldv)[0] is False)
-
-    # ★★登録した条件は静かに古くなる★★（2026-09-17）
-    #   版が上がると閉じられなくなるのに、理由がどこにも出なかった。
-    _live = {"check": "confirmed_value_recorded",
-             "version": _rc.CHECKS["confirmed_value_recorded"]["version"],
-             "args": {"field": "ceiling"}}
-    t("　★いまの版と同じ条件は、何も言わない★", condition_stale(_live) == [])
-    # ★★詰まりを知らせる文は、必ず直し方まで言う★★
-    #   （2026-09-17・Codexの指摘・罠⓸）＝
-    #   ★直す前は「登録し直してください」で終わっていた★ので、
-    #   案内どおりに動くと**同じ輪に戻るだけ**だった
-    #   （版が上がった条件は、登録し直しても古いほうが残る）。
-    #   ★無人タスクは案内どおりに動く★ので、これは実害になる。
-    _RE = _oi_mod.REPAIR_STEPS
-    t("★★版が変わった条件の知らせに、白紙に戻す道が書いてある★★",
-      all(_RE in w for w in condition_stale(dict(_live, version=999))))
-    t("　★名簿から消えた検査の知らせにも書いてある★",
-      all(_RE in w for w in
-          condition_stale(dict(_live, check="そんな検査はありませんXYZ"))))
-    t("　★観測どまりに変わった検査の知らせにも書いてある★",
-      all(_RE in w for w in condition_stale(
-          {"check": "strategy_vs_checker",
-           "version": _rc.CHECKS["strategy_vs_checker"]["version"],
-           "args": {}})))
-    t("　★壊れた条件の知らせにも書いてある★",
-      _RE in _oi_mod.conditions_broken(
-          {"resolution_conditions": [{"check": "x"}, "壊れた要素"]})
-      and _RE in _oi_mod.conditions_broken(
-          {"resolution_conditions": "ただの文字列"}))
-
-    # ★★案件を出すときにも、壊れた一覧をそのまま知らせる★★
-    #   （2026-09-17・Codexの指摘）＝★直す前は「未登録」「その分だけ」に見えた★。
-    #   その案内どおり登録しても、壊れた要素が残るので結局閉じられない。
-    t("★★一覧ですらない条件を「未登録」と見せない★★",
-      any(_RE in x for x in
-          due_condition_lines({"resolution_conditions": "ただの文字列"}))
-      and not any("未登録" in x for x in
-                  due_condition_lines(
-                      {"resolution_conditions": "ただの文字列"})))
-    t("★★壊れた要素が混ざった一覧を「その分だけ」と見せない★★",
-      any(_RE in x for x in due_condition_lines(
-          {"resolution_conditions": [{"check": "model_code_gone",
-                                      "version": 1, "args": {}},
-                                     "壊れた要素"]})))
-    t("　★登録が無い案件は、今までどおり「未登録」と言う★",
-      any("未登録" in x for x in due_condition_lines({})))
-    t("　★古くなった条件は「登録し直すだけでは直りません」と言う★",
-      any("登録し直すだけでは直りません" in x for x in due_condition_lines(
-          {"resolution_conditions": [dict(_live, version=999)]})))
-    t("★★検査の版が変わった条件は、その場で知らせる★★"
-      "（その案件だけ、理由の分からないまま閉じられなくなる）",
-      bool(condition_stale(dict(_live, version=999))))
-    t("★★名簿から消えた検査の条件も知らせる★★",
-      bool(condition_stale(dict(_live, check="そんな検査はありませんXYZ"))))
-    t("★★観測どまりに変わった検査の条件も知らせる★★",
-      bool(condition_stale({"check": "strategy_vs_checker", "version":
-                            _rc.CHECKS["strategy_vs_checker"]["version"],
-                            "args": {}})))
 
     # ------------------------------------------------ 公開の判定は台帳と別
     # ★★台帳を閉じても、公開してよいかの判定は動かない★★
@@ -1241,6 +960,53 @@ def selftest() -> int:
     t("　★案件が1件も無くなっても、区分は AUTO_PENDING のまま★",
       _cls1 == "AUTO_PENDING" and _cls2 == "AUTO_PENDING")
 
+    # ★★2AIの合意で閉じる★★（2026-09-17・運営者の指示）
+    #   ＞ 2AIで決めればそれが事実ってことで良くない？
+    #   ★機械に当てようのない案件がある★（サイト全体の話・実測111件）。
+    #   そこを断ると**永久に閉じられない**ので、
+    #   ★2AIの合意と理由があれば閉じる★。機械が見るのはその2点だけ。
+    _d2 = tempfile.mkdtemp(prefix="ledger_2ai_test_")
+    _keep2 = globals()["LEDGER"]
+    try:
+        _f2 = os.path.join(_d2, "open_issues.json")
+        _ROW = {"id": 9601, "slug": "site", "kind": "structural",
+                "status": "open", "title": "仕組みの話", "detail": "仕組みの話"}
+
+        def _put():
+            io.open(_f2, "w", encoding="utf-8", newline="\n").write(
+                json.dumps({"issues": [dict(_ROW)]}, ensure_ascii=False))
+
+        def _state():
+            return json.loads(io.open(_f2, encoding="utf-8").read())[
+                "issues"][0].get("status")
+
+        globals()["LEDGER"] = _f2
+        _WHY = "仕組みを作り直したので、この案件の内容はもう起きません"
+        # ★断った「理由の文」まで見る★（罠㉚）＝奥にも守りがあるので、
+        #   「閉じなかった」だけではこの関門を通ったか分からない。
+        import contextlib as _ctx5
+        _b5 = io.StringIO()
+        _put()
+        with _ctx5.redirect_stdout(_b5):
+            _r5 = close_issue(9601, "site", [], [], _WHY, by=["claude"])
+        t("★★判断者が1つだけでは閉じない★★"
+          "（Claudeひとりで「2AIが決めた」ことにできてしまう）",
+          _r5 != 0 and _state() == "open"
+          and "判断者は" in _b5.getvalue()
+          and "--by claude,codex" in _b5.getvalue())
+        _put()
+        t("　★理由が短ければ閉じない★（なぜ直ったかが残らない）",
+          close_issue(9601, "site", [], [], "直した",
+                      by=["claude", "codex"]) != 0 and _state() == "open")
+        _put()
+        t("★★2AIの合意と理由があれば、検査を当てられなくても閉じられる★★"
+          "（断ると、サイト全体の話＝実測111件が永久に閉じられない）",
+          close_issue(9601, "site", [], [], _WHY,
+                      by=["claude", "codex"]) == 0 and _state() == "closed")
+    finally:
+        globals()["LEDGER"] = _keep2
+        shutil.rmtree(_d2, ignore_errors=True)
+
     t("★★裏取り待ちの案件は、逐語が消えただけでは閉じない★★"
       "（＝2026-08-30に #155 を誤って閉じた型）",
       kind_allows({"kind": "external_value"}, [], ["消えた文"])[0] is False)
@@ -1250,8 +1016,43 @@ def selftest() -> int:
     t("　★ほかの型なら逐語だけでも通る★",
       kind_allows({"kind": "quality"}, [], ["消えた文"])[0] is True)
 
+    # ★★検査を挙げたら、木が綺麗であることを求める★★
+    #   ★断った理由の文まで見る★（罠㉚）＝奥の `closeable` も未コミットを
+    #   断るので、「閉じなかった」だけではこの関門を通ったか分からない。
+    _d3 = tempfile.mkdtemp(prefix="ledger_dirty_test_")
+    _keep3 = globals()["LEDGER"]
+    _keepd = globals()["_dirty"]
+    try:
+        _f3 = os.path.join(_d3, "open_issues.json")
+        io.open(_f3, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"issues": [
+                {"id": 9701, "slug": "tokyo_ghoul", "status": "open",
+                 "kind": "quality", "title": "試験用",
+                 "detail": "『試験用の逐語です』という文が本文にあります"}]},
+                ensure_ascii=False))
+        globals()["LEDGER"] = _f3
+        globals()["_dirty"] = lambda: True      # ★汚れている状態を作る★
+        _b6 = io.StringIO()
+        import contextlib as _ctx6
+        with _ctx6.redirect_stdout(_b6):
+            _r6 = close_issue(9701, "tokyo_ghoul", [], ["試験用の逐語です"],
+                              "この逐語が消えていれば直っています",
+                              by=["claude", "codex"])
+        # ★この関門が言う文そのものを見る★＝奥の `closeable` も
+        #   よく似た文（「作業ツリーに未コミットの変更があります」）を返すので、
+        #   ★言葉が近いだけで通ると、隣の守りに助けられる★（罠④）。
+        t("★★検査を挙げたときは、木が汚れていれば閉じない★★"
+          "（いまの記事で確かめた、と言えないため）",
+          _r6 != 0
+          and "★閉じません★ 未コミットの変更があります" in _b6.getvalue())
+    finally:
+        globals()["LEDGER"] = _keep3
+        globals()["_dirty"] = _keepd
+        shutil.rmtree(_d3, ignore_errors=True)
+
     if _dirty():
-        t("★★未コミットの木では、消えている逐語でも閉じない★★",
+        t("★★1件でも通らなければ閉じない★★"
+          "（片方だけ確かめて閉じる＝#284の型）",
           run_checks("tokyo_ghoul", [], [gone])[0] is False)
         print("⏭ 木が汚れているので「逐語が消えたか」の4件は飛ばしました"
               "（CI・mutation_check の綺麗な写しで動きます）")
