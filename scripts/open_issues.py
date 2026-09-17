@@ -1545,6 +1545,21 @@ def row_conditions(row: dict) -> list:
         else []
 
 
+# ★★詰まったときの直し方は、1か所に書いて全部の出口で使う★★
+#   （2026-09-17・Codexの指摘・罠⓸＋罠③）
+#   ★直す前★＝白紙に戻す道具は作ったのに、
+#   ★詰まりを知らせる文は「登録し直してください」のままだった★。
+#   無人タスクは案内どおりに動くので、★同じ輪に戻るだけ★だった
+#   （版が上がった条件は、登録し直しても古いほうが残る）。
+REPAIR_STEPS = (
+    "★直し方★＝"
+    "python scripts/open_issues.py condition-reset --id <番号> "
+    "--why-file <理由> --by claude,codex"
+    " → condition（登録し直す）→ seal（封をする）→ "
+    "ledger_sweep.py --slug <機種> --close <番号>"
+)
+
+
 def conditions_broken(row: dict) -> str:
     """★条件の入れ物そのものが壊れていないか★ → 問題の文（無ければ空）
 
@@ -1557,11 +1572,12 @@ def conditions_broken(row: dict) -> str:
     if got is None:
         return ""
     if not isinstance(got, list):
-        return "閉じる条件の入れ物が壊れています（一覧ではありません）"
+        return ("閉じる条件の入れ物が壊れています（一覧ではありません）。"
+                + REPAIR_STEPS)
     bad = [i for i, c in enumerate(got) if not isinstance(c, dict)]
     if bad:
         return (f"閉じる条件の {len(bad)} 件が壊れています"
-                f"（{bad[:3]} 番目）。登録し直してください")
+                f"（{bad[:3]} 番目）。" + REPAIR_STEPS)
     return ""
 
 
@@ -1641,21 +1657,26 @@ def _condition_binds_row(row: dict, conds: list) -> str:
     for w in want:
         ng = evidence_problem(w)
         if ng:
-            return (f"登録した条件（{w.get('check')}）は{ng}"
-                    "。綺麗なコミットで登録し直してください")
+            return (f"登録した条件（{w.get('check')}）は{ng}。"
+                    + REPAIR_STEPS)
         if not is_ancestor(str(w.get("failed_at_commit") or "")):
             return (f"登録した条件（{w.get('check')}）が落ちていたコミットは、"
                     "いまの歴史の中にありません"
-                    "（別の枝で落としたものは証拠になりません）")
+                    "（別の枝で落としたものは証拠になりません）。"
+                    + REPAIR_STEPS)
     seal = row.get("conditions_sealed")
     if str(seal.get("issue_digest") or "") != issue_digest(row):
         return ("封をしたあとに案件の本文が書き換わっています"
-                "（覆っているか分からないので、封をし直してください）")
+                "（覆っているか分からないので、封をし直してください）。"
+                "python scripts/open_issues.py seal --id <番号> "
+                "--why-file <理由> --by claude,codex")
     keys = sorted(json.dumps(_cond_key(c, slug), ensure_ascii=False)
                   for c in want)
     if list(seal.get("condition_keys") or []) != keys:
         return ("封をしたときの条件と、いまの条件が違います"
-                "（封をし直してください）")
+                "（封をし直してください）。"
+                "python scripts/open_issues.py seal --id <番号> "
+                "--why-file <理由> --by claude,codex")
     have = {_cond_key(c.get("condition") or {}) for c in conds
             if isinstance(c, dict)}          # ★受領証はそのまま見る★
     for w in want:

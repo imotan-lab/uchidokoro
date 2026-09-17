@@ -5472,8 +5472,8 @@ MUTATIONS = [
     {
         "why": "★観測どまりに変わった検査の条件を、閉じられるものとして扱う★",
         "file": "scripts/ledger_sweep.py",
-        "before": "    if not meta.get(\"closeable\"):\n        return [f\"登録した検査（{name}）は、いまは観測どまりです\"",
-        "after": "    if False:\n        return [f\"登録した検査（{name}）は、いまは観測どまりです\"",
+        "before": "    if not meta.get(\"closeable\"):\n        return [f\"登録した検査（{name}）は、いまは観測どまりです。\"",
+        "after": "    if False:\n        return [f\"登録した検査（{name}）は、いまは観測どまりです。\"",
         "run": ["scripts/ledger_sweep.py"],
     },
     {
@@ -5717,6 +5717,34 @@ MUTATIONS = [
         "before": "             if isinstance(c, dict)\n             and _cond_key(c, slug) == _cond_key(new, slug)]",
         "after": "             if _cond_key(c, slug) == _cond_key(new, slug)]",
         "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★版が変わった条件の知らせに、直し方を書かない（案内どおりに登録し直すと、古いほうが残って同じ輪に戻る）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "                f\"（条件 {cond.get('version')} / いま {meta.get('version')}）。\"\n                \"中身を読み直したうえで、\" + _oi_mod.REPAIR_STEPS]",
+        "after": "                f\"（条件 {cond.get('version')} / いま {meta.get('version')}）。\"\n                \"中身を読み直して条件を登録し直してください\"]",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★名簿から消えた検査の知らせに、直し方を書かない★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "        return [f\"登録した検査（{name}）は、いまの名簿にありません。\"\n                + _oi_mod.REPAIR_STEPS]",
+        "after": "        return [f\"登録した検査（{name}）は、いまの名簿にありません\"]",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★観測どまりに変わった検査の知らせに、直し方を書かない★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "        return [f\"登録した検査（{name}）は、いまは観測どまりです。\"\n                + _oi_mod.REPAIR_STEPS]",
+        "after": "        return [f\"登録した検査（{name}）は、いまは観測どまりです\"]",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★壊れた条件の知らせに、直し方を書かない（読み飛ばしても残る限り断られるので、白紙に戻すしかない）★",
+        "file": "scripts/open_issues.py",
+        "before": "        return (f\"閉じる条件の {len(bad)} 件が壊れています\"\n                f\"（{bad[:3]} 番目）。\" + REPAIR_STEPS)",
+        "after": "        return (f\"閉じる条件の {len(bad)} 件が壊れています\"\n                f\"（{bad[:3]} 番目）\")",
+        "run": ["scripts/ledger_sweep.py"],
     },
 ]
 

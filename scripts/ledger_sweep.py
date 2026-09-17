@@ -368,15 +368,15 @@ def condition_stale(cond) -> list:
     name = str(cond.get("check") or "")
     meta = _rc.CHECKS.get(name)
     if meta is None:
-        return [f"登録した検査（{name}）は、いまの名簿にありません"
-                "。条件を登録し直してください"]
+        return [f"登録した検査（{name}）は、いまの名簿にありません。"
+                + _oi_mod.REPAIR_STEPS]
     if not meta.get("closeable"):
-        return [f"登録した検査（{name}）は、いまは観測どまりです"
-                "。条件を登録し直してください"]
+        return [f"登録した検査（{name}）は、いまは観測どまりです。"
+                + _oi_mod.REPAIR_STEPS]
     if cond.get("version") != meta.get("version"):
         return [f"登録した検査（{name}）の版が変わりました"
-                f"（条件 {cond.get('version')} / いま {meta.get('version')}）"
-                "。中身を読み直して条件を登録し直してください"]
+                f"（条件 {cond.get('version')} / いま {meta.get('version')}）。"
+                "中身を読み直したうえで、" + _oi_mod.REPAIR_STEPS]
     return []
 
 
@@ -653,7 +653,7 @@ def close_issue(issue_id: int, slug: str, checks, texts, why_extra="",
     _st = stale_conditions(row)
     if _st:
         print("  " + _st[0])
-        print("★閉じません★（登録し直してから閉じてください）")
+        print("★閉じません★ " + _oi_mod.REPAIR_STEPS)
         return 1
     if _dirty():
         print("★閉じません★ 未コミットの変更があります"
@@ -762,11 +762,17 @@ def main() -> int:
             if not _cs:
                 print("    ★閉じる条件は未登録★"
                       "（登録しないと閉じられません）")
+            _stale_here = False
             for cond in _cs:
                 print(f"    ★登録ずみの閉じる条件★ {cond.get('check')} "
                       f"{cond.get('args')}（{cond.get('why')}）")
                 for _w in condition_stale(cond):
                     print("    ★" + _w + "★")
+                    _stale_here = True
+            if _stale_here:
+                # ★詰まりを知らせたら、その場で直し方まで言う★
+                #   （言わないと、案内どおりに登録し直して同じ輪に戻る）
+                print("    ★この案件は、登録し直すだけでは直りません★")
         if got:
             print("\n★記事を読んで、直っているなら閉じてください★")
             print("★★①「これが通れば直っている」を案件に登録します★★"
@@ -785,6 +791,9 @@ def main() -> int:
             print("★直っていなければ、その回を数えます★")
             print("  python scripts/open_issues.py attempt --id <番号> "
                   "--round <この回の名前> --note \"試したこと\"")
+            print("★★「条件が使えません」と言われたら、登録し直すのではなく"
+                  "白紙に戻します★★")
+            print("  " + _oi_mod.REPAIR_STEPS)
         if a.record and got:
             mark_shown([r.get("id") for r in got], today)
             print(f"次は後ろへ回します: {[r.get('id') for r in got]}")
@@ -1125,6 +1134,28 @@ def selftest() -> int:
              "version": _rc.CHECKS["confirmed_value_recorded"]["version"],
              "args": {"field": "ceiling"}}
     t("　★いまの版と同じ条件は、何も言わない★", condition_stale(_live) == [])
+    # ★★詰まりを知らせる文は、必ず直し方まで言う★★
+    #   （2026-09-17・Codexの指摘・罠⓸）＝
+    #   ★直す前は「登録し直してください」で終わっていた★ので、
+    #   案内どおりに動くと**同じ輪に戻るだけ**だった
+    #   （版が上がった条件は、登録し直しても古いほうが残る）。
+    #   ★無人タスクは案内どおりに動く★ので、これは実害になる。
+    _RE = _oi_mod.REPAIR_STEPS
+    t("★★版が変わった条件の知らせに、白紙に戻す道が書いてある★★",
+      all(_RE in w for w in condition_stale(dict(_live, version=999))))
+    t("　★名簿から消えた検査の知らせにも書いてある★",
+      all(_RE in w for w in
+          condition_stale(dict(_live, check="そんな検査はありませんXYZ"))))
+    t("　★観測どまりに変わった検査の知らせにも書いてある★",
+      all(_RE in w for w in condition_stale(
+          {"check": "strategy_vs_checker",
+           "version": _rc.CHECKS["strategy_vs_checker"]["version"],
+           "args": {}})))
+    t("　★壊れた条件の知らせにも書いてある★",
+      _RE in _oi_mod.conditions_broken(
+          {"resolution_conditions": [{"check": "x"}, "壊れた要素"]})
+      and _RE in _oi_mod.conditions_broken(
+          {"resolution_conditions": "ただの文字列"}))
     t("★★検査の版が変わった条件は、その場で知らせる★★"
       "（その案件だけ、理由の分からないまま閉じられなくなる）",
       bool(condition_stale(dict(_live, version=999))))
