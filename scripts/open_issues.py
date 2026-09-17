@@ -702,6 +702,24 @@ def selftest() -> int:
       bool(_condition_binds_row(_other, _hit)))
     t("　★いまの歴史にあるコミットなら通る★", is_ancestor(_headsha) is True)
     t("　★40桁でないものは通さない★", is_ancestor("abc") is False)
+    # ★★壊れた条件を黙って捨てない★★（2026-09-17・Codexの補足）
+    #   ★直す前は辞書でない要素を落として読んでいた★ので、
+    #   壊れた要素が1つ混ざっていても残りだけで閉じられた（fail-open）。
+    t("★★条件の一覧に壊れた要素が混ざっていたら閉じない★★",
+      bool(conditions_broken({"resolution_conditions": [
+          {"check": "x"}, "壊れた要素"]})))
+    t("　★一覧ですらなければ閉じない★",
+      bool(conditions_broken({"resolution_conditions": "ただの文字列"})))
+    t("　★そろっていれば通る★",
+      conditions_broken({"resolution_conditions": [{"check": "x"}]}) == "")
+    t("　★登録が無い案件は、ここでは何も言わない★"
+      "（「1件も登録されていません」の側が言う）",
+      conditions_broken({}) == "")
+    _brk = _seal(_nosealed)
+    _brk["resolution_conditions"] = list(_brk["resolution_conditions"]) \
+        + ["壊れた要素"]
+    t("★★閉じる側でも、壊れた条件の一覧を断る★★",
+      bool(_condition_binds_row(_brk, _hit)))
 
     # -------------------------------------- 登録の関門（いま落ちていること）
     # ★★案件の説明文そのものを条件にできた★★（2026-09-17・Codexの指摘・再現済み）
@@ -823,6 +841,31 @@ def selftest() -> int:
           len(_r5.get("resolution_conditions") or []) == 1
           and evidence_problem(_got5) == ""
           and _r5.get("conditions_sealed") is None)
+
+        # ★★形はそろっているが、いまの歴史に無いコミットの条件★★
+        #   （2026-09-17・Codexの2回目の指摘＝rebase や別の枝のあと）
+        #   ★閉じる側は断り、登録し直す側は「もう登録されています」で更新しない★
+        #   ＝人が台帳を手で直すまで**永久に閉じられなかった**。
+        _fresh()
+        _r6 = json.loads(_cled.read_text(encoding="utf-8"))["issues"][0]
+        _r6["resolution_conditions"] = [
+            {"check": "text_gone", "version": 1,
+             "args": {"text": "どこにも無い文XYZ"},
+             "result_when_set": "FAIL",
+             "failed_at_commit": "0" * 40,      # ★形は正しいが歴史に無い★
+             "failed_digest": "f" * 64}]
+        _r6["conditions_sealed"] = {"at": "2026-09-17"}
+        _cled.write_text(json.dumps({"next_id": 2, "issues": [_r6]},
+                                    ensure_ascii=False), encoding="utf-8")
+        _reg_ok()
+        _r7 = json.loads(_cled.read_text(encoding="utf-8"))["issues"][0]
+        _got7 = (_r7.get("resolution_conditions") or [{}])[0]
+        t("★★いまの歴史に無いコミットの条件も、登録し直せる★★"
+          "（できないと、閉じるときは断られ、直すこともできず永久に詰まる）",
+          len(_r7.get("resolution_conditions") or []) == 1
+          and str(_got7.get("failed_at_commit") or "") != "0" * 40
+          and is_ancestor(str(_got7.get("failed_at_commit") or ""))
+          and _r7.get("conditions_sealed") is None)
         _fresh()
         t("　★判断者が2つ無ければ登録できない★",
           _stops_ret(lambda: _reg(by="claude")) and _n() == 0)
@@ -1424,6 +1467,26 @@ def row_conditions(row: dict) -> list:
         else []
 
 
+def conditions_broken(row: dict) -> str:
+    """★条件の入れ物そのものが壊れていないか★ → 問題の文（無ければ空）
+
+    ★★黙って捨てない★★（2026-09-17・Codexの補足）＝
+      `row_conditions` は辞書でない要素を落として読むので、
+      ★壊れた要素が1つ混ざっていても、残りだけで閉じられた★。
+      ＝壊れているのに「そろっている」と読む形（fail-open）。
+    """
+    got = row.get("resolution_conditions")
+    if got is None:
+        return ""
+    if not isinstance(got, list):
+        return "閉じる条件の入れ物が壊れています（一覧ではありません）"
+    bad = [i for i, c in enumerate(got) if not isinstance(c, dict)]
+    if bad:
+        return (f"閉じる条件の {len(bad)} 件が壊れています"
+                f"（{bad[:3]} 番目）。登録し直してください")
+    return ""
+
+
 def pin_slug(check: str, args: dict, slug: str) -> dict:
     """★機種を案件の行から固定する★（ただし機種を取る検査だけ）（2026-09-17）
 
@@ -1482,6 +1545,9 @@ def _condition_binds_row(row: dict, conds: list) -> str:
       ★登録の無い案件は素通りだった★（台帳の全件がそうだった）。
     """
     slug = str(row.get("slug") or "")
+    ng = conditions_broken(row)          # ★壊れた要素を黙って捨てない★
+    if ng:
+        return ng
     want = row_conditions(row)
     if not want:
         return ("この案件には、閉じる条件が1件も登録されていません。"
@@ -1714,10 +1780,18 @@ def cmd_condition(path, args):
     _same = [i for i, c in enumerate(box)
              if _cond_key(c, slug) == _cond_key(new, slug)]
     if _same:
-        # ★★証拠を持たない古い条件は、登録し直せる★★（2026-09-17・Codexの指摘）
+        # ★★使えない古い条件は、登録し直せる★★（2026-09-17・Codexの指摘）
         #   ★直す前は「同じ条件です」で終わっていた★ので、
         #   ★汚れた木で登録した条件を、道具からは直せなかった★。
-        if not evidence_problem(box[_same[0]]):
+        # ★★閉じる側と同じ物差しで見る★★（同・2回目の指摘）＝
+        #   ★形だけを見ていた★ので、別の枝や rebase 前の40桁も
+        #   「証拠あり」として扱い、
+        #   ①閉じるときは「いまの歴史の中にありません」で断られ
+        #   ②登録し直そうとすると「もう登録されています」で更新されず
+        #   ＝★人が台帳を手で直すまで永久に閉じられなかった★。
+        _old = box[_same[0]]
+        if (not evidence_problem(_old)
+                and is_ancestor(str(_old.get("failed_at_commit") or ""))):
             print(f"#{args.id} には同じ条件がもう登録されています")
             return 0
         box[_same[0]] = new

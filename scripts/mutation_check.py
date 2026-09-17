@@ -5665,8 +5665,29 @@ MUTATIONS = [
     {
         "why": "★証拠を持たない古い条件を、登録し直せないままにする（汚れた木で登録した条件を、道具からは直せない）★",
         "file": "scripts/open_issues.py",
-        "before": "        if not evidence_problem(box[_same[0]]):",
-        "after": "        if True:",
+        "before": "        _old = box[_same[0]]",
+        "after": "        _old = dict(new)",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★登録し直すとき、いまの歴史に在るコミットかを見ない（閉じるときは断られ、直すこともできず、その案件は永久に詰まる）★",
+        "file": "scripts/open_issues.py",
+        "before": "        if (not evidence_problem(_old)\n                and is_ancestor(str(_old.get(\"failed_at_commit\") or \"\"))):",
+        "after": "        if not evidence_problem(_old):",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★条件の一覧に壊れた要素が混ざっていても、残りだけで閉じる（壊れているのに『そろっている』と読む）★",
+        "file": "scripts/open_issues.py",
+        "before": "    bad = [i for i, c in enumerate(got) if not isinstance(c, dict)]",
+        "after": "    bad = []",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★閉じるときに、条件の一覧が壊れていないかを見ない★",
+        "file": "scripts/open_issues.py",
+        "before": "    ng = conditions_broken(row)          # ★壊れた要素を黙って捨てない★\n    if ng:\n        return ng",
+        "after": "    ng = \"\"\n    if ng:\n        return ng",
         "run": ["scripts/open_issues.py"],
     },
 ]
