@@ -571,7 +571,7 @@ def selftest() -> int:
             return json.loads(_led.read_text(encoding="utf-8"))["issues"][0]
 
         _rc0 = cmd_close(_led, _A(id=1, reason="試験のため", reason_file="",
-                                  receipt="", owner_decision=False))
+                                  receipt=""))
         t("★★受領証が無ければ閉じない★★"
           "（確かめずに閉じる裏口＝閉じた414件のうち385件が通っていた道）",
           _rc0 != 0 and _st()["status"] == "open")
@@ -594,34 +594,28 @@ def selftest() -> int:
             _rc0b = cmd_close(_led, _A(id=1, reason="試験のため",
                                        reason_file="",
                                        receipt=str(_bad_rp),
-                                       owner_decision=False))
+                                       ))
         _msg2 = _buf2.getvalue()
         t("　★読めるが別の案件の受領証は、形の関門が名指しで断る★"
           "（形の関門を呼んでいることの証明）",
           _rc0b != 0 and _st()["status"] == "open" and "#999" in _msg2)
 
-        # ★無人タスクが動いている最中は、運営者判断の道も使えない★
-        globals()["LOCK_PATH"] = Path(_d2) / "task.lock"
-        LOCK_PATH.write_text(json.dumps(
-            {"task": "zz-task",
-             "heartbeat": datetime.datetime.now().isoformat()},
-            ensure_ascii=False), encoding="utf-8")
+        # ★★2AIを通さずに閉じる道が残っていないこと★★
+        #   （2026-09-17・Codexの指摘）＝`--owner-decision` は
+        #   ★2AIの合意が要らない唯一の抜け道★だったので外した。
+        #   ★私の試験がその道を「成功」として固定していた★ので、
+        #   穴があっても緑のままだった（罠㊾の親戚）。
+        import inspect as _ins
+        _src_close = _ins.getsource(cmd_close)
+        t("★★2AIを通さずに閉じる道が無い★★"
+          "（受領証も判断者も要らない分岐が残っていると、"
+          "「2AIの合意は必ず要る」が嘘になる）",
+          "owner_decision" not in _src_close
+          and '"owner"' not in _src_close)
         _rc1 = cmd_close(_led, _A(id=1, reason="",
-                                  reason_file=str(_why2), receipt="",
-                                  owner_decision=True))
-        t("★★無人タスクの最中は、運営者判断の道でも閉じない★★"
-          "（自動で回る道に紛れると、機械が確かめた件数が嘘になる）",
+                                  reason_file=str(_why2), receipt=""))
+        t("　★受領証が無ければ、やはり閉じない★",
           _rc1 != 0 and _st()["status"] == "open")
-        LOCK_PATH.unlink()
-        _rc2 = cmd_close(_led, _A(id=1, reason="",
-                                  reason_file=str(_why2), receipt="",
-                                  owner_decision=True))
-        t("　★無人が動いていなければ、運営者判断で閉じられる★"
-          "（断るだけの守りは、いつか全部断る）",
-          _rc2 == 0 and _st()["status"] == "closed")
-        t("　★人の手で閉じたことが別の印で残る★"
-          "（残らないと、自動化が進んだのか後退したのかが分からない）",
-          _st().get("closed_by") == "owner")
 
         # ------------------------------------------ 回数の数え方
         _led.write_text(json.dumps({"next_id": 2, "issues": [
@@ -1061,10 +1055,12 @@ def judges_problem(by) -> str:
 def cmd_close(path, args):
     """★閉じる★＝受領証の検査を**この場でやり直して**から書き換える。
 
-    ★運営者の判断で閉じる道も残す★（--owner-decision）＝
-    機械が確かめられない案件は実在する（例＝誤って閉じた案件の復元）。
-    ★ただし別の印で残す★（closed_by）＝
-    「機械が確かめた件数」を数えられなくなるのを防ぐ。
+    ★★運営者の判断で閉じる道（--owner-decision）は外した★★
+      （2026-09-17・Codexの指摘）＝★2AIの合意が要らない唯一の抜け道★で、
+      「2AIの合意は必ず要る」「受領証なしでは断る」という説明と食い違っていた。
+      ★役目はもう無い★＝検査を当てられない案件も2AIの合意で閉じられる
+      ようにしたので、人が手で閉じる必要がなくなった。
+      ★足すのではなく消して直した★（新しい層は要らない）。
     """
     args.reason = _read_text_arg(args.reason, args.reason_file, "reason")
     if not args.reason:
@@ -1079,68 +1075,50 @@ def cmd_close(path, args):
         return 0
 
     closed_by = "machine"
-    if getattr(args, "owner_decision", False):
-        # ★★運営者が「機械では確かめられない」と判断したときだけ★★
-        #   ★これは塞いだ裏口を開け直す形なので、条件を厳しくする★
-        #   （2026-09-17・これはCodexの指摘ではなく、こちらで見つけた穴）
-        #   ①★無人タスクが動いている間は使えない★＝
-        #     自動で回る道に紛れ込むと、「機械が確かめて閉じた」件数が
-        #     嘘になり、★仕組みが壊れても誰も気づかない★。
-        #     （この形は自由文の受け取りで既に使っている守り）
-        #   ②★別の印で残す★＝あとから「人の手が何件要ったか」を数える。
-        #     数えられないと、自動化が進んだのか後退したのかが分からない。
-        who = _running_task()
-        if who:
-            print(f"★閉じません★ いま無人タスク（{who}）が動いています。"
-                  "運営者の判断で閉じる道は、無人の最中には使えません")
+    rp = str(getattr(args, "receipt", "") or "")
+    if not rp:
+        print("★閉じません★ 受領証（--receipt）がありません。"
+              "閉じる入口は python scripts/ledger_sweep.py "
+              "--slug <機種> --close <番号> …です")
+        return 1
+    try:
+        with open(rp, encoding="utf-8") as f:
+            rec = json.load(f)
+    except Exception as e:                               # noqa: BLE001
+        print(f"★閉じません★ 受領証を読めません: {rp}（{e}）")
+        return 1
+    ng = _receipt_problems(rec, args.id, row)
+    if ng:
+        print(f"★閉じません★ {ng}")
+        return 1
+    conds = rec["conditions"]
+    # ★★申告を信じず、その場でやり直す★★
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import recheck as _rc
+    except Exception as e:                               # noqa: BLE001
+        print(f"★閉じません★ 検査の道具を読めません: {e}")
+        return 1
+    for c in conds:
+        cond = dict(c["condition"])
+        ok, why, got = _rc.closeable(cond)
+        name = str(cond.get("check") or "?")
+        if not ok:
+            print(f"★閉じません★ {name} をやり直したら通りませんでした: "
+                  f"{why}")
             return 1
-        closed_by = "owner"
-        print("★運営者の判断で閉じます★（機械の検査は通していません）")
-    else:
-        rp = str(getattr(args, "receipt", "") or "")
-        if not rp:
-            print("★閉じません★ 受領証（--receipt）がありません。"
-                  "閉じる入口は python scripts/ledger_sweep.py "
-                  "--slug <機種> --close <番号> …です")
+        # ★確かめた時と同じものを見ているか★＝
+        #   台帳の外にある控え（確定値・壊し方）はコミットで覆えないので、
+        #   指紋を見比べないと「昨日の合格」で閉じられる。
+        now_d = str((got or {}).get("observation_digest") or "")
+        if now_d != str(c.get("observation_digest") or ""):
+            print(f"★閉じません★ {name} で見たものが、"
+                  "受領証を書いた時と変わっています")
             return 1
-        try:
-            with open(rp, encoding="utf-8") as f:
-                rec = json.load(f)
-        except Exception as e:                               # noqa: BLE001
-            print(f"★閉じません★ 受領証を読めません: {rp}（{e}）")
-            return 1
-        ng = _receipt_problems(rec, args.id, row)
-        if ng:
-            print(f"★閉じません★ {ng}")
-            return 1
-        conds = rec["conditions"]
-        # ★★申告を信じず、その場でやり直す★★
-        try:
-            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-            import recheck as _rc
-        except Exception as e:                               # noqa: BLE001
-            print(f"★閉じません★ 検査の道具を読めません: {e}")
-            return 1
-        for c in conds:
-            cond = dict(c["condition"])
-            ok, why, got = _rc.closeable(cond)
-            name = str(cond.get("check") or "?")
-            if not ok:
-                print(f"★閉じません★ {name} をやり直したら通りませんでした: "
-                      f"{why}")
-                return 1
-            # ★確かめた時と同じものを見ているか★＝
-            #   台帳の外にある控え（確定値・壊し方）はコミットで覆えないので、
-            #   指紋を見比べないと「昨日の合格」で閉じられる。
-            now_d = str((got or {}).get("observation_digest") or "")
-            if now_d != str(c.get("observation_digest") or ""):
-                print(f"★閉じません★ {name} で見たものが、"
-                      "受領証を書いた時と変わっています")
-                return 1
-            print(f"  ○ {name} をやり直しました")
-        # ★どちらで閉じたかを書き分ける★＝あとから
-        #   「機械が確かめた件数」と「2AIの判断だけの件数」を数えられるように。
-        closed_by = "machine" if conds else "2ai"
+        print(f"  ○ {name} をやり直しました")
+    # ★どちらで閉じたかを書き分ける★＝あとから
+    #   「機械が確かめた件数」と「2AIの判断だけの件数」を数えられるように。
+    closed_by = "machine" if conds else "2ai"
 
     row["status"] = "closed"
     row["resolution"] = args.reason
@@ -1239,10 +1217,6 @@ def main():
     p.add_argument("--receipt", default="",
                    help="★ledger_sweep が出した受領証★"
                         "（中の検査をここでやり直してから閉じる）")
-    p.add_argument("--owner-decision", dest="owner_decision",
-                   action="store_true",
-                   help="★機械では確かめられない案件を、運営者の判断で閉じる★"
-                        "（無人タスクの最中は使えない・別の印で残る）")
 
     args = ap.parse_args()
     path = Path(args.file) if args.file else DEFAULT_FILE

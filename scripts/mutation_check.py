@@ -5359,8 +5359,8 @@ MUTATIONS = [
         "why": "★受領証の形を見る関門を、呼ばずに素通りする"
                "（関数だけを試す試験は緑のまま＝罠③）★",
         "file": "scripts/open_issues.py",
-        "before": "        ng = _receipt_problems(rec, args.id, row)",
-        "after": "        ng = \"\"",
+        "before": "    ng = _receipt_problems(rec, args.id, row)",
+        "after": "    ng = \"\"",
         "run": ["scripts/open_issues.py"],
     },
     {
@@ -5389,13 +5389,6 @@ MUTATIONS = [
         "file": "scripts/open_issues.py",
         "before": "        if not str(c.get(\"observation_digest\") or \"\"):",
         "after": "        if False:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★運営者の判断で閉じる道を、無人タスクの最中にも開ける（自動で回る道に紛れ、機械が確かめた件数が嘘になる）★",
-        "file": "scripts/open_issues.py",
-        "before": "        who = _running_task()\n        if who:",
-        "after": "        who = \"\"\n        if who:",
         "run": ["scripts/open_issues.py"],
     },
     {
