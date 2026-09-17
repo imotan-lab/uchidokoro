@@ -80,7 +80,7 @@ MUTATIONS = [
                   "!= set(ALLOWED_AGREERS):",
         "after": "    if False:",
         "run": ["scripts/maker_identity_cache.py"],
-        "issues": [696],
+        "issues": [694, 696],
     },
     {
         "why": "★AIごとの結論が、控えの結論と同じかを見ない"
@@ -124,7 +124,7 @@ MUTATIONS = [
                   + chr(10) + '                and _mc_state in (None, "", "MATCH"):',
         "after": '        if r.get("identity_ok") and not (r.get("reason_codes") or []):',
         "run": ["scripts/add_machine_run.py"],
-        "issues": [696],
+        "issues": [694, 696],
     },
     {
         "why": "★2AI用の道具が、控えの取り込みに失敗しても静かに進む"
@@ -219,7 +219,7 @@ MUTATIONS = [
         "before": "        if q not in body:",
         "after": "        if False:",
         "run": ["scripts/maker_identity_cache.py"],
-        "issues": [696],
+        "issues": [694, 696],
     },
     {
         "why": "★控えを使うとき「同じ本文を見ているか」を確かめない"
@@ -243,7 +243,7 @@ MUTATIONS = [
         "after": "    if not grant:" + chr(10)
                  + '        return True, "OK"',
         "run": ["scripts/model_code_lookup.py", "scripts/add_machine_run.py"],
-        "issues": [696],
+        "issues": [694, 696],
     },
     {
         "why": "★許可証を本文の指紋で照合しない"
