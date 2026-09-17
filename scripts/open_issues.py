@@ -866,6 +866,84 @@ def selftest() -> int:
           and str(_got7.get("failed_at_commit") or "") != "0" * 40
           and is_ancestor(str(_got7.get("failed_at_commit") or ""))
           and _r7.get("conditions_sealed") is None)
+
+        # ★★詰まった案件を、道具だけで直して閉じられるところまで見る★★
+        #   （2026-09-17・Codexの指摘＝断るだけで直す道が無かった）
+        #   ★ここが往復の試験★＝「拒否できる」だけでは足りない。
+        def _reset(**kw):
+            a = dict(id=1, why="", why_file=str(_cwhy), by="claude,codex")
+            a.update(kw)
+            _b = _io4.StringIO()
+            with _ctx4.redirect_stdout(_b):
+                return cmd_condition_reset(_cled, _C(**a))
+
+        for _name, _broken in (
+                ("壊れた要素が混ざった一覧", ["ただの文字列"]),
+                ("名簿から消えた検査", [{"check": "もう無い検査XYZ",
+                                        "version": 1, "args": {},
+                                        "result_when_set": "FAIL",
+                                        "failed_at_commit": _headsha,
+                                        "failed_digest": "f" * 64}]),
+                ("版が上がった条件", [{"check": "text_gone", "version": 99,
+                                      "args": {"text": "どこにも無い文XYZ"},
+                                      "result_when_set": "FAIL",
+                                      "failed_at_commit": _headsha,
+                                      "failed_digest": "f" * 64}]),
+        ):
+            _fresh()
+            _rw = json.loads(_cled.read_text(encoding="utf-8"))["issues"][0]
+            _rw["resolution_conditions"] = _broken
+            _rw["conditions_sealed"] = {
+                "at": "2026-09-17", "by": ["claude", "codex"],
+                "why": "この条件で案件の全部を覆いました（試験）",
+                "issue_digest": issue_digest(_rw), "condition_keys": []}
+            _cled.write_text(json.dumps({"next_id": 2, "issues": [_rw]},
+                                        ensure_ascii=False), encoding="utf-8")
+            _stuck = bool(_condition_binds_row(
+                json.loads(_cled.read_text(encoding="utf-8"))["issues"][0],
+                _hit))
+            # ★白紙に戻す前に、登録し直す道具が落ちないことを見る★
+            #   （落ちると、白紙に戻す前の段階で手が止まる）
+            try:
+                _reg_ok()
+                _blew0 = ""
+            except Exception as e:                           # noqa: BLE001
+                _blew0 = f"{type(e).__name__}: {e}"
+            t(f"　★{_name}のままでも、登録の道具は落ちない★"
+              + (f"／★落ちた: {_blew0[:60]}★" if _blew0 else ""),
+              not _blew0)
+            # ★封を戻してから白紙にする★＝登録し直すと封は外れるので、
+            #   そのままだと「白紙にすると封が消える」を試験できない（罠④）
+            _pre = json.loads(_cled.read_text(encoding="utf-8"))["issues"][0]
+            _pre["conditions_sealed"] = {"at": "2026-09-17"}
+            _cled.write_text(json.dumps({"next_id": 2, "issues": [_pre]},
+                                        ensure_ascii=False), encoding="utf-8")
+            _reset()
+            # ★白紙に戻した直後を見る★（あとで見ると、登録し直す側が
+            #   封を外すので、白紙側の守りを壊しても気づけない＝罠④）
+            _mid = json.loads(_cled.read_text(encoding="utf-8"))["issues"][0]
+            _rec = (_mid.get("condition_resets") or [{}])[0]
+            t(f"　★{_name}を白紙に戻すと、条件も封も消える★",
+              _mid.get("resolution_conditions") is None
+              and _mid.get("conditions_sealed") is None)
+            t(f"　★{_name}の中身を控えに残す★（何を消したか追えなくなる）",
+              isinstance(_rec.get("dropped"), list)
+              and all(x in _rec["dropped"] for x in _broken)
+              and judges_problem(_rec.get("by")) == "")
+            # ★登録し直す道具が落ちたら、それは「直せる」ではない★
+            try:
+                _reg_ok()
+                _blew = ""
+            except Exception as e:                           # noqa: BLE001
+                _blew = f"{type(e).__name__}: {e}"
+            _after = json.loads(_cled.read_text(encoding="utf-8"))["issues"][0]
+            _conds = _after.get("resolution_conditions") or []
+            t(f"★★{_name}でも、道具だけで直して登録し直せる★★"
+              "（直す道が無いと、人がJSONを触るまで永久に詰まる）"
+              + (f"／★落ちた: {_blew[:60]}★" if _blew else ""),
+              _stuck and not _blew and len(_conds) == 1
+              and evidence_problem(_conds[0]) == ""
+              and _after.get("conditions_sealed") is None)
         _fresh()
         t("　★判断者が2つ無ければ登録できない★",
           _stops_ret(lambda: _reg(by="claude")) and _n() == 0)
@@ -1682,6 +1760,55 @@ def cmd_close(path, args):
     return 0
 
 
+def cmd_condition_reset(path, args):
+    """★登録した条件を、まとめて白紙に戻す★（2026-09-17・Codexの指摘）
+
+    ★★なぜ要るか★★＝閉じる側は「使えない条件」を正しく断るのに、
+      ★断られたあと、道具で直す道が無かった★。
+        ・壊れた要素が混ざった一覧 … 読み飛ばしても残る限り断られる
+        ・検査の版が上がった条件 … 登録し直しても別物として増えるだけ
+        ・名簿から消えた検査／観測どまりへ変わった検査 … 登録し直せない
+        ・いまの歴史に無いコミット … （これは登録し直せるようにした）
+      ＝★どれも人が台帳のJSONを手で直すまで永久に閉じられなかった★。
+      運営者の目的（手を使わずに閉じる）を正面から壊す。
+
+    ★消したものは捨てない★＝`condition_resets` に写しを残す
+      （何を白紙にしたかが分からなくなると、あとから追えない）。
+    ★封も外す★（覆っている条件が無くなるため）。
+    """
+    why = _read_text_arg(args.why, args.why_file, "why")
+    if len(why) < 10:
+        raise SystemExit("★なぜ白紙に戻すのかを10字以上で★")
+    by = [s.strip() for s in str(args.by or "").split(",") if s.strip()]
+    _ngby = judges_problem(by)
+    if _ngby:
+        raise SystemExit("★" + _ngby + "★")
+    data = _load(path)
+    row = next((i for i in data["issues"] if i["id"] == args.id), None)
+    if row is None:
+        print(f"⚠ 案件 #{args.id} が見つかりません")
+        return 1
+    if row["status"] != "open":
+        print(f"#{args.id} は既にclosed（白紙には戻しません）")
+        return 1
+    old = row.get("resolution_conditions")
+    if old is None and not row.get("conditions_sealed"):
+        print(f"#{args.id} には登録した条件がありません")
+        return 0
+    box = row.setdefault("condition_resets", [])
+    box.append({"at": _today(), "by": by, "why": why,
+                "dropped": json.loads(json.dumps(old, ensure_ascii=False,
+                                                 default=str))})
+    del box[:-10]                       # ★直近だけ残す★（台帳を太らせない）
+    row.pop("resolution_conditions", None)
+    row.pop("conditions_sealed", None)
+    _save(path, data)
+    n = len(old) if isinstance(old, list) else 0
+    print(f"#{args.id} の閉じる条件を白紙に戻しました（{n} 件・封も外しました）")
+    print("★このあと condition で登録し直し、seal で封をしてください★")
+    return 0
+
+
 def cmd_condition(path, args):
     """★案件に「これが通れば直っている」という条件を登録する★（2026-09-17）
 
@@ -1777,8 +1904,12 @@ def cmd_condition(path, args):
            "failed_at_commit": _head0,
            "failed_digest": got.get("observation_digest")}
     slug = str(row.get("slug") or "")
+    # ★壊れた要素があっても、この道具が落ちない★（落ちると直す手が無くなる）
+    #   ★ただし読み飛ばしでは解決しない★＝残っている限り閉じる側が断るので、
+    #   直す道は `--reset`（下）。ここは「例外で止まらない」ためだけ。
     _same = [i for i, c in enumerate(box)
-             if _cond_key(c, slug) == _cond_key(new, slug)]
+             if isinstance(c, dict)
+             and _cond_key(c, slug) == _cond_key(new, slug)]
     if _same:
         # ★★使えない古い条件は、登録し直せる★★（2026-09-17・Codexの指摘）
         #   ★直す前は「同じ条件です」で終わっていた★ので、
@@ -1971,6 +2102,14 @@ def main():
                    help="なぜその検査で直ったと言えるか（無人タスクはこちら）")
     p.add_argument("--by", default="", help="判断者（例: claude,codex）")
 
+    p = sub.add_parser("condition-reset",
+                       help="登録した条件を白紙に戻す（封も外す）")
+    p.add_argument("--id", type=int, required=True)
+    p.add_argument("--why", default="")
+    p.add_argument("--why-file", dest="why_file", default="",
+                   help="なぜ白紙に戻すのか（無人タスクはこちら）")
+    p.add_argument("--by", default="", help="判断者（例: claude,codex）")
+
     p = sub.add_parser("seal",
                        help="「この条件で案件の全部を覆った」と2AIが封をする")
     p.add_argument("--id", type=int, required=True)
@@ -1985,7 +2124,7 @@ def main():
           "severity": cmd_severity, "blocking": cmd_blocking,
           "questions": cmd_questions, "attempt": cmd_attempt,
           "notified": cmd_notified, "condition": cmd_condition,
-          "seal": cmd_seal,
+          "seal": cmd_seal, "condition-reset": cmd_condition_reset,
           "notifications": cmd_notifications}[args.cmd]
     sys.exit(fn(path, args))
 

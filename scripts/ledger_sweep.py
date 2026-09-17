@@ -769,16 +769,19 @@ def main() -> int:
                     print("    ★" + _w + "★")
         if got:
             print("\n★記事を読んで、直っているなら閉じてください★")
-            print("★★先に「これが通れば直っている」を案件に登録します★★"
-                  "（検査名だけでは、その案件が直った証拠になりません）")
+            print("★★①「これが通れば直っている」を案件に登録します★★"
+                  "（★登録できるのは、いま実際に落ちている検査だけ★）")
             print("  python scripts/open_issues.py condition --id <番号> "
                   "--check <検査名> --arg <名前>=<値> "
                   "--why-file <理由を書いたファイル> --by claude,codex")
+            print("★★②「これで案件の全部を覆った」と封をします★★"
+                  "（問題が2つ書いてあるなら、2つとも登録してから）")
+            print("  python scripts/open_issues.py seal --id <番号> "
+                  "--why-file <理由を書いたファイル> --by claude,codex")
+            print("★★③閉じます★★"
+                  "（登録した条件は、渡さなくても機械が全部やり直します）")
             print("  python scripts/ledger_sweep.py --slug <機種> "
-                  "--close <番号> --check <検査名> …")
-            print("★消えた逐語（--text）や壊し方（--guard-mutation）で"
-                  "閉じるときは、登録は要りません★"
-                  "（それ自体が案件と結び付いているため）")
+                  "--close <番号>")
             print("★直っていなければ、その回を数えます★")
             print("  python scripts/open_issues.py attempt --id <番号> "
                   "--round <この回の名前> --note \"試したこと\"")

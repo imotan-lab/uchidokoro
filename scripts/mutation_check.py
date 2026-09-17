@@ -5690,6 +5690,34 @@ MUTATIONS = [
         "after": "    ng = \"\"\n    if ng:\n        return ng",
         "run": ["scripts/open_issues.py"],
     },
+    {
+        "why": "★白紙に戻しても条件が残る（詰まった案件の唯一の出口がふさがり、人がJSONを触るまで直せない）★",
+        "file": "scripts/open_issues.py",
+        "before": "    row.pop(\"resolution_conditions\", None)\n    row.pop(\"conditions_sealed\", None)\n    _save(path, data)",
+        "after": "    _save(path, data)",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★白紙に戻すときに封を残す（覆う条件が無いのに封だけ生き残る）★",
+        "file": "scripts/open_issues.py",
+        "before": "    row.pop(\"resolution_conditions\", None)\n    row.pop(\"conditions_sealed\", None)",
+        "after": "    row.pop(\"resolution_conditions\", None)",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★白紙に戻したものを控えない（何を消したか追えなくなる）★",
+        "file": "scripts/open_issues.py",
+        "before": "    box = row.setdefault(\"condition_resets\", [])",
+        "after": "    box = []",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★壊れた要素があると、登録し直す道具そのものが落ちる（直す手が無くなる）★",
+        "file": "scripts/open_issues.py",
+        "before": "             if isinstance(c, dict)\n             and _cond_key(c, slug) == _cond_key(new, slug)]",
+        "after": "             if _cond_key(c, slug) == _cond_key(new, slug)]",
+        "run": ["scripts/open_issues.py"],
+    },
 ]
 
 
