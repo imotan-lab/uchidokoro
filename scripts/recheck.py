@@ -1530,7 +1530,74 @@ def check_guard_proven(args: dict) -> dict:
 # --- 検査の名簿 -----------------------------------------------------------
 # ★ここに無い名前は動かない★（台帳から来た文字列でコマンドを組み立てない）
 
+def check_confirmed_value_recorded(args: dict) -> dict:
+    """★2AIの確定値が、実際に記録されて成立しているか★（2026-09-17）
+
+    ★★なぜ要るか★★（運営者の指示）
+      ＞ 私の手を使わずとも閉じれるような仕組みにしてくれないと
+      ＞ いつまで経っても自動化出来ないじゃん
+      ★裏取り待ちの型（external_value）には、機械が確かめられる検査が
+        1つも無かった★＝どれだけ直しても人が手で閉じるしかなく、
+      その機種は止まったままになる（実例＝L転生王女は値が先月そろって
+      いたのに、記録が残っていて誰も閉じられなかった）。
+
+    ★見るのは「記録されているか」だけ★＝値が正しいかは判定しない
+      （それは2AIの仕事）。機械は次だけを確かめる。
+        ①控えが**厳しい読み方**で読める（＝全部の記録が契約を満たし、
+          独立した出典も必要な数そろっている）
+        ②その機種のその項目が控えにある
+      ★控えが読めないときは PASS にしない★（fail-closed）
+
+    ★★同じ規則を2か所に書かない★★（罠③・2026-09-17に自分で踏んだ）
+      ★はじめは `validate_record` と「系列の数」をここでも見ていた★が、
+      `load(strict=True)` が**全部の記録に同じ検査をかけて例外で止める**ので、
+      ★その2つは一度も発火しない死んだコードだった★
+      （壊し方を登録したら「守られていません」と出て気づいた）。
+      ＝ここで重ねて書くと、片方だけ直したときに黙って食い違う。
+    """
+    slug = str(args.get("slug") or "")
+    field = str(args.get("field") or "")
+    if not slug or not field:
+        return _result(ERROR, "slug と field が要ります", args)
+    try:
+        import confirmed_values as _cv
+    except Exception as e:                                   # noqa: BLE001
+        return _result(ERROR, f"控えを読む道具がありません: {e}", args)
+    try:
+        got = _cv.load(require_exists=True)
+    except Exception as e:                                   # noqa: BLE001
+        # ★読めない＝確かめていない★（合格にしない）
+        return _result(ERROR, f"確定値の控えを読めません: {e}", args)
+    rows = (got.get("machines") or {}).get(slug) or {}
+    rec = rows.get(field)
+    if not isinstance(rec, dict):
+        return _result(FAIL, f"{slug} の「{field}」は控えにありません", args)
+    need = _cv.min_sources(field)
+    got_n = len(rec.get("lineages") or [])
+    # ★★見た中身の指紋を必ず返す★★（2026-09-17・Codexの指摘）
+    #   控えは**リポジトリの外**にあるので、コミットの照合では覆えない。
+    #   ＝確かめてから閉じるまでの間に中身が差し替わっても気づけない。
+    #   observed に入れておくと observation_digest がそれを含むので、
+    #   閉じる側は「確かめた時と同じものを見ているか」を1つの値で見比べられる。
+    _obs = {"record_sha256": _sha(json.dumps(rec, ensure_ascii=False,
+                                             sort_keys=True)),
+            "lineages": got_n, "min_sources": need}
+    return _result(PASS,
+                   f"{slug} の「{field}」は控えにあり、"
+                   f"独立した出典{got_n}系列で成立しています"
+                   f"（{rec.get('decided_at')}／"
+                   f"{'/'.join(rec.get('agreed_by') or [])}）", args,
+                   observed=_obs)
+
+
 CHECKS = {
+    "confirmed_value_recorded": {
+        "version": 1,
+        "closeable": True,          # ★控えを読み直して機械が白黒を付ける★
+        "title": "2AIの確定値が記録され、独立した出典で成立しているか",
+        "fn": check_confirmed_value_recorded,
+        "args_spec": {"slug": (str, True, None), "field": (str, True, None)},
+    },
     "guard_proven": {
         "version": 1,
         "closeable": True,          # ★機械が実際にコードを壊して確かめる★
@@ -1762,7 +1829,7 @@ def _cmd_list():
     return 0
 
 
-def _cmd_run(check, slug, rate, run_all, as_json):
+def _cmd_run(check, slug, rate, run_all, as_json, field=None):
     # ★名簿そのものが壊れていても、約束した終了コードから外れない★（依頼244の指摘4）
     try:
         if run_all:
@@ -1802,6 +1869,8 @@ def _cmd_run(check, slug, rate, run_all, as_json):
         args = {"slug": s}
         if rate:
             args["rate"] = rate
+        if field:
+            args["field"] = field
         rows.append(run(check, args))
 
     tally = {r: 0 for r in RESULTS}
@@ -2695,6 +2764,83 @@ def _selftest():
     except ImportError:
         t("　（壊し方の道具が読めないので飛ばしました）", False)
 
+    # ---------------------------------------- 2AIの確定値が記録されているか
+    # ★★裏取り待ちの型に、機械が確かめられる検査が1つも無かった★★
+    #   （2026-09-17・運営者の指示「私の手を使わずとも閉じれるように」）
+    # ★控えのJSONを手で書かない★＝本物の登録関数を通す（罠①）。
+    #   置き場だけを一時の場所へ向け、通信を差し替える。
+    import tempfile as _tf
+    try:
+        import confirmed_values as _cvT
+        _keep_store = _cvT.STORE
+        _keep_bind = _cvT.bind_machine
+        _NAME = "L試験機"
+        _Q1 = "天井は1000G+α"
+        _Q2 = "通常時1000G+αで天井"
+
+        def _ff(url):
+            q = _Q1 if "chonborista" in url else _Q2
+            return ("<title>" + _NAME + " スロット 新台 天井 | 解析</title>"
+                    "<body><h1>" + _NAME + "</h1><p>" + q + "。"
+                    + ("説明。" * 30) + "</p></body>")
+
+        try:
+            _cvT.STORE = os.path.join(_tf.mkdtemp(prefix="recheck_cv_"),
+                                      "confirmed_values.json")
+            _cvT.bind_machine = lambda u: ("zz_test", _NAME)
+            _cvT.init_store()     # ★初回は明示的に作る★（消失と初回を分ける）
+            _cvT.record(
+                slug="zz_test", field="ceiling",
+                official_url="https://m.example/products/slot/x/",
+                value={"kind": "GAME", "amount": "1000", "unit": "G",
+                       "benefit": "AT"},
+                sources=[_cvT.parse_source("https://chonborista.com/1|" + _Q1),
+                         _cvT.parse_source("https://nana-press.com/1|" + _Q2)],
+                by=["claude", "codex"], name=_NAME, fetch=_ff,
+                why="同じ原文を読んで一致しました")
+            _got = check_confirmed_value_recorded({"slug": "zz_test",
+                                                   "field": "ceiling"})
+            _miss = check_confirmed_value_recorded({"slug": "zz_test",
+                                                    "field": "at"})
+            _other = check_confirmed_value_recorded({"slug": "zz_other",
+                                                     "field": "ceiling"})
+            _noarg = check_confirmed_value_recorded({"slug": "zz_test"})
+            # ★★出典が1社だけに痩せた控えは合格にしない★★
+            #   ★本物の記録から系列を減らして作る★（手で書いた偽物ではない）＝
+            #   「2社そろって初めて載せる」という決まりそのものの検査。
+            with open(_cvT.STORE, encoding="utf-8") as _fh:
+                _raw = json.loads(_fh.read())
+            _one = _raw["machines"]["zz_test"]["ceiling"]
+            _one["sources"] = _one["sources"][:1]
+            _one["lineages"] = _one["lineages"][:1]
+            with open(_cvT.STORE, "w", encoding="utf-8") as _fh:
+                _fh.write(json.dumps(_raw, ensure_ascii=False))
+            _thin = check_confirmed_value_recorded({"slug": "zz_test",
+                                                    "field": "ceiling"})
+            _cvT.STORE = os.path.join(_tf.mkdtemp(prefix="recheck_cv2_"),
+                                      "confirmed_values.json")
+            _unread = check_confirmed_value_recorded({"slug": "zz_test",
+                                                      "field": "ceiling"})
+        finally:
+            _cvT.STORE = _keep_store
+            _cvT.bind_machine = _keep_bind
+        t("★★本物の登録関数で入れた確定値は、機械が合格と言える★★"
+          "（裏取り待ちの案件を、人の手なしで閉じられる唯一の道）",
+          _got["result"] == PASS)
+        t("　★見た中身の指紋を必ず返す★"
+          "（控えはリポジトリの外にあり、コミットの照合では覆えない）",
+          len(str(_got["observed"].get("record_sha256") or "")) == 64)
+        t("　記録されていない項目は合格にしない", _miss["result"] == FAIL)
+        t("　★別の機種の控えでは合格にしない★", _other["result"] == FAIL)
+        t("　項目を言わなければ動かさない", _noarg["result"] == ERROR)
+        t("★★出典が1社だけに痩せた控えでは合格にしない★★"
+          "（1社しか持っていない値で、裏取り待ちの案件が閉じてしまう）",
+          _thin["result"] != PASS)
+        t("★★控えが読めないときは合格にしない★★（fail-closed）",
+          _unread["result"] == ERROR)
+    except ImportError:
+        t("　（確定値の道具が読めないので飛ばしました）", False)
+
     t("★指紋は切り詰めない（64桁）★", len(a["observation_digest"]) == 64)
     t("コミットが分かる", re.fullmatch(r"[0-9a-f]{40}", a["commit_sha"] or "") is not None)
 
@@ -2709,6 +2855,8 @@ def main():
     ap.add_argument("--check")
     ap.add_argument("--slug")
     ap.add_argument("--rate")
+    ap.add_argument("--field",
+                    help="確定値の項目名（confirmed_value_recorded で使う）")
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--selftest", action="store_true")
@@ -2724,7 +2872,7 @@ def main():
         print(json.dumps({"check": a.check, "error": msg}, ensure_ascii=False)
               if a.json else msg)
         return 2
-    return _cmd_run(a.check, a.slug, a.rate, a.all, a.json)
+    return _cmd_run(a.check, a.slug, a.rate, a.all, a.json, a.field)
 
 
 if __name__ == "__main__":

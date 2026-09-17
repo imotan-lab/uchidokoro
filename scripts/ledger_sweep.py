@@ -63,6 +63,10 @@ for _p in (BASE, _S):
 import local_paths as _lp                                # noqa: E402
 import recheck as _rc                                    # noqa: E402
 import safe_json as _sj                                  # noqa: E402
+# ★受領証の版は台帳の側に1つだけ置く★（同じ規則を2か所に書かない・罠③）
+#   ここで文字列を書き直すと、片方だけ上げたときに黙って食い違う。
+import open_issues as _oi_mod                            # noqa: E402
+from open_issues import RECEIPT_SCHEMA                    # noqa: E402
 
 LEDGER = _lp.doc("open_issues.json")
 
@@ -174,49 +178,64 @@ def for_slug(slug: str) -> dict:
     return out
 
 
-def _machine_slugs() -> set:
-    """いま一覧にある機種（＝毎朝のタスクが担当しうる機種）。"""
-    data = _sj.read_json(os.path.join(BASE, "assets", "data", "machines.json"),
-                         expect=(dict, list))
-    rows = data if isinstance(data, list) else (data.get("machines") or [])
-    return {str(r.get("slug") or "") for r in rows if isinstance(r, dict)}
+# ★★機種に紐づかない案件だけを出す道（--site）は廃止した★★（2026-09-17）
+#   ★理由★＝出すだけで**閉じる手順が繋がっていなかった**（読んで終わり）。
+#   ＝運営者の指示「私の手を使わずとも閉じれるように」を満たさない。
+#   `--due` が同じ回転（見せた日の古い順）で**全部**を対象に出し、
+#   その場で閉じるところまで繋がっているので、こちらへ一本化した。
+#   ★見せた日の控えはそのまま引き継ぐ★＝回転を最初へ戻さないため。
+#   ★2つ残さない★（鉄則0b）＝同じ日に両方動くと、
+#   後から動いたほうが「今日もう出した2件」に張り付いて先へ進めなかった
+#   （実際にそうなった）。
 
 
-def for_site(limit: int = 2, today: str = "") -> list:
-    """★機種に紐づかない案件を、古い順に少しだけ出す★（2026-08-30）
+def for_due(limit: int = 10, today: str = "") -> list:
+    """★機種の段階によらず、開いている案件を順に出す★（2026-09-17）
 
-    ★なぜ要るか★＝毎朝のタスクは「担当した機種の案件」しか見ないので、
-      `site` や `_global` の案件は**誰の目にも永久に触れない**
-      （実測：開いている 144 件のうち 63 件・うち重要 26 件）。
+    ★★なぜ要るか★★（運営者の指示）
+      ＞ 私の手を使わずとも閉じれるような仕組みにしてくれないと
+      ＞ いつまで経っても自動化出来ないじゃん
+      ★直す前★＝閉じる工程に届くのは「朝のタスクが担当した機種」だけで、
+      担当できるのは**公開済みの記事だけ**だった（早すぎる公開を止める線）。
+      ＝★まだ公開していない機種の案件は、誰にも閉じられない★。
+      しかもその案件がその機種を止めるので、★永久に解けない★。
+      実例＝L転生王女。値は先月そろっていたのに1件残って止まっていた。
+      ★記事を1文字も書かないので、公開を止める線はそのまま★
+      （閉じることと、記事を書き換えることを切り離した）。
 
-    ★順番は「見せた日の古い順」★＝1周したらまた回ってくる。
-    ★機種の担当順には割り込まない★（運営者が決めた順番は変えない）。
-    ★ここでは閉じない★＝閉じるのは今までどおり `--close`（機械が確かめる）。
+    ★★並び順★★（Codexと詰めた）
+      ①まだ一度も出していないもの ②最後に出した日が古い順
+      ③重要度は**同じ日のときの決着だけ**に使う ④初出が古い順 ⑤番号順
+      ★重要度を先頭に置かない★＝軽いものが永久に回ってこない。
+      ＝「入口は重いものを積み、出口は重いものしか拾わない」の再来になる。
     """
-    known = _machine_slugs()
-    mine = [r for r in _rows()
-            if r.get("status") != "closed"
-            and str(r.get("slug") or "") not in known]
     seen = _seen_map()
+    sev_rank = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
 
     def _num(r):
         try:
             return int(r.get("id"))
         except (TypeError, ValueError):
-            return 10 ** 9        # 番号が読めないものは後ろへ
+            return 10 ** 9
 
-    # ★並び順は「見せた日の古い順 → 番号の小さい順」★
-    #   ★番号は数として見る★（文字で並べると 1, 10, 100, 2 … になる）
-    mine.sort(key=lambda r: (seen.get(str(r.get("id")), ""), _num(r)))
-
-    # ★同じ日に2回動かしても、同じものを出す★（2026-08-30・Codexの後回し指摘）
-    #   ★直す前は `today` を使っておらず、番人が朝に再試行すると
-    #     2件ずつ先へ進んでいた★＝読まれないまま飛ばされる案件ができる。
-    if today:
-        already = [r for r in mine if seen.get(str(r.get("id"))) == today]
-        if already:
-            return already[:max(0, int(limit))]
-    return mine[:max(0, int(limit))]
+    mine = [r for r in _rows() if r.get("status") != "closed"]
+    mine.sort(key=lambda r: (
+        seen.get(str(r.get("id")), ""),                 # 未提示が先（空文字）
+        sev_rank.get(str(r.get("severity") or ""), 9),  # 同日なら重い順
+        str(r.get("first_seen") or ""),
+        _num(r)))
+    limit = max(0, int(limit))
+    if not today:
+        return mine[:limit]
+    # ★★今日もう出したものは、もう一度同じものを出す★★
+    #   （番人が朝に再試行しても、読まれないまま飛ばされる案件を作らない）
+    # ★★足りなければ、その先を足す★★（2026-09-17・実際に詰まった）
+    #   ★直す前は「今日出した分」だけを返して打ち切っていた★ので、
+    #   前の工程が2件出していると、10件見るつもりの回が
+    #   ★その2件に張り付いて先へ進めなかった★。
+    already = [r for r in mine if seen.get(str(r.get("id"))) == today]
+    rest = [r for r in mine if seen.get(str(r.get("id"))) != today]
+    return (already + rest)[:limit]
 
 
 def _state_path() -> str:
@@ -265,65 +284,122 @@ def _html_ready(slug: str) -> bool:
     return os.path.exists(os.path.join(BASE, "machines", slug, "index.html"))
 
 
+def args_for_check(check: str, slug: str, row=None) -> dict:
+    """★その検査に渡す引数を、案件の行から組み立てる★（2026-09-17）
+
+    ★★直す前は `{"slug": slug}` しか渡していなかった★★（Codexの指摘）
+      ＝機種のほかに引数を要る検査（どの項目の値か、など）は
+      **呼べもしなかった**。名簿に足しても永久に使われない。
+
+    ★機種は必ず行から固定する★＝案件が名乗っている機種を使い、
+      登録された条件の側では上書きさせない
+      （別の機種の控えで通してしまうのを防ぐ）。
+    """
+    a = {"slug": slug}
+    want = (row or {}).get("resolution_condition")
+    if isinstance(want, dict) and str(want.get("check") or "") == check:
+        extra = want.get("args")
+        if isinstance(extra, dict):
+            a.update({str(k): v for k, v in extra.items()})
+    a["slug"] = slug
+    return a
+
+
+def condition_stale(cond) -> list:
+    """★登録した条件が、いまも使えるか★ → 使えない理由（無ければ空）
+
+    ★★なぜ要るか★★（2026-09-17）＝登録した条件は**静かに古くなる**。
+      検査の版が上がると `recheck.closeable` が版の食い違いで断るので、
+      ★その案件だけが、理由の分からないまま閉じられなくなる★。
+      名簿から検査が消えたときも同じ。
+      ＝閉じる回で案件を出すときに、その場で言う。
+    ★ここでは直さない★（勝手に版を上げると「確かめた」の中身が変わる）。
+    """
+    if not isinstance(cond, dict):
+        return []
+    name = str(cond.get("check") or "")
+    meta = _rc.CHECKS.get(name)
+    if meta is None:
+        return [f"登録した検査（{name}）は、いまの名簿にありません"
+                "。条件を登録し直してください"]
+    if not meta.get("closeable"):
+        return [f"登録した検査（{name}）は、いまは観測どまりです"
+                "。条件を登録し直してください"]
+    if cond.get("version") != meta.get("version"):
+        return [f"登録した検査（{name}）の版が変わりました"
+                f"（条件 {cond.get('version')} / いま {meta.get('version')}）"
+                "。中身を読み直して条件を登録し直してください"]
+    return []
+
+
 def run_checks(slug: str, checks, texts, head: str = "",
-               guards=None) -> tuple:
-    """2AIが名指しした検査を**全部**やり直す → (ok, 一件ずつの記録)
+               guards=None, row=None) -> tuple:
+    """2AIが名指しした検査を**全部**やり直す → (ok, 一件ずつの記録, 受領証の中身)
 
     ★★1件でも通らなければ閉じない★★（罠⑮＝免除の条件をゆるくしない）
       1つの案件に問題が2つ書いてあることがある（実例 #284＝
       「狙い目の逆転」と「句点後の半角スペース」）。
       片方だけ確かめて閉じると、もう片方が直っていないまま消える。
     ★検査を1つも渡されなければ通さない★（空で閉じない）
+
+    ★3つ目に返すもの＝受領証に載せる「何を・どう確かめたか」★（2026-09-17）
+      台帳を書き換える側（open_issues）が、これを**もう一度やり直して**から
+      閉じる。＝ここを素通りして閉じる道を無くすため。
     """
     checks = list(checks or [])
     texts = list(texts or [])
     guards = list(guards or [])
     if not checks and not texts and not guards:
-        return False, ["確かめる検査が1件もありません"]
+        return False, ["確かめる検査が1件もありません"], []
 
     # ★これだけでは閉じられない検査★は、逐語の確認と組でなければ通さない
     lone = [c for c in checks if c in NEED_COMPANION]
     if lone and not texts:
         return False, [f"{'/'.join(lone)} は単独では閉じられません"
-                       "（消えた逐語も一緒に確かめてください）"]
+                       "（消えた逐語も一緒に確かめてください）"], []
 
     head = head or _head()
     whys = []
+    done = []
+
+    def _one(cond, label):
+        ok, why, got = _rc.closeable(cond)
+        whys.append(f"{'○' if ok else '×'} {label} ／ {why}")
+        if ok:
+            done.append({"condition": cond,
+                         "observation_digest":
+                             str((got or {}).get("observation_digest") or "")})
+        return ok
+
     for check in checks:
         meta = _rc.CHECKS.get(check)
         if not meta:
-            return False, whys + [f"知らない検査です: {check}"]
+            return False, whys + [f"知らない検査です: {check}"], done
         if not meta.get("closeable"):
-            return False, whys + [f"観測どまりの検査です: {check}"]
-        ok, why, _got = _rc.closeable(
-            {"check": check, "version": meta.get("version"),
-             "args": {"slug": slug}, "expected_commit": head})
-        whys.append(f"{'○' if ok else '×'} {check} ／ {why}")
-        if not ok:
-            return False, whys
+            return False, whys + [f"観測どまりの検査です: {check}"], done
+        if not _one({"check": check, "version": meta.get("version"),
+                     "args": args_for_check(check, slug, row),
+                     "expected_commit": head}, check):
+            return False, whys, done
     if texts and not _html_ready(slug):
         return False, whys + ["公開HTMLがありません"
-                              "（記事データだけでは閉じません）"]
+                              "（記事データだけでは閉じません）"], done
     meta = _rc.CHECKS["text_gone"]
     for t in texts:
-        ok, why, _got = _rc.closeable(
-            {"check": "text_gone", "version": meta["version"],
-             "args": {"slug": slug, "text": t}, "expected_commit": head})
-        whys.append(f"{'○' if ok else '×'} text_gone[{t[:30]}] ／ {why}")
-        if not ok:
-            return False, whys
+        if not _one({"check": "text_gone", "version": meta["version"],
+                     "args": {"slug": slug, "text": t},
+                     "expected_commit": head}, f"text_gone[{t[:30]}]"):
+            return False, whys, done
     # ★★機械の中身を直したときの道★★（2026-09-08・台帳#581）
     #   ★記事の文章を見る検査は当てはまらない★ので、
     #   「その直しを1行壊すと試験が赤くなるか」で確かめる。
     _gmeta = _rc.CHECKS["guard_proven"]
     for g in guards:
-        ok, why, _got = _rc.closeable(
-            {"check": "guard_proven", "version": _gmeta["version"],
-             "args": {"mutation_why": g}, "expected_commit": head})
-        whys.append(f"{'○' if ok else '×'} guard_proven[{g[:40]}] ／ {why}")
-        if not ok:
-            return False, whys
-    return True, whys
+        if not _one({"check": "guard_proven", "version": _gmeta["version"],
+                     "args": {"mutation_why": g},
+                     "expected_commit": head}, f"guard_proven[{g[:40]}]"):
+            return False, whys, done
+    return True, whys, done
 
 
 def precheck_close(issue_id, slug: str) -> tuple:
@@ -511,7 +587,8 @@ def close_issue(issue_id: int, slug: str, checks, texts, why_extra="",
         return 1
 
     head0 = _head()
-    ok, whys = run_checks(slug, checks, texts, head0, guards=guards)
+    ok, whys, done = run_checks(slug, checks, texts, head0, guards=guards,
+                                row=row)
     for w in whys:
         print("  " + w[:130])
     if not ok:
@@ -536,9 +613,25 @@ def close_issue(issue_id: int, slug: str, checks, texts, why_extra="",
     io.open(p, "w", encoding="utf-8", newline="\n").write(
         "\n".join(lines) + "\n")
 
+    # ★★受領証を書く★★（2026-09-17・閉じる入口を1本にする）
+    #   ★これは「確かめた」という**申告**であって、通行証ではない★＝
+    #   受け取った側は中の検査を**その場でもう一度やり直す**。
+    #   ＝申告だけでは閉じられないので、偽物を書いても意味がない。
+    rp = os.path.join(ops, f"close_receipt_{issue_id}.json")
+    io.open(rp, "w", encoding="utf-8", newline="\n").write(
+        json.dumps({"schema": RECEIPT_SCHEMA, "issue_id": int(issue_id),
+                    "slug": slug, "commit": head0,
+                    "issued_at": datetime.now().isoformat(timespec="seconds"),
+                    "conditions": done}, ensure_ascii=False, indent=1))
+
+    # ★どの台帳を書くかを明示して渡す★（2026-09-17）
+    #   ★なぜ★＝確かめた台帳と、書き換える台帳が同じであることを
+    #   両者の既定値がたまたま一致していることに頼らない。
+    #   （これが無いと、通しの試験が本番の台帳を書き換えてしまう＝罠㉗）
     r = subprocess.run(
-        [sys.executable, os.path.join(_S, "open_issues.py"), "close",
-         "--id", str(issue_id), "--reason-file", p],
+        [sys.executable, os.path.join(_S, "open_issues.py"),
+         "--file", LEDGER, "close",
+         "--id", str(issue_id), "--reason-file", p, "--receipt", rp],
         cwd=BASE, capture_output=True, text=True, encoding="utf-8",
         errors="replace")
     out = (r.stdout or "").strip() or (r.stderr or "").strip()
@@ -571,29 +664,39 @@ def main() -> int:
                          "（自由文をシェルに書かない・鉄則1c）")
     ap.add_argument("--why", default="",
                     help="2AIがそう決めた理由（記録に残す）")
-    ap.add_argument("--site", action="store_true",
-                    help="機種に紐づかない案件を、古い順に少しだけ出す")
+    ap.add_argument("--due", action="store_true",
+                    help="★閉じる回で読む案件を出す★"
+                         "（機種の段階によらず・未提示→最後に出した日の古い順）")
     ap.add_argument("--limit", type=int, default=2,
-                    help="--site で出す件数（既定 2）")
+                    help="--due で出す件数（既定 2）")
     ap.add_argument("--record", action="store_true",
-                    help="--site で出したものに日付を付ける（次は後ろへ回る）")
+                    help="出したものに日付を付ける（次は後ろへ回る）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
-    if a.site:
+    if a.due:
         today = datetime.now().strftime("%Y-%m-%d")
-        got = for_site(a.limit, today)
-        print(f"機種に紐づかない案件から {len(got)} 件（古い順）")
+        got = for_due(a.limit, today)
+        print(f"閉じる回で読む案件 {len(got)} 件"
+              "（未提示→最後に出した日の古い順）")
         for r in got:
+            cond = r.get("resolution_condition")
             print(f"\n  #{r.get('id')} [{r.get('severity') or '-'}] "
-                  f"{str(r.get('title'))[:110]}")
+                  f"{r.get('slug')}: {str(r.get('title'))[:100]}")
             print(f"    {str(r.get('detail') or '')[:400]}")
+            if isinstance(cond, dict):
+                print(f"    ★登録ずみの閉じる条件★ {cond.get('check')} "
+                      f"{cond.get('args')}（{cond.get('why')}）")
+                for _w in condition_stale(cond):
+                    print("    ★" + _w + "★")
         if got:
-            print("\n★これは「読む材料」です★"
-                  "（機種の担当順には割り込みません）")
-            print("★閉じるのは今までどおり★＝"
-                  "python scripts/ledger_sweep.py --slug <機種> --close <番号> …")
+            print("\n★記事を読んで、直っているなら閉じる検査を名指ししてください★")
+            print("  python scripts/ledger_sweep.py --slug <機種> "
+                  "--close <番号> --check <検査名> …")
+            print("★直っていなければ、その回を数えます★")
+            print("  python scripts/open_issues.py attempt --id <番号> "
+                  "--round <この回の名前> --note \"試したこと\"")
         if a.record and got:
             mark_shown([r.get("id") for r in got], today)
             print(f"次は後ろへ回します: {[r.get('id') for r in got]}")
@@ -823,6 +926,80 @@ def selftest() -> int:
       os.path.basename(_state_path()) != "state.json")
     t("　★専用の置き場を使う★",
       os.path.basename(_state_path()) == "ledger_site_state.json")
+
+    # ------------------------------------------------ 検査の引数を案件から組む
+    # ★★直す前は機種しか渡していなかった★★（2026-09-17・Codexの指摘）
+    #   ＝機種のほかに引数が要る検査は、名簿に足しても**呼べなかった**。
+    t("★条件を持たない案件は、今までどおり機種だけを渡す★",
+      args_for_check("confirmed_value_recorded", "dmm_5086", {})
+      == {"slug": "dmm_5086"})
+    _rowc = {"slug": "dmm_5086", "resolution_condition": {
+        "check": "confirmed_value_recorded",
+        "args": {"field": "gameplay#normal_cz"}}}
+    t("★★案件に登録した引数が、検査まで届く★★",
+      args_for_check("confirmed_value_recorded", "dmm_5086", _rowc)
+      == {"slug": "dmm_5086", "field": "gameplay#normal_cz"})
+    t("　★別の検査には、その条件の引数を混ぜない★",
+      args_for_check("text_gone", "dmm_5086", _rowc) == {"slug": "dmm_5086"})
+    t("★★機種は案件の行から固定する★★"
+      "（条件の側で別の機種に差し替えられないこと）",
+      args_for_check("confirmed_value_recorded", "dmm_5086",
+                     {"slug": "dmm_5086", "resolution_condition": {
+                         "check": "confirmed_value_recorded",
+                         "args": {"slug": "hokuto", "field": "f"}}})
+      == {"slug": "dmm_5086", "field": "f"})
+
+    # ★★登録した条件は静かに古くなる★★（2026-09-17）
+    #   版が上がると閉じられなくなるのに、理由がどこにも出なかった。
+    _live = {"check": "confirmed_value_recorded",
+             "version": _rc.CHECKS["confirmed_value_recorded"]["version"],
+             "args": {"field": "ceiling"}}
+    t("　★いまの版と同じ条件は、何も言わない★", condition_stale(_live) == [])
+    t("★★検査の版が変わった条件は、その場で知らせる★★"
+      "（その案件だけ、理由の分からないまま閉じられなくなる）",
+      bool(condition_stale(dict(_live, version=999))))
+    t("★★名簿から消えた検査の条件も知らせる★★",
+      bool(condition_stale(dict(_live, check="そんな検査はありませんXYZ"))))
+    t("★★観測どまりに変わった検査の条件も知らせる★★",
+      bool(condition_stale({"check": "strategy_vs_checker", "version":
+                            _rc.CHECKS["strategy_vs_checker"]["version"],
+                            "args": {}})))
+
+    # ------------------------------------------------ 公開の判定は台帳と別
+    # ★★台帳を閉じても、公開してよいかの判定は動かない★★
+    #   （2026-09-17・Codexの条件①「公開判定は従来どおり独立」）
+    #   ★なぜ要るか★＝閉じる工程を「記事を直す」から切り離したので、
+    #   ★まだ公開していない機種の案件も閉じられるようになった★。
+    #   もし台帳が公開の判定に効いていたら、
+    #   ★案件を閉じた瞬間に、中身の薄い新台が検索に載る★。
+    import ast as _ast
+    _pd_src = io.open(os.path.join(_S, "page_decision.py"),
+                      encoding="utf-8").read()
+    _pd_tree = _ast.parse(_pd_src)
+    _imports = set()
+    for _n in _ast.walk(_pd_tree):
+        if isinstance(_n, _ast.Import):
+            _imports |= {al.name.split(".")[0] for al in _n.names}
+        elif isinstance(_n, _ast.ImportFrom):
+            _imports.add(str(_n.module or "").split(".")[0])
+    t("★★機種の区分を決める側は、台帳を一切読まない★★"
+      "（読むようになったら、案件を閉じるだけで公開の線が動く）",
+      "open_issues" not in _imports)
+    import page_decision as _pd
+    # ★判定書は本物の発行器に作らせる★（手で書いた偽物を採点しない・罠①）
+    _pending = {"slug": "zz_pending", "name": "試験用",
+                "publication_policy": _pd.SCHEMA,
+                "page_decision": _pd.decide_for_schema(
+                    {}, _pd.SCHEMA, {"mode": "normal"}, "2026-09-17")}
+    _cls1 = _pd.machine_class(_pending, {"mode": "normal"})
+    _keep_bs = _oi_mod.blocking_slugs
+    try:
+        _oi_mod.blocking_slugs = lambda *a, **k: {}      # ★案件を全部閉じた状態★
+        _cls2 = _pd.machine_class(_pending, {"mode": "normal"})
+    finally:
+        _oi_mod.blocking_slugs = _keep_bs
+    t("　★案件が1件も無くなっても、区分は AUTO_PENDING のまま★",
+      _cls1 == "AUTO_PENDING" and _cls2 == "AUTO_PENDING")
 
     t("★★裏取り待ちの案件は、逐語が消えただけでは閉じない★★"
       "（＝2026-08-30に #155 を誤って閉じた型）",

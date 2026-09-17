@@ -497,6 +497,197 @@ def selftest() -> int:
         t("　後片付けが実際にできた（残ったもの: %s）"
           % ("なし" if not stuck else "、".join(stuck)), not stuck)
 
+    # ------------------------------------------------ 閉じる入口を1本にした守り
+    # ★★ここが緩むと、確かめずに閉じる道が戻る★★（2026-09-17）
+    #   実測＝閉じた414件のうち、機械が確かめて閉じたのは29件だけだった。
+    #   ★形の検査は純粋な関数にしてある★＝gitの状態に左右されないので、
+    #   手元でもCIでも同じに動く（検査そのものをやり直す部分は
+    #   `recheck.closeable` が持っていて、そちらは木が綺麗なことを求める）。
+    _row = {"id": 7, "slug": "dmm_5086", "status": "open"}
+    _good = {"schema": RECEIPT_SCHEMA, "issue_id": 7, "slug": "dmm_5086",
+             "conditions": [{"condition": {"check": "x"},
+                             "observation_digest": "abc"}]}
+    t("★★形の整った受領証は通る★★（断るだけの守りは、いつか全部断る）",
+      _receipt_problems(_good, 7, _row) == "")
+    t("　★受領証が無い（None）なら断る★",
+      bool(_receipt_problems(None, 7, _row)))
+    t("★★版が違う受領証は断る★★（形を変えたのに古い受領証で閉じられる）",
+      bool(_receipt_problems(dict(_good, schema="なにか別の版"), 7, _row)))
+    t("★★別の案件の受領証では閉じない★★"
+      "（1件ぶん確かめて、別の案件を閉じられてしまう）",
+      bool(_receipt_problems(dict(_good, issue_id=8), 7, _row)))
+    t("★★別の機種の受領証では閉じない★★"
+      "（他機種の控えで通してしまう）",
+      bool(_receipt_problems(dict(_good, slug="hokuto"), 7, _row)))
+    t("★★検査が1件も書かれていない受領証では閉じない★★（空で閉じない）",
+      bool(_receipt_problems(dict(_good, conditions=[]), 7, _row)))
+    t("★★確かめた時の指紋が無い受領証では閉じない★★"
+      "（台帳の外にある控えは、コミットの照合では覆えない）",
+      bool(_receipt_problems(
+          dict(_good, conditions=[{"condition": {"check": "x"}}]), 7, _row)))
+
+    # ★★案件と検査を構造で結び付ける★★（2026-09-17・Codexの指摘）
+    #   ★直す前★＝閉じる側は番号・機種・状態しか見ていなかったので、
+    #   ★その案件と何の関係もない検査でも、通りさえすれば閉じられた★。
+    _bound = dict(_row)
+    _bound["resolution_condition"] = {
+        "check": "confirmed_value_recorded", "version": 1,
+        "args": {"field": "gameplay#normal_cz"}}
+    _hit = [{"condition": {"check": "confirmed_value_recorded",
+                           "args": {"slug": "dmm_5086",
+                                    "field": "gameplay#normal_cz"}},
+             "observation_digest": "d"}]
+    t("★条件を登録していない案件は、今までどおり通る★",
+      _condition_binds_row(_row, _hit) == "")
+    t("★★登録した条件と同じ検査・同じ引数なら通る★★",
+      _condition_binds_row(_bound, _hit) == "")
+    t("★★検査の名前が違えば閉じない★★",
+      bool(_condition_binds_row(
+          _bound, [{"condition": {"check": "text_gone", "args": {}},
+                    "observation_digest": "d"}])))
+    t("★★同じ検査でも、別の項目を見ていたら閉じない★★"
+      "（値は記録済みだが、案件の中身は別、という取り違え）",
+      bool(_condition_binds_row(
+          _bound, [{"condition": {"check": "confirmed_value_recorded",
+                                  "args": {"slug": "dmm_5086",
+                                           "field": "別の項目"}},
+                    "observation_digest": "d"}])))
+    t("★★機種は案件の行から固定する★★"
+      "（受領証の自己申告だと、別の機種の控えで通せる）",
+      bool(_condition_binds_row(
+          _bound, [{"condition": {"check": "confirmed_value_recorded",
+                                  "args": {"slug": "hokuto",
+                                           "field": "gameplay#normal_cz"}},
+                    "observation_digest": "d"}])))
+    # ★★条件の側が機種を名乗っていても、案件の行が勝つ★★
+    #   ★これを見ないと★＝「無ければ入れる」に変えるだけで、
+    #   登録した条件に別の機種を書いておけば、その機種の控えで閉じられる。
+    _sneak = dict(_row)
+    _sneak["resolution_condition"] = {
+        "check": "confirmed_value_recorded", "version": 1,
+        "args": {"slug": "hokuto", "field": "gameplay#normal_cz"}}
+    t("★★登録した条件が別の機種を名乗っていても、案件の機種で照合する★★",
+      bool(_condition_binds_row(
+          _sneak, [{"condition": {"check": "confirmed_value_recorded",
+                                  "args": {"slug": "hokuto",
+                                           "field": "gameplay#normal_cz"}},
+                    "observation_digest": "d"}]))
+      and _condition_binds_row(
+          _sneak, [{"condition": {"check": "confirmed_value_recorded",
+                                  "args": {"slug": "dmm_5086",
+                                           "field": "gameplay#normal_cz"}},
+                    "observation_digest": "d"}]) == "")
+
+    # -------------------------------------- 本物の入口を通す（罠③＝直接呼びだけにしない）
+    # ★★関数だけを試すと、呼び出し行を消したときに緑のまま★★
+    #   ここでは `cmd_close` / `cmd_attempt` を本当に呼ぶ。
+    #   ★本番の台帳は触らない★（罠㉗＝対照実験で本物の案件を1件消した）
+    _d2 = tempfile.mkdtemp(prefix="open_issues_close_test_")
+    _keep_lock2 = LOCK_PATH
+    _keep_roots2 = TEXT_ROOTS
+    try:
+        # ★理由の文は一時の置き場から読ませる★
+        #   （無人の印を立てる試験なので、直接指定は機械が断る＝正しい）
+        globals()["TEXT_ROOTS"] = (Path(_d2),)
+        _why2 = Path(_d2) / "why.txt"
+        _why2.write_text("機械では確かめられないので人の判断で閉じます\n",
+                         encoding="utf-8")
+        _led = Path(_d2) / "open_issues.json"
+        _led.write_text(json.dumps({"next_id": 2, "issues": [
+            {"id": 1, "slug": "zz_test", "kind": "external_value",
+             "source": "manual", "status": "open", "title": "試験用",
+             "detail": "試験用", "severity": "CRITICAL",
+             "first_seen": "2026-09-01", "last_seen": "2026-09-01"}]},
+            ensure_ascii=False), encoding="utf-8")
+
+        class _A:
+            def __init__(self, **kw):
+                self.__dict__.update(kw)
+
+        def _st():
+            return json.loads(_led.read_text(encoding="utf-8"))["issues"][0]
+
+        _rc0 = cmd_close(_led, _A(id=1, reason="試験のため", reason_file="",
+                                  receipt="", owner_decision=False))
+        t("★★受領証が無ければ閉じない★★"
+          "（確かめずに閉じる裏口＝閉じた414件のうち385件が通っていた道）",
+          _rc0 != 0 and _st()["status"] == "open")
+        # ★★形の関門を「呼んでいる」ことまで見る★★（罠③）
+        #   ★関数だけを直接試すと、呼び出し行を消しても緑のまま★。
+        #   ここは読める受領証を渡すので、読み込みの失敗には助けられない。
+        _bad_rp = Path(_d2) / "bad_receipt.json"
+        _bad_rp.write_text(json.dumps(
+            {"schema": RECEIPT_SCHEMA, "issue_id": 999, "slug": "zz_test",
+             "conditions": [{"condition": {"check": "text_gone"},
+                             "observation_digest": "d"}]},
+            ensure_ascii=False), encoding="utf-8")
+        #   ★断った「理由の文」まで見る★（罠㉚）＝
+        #   奥にも守りがあるので「閉じなかった」だけでは、
+        #   この関門を通ったのかどうかが分からない。
+        import contextlib as _ctx2
+        import io as _io2
+        _buf2 = _io2.StringIO()
+        with _ctx2.redirect_stdout(_buf2):
+            _rc0b = cmd_close(_led, _A(id=1, reason="試験のため",
+                                       reason_file="",
+                                       receipt=str(_bad_rp),
+                                       owner_decision=False))
+        _msg2 = _buf2.getvalue()
+        t("　★読めるが別の案件の受領証は、形の関門が名指しで断る★"
+          "（形の関門を呼んでいることの証明）",
+          _rc0b != 0 and _st()["status"] == "open" and "#999" in _msg2)
+
+        # ★無人タスクが動いている最中は、運営者判断の道も使えない★
+        globals()["LOCK_PATH"] = Path(_d2) / "task.lock"
+        LOCK_PATH.write_text(json.dumps(
+            {"task": "zz-task",
+             "heartbeat": datetime.datetime.now().isoformat()},
+            ensure_ascii=False), encoding="utf-8")
+        _rc1 = cmd_close(_led, _A(id=1, reason="",
+                                  reason_file=str(_why2), receipt="",
+                                  owner_decision=True))
+        t("★★無人タスクの最中は、運営者判断の道でも閉じない★★"
+          "（自動で回る道に紛れると、機械が確かめた件数が嘘になる）",
+          _rc1 != 0 and _st()["status"] == "open")
+        LOCK_PATH.unlink()
+        _rc2 = cmd_close(_led, _A(id=1, reason="",
+                                  reason_file=str(_why2), receipt="",
+                                  owner_decision=True))
+        t("　★無人が動いていなければ、運営者判断で閉じられる★"
+          "（断るだけの守りは、いつか全部断る）",
+          _rc2 == 0 and _st()["status"] == "closed")
+        t("　★人の手で閉じたことが別の印で残る★"
+          "（残らないと、自動化が進んだのか後退したのかが分からない）",
+          _st().get("closed_by") == "owner")
+
+        # ------------------------------------------ 回数の数え方
+        _led.write_text(json.dumps({"next_id": 2, "issues": [
+            {"id": 1, "slug": "zz_test", "kind": "external_value",
+             "source": "manual", "status": "open", "title": "試験用",
+             "detail": "試験用", "severity": "CRITICAL",
+             "first_seen": "2026-09-01", "last_seen": "2026-09-01"}]},
+            ensure_ascii=False), encoding="utf-8")
+        cmd_attempt(_led, _A(id=1, note="", round_id="r1",
+                             outcome="unresolved"))
+        cmd_attempt(_led, _A(id=1, note="", round_id="r1",
+                             outcome="unresolved"))
+        t("★★同じ回は二度数えない★★"
+          "（タスクが落ちてやり直しただけで3回に達し、人へ回っていた）",
+          int(_st().get("attempts") or 0) == 1)
+        cmd_attempt(_led, _A(id=1, note="", round_id="r2", outcome="error"))
+        t("★★仕組みの都合で動かせなかった回は数えない★★"
+          "（利用制限・時間切れ・ロックだけで人へ回る）",
+          int(_st().get("attempts") or 0) == 1
+          and int(_st().get("errors") or 0) == 1)
+        cmd_attempt(_led, _A(id=1, note="", round_id="r3",
+                             outcome="unresolved"))
+        t("　★別の回はちゃんと数える★（数えないほうへ倒れていない）",
+          int(_st().get("attempts") or 0) == 2)
+    finally:
+        globals()["LOCK_PATH"] = _keep_lock2
+        globals()["TEXT_ROOTS"] = _keep_roots2
+        shutil.rmtree(_d2, ignore_errors=True)
+
     ng = sum(1 for _, o in results if not o)
     print()
     print("%d/%d 合格" % (len(results) - ng, len(results)))
@@ -674,6 +865,17 @@ def cmd_attempt(path, args):
 
     3回目で「人に知らせる番」と表示する。
     ★数えるのは道具の側★＝手順書に回数を書くと、いつか合わなくなる。
+
+    ★★同じ回を二度数えない★★（2026-09-17・Codexの指摘）
+      ★直す前★＝呼ぶたびに増えていたので、
+      ★タスクが途中で落ちて同じ晩にやり直しただけで3回に達した★。
+      ＝まだ材料を変えて試してもいないのに「人に知らせる番」になる。
+      いまは回に名前（--round）を付け、同じ名前は1回しか数えない。
+
+    ★★決まらなかったのか、動かせなかったのかを分ける★★（同）
+      `--outcome error`（利用制限・時間切れ・ロック・読めない）は**数えない**。
+      仕組みの都合で人へ回してしまうのは、`repair_journal` で既に
+      「1回に数えない」と決めた線と同じ。
     """
     data = _load(path)
     hit = next((i for i in data["issues"] if i.get("id") == args.id), None)
@@ -683,8 +885,30 @@ def cmd_attempt(path, args):
     if hit.get("status") != "open":
         print(f"#{args.id} はすでに解決済みです（やり直しは要りません）")
         return 0
-    hit["attempts"] = int(hit.get("attempts") or 0) + 1
+    outcome = str(getattr(args, "outcome", "") or "unresolved")
+    if outcome not in ("unresolved", "error"):
+        raise SystemExit("--outcome は unresolved か error です")
     hit["last_seen"] = _today()
+    if outcome == "error":
+        # ★数えないが、黙って消さない★（何回つまずいたかは残す）
+        hit["errors"] = int(hit.get("errors") or 0) + 1
+        _save(path, data)
+        print(f"#{args.id} 仕組みの都合で動かせませんでした"
+              f"（回数に数えません／通算 {hit['errors']} 回）")
+        return 0
+    rid = str(getattr(args, "round_id", "") or "").strip()
+    if not rid:
+        raise SystemExit("★--round（この回の名前）が要ります★"
+                         "＝同じ回を二度数えないため")
+    done = hit.setdefault("attempt_rounds", [])
+    if rid in done:
+        print(f"#{args.id} この回（{rid}）はもう数えてあります"
+              f"（いま {int(hit.get('attempts') or 0)} 回目）")
+        _save(path, data)
+        return 0
+    done.append(rid)
+    del done[:-ASK_MAX_ATTEMPTS * 2]
+    hit["attempts"] = int(hit.get("attempts") or 0) + 1
     if args.note:
         notes = hit.setdefault("attempt_notes", [])
         notes.append(f"{_today()}: {args.note}")
@@ -788,29 +1012,225 @@ def cmd_digest(path, args):
         if it.get("detail"):
             first_line = str(it["detail"]).splitlines()[0]
             print(f"    {first_line}")
-    print(f"（計{len(items)}件。対応後は python scripts/open_issues.py close --id N --reason \"...\" でクローズ）")
+    print(f"（計{len(items)}件。★閉じるのは機械が確かめたときだけ★＝"
+          "python scripts/ledger_sweep.py --slug <機種> --close N "
+          "--check <検査名> …）")
     print("（対応方法: このメールをClaude Codeのセッションに貼り付けて「対応して」と伝えるだけでOK。裏取り→修正→closeまで処理されます）")
     return 0
 
 
+# ---------------------------------------------------------------- 閉じるときの受領証
+# ★★閉じる入口を本当に1本にする★★（2026-09-17・Codexの指摘）
+#   ★直す前★＝この close は理由の文章だけで閉じていた。
+#   ＝機械が検査をやり直す仕組み（ledger_sweep）を**素通りできた**。
+#   しかも毎朝のメールが、その素通りする呼び方を案内していた
+#   ＝★裏口のほうが広く知られていた★。
+#   実測（2026-09-17）＝閉じた414件のうち、機械が確かめて閉じたのは29件だけ。
+#
+# ★★受領証は「信じる」ものではない★★＝中身は
+#   「どの案件を・どの検査で確かめたか」という**申告**でしかない。
+#   ★この close は、その検査を自分でもう一度やり直す★（recheck.closeable）。
+#   ＝でたらめな受領証を書いても、検査が通らなければ閉じない。
+#   ★これは認可ではない★（同じ権限なら誰でもファイルを書ける）。
+#   止めているのは「確かめずに閉じること」であって、悪意ではない。
+RECEIPT_SCHEMA = "ledger-close-receipt/v1"
+
+
+def _receipt_problems(rec, issue_id: int, row: dict) -> str:
+    """★受領証が、この案件のものとして形を満たしているか★ → 問題の文（無ければ空）
+
+    ★中身の正しさは見ない★＝検査をやり直すのは呼び出し側。
+    ここは「どの案件の話か」がずれていないかだけを見る。
+    """
+    if not isinstance(rec, dict):
+        return "受領証がJSONの辞書ではありません"
+    if str(rec.get("schema") or "") != RECEIPT_SCHEMA:
+        return (f"受領証の版が違います（{rec.get('schema')!r} / "
+                f"いま {RECEIPT_SCHEMA}）")
+    if rec.get("issue_id") != issue_id:
+        return (f"受領証は #{rec.get('issue_id')} のものです"
+                f"（閉じようとしているのは #{issue_id}）")
+    if str(rec.get("slug") or "") != str(row.get("slug") or ""):
+        return (f"受領証の機種は {rec.get('slug')!r} で、"
+                f"案件の {row.get('slug')!r} と違います")
+    conds = rec.get("conditions")
+    if not isinstance(conds, list) or not conds:
+        return "受領証に、やり直す検査が1件も書かれていません"
+    for c in conds:
+        if not isinstance(c, dict) or not isinstance(c.get("condition"), dict):
+            return "受領証の検査の書き方が壊れています"
+        if not str(c.get("observation_digest") or ""):
+            return "受領証に、確かめた時の指紋がありません"
+    return ""
+
+
+def _condition_binds_row(row: dict, conds: list) -> str:
+    """★案件が「閉じる条件」を持っているなら、それを必ず通す★ → 問題の文
+
+    （2026-09-17・Codexの指摘＝案件と検査引数を構造的に結合する）
+    ★何が起きていたか★＝閉じる側は番号・機種・状態しか見ていなかったので、
+    ★その案件と何の関係もない検査でも、通りさえすれば閉じられた★。
+    実例＝ある機種の値は先月そろっていたが、案件の中身は
+    「表記ゆれを記録できない**仕組み**」だった
+    ＝値が記録されている検査は通るが、★案件は直っていない★。
+
+    ★機種は案件の行から取る★（受領証に書かせない）＝
+    自己申告にすると、別の機種の控えで通してしまう。
+    """
+    want = row.get("resolution_condition")
+    if not isinstance(want, dict):
+        return ""                       # ★条件が無い案件は今までどおり★
+    w_check = str(want.get("check") or "")
+    w_args = dict(want.get("args") or {})
+    w_args["slug"] = str(row.get("slug") or "")     # ★行から固定★
+    for c in conds:
+        cond = c.get("condition") or {}
+        if str(cond.get("check") or "") != w_check:
+            continue
+        if dict(cond.get("args") or {}) == w_args:
+            return ""
+    return (f"この案件には閉じる条件（{w_check}）が登録されています。"
+            "受領証にその検査がありません")
+
+
 def cmd_close(path, args):
+    """★閉じる★＝受領証の検査を**この場でやり直して**から書き換える。
+
+    ★運営者の判断で閉じる道も残す★（--owner-decision）＝
+    機械が確かめられない案件は実在する（例＝誤って閉じた案件の復元）。
+    ★ただし別の印で残す★（closed_by）＝
+    「機械が確かめた件数」を数えられなくなるのを防ぐ。
+    """
     args.reason = _read_text_arg(args.reason, args.reason_file, "reason")
     if not args.reason:
         raise SystemExit("★--reason または --reason-file が要ります★")
     data = _load(path)
-    for it in data["issues"]:
-        if it["id"] == args.id:
-            if it["status"] != "open":
-                print(f"#{args.id} は既にclosed（{it.get('resolved_date')}）")
-                return 0
-            it["status"] = "closed"
-            it["resolution"] = args.reason
-            it["resolved_date"] = _today()
-            _save(path, data)
-            print(f"案件 #{args.id} をクローズ: {args.reason}")
-            return 0
-    print(f"⚠ 案件 #{args.id} が見つかりません")
-    return 1
+    row = next((i for i in data["issues"] if i["id"] == args.id), None)
+    if row is None:
+        print(f"⚠ 案件 #{args.id} が見つかりません")
+        return 1
+    if row["status"] != "open":
+        print(f"#{args.id} は既にclosed（{row.get('resolved_date')}）")
+        return 0
+
+    closed_by = "machine"
+    if getattr(args, "owner_decision", False):
+        # ★★運営者が「機械では確かめられない」と判断したときだけ★★
+        #   ★これは塞いだ裏口を開け直す形なので、条件を厳しくする★
+        #   （2026-09-17・これはCodexの指摘ではなく、こちらで見つけた穴）
+        #   ①★無人タスクが動いている間は使えない★＝
+        #     自動で回る道に紛れ込むと、「機械が確かめて閉じた」件数が
+        #     嘘になり、★仕組みが壊れても誰も気づかない★。
+        #     （この形は自由文の受け取りで既に使っている守り）
+        #   ②★別の印で残す★＝あとから「人の手が何件要ったか」を数える。
+        #     数えられないと、自動化が進んだのか後退したのかが分からない。
+        who = _running_task()
+        if who:
+            print(f"★閉じません★ いま無人タスク（{who}）が動いています。"
+                  "運営者の判断で閉じる道は、無人の最中には使えません")
+            return 1
+        closed_by = "owner"
+        print("★運営者の判断で閉じます★（機械の検査は通していません）")
+    else:
+        rp = str(getattr(args, "receipt", "") or "")
+        if not rp:
+            print("★閉じません★ 受領証（--receipt）がありません。"
+                  "閉じる入口は python scripts/ledger_sweep.py "
+                  "--slug <機種> --close <番号> …です")
+            return 1
+        try:
+            with open(rp, encoding="utf-8") as f:
+                rec = json.load(f)
+        except Exception as e:                               # noqa: BLE001
+            print(f"★閉じません★ 受領証を読めません: {rp}（{e}）")
+            return 1
+        ng = _receipt_problems(rec, args.id, row)
+        if ng:
+            print(f"★閉じません★ {ng}")
+            return 1
+        conds = rec["conditions"]
+        ng = _condition_binds_row(row, conds)
+        if ng:
+            print(f"★閉じません★ {ng}")
+            return 1
+        # ★★申告を信じず、その場でやり直す★★
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import recheck as _rc
+        except Exception as e:                               # noqa: BLE001
+            print(f"★閉じません★ 検査の道具を読めません: {e}")
+            return 1
+        for c in conds:
+            cond = dict(c["condition"])
+            ok, why, got = _rc.closeable(cond)
+            name = str(cond.get("check") or "?")
+            if not ok:
+                print(f"★閉じません★ {name} をやり直したら通りませんでした: "
+                      f"{why}")
+                return 1
+            # ★確かめた時と同じものを見ているか★＝
+            #   台帳の外にある控え（確定値・壊し方）はコミットで覆えないので、
+            #   指紋を見比べないと「昨日の合格」で閉じられる。
+            now_d = str((got or {}).get("observation_digest") or "")
+            if now_d != str(c.get("observation_digest") or ""):
+                print(f"★閉じません★ {name} で見たものが、"
+                      "受領証を書いた時と変わっています")
+                return 1
+            print(f"  ○ {name} をやり直しました")
+
+    row["status"] = "closed"
+    row["resolution"] = args.reason
+    row["resolved_date"] = _today()
+    row["closed_by"] = closed_by
+    _save(path, data)
+    print(f"案件 #{args.id} をクローズ（{closed_by}）: {args.reason}")
+    return 0
+
+
+def cmd_condition(path, args):
+    """★案件に「これが通れば直っている」という条件を登録する★（2026-09-17）
+
+    ★機種は書かせない★＝案件の行から取る（`_condition_binds_row` と同じ考え）。
+    ★決めるのは2AI★＝機械は、名簿にある閉じられる検査かどうかだけを見る。
+    """
+    why = _read_text_arg(args.why, args.why_file, "why")
+    if len(why) < 10:
+        raise SystemExit("★なぜその検査で直ったと言えるかを10字以上で★")
+    by = [s.strip() for s in str(args.by or "").split(",") if s.strip()]
+    if len(by) < 2:
+        raise SystemExit("★判断者が2つ要ります★（--by claude,codex）")
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import recheck as _rc
+    except Exception as e:                                   # noqa: BLE001
+        raise SystemExit(f"検査の名簿を読めません: {e}")
+    meta = _rc.CHECKS.get(args.check)
+    if meta is None:
+        raise SystemExit(f"★知らない検査です★: {args.check}")
+    if not meta.get("closeable"):
+        raise SystemExit(f"★観測どまりの検査です★: {args.check}")
+    cargs = {}
+    for kv in (args.arg or []):
+        if "=" not in kv:
+            raise SystemExit(f"--arg は 名前=値 の形で書きます: {kv!r}")
+        k, v = kv.split("=", 1)
+        cargs[k.strip()] = v
+    cargs.pop("slug", None)              # ★機種は行から固定する★
+    data = _load(path)
+    row = next((i for i in data["issues"] if i["id"] == args.id), None)
+    if row is None:
+        print(f"⚠ 案件 #{args.id} が見つかりません")
+        return 1
+    if row["status"] != "open":
+        print(f"#{args.id} は既にclosed（条件は登録しません）")
+        return 1
+    row["resolution_condition"] = {
+        "check": args.check, "version": meta["version"], "args": cargs,
+        "set_at": _today(), "set_by": by, "why": why,
+    }
+    _save(path, data)
+    print(f"#{args.id} に閉じる条件を登録しました: {args.check} {cargs}")
+    return 0
 
 
 def cmd_severity(path, args):
@@ -878,6 +1298,13 @@ def main():
     p = sub.add_parser("attempt", help="決まらなかった質問のやり直し回数を+1する")
     p.add_argument("--id", type=int, required=True)
     p.add_argument("--note", default="", help="何を試したか（短く）")
+    p.add_argument("--round", dest="round_id", default="",
+                   help="★この回の名前★（同じ名前は二度数えない。"
+                        "タスクが落ちてやり直しただけで3回に達するのを防ぐ）")
+    p.add_argument("--outcome", default="unresolved",
+                   choices=["unresolved", "error"],
+                   help="unresolved=決まらなかった（数える）／"
+                        "error=仕組みの都合で動かせなかった（数えない）")
 
     # ★送れたときだけ印を付ける★（送信の成否を確かめずに輪から外さない）
     sub.add_parser("notifications", help="まだ知らせていない質問")
@@ -891,13 +1318,31 @@ def main():
     p.add_argument("--reason", default="")
     p.add_argument("--reason-file", dest="reason_file", default="",
                    help="クローズ理由を書いたファイル（無人タスクはこちら）")
+    p.add_argument("--receipt", default="",
+                   help="★ledger_sweep が出した受領証★"
+                        "（中の検査をここでやり直してから閉じる）")
+    p.add_argument("--owner-decision", dest="owner_decision",
+                   action="store_true",
+                   help="★機械では確かめられない案件を、運営者の判断で閉じる★"
+                        "（無人タスクの最中は使えない・別の印で残る）")
+
+    p = sub.add_parser("condition",
+                       help="案件に「これが通れば直っている」条件を登録する")
+    p.add_argument("--id", type=int, required=True)
+    p.add_argument("--check", required=True, help="閉じられる検査の名前")
+    p.add_argument("--arg", action="append", default=[],
+                   help="検査に渡す引数（名前=値・複数可。★機種は書かない★）")
+    p.add_argument("--why", default="")
+    p.add_argument("--why-file", dest="why_file", default="",
+                   help="なぜその検査で直ったと言えるか（無人タスクはこちら）")
+    p.add_argument("--by", default="", help="判断者（例: claude,codex）")
 
     args = ap.parse_args()
     path = Path(args.file) if args.file else DEFAULT_FILE
     fn = {"add": cmd_add, "list": cmd_list, "digest": cmd_digest, "close": cmd_close,
           "severity": cmd_severity, "blocking": cmd_blocking,
           "questions": cmd_questions, "attempt": cmd_attempt,
-          "notified": cmd_notified,
+          "notified": cmd_notified, "condition": cmd_condition,
           "notifications": cmd_notifications}[args.cmd]
     sys.exit(fn(path, args))
 

@@ -172,6 +172,13 @@ jobs:
           python scripts/add_machine_run.py --selftest
           python scripts/open_issues.py --selftest
           python scripts/confirmed_values.py --selftest
+          # ★台帳を閉じる側も直接まわす★（2026-09-17）
+          #   ★直す前★＝この2本はCIの名簿に無く、壊し方の道具が
+          #   「壊す前が緑か」を測るときにだけ動いていた。
+          #   ＝ここが赤いとき「壊す前から赤い」としか出ず、
+          #   ★何が壊れたのかが名指しで出なかった★。
+          python scripts/ledger_sweep.py --selftest
+          python scripts/recheck.py --selftest
           # ★表示検査を、確かに自分のサーバーで行う道具★（台帳#493）
           #   控えたPIDと実際にポートを掴む番号が別物で、
           #   ★過去の残骸が検査に応答していた★（最古は5日間動きっぱなし）

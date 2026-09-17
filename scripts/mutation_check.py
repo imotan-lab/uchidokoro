@@ -4702,13 +4702,20 @@ MUTATIONS = [
         "why": "★1件でも通らなければ閉じない、をやめる"
                "（片方だけ確かめて閉じる＝#284の型）★",
         "file": "scripts/ledger_sweep.py",
-        "before": "        whys.append(f\"{'○' if ok else '×'} "
-                  "text_gone[{t[:30]}] ／ {why}\")\n"
-                  "        if not ok:\n"
-                  "            return False, whys",
-        "after": "        whys.append(f\"{'○' if ok else '×'} "
-                 "text_gone[{t[:30]}] ／ {why}\")\n"
-                 "        if not ok:\n            pass",
+        "before": "        if not _one({\"check\": \"text_gone\", "
+                  "\"version\": meta[\"version\"],\n"
+                  "                     \"args\": {\"slug\": slug, "
+                  "\"text\": t},\n"
+                  "                     \"expected_commit\": head}, "
+                  "f\"text_gone[{t[:30]}]\"):\n"
+                  "            return False, whys, done",
+        "after": "        if not _one({\"check\": \"text_gone\", "
+                 "\"version\": meta[\"version\"],\n"
+                 "                     \"args\": {\"slug\": slug, "
+                 "\"text\": t},\n"
+                 "                     \"expected_commit\": head}, "
+                 "f\"text_gone[{t[:30]}]\"):\n"
+                 "            pass",
         "run": ["scripts/ledger_sweep.py"],
     },
     {
@@ -5346,6 +5353,165 @@ MUTATIONS = [
         "before": "    return 1 <= len(head) <= _LABEL_MAX",
         "after": "    return False",
         "run": ["scripts/style_check.py"],
+    },
+    # ─── 2026-09-17・台帳を人の手なしで閉じる（閉じる入口を1本にする）────
+    {
+        "why": "★受領証の形を見る関門を、呼ばずに素通りする"
+               "（関数だけを試す試験は緑のまま＝罠③）★",
+        "file": "scripts/open_issues.py",
+        "before": "        ng = _receipt_problems(rec, args.id, row)",
+        "after": "        ng = \"\"",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★受領証の版を見ない（形を変えたのに、古い受領証で閉じられる）★",
+        "file": "scripts/open_issues.py",
+        "before": "    if str(rec.get(\"schema\") or \"\") != RECEIPT_SCHEMA:",
+        "after": "    if False:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★受領証がどの案件のものかを見ない（1件ぶん確かめて、別の案件を閉じられる）★",
+        "file": "scripts/open_issues.py",
+        "before": "    if rec.get(\"issue_id\") != issue_id:",
+        "after": "    if False:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★受領証の機種を見ない（別の機種の控えで通してしまう）★",
+        "file": "scripts/open_issues.py",
+        "before": "    if str(rec.get(\"slug\") or \"\") != str(row.get(\"slug\") or \"\"):",
+        "after": "    if False:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★検査が1件も書かれていない受領証で閉じる（空で閉じられる）★",
+        "file": "scripts/open_issues.py",
+        "before": "    if not isinstance(conds, list) or not conds:",
+        "after": "    if not isinstance(conds, list):",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★確かめた時の指紋が無い受領証で閉じる（台帳の外にある控えは、コミットの照合では覆えない）★",
+        "file": "scripts/open_issues.py",
+        "before": "        if not str(c.get(\"observation_digest\") or \"\"):",
+        "after": "        if False:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★案件に登録した閉じる条件を見ない（その案件と何の関係もない検査でも、通りさえすれば閉じられる）★",
+        "file": "scripts/open_issues.py",
+        "before": "    want = row.get(\"resolution_condition\")\n    if not isinstance(want, dict):",
+        "after": "    want = None\n    if not isinstance(want, dict):",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★登録した条件の引数を照合しない（同じ検査なら、別の項目を見ていても閉じられる）★",
+        "file": "scripts/open_issues.py",
+        "before": "        if dict(cond.get(\"args\") or {}) == w_args:",
+        "after": "        if True:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★条件の機種を、案件の行から固定しない（受領証の自己申告で、別の機種の控えを通せる）★",
+        "file": "scripts/open_issues.py",
+        "before": "    w_args[\"slug\"] = str(row.get(\"slug\") or \"\")     # ★行から固定★",
+        "after": "    w_args.setdefault(\"slug\", str(row.get(\"slug\") or \"\"))",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★運営者の判断で閉じる道を、無人タスクの最中にも開ける（自動で回る道に紛れ、機械が確かめた件数が嘘になる）★",
+        "file": "scripts/open_issues.py",
+        "before": "        who = _running_task()\n        if who:",
+        "after": "        who = \"\"\n        if who:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★同じ回を何度でも数える（タスクが落ちてやり直しただけで3回に達し、人へ回る）★",
+        "file": "scripts/open_issues.py",
+        "before": "    if rid in done:",
+        "after": "    if False:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★仕組みの都合で動かせなかった回も数える（利用制限や時間切れだけで人へ回る）★",
+        "file": "scripts/open_issues.py",
+        "before": "    if outcome == \"error\":",
+        "after": "    if False:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★検査に渡す引数を、案件の行から組まない（機種のほかに引数が要る検査は、名簿に足しても呼べない）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    want = (row or {}).get(\"resolution_condition\")",
+        "after": "    want = None",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★検査の名前を見ずに、どの検査へも条件の引数を混ぜる★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    if isinstance(want, dict) and str(want.get(\"check\") or \"\") == check:",
+        "after": "    if isinstance(want, dict):",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★検査に渡す機種を、案件の行から固定しない（登録した条件の側で、別の機種へ差し替えられる）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "            a.update({str(k): v for k, v in extra.items()})\n    a[\"slug\"] = slug",
+        "after": "            a.update({str(k): v for k, v in extra.items()})",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★機種の区分を決める側が台帳を読む（案件を閉じるだけで、中身の薄い新台が検索に載る）★",
+        "file": "scripts/page_decision.py",
+        "before": "import safe_json as _sj",
+        "after": "import safe_json as _sj\nimport open_issues as _oi_break",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★控えを甘い読み方で読む"
+               "（契約を満たさない記録・出典が1社だけの値でも、"
+               "裏取り待ちの案件が閉じる）★",
+        "file": "scripts/recheck.py",
+        "before": "        got = _cv.load(require_exists=True)",
+        "after": "        got = _cv.load(strict=False, require_exists=True)",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "★控えが読めないときに合格にする（確かめていないのに閉じる）★",
+        "file": "scripts/recheck.py",
+        "before": "        return _result(ERROR, f\"確定値の控えを読めません: {e}\", args)",
+        "after": "        return _result(PASS, f\"確定値の控えを読めません: {e}\", args)",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "★見た中身の指紋を返さない（確かめてから閉じるまでに控えが差し替わっても気づけない）★",
+        "file": "scripts/recheck.py",
+        "before": "    _obs = {\"record_sha256\": _sha(json.dumps(rec, ensure_ascii=False,",
+        "after": "    _obs = {\"record_sha256_\": _sha(json.dumps(rec, ensure_ascii=False,",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "★登録した条件の版が変わっても黙っている（その案件だけ、理由の分からないまま閉じられなくなる）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    if cond.get(\"version\") != meta.get(\"version\"):",
+        "after": "    if False:",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★名簿から消えた検査の条件を、生きているものとして扱う★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    meta = _rc.CHECKS.get(name)",
+        "after": "    meta = _rc.CHECKS.get(name) or "
+                 "{\"version\": cond.get(\"version\"), \"closeable\": True}",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★観測どまりに変わった検査の条件を、閉じられるものとして扱う★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    if not meta.get(\"closeable\"):\n        return [f\"登録した検査（{name}）は、いまは観測どまりです\"",
+        "after": "    if False:\n        return [f\"登録した検査（{name}）は、いまは観測どまりです\"",
+        "run": ["scripts/ledger_sweep.py"],
     },
 ]
 
