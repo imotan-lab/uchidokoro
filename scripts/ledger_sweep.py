@@ -306,7 +306,16 @@ def checks_bound_to_issue(row, checks, texts, guards) -> tuple:
     ★登録した条件は全部通す★（①はここで落ちる）。
     """
     if row_conditions(row):
-        return True, "案件に登録した条件で結び付いています"
+        # ★封（これで案件の全部を覆ったという宣言）も要る★
+        #   ＝条件が1件あるだけでは、案件に書かれた問題を
+        #   全部登録したことにならない（2026-09-17・Codexの指摘）。
+        #   ★中身の照合は台帳側に1つ★（`_condition_binds_row`）。
+        _seal = (row or {}).get("conditions_sealed")
+        if not isinstance(_seal, dict):
+            return False, ("この案件には「これで全部を覆った」という封が"
+                           "ありません。python scripts/open_issues.py seal "
+                           "--id <番号> --why-file <理由> --by claude,codex")
+        return True, "案件に登録した条件と封で結び付いています"
     return False, ("この案件には、閉じる条件が1件も登録されていません。"
                    "検査名や逐語だけでは、その案件が直った証拠になりません"
                    "（同じ機種で通る無関係な検査でも、"
@@ -328,10 +337,10 @@ def conditions_for_row(slug: str, row, head: str = "") -> list:
     """
     out = []
     for want in row_conditions(row):
-        a = dict(want.get("args") or {})
-        a["slug"] = slug                       # ★機種は行から固定★
-        out.append({"check": str(want.get("check") or ""),
-                    "version": want.get("version"), "args": a,
+        _c = str(want.get("check") or "")
+        # ★機種は行から固定★（★ただし機種を取る検査だけ★＝規則は台帳側に1つ）
+        a = _oi_mod.pin_slug(_c, want.get("args") or {}, slug)
+        out.append({"check": _c, "version": want.get("version"), "args": a,
                     "expected_commit": head or _head()})
     return out
 
@@ -973,7 +982,8 @@ def selftest() -> int:
                      "check": "model_code_gone", "version": 999,
                      "args": {}, "set_at": "2026-08-01",
                      "set_by": ["claude", "codex"],
-                     "why": "型式名が消えていれば直り"}]},
+                     "why": "型式名が消えていれば直り"}],
+                 "conditions_sealed": {"at": "2026-08-01"}},
             ]}, ensure_ascii=False))
         globals()["LEDGER"] = _fake
 
@@ -1056,9 +1066,15 @@ def selftest() -> int:
                             [])[0] is False)
     t("　★壊し方だけでも結び付きにしない★",
       checks_bound_to_issue(_plain, [], [], ["壊し方の名前"])[0] is False)
-    t("　★登録した条件があれば通る★",
+    t("　★条件はあるが封が無ければ通さない★"
+      "（条件1件だけで、案件の片方の問題を直さずに閉じられた）",
       checks_bound_to_issue(
           dict(_plain, resolution_conditions=[{"check": "model_code_gone"}]),
+          [], [], [])[0] is False)
+    t("　★条件と封がそろえば通る★",
+      checks_bound_to_issue(
+          dict(_plain, resolution_conditions=[{"check": "model_code_gone"}],
+               conditions_sealed={"at": "2026-09-17"}),
           [], [], [])[0] is True)
 
     # ★★登録した条件は、呼び出し側が何を渡しても全部やり直す★★

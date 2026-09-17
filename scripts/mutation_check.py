@@ -5542,16 +5542,69 @@ MUTATIONS = [
     {
         "why": "★登録した条件の機種を、案件の行から固定しない（登録の側で別の機種に差し替えられる）★",
         "file": "scripts/ledger_sweep.py",
-        "before": "        a[\"slug\"] = slug                       # ★機種は行から固定★",
-        "after": "        a.setdefault(\"slug\", slug)",
+        "before": "        a = _oi_mod.pin_slug(_c, want.get(\"args\") or {}, slug)",
+        "after": "        a = dict(want.get(\"args\") or {})",
         "run": ["scripts/ledger_sweep.py"],
     },
     {
         "why": "★登録した条件の版ではなく、いまの版で確かめる（検査が変わっても登録し直さずに閉じられる）★",
         "file": "scripts/ledger_sweep.py",
-        "before": "                    \"version\": want.get(\"version\"), \"args\": a,",
-        "after": "                    \"version\": (_rc.CHECKS.get(str(want.get(\"check\") or \"\")) or {}).get(\"version\"), \"args\": a,",
+        "before": "        out.append({\"check\": _c, \"version\": want.get(\"version\"), \"args\": a,",
+        "after": "        out.append({\"check\": _c, \"version\": (_rc.CHECKS.get(_c) or {}).get(\"version\"), \"args\": a,",
         "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★機種を取らない検査にも機種を渡す（機種に紐づかない案件＝実測111件が条件を登録すらできない）★",
+        "file": "scripts/open_issues.py",
+        "before": "    if \"slug\" in (meta.get(\"args_spec\") or {}):",
+        "after": "    if True:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★封（これで案件の全部を覆ったという宣言）が無くても閉じる（条件1件だけ登録して、もう片方の問題を直さずに閉じられる）★",
+        "file": "scripts/open_issues.py",
+        "before": ('    seal = row.get("conditions_sealed")\n'
+                   '    if not isinstance(seal, dict):'),
+        "after": ('    seal = {}\n'
+                  '    if not isinstance(seal, dict):'),
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★封をしたあと案件の本文が書き換わっても気づかない（覆っているか分からないまま閉じる）★",
+        "file": "scripts/open_issues.py",
+        "before": "    if str(seal.get(\"issue_digest\") or \"\") != issue_digest(row):",
+        "after": "    if False:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★封をしたあと条件を足しても気づかない（封の時点と違う顔ぶれで閉じられる）★",
+        "file": "scripts/open_issues.py",
+        "before": "    if list(seal.get(\"condition_keys\") or []) != keys:",
+        "after": "    if False:",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★閉じる側が、封の有無を見ない（台帳側だけの検査になり、片方を消せる）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "        if not isinstance(_seal, dict):",
+        "after": "        if False:",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★条件を足したときに、前の封を残す（そろっていないのに閉じられる状態へ戻る）★",
+        "file": "scripts/open_issues.py",
+        "before": "    row.pop(\"conditions_sealed\", None)",
+        "after": "    pass",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★未コミットのままでも条件を登録できる（一時の書き換えで検査を落として登録し、戻せば何も直さずに閉じられる）★",
+        "file": "scripts/open_issues.py",
+        "before": ('    if not _rc.repo_clean():\n'
+                   '        print("★登録しません★ 未コミットの変更があります"'),
+        "after": ('    if False:\n'
+                  '        print("★登録しません★ 未コミットの変更があります"'),
+        "run": ["scripts/open_issues.py"],
     },
 ]
 
