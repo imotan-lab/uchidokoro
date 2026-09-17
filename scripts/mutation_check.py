@@ -124,7 +124,7 @@ MUTATIONS = [
                   + chr(10) + '                and _mc_state in (None, "", "MATCH"):',
         "after": '        if r.get("identity_ok") and not (r.get("reason_codes") or []):',
         "run": ["scripts/add_machine_run.py"],
-        "issues": [694, 696],
+        "issues": [689, 694, 696],
     },
     {
         "why": "★2AI用の道具が、控えの取り込みに失敗しても静かに進む"
