@@ -284,77 +284,64 @@ def _html_ready(slug: str) -> bool:
     return os.path.exists(os.path.join(BASE, "machines", slug, "index.html"))
 
 
-def args_for_check(check: str, slug: str, row=None) -> dict:
-    """★その検査に渡す引数を、案件の行から組み立てる★（2026-09-17）
-
-    ★★直す前は `{"slug": slug}` しか渡していなかった★★（Codexの指摘）
-      ＝機種のほかに引数を要る検査（どの項目の値か、など）は
-      **呼べもしなかった**。名簿に足しても永久に使われない。
-
-    ★機種は必ず行から固定する★＝案件が名乗っている機種を使い、
-      登録された条件の側では上書きさせない
-      （別の機種の控えで通してしまうのを防ぐ）。
-    """
-    a = {"slug": slug}
-    want = (row or {}).get("resolution_condition")
-    if isinstance(want, dict) and str(want.get("check") or "") == check:
-        extra = want.get("args")
-        if isinstance(extra, dict):
-            a.update({str(k): v for k, v in extra.items()})
-    a["slug"] = slug
-    return a
-
-
-def version_for_check(check: str, row=None) -> int:
-    """★その検査を、どの版で確かめるか★（2026-09-17・Codexの指摘②）
-
-    ★★直す前は、いつも「いまの版」を入れていた★★＝
-      登録した条件が v1 でも、検査が v2 に変わっていれば
-      ★黙って v2 で確かめて閉じていた★。
-      `condition_stale` の警告は**表示だけ**で関門になっていなかった。
-      ＝「中身を読み直して条件を登録し直す」という決まりが、
-      守られなくても誰も止めなかった。
-    ★登録した版をそのまま入れる★＝`recheck.closeable` が
-      版の食い違いで断るので、必ず登録し直すことになる。
-    """
-    want = (row or {}).get("resolution_condition")
-    if isinstance(want, dict) and str(want.get("check") or "") == check:
-        return want.get("version")
-    meta = _rc.CHECKS.get(check) or {}
-    return meta.get("version")
+def row_conditions(row) -> list:
+    """★その案件に登録されている「閉じる条件」を全部★（読み方は台帳側に1つ）"""
+    return _oi_mod.row_conditions(row or {})
 
 
 def checks_bound_to_issue(row, checks, texts, guards) -> tuple:
-    """★その検査が、この案件と結び付いているか★ → (ok, 理由)
+    """★その案件に、閉じる条件が登録されているか★ → (ok, 理由)
 
-    ★★何が起きていたか★★（2026-09-17・Codexの指摘①・再現済み）
-      ★同じ機種で通る、案件と何の関係もない検査を1つ挙げるだけで閉じられた★。
-      実際に、ヤメ時の書き方の案件を `model_code_gone`（型式名が消えたか）で
-      閉じられることを確かめた。
+    ★★何が起きていたか★★（2026-09-17・Codexの指摘・どちらも再現した）
+      ①★同じ機種で通る、案件と無関係な検査を1つ挙げるだけで閉じられた★
+        （ヤメ時の書き方の案件を、型式名の検査で閉じられた）。
+      ②★案件の説明文そのものを「消えた逐語」にできた★
+        （「ヤメ時の説明が読みづらい」という説明文は**もともと記事に無い**ので、
+          `text_gone` が必ず通る＝1文字も直さずに閉じられた）。
 
-    ★結び付け方は3つ。どれか1つあればよい★
-      ① 案件に登録した条件（`resolution_condition`）を通している
-      ② 消えた逐語（`--text`）＝その案件の本文に在る文字（`texts_from_issue`）
-      ③ 壊し方（`--guard-mutation`）＝その壊し方が案件の番号を名乗っている
-    ★どれも無ければ閉じない★＝「通る検査を探してくる」だけで閉じられてしまう。
-
-    ★登録した条件が1つでも足りる理由★＝ほかに挙げた検査は**足し算**
-      （全部通らないと閉じない）なので、閉じやすくはならない。
-      1つの案件に問題が2つ書いてある場合も、片方を登録して
-      もう片方を `--check` で足せば、結び付きは保たれる。
+    ★★だから結び付けは「登録」の1本だけにした★★
+      ＝逐語も壊し方も、条件として**登録**してから使う。
+      登録の時点で「いまはまだ通らない」ことを機械が確かめるので、
+      あとで通ったことが**変化の証拠**になる（②はここで落ちる）。
+    ★登録した条件は全部通す★（①はここで落ちる）。
     """
-    want = (row or {}).get("resolution_condition")
-    if isinstance(want, dict):
+    if row_conditions(row):
         return True, "案件に登録した条件で結び付いています"
-    if texts:
-        return True, "案件の本文にある逐語で結び付いています"
-    if guards:
-        return True, "案件の番号を名乗る壊し方で結び付いています"
-    return False, ("この案件には、閉じる条件が登録されていません。"
-                   "検査名だけでは、その案件が直った証拠になりません"
-                   "（同じ機種で通る無関係な検査でも閉じられてしまうため）。"
+    return False, ("この案件には、閉じる条件が1件も登録されていません。"
+                   "検査名や逐語だけでは、その案件が直った証拠になりません"
+                   "（同じ機種で通る無関係な検査でも、"
+                   "案件の説明文そのものを逐語にしても閉じられてしまうため）。"
                    "python scripts/open_issues.py condition --id <番号> "
                    "--check <検査名> … で先に登録してください")
+
+
+def conditions_for_row(slug: str, row, head: str = "") -> list:
+    """★案件に登録した条件を、そのまま動かせる形にする★（2026-09-17）
+
+    ★機種は必ず案件の行から固定する★＝登録の側に別の機種が書いてあっても、
+      その機種の記事や控えで通してしまわない。
+    ★版も登録したものをそのまま入れる★＝検査が変わったら
+      `recheck.closeable` が版の食い違いで断るので、必ず登録し直すことになる。
+    ★切り出してある理由★＝木が汚れていても、
+      「何をどう組み立てたか」だけを試験で直接見られるようにするため
+      （合否は `closeable` が未コミットを見るので、手元では当てにできない）。
+    """
+    out = []
+    for want in row_conditions(row):
+        a = dict(want.get("args") or {})
+        a["slug"] = slug                       # ★機種は行から固定★
+        out.append({"check": str(want.get("check") or ""),
+                    "version": want.get("version"), "args": a,
+                    "expected_commit": head or _head()})
+    return out
+
+
+def stale_conditions(row) -> list:
+    """★登録した条件のうち、いま使えないもの★（理由の文の一覧）"""
+    out = []
+    for c in row_conditions(row):
+        out += condition_stale(c)
+    return out
 
 
 def condition_stale(cond) -> list:
@@ -401,7 +388,7 @@ def run_checks(slug: str, checks, texts, head: str = "",
     checks = list(checks or [])
     texts = list(texts or [])
     guards = list(guards or [])
-    if not checks and not texts and not guards:
+    if not checks and not texts and not guards and not row_conditions(row):
         return False, ["確かめる検査が1件もありません"], []
 
     # ★これだけでは閉じられない検査★は、逐語の確認と組でなければ通さない
@@ -423,15 +410,27 @@ def run_checks(slug: str, checks, texts, head: str = "",
                              str((got or {}).get("observation_digest") or "")})
         return ok
 
+    # ★★案件に登録した条件は、呼び出し側が何を渡しても必ず全部やり直す★★
+    #   （2026-09-17・Codexの指摘①・再現済み）
+    #   ★直す前は「渡された検査を全部やる」だけだった★ので、
+    #   「必要な検査を全部渡したか」は誰も見ていなかった
+    #   ＝1つの案件に問題が2つ書いてあるとき、
+    #   ★片方を登録して片方の検査だけ渡せば閉じられた★。
+    for want, cond in zip(row_conditions(row),
+                          conditions_for_row(slug, row, head)):
+        if not _one(cond, f"登録した条件[{want.get('check')}]"):
+            return False, whys, done
+
     for check in checks:
         meta = _rc.CHECKS.get(check)
         if not meta:
             return False, whys + [f"知らない検査です: {check}"], done
         if not meta.get("closeable"):
             return False, whys + [f"観測どまりの検査です: {check}"], done
-        if not _one({"check": check,
-                     "version": version_for_check(check, row),
-                     "args": args_for_check(check, slug, row),
+        if any(str(w.get("check") or "") == check for w in row_conditions(row)):
+            continue                 # ★登録ぶんはもう上でやり直している★
+        if not _one({"check": check, "version": meta.get("version"),
+                     "args": {"slug": slug},
                      "expected_commit": head}, check):
             return False, whys, done
     if texts and not _html_ready(slug):
@@ -642,7 +641,7 @@ def close_issue(issue_id: int, slug: str, checks, texts, why_extra="",
     # ★★古くなった条件では閉じない★★（2026-09-17・Codexの指摘②）
     #   ★直す前は、ここで知らせるだけだった★＝
     #   登録した版と違う版で確かめて、そのまま閉じていた。
-    _st = condition_stale(row.get("resolution_condition"))
+    _st = stale_conditions(row)
     if _st:
         print("  " + _st[0])
         print("★閉じません★（登録し直してから閉じてください）")
@@ -747,11 +746,14 @@ def main() -> int:
         print(f"閉じる回で読む案件 {len(got)} 件"
               "（未提示→最後に出した日の古い順）")
         for r in got:
-            cond = r.get("resolution_condition")
             print(f"\n  #{r.get('id')} [{r.get('severity') or '-'}] "
                   f"{r.get('slug')}: {str(r.get('title'))[:100]}")
             print(f"    {str(r.get('detail') or '')[:400]}")
-            if isinstance(cond, dict):
+            _cs = row_conditions(r)
+            if not _cs:
+                print("    ★閉じる条件は未登録★"
+                      "（登録しないと閉じられません）")
+            for cond in _cs:
                 print(f"    ★登録ずみの閉じる条件★ {cond.get('check')} "
                       f"{cond.get('args')}（{cond.get('why')}）")
                 for _w in condition_stale(cond):
@@ -967,11 +969,11 @@ def selftest() -> int:
                 {"id": 9004, "slug": "tokyo_ghoul", "status": "open",
                  "kind": "quality", "title": "試験用: 古い条件つき",
                  "detail": "条件を古い版で登録したまま",
-                 "resolution_condition": {
+                 "resolution_conditions": [{
                      "check": "model_code_gone", "version": 999,
                      "args": {}, "set_at": "2026-08-01",
                      "set_by": ["claude", "codex"],
-                     "why": "型式名が消えていれば直り"}},
+                     "why": "型式名が消えていれば直り"}]},
             ]}, ensure_ascii=False))
         globals()["LEDGER"] = _fake
 
@@ -1015,7 +1017,11 @@ def selftest() -> int:
         _r1, _m1 = _close_says(9001, ["model_code_gone"])
         t("★★条件が無い案件を、検査名だけでは閉じない★★"
           "（同じ機種で通る無関係な検査を1つ挙げるだけで閉じられていた）",
-          _r1 != 0 and "閉じる条件が登録されていません" in _m1)
+          _r1 != 0 and "閉じる条件が1件も登録されていません" in _m1)
+        _r1b, _m1b = _close_says(9001, [], ["試験用の逐語です"])
+        t("★★案件の本文にある逐語だけでも閉じない★★"
+          "（案件の説明文そのものを渡せば、記事に無いので必ず通ってしまう）",
+          _r1b != 0 and "閉じる条件が1件も登録されていません" in _m1b)
         _r2, _m2 = _close_says(9004, ["model_code_gone"])
         t("★★古い版の条件のままでは閉じない★★"
           "（登録し直さなくても、いまの版で確かめて閉じられていた）",
@@ -1033,61 +1039,64 @@ def selftest() -> int:
     t("　★専用の置き場を使う★",
       os.path.basename(_state_path()) == "ledger_site_state.json")
 
-    # ------------------------------------------------ 検査の引数を案件から組む
-    # ★★直す前は機種しか渡していなかった★★（2026-09-17・Codexの指摘）
-    #   ＝機種のほかに引数が要る検査は、名簿に足しても**呼べなかった**。
-    t("★条件を持たない案件は、今までどおり機種だけを渡す★",
-      args_for_check("confirmed_value_recorded", "dmm_5086", {})
-      == {"slug": "dmm_5086"})
-    _rowc = {"slug": "dmm_5086", "resolution_condition": {
-        "check": "confirmed_value_recorded",
-        "args": {"field": "gameplay#normal_cz"}}}
-    t("★★案件に登録した引数が、検査まで届く★★",
-      args_for_check("confirmed_value_recorded", "dmm_5086", _rowc)
-      == {"slug": "dmm_5086", "field": "gameplay#normal_cz"})
-    t("　★別の検査には、その条件の引数を混ぜない★",
-      args_for_check("text_gone", "dmm_5086", _rowc) == {"slug": "dmm_5086"})
-    t("★★機種は案件の行から固定する★★"
-      "（条件の側で別の機種に差し替えられないこと）",
-      args_for_check("confirmed_value_recorded", "dmm_5086",
-                     {"slug": "dmm_5086", "resolution_condition": {
-                         "check": "confirmed_value_recorded",
-                         "args": {"slug": "hokuto", "field": "f"}}})
-      == {"slug": "dmm_5086", "field": "f"})
-
-    # ★★検査は、この案件と結び付いていないと使えない★★
-    #   （2026-09-17・Codexの指摘①・実際に再現した）
-    #   ★ヤメ時の書き方の案件を、型式名の検査で閉じられた★
-    #   ＝同じ機種で通る検査を1つ探してくるだけで閉じられていた。
+    # ★★結び付けは「登録」の1本だけ★★
+    #   （2026-09-17・Codexの指摘①②・どちらも実際に再現した）
+    #   ①★ヤメ時の書き方の案件を、型式名の検査で閉じられた★
+    #     ＝同じ機種で通る検査を1つ探してくるだけでよかった。
+    #   ②★案件の説明文そのものを「消えた逐語」にできた★
+    #     ＝もともと記事に無い文字なので、必ず「消えている」と出た。
     _plain = {"id": 7, "slug": "hokuto", "kind": "quality",
-              "title": "ヤメ時の説明", "detail": "ヤメ時の節が読みにくい"}
+              "title": "ヤメ時の説明", "detail": "ヤメ時の説明が読みづらい"}
     t("★★条件が無い案件を、検査名だけで閉じない★★"
       "（同じ機種で通る無関係な検査で閉じられていた）",
       checks_bound_to_issue(_plain, ["model_code_gone"], [], [])[0] is False)
-    t("　★案件の本文にある逐語があれば通る★（それ自体が結び付き）",
-      checks_bound_to_issue(_plain, ["model_code_gone"], ["ヤメ時の節"],
-                            [])[0] is True)
-    t("　★案件の番号を名乗る壊し方があれば通る★",
-      checks_bound_to_issue(_plain, ["model_code_gone"], [],
-                            ["壊し方の名前"])[0] is True)
+    t("★★案件の本文にある逐語も、それだけでは結び付きにしない★★"
+      "（案件の説明文そのものを渡せば、記事に無いので必ず通る）",
+      checks_bound_to_issue(_plain, [], ["ヤメ時の説明が読みづらい"],
+                            [])[0] is False)
+    t("　★壊し方だけでも結び付きにしない★",
+      checks_bound_to_issue(_plain, [], [], ["壊し方の名前"])[0] is False)
     t("　★登録した条件があれば通る★",
       checks_bound_to_issue(
-          dict(_plain, resolution_condition={"check": "model_code_gone"}),
-          ["model_code_gone"], [], [])[0] is True)
+          dict(_plain, resolution_conditions=[{"check": "model_code_gone"}]),
+          [], [], [])[0] is True)
+
+    # ★★登録した条件は、呼び出し側が何を渡しても全部やり直す★★
+    #   ★直す前は「渡された検査を全部やる」だけ★で、
+    #   「必要な検査を全部渡したか」を誰も見ていなかった
+    #   ＝問題が2つ書いてある案件を、片方の検査だけで閉じられた。
+    #   ★木が汚れていても分かる形にする★＝「何を先にやり直したか」で見る
+    #   （合否は `closeable` が未コミットを見るので、手元では当てにできない）
+    _two = {"slug": "hokuto", "resolution_conditions": [
+        {"check": "text_gone", "version": _rc.CHECKS["text_gone"]["version"],
+         "args": {"text": "登録ぶんの逐語XYZ"}}]}
+    _ok2, _w2, _d2r = run_checks("hokuto", ["model_code_gone"], [], _head(),
+                                 row=_two)
+    t("★★渡していない登録ぶんを、呼び出し側が省けない★★"
+      "（問題が2つある案件を、片方の検査だけで閉じられた）",
+      bool(_w2) and "登録した条件[text_gone]" in _w2[0])
+
+    # ★★組み立てた条件そのものを見る★★（木が汚れていても分かる形）
+    _mix = {"slug": "hokuto", "resolution_conditions": [
+        {"check": "text_gone", "version": 7,
+         "args": {"slug": "yajikita_mairu", "text": "ある文"}}]}
+    _built = conditions_for_row("hokuto", _mix, "0" * 40)
+    t("★★登録の側が別の機種を名乗っても、案件の機種で動かす★★"
+      "（その機種の記事で通してしまう）",
+      _built[0]["args"]["slug"] == "hokuto")
+    t("★★登録した版をそのまま入れる★★"
+      "（いまの版を入れると、登録し直さなくても閉じられる）",
+      _built[0]["version"] == 7)
+    t("　★引数はそのまま運ぶ★",
+      _built[0]["args"]["text"] == "ある文")
 
     # ★★登録した版で確かめる★★（2026-09-17・Codexの指摘②・実際に再現した）
     #   ★直す前は、いつも「いまの版」を入れていた★ので、
     #   条件を古い版で登録したまま、新しい版で確かめて閉じられた。
-    _oldv = {"slug": "hokuto", "resolution_condition": {
-        "check": "model_code_gone", "version": 999, "args": {}}}
-    t("★★登録した条件の版を、そのまま検査に入れる★★"
-      "（いまの版を入れると、登録し直さなくても閉じられる）",
-      version_for_check("model_code_gone", _oldv) == 999)
-    t("　★条件を持たない検査は、いまの版で確かめる★",
-      version_for_check("model_code_gone", _plain)
-      == _rc.CHECKS["model_code_gone"]["version"])
-    t("　★古い版の条件では、検査そのものが通らない★"
-      "（`closeable` が版の食い違いで断る）",
+    _oldv = {"slug": "hokuto", "resolution_conditions": [
+        {"check": "model_code_gone", "version": 999, "args": {}}]}
+    t("★★古い版の条件では、検査そのものが通らない★★"
+      "（いまの版を入れると、登録し直さなくても閉じられた）",
       run_checks("hokuto", ["model_code_gone"], [], _head(),
                  row=_oldv)[0] is False)
 
