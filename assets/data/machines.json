@@ -11947,7 +11947,7 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
+   "indexable": true,
    "machine_profile": "AT_CZ",
    "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
@@ -11961,16 +11961,15 @@
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CLAIMS_LT_3"
-   ],
+   "reason_codes": [],
    "claims": [
     "at_prob",
+    "cz:エピソードバトル",
     "cz:輪廻転天チャレンジ"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-04",
-   "input_digest": "sha256:fe455c4462371b557cef8dd2a497e1e61b3b05ebdf026af7433661ee6dca5060"
+   "decided_at": "2026-09-19",
+   "input_digest": "sha256:7c0b2f519bfb6e63457d67a4610b2b86dbf7e0ed8721990323ecf4e25c5e624c"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
@@ -11981,7 +11980,11 @@
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5086 型式=未掲載 メーカー=オリンピアエステート 導入=2026-10-05 確認日=2026-08-28",
-   "market_release_date": "2026-10-05"
+   "market_release_date": "2026-10-05",
+   "observed_model_code": "L転生王女と天才令嬢の魔法革命S3",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
   }
  },
  {
@@ -12054,25 +12057,28 @@
    "indexable": false,
    "machine_profile": "AT_CZ",
    "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [],
+   "confirmed_topics": [
+    "setting",
+    "spec"
+   ],
    "pending_topics": [
     "gameplay",
     "cz",
     "ceiling",
-    "spec",
-    "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
     "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
     "NO_UNIQUE_GAMEPLAY"
    ],
-   "claims": [],
+   "claims": [
+    "bonus_prob",
+    "payout_rate"
+   ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-04",
-   "input_digest": "sha256:97d326dfd018051e47b7021ff20604d76ab9cf261d6a4ed26c108b9844bf9b6b"
+   "decided_at": "2026-09-19",
+   "input_digest": "sha256:9ee2f6822ede200f260d3f04c14bf327282f5c59502f989a9a632c8eee38dfdb"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11",
@@ -12083,7 +12089,11 @@
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5090 型式=未掲載 メーカー=パイオニア 導入=2026-11 確認日=2026-08-28",
-   "market_release_date": "2026-11"
+   "market_release_date": "2026-11",
+   "observed_model_code": "LハイハイシオサイReTC",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
   }
  },
  {
