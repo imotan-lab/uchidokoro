@@ -1744,6 +1744,10 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     #   （同定で外れたページを使ってよいか、等）。
     #   材料が無いときに捨てると、**止まった機種が永久に解けない**。
     out["questions"] += [q for q in (got.get("maker_questions") or [])]
+    # ★★「同じ出どころか」の問いも受け取る★★（2026-09-18）
+    #   ★メーカー表記の問いとは記録先が違う★ので別の入れ物で持ち回る。
+    #   ★ここで受け取らないと、育成レーンでは黙って消える★（罠③）。
+    out["questions"] += [q for q in (got.get("lineage_questions") or [])]
     # ★★型のついた読み取り失敗も受け取る★★（2026-09-10・CodexのP0）
     _deliver_read(out, got)
     # ★材料が返っても「書いてはいけない理由」があれば止める★

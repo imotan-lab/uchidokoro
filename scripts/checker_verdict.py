@@ -92,6 +92,18 @@ def known_ceilings(slug: str, m: dict | None = None) -> set:
       ①2AIが記録した早見表の天井（`checker_ceiling.games`）
       ②2AIが記録した天井（`ceiling.value.amount` の先頭の数字・G数のみ）
       ③その機種のチェッカーに既に入っている天井（`<mode>.ceiling`）
+
+    ★★②は「ceiling」という名前だけを見てはいけない★★
+      （2026-09-18・Codexの指摘・実データで確かめた）＝
+      1機種に天井は複数あるので、控えの項目名は
+      `ceiling#bonus` `ceiling#cz` のように**見出し付き**になる。
+      ★`got.get("ceiling")` だけを読むと、そういう機種は
+      「天井が1つも確かめられていません」と誤って断る★
+      （実測＝ssb1 は 899G と 560G を記録済みなのに 0件だった）。
+      ★見出しの切り離しは `confirmed_values.base_field` に任せる★
+      （同じ規則を2か所に書かない）。
+      ★G数の天井だけを採る★＝`ssb1` の `ceiling#point` は
+      1000pt なので混ぜない（狙い目の線はG数で引く）。
     """
     out = set()
     try:
@@ -99,11 +111,16 @@ def known_ceilings(slug: str, m: dict | None = None) -> set:
         got = _cv.for_slug_checked(slug) or {}
     except Exception:                                        # noqa: BLE001
         got = {}                          # ★読めなければ「無い」扱い（断る側へ倒す）★
+        _cv = None
     v = ((got.get("checker_ceiling") or {}).get("value") or {}).get("games")
     if (n := _lead_int(v)) is not None:
         out.add(n)
-    c = (got.get("ceiling") or {}).get("value") or {}
-    if str(c.get("kind") or "") == "GAME" and str(c.get("unit") or "") == "G":
+    for _key in sorted(got):
+        if _cv is None or _cv.base_field(_key) != "ceiling":
+            continue
+        c = (got.get(_key) or {}).get("value") or {}
+        if str(c.get("kind") or "") != "GAME" or str(c.get("unit") or "") != "G":
+            continue                       # ★pt・周期・スルーは混ぜない★
         if (n := _lead_int(c.get("amount"))) is not None:
             out.add(n)
     ck = (m or {}).get("checker") or {}
@@ -194,26 +211,81 @@ def decision_problems(dec, ms=None) -> list:
         order = [vals[lv] for lv in LEVELS if lv in vals]
         if order != sorted(order):
             ng.append(f"{tag}: caution ≦ good ≦ excellent の順になっていません")
-        # ★★どのモードでも、確かめてある天井のいちばん深いところを超えない★★
-        #   （2026-09-18・Codexの指摘）★`ceiling` を省けば検査が走らない★
-        #   という抜け道を塞ぐ。リセット後のように天井を別に記録していない
-        #   モードでも、ここで上限がかかる。
-        for lv in LEVELS:
-            if lv in vals and vals[lv] > cap:
-                ng.append(f"{tag}: {lv}（{vals[lv]}）が、確かめてある天井の"
-                          f"いちばん深いところ（{cap}）を超えています")
+        # ★★そのモードの天井を超えない★★（2026-09-18・Codexの2回目の指摘）
+        #   ★直す前は「全部の天井のいちばん深いところ」だけを見ていた★ので、
+        #   `normal` の天井が600・`at` の天井が1000の機種で、
+        #   `normal: {"good": 900}`（ceiling を書かない）が通り、
+        #   ★書いたあとは good 900 > その欄の天井 600 のチェッカーになった★。
+        #   ★そのモードの天井＝決定に書いてあればそれ／無ければ既にある値★
+        eff = _int(md.get("ceiling")) if "ceiling" in md else mode_ceiling(m, key)
         if "ceiling" in md:
             ce = _int(md.get("ceiling"))
             if ce is None or not (0 < ce <= MAX_VALUE):
                 ng.append(f"{tag}: ceiling が 1〜{MAX_VALUE} の整数ではありません")
+                eff = None
             elif ce not in nums:
                 # ★確かめていない天井は受け取らない★（2AIに数字を作らせない）
                 ng.append(f"{tag}: 天井 {ce} は確かめた記録にありません"
                           f"（確かめてあるのは {sorted(nums)}）")
-            else:
-                for lv in LEVELS:
-                    if lv in vals and vals[lv] > ce:
-                        ng.append(f"{tag}: {lv} が天井 {ce} を超えています")
+                eff = None
+        # ★そのモードの天井が分からないときだけ、いちばん深いところで抑える★
+        #   （リセット後のように、天井を別に記録していないモード用）
+        limit, why = (eff, "その欄の天井") if eff else (cap, "確かめてある天井の"
+                                                         "いちばん深いところ")
+        for lv in LEVELS:
+            if lv in vals and vals[lv] > limit:
+                ng.append(f"{tag}: {lv}（{vals[lv]}）が、{why}（{limit}）を"
+                          "超えています")
+    if ng:
+        return ng
+    # ★★当てたあとの完成形でも、もう一度だけ見る★★（2026-09-18）
+    #   ★これは受け皿★＝いまの `merged()` では上の欄ごとの検査と同じ答えになる。
+    #   置いておく理由は、あとで当て方（欄の足し方・値の移し方）が増えたとき、
+    #   書く前にもう一度だけ完成形で見られるようにするため。
+    #   ★決定が触った欄だけを見る★＝元から入っていた値の問題で、
+    #   関係のない直しまで断らないため（罠⓸＝直す道が無くなる）。
+    #   ★同じ理由づけは `decide_now` の「書く直前の照合」にもある★
+    touched = {str(x.get("key") or "") for x in (dec.get("modes") or [])
+               if isinstance(x, dict)}
+    return [p for p in merged_problems(merged(m, dec))
+            if any(f"当てたあと: {k} の" in p for k in touched)]
+
+
+def mode_ceiling(m: dict | None, key: str):
+    """★その欄に既に入っている天井★（`modeData` の下も見る）"""
+    ck = (m or {}).get("checker") or {}
+    if not isinstance(ck, dict):
+        return None
+    conf = (ck.get("modeData") or {}).get(key) or ck.get(key) or {}
+    return _lead_int(conf.get("ceiling")) if isinstance(conf, dict) else None
+
+
+def merged_problems(m: dict) -> list:
+    """★当てたあとの姿が、読者の道具として筋が通っているか★
+
+    ★見るのは1つだけ★＝どの欄でも `good`（と前後の線）がその欄の天井を
+    超えていないこと。★決定ファイルの検査だけでは覆えない★＝
+    既に入っている天井と、新しく書く線の組み合わせで壊れるため。
+    """
+    ng = []
+    ck = (m or {}).get("checker") or {}
+    if not isinstance(ck, dict):
+        return ng
+    for md in (ck.get("modes") or []):
+        if not isinstance(md, dict):
+            continue
+        key = str(md.get("key") or "")
+        conf = (ck.get("modeData") or {}).get(key) or ck.get(key) or {}
+        if not isinstance(conf, dict):
+            continue
+        ce = _lead_int(conf.get("ceiling"))
+        if ce is None:
+            continue
+        for lv in LEVELS:
+            v = _int(conf.get(lv))
+            if v is not None and v > ce:
+                ng.append(f"当てたあと: {key} の {lv}（{v}）が"
+                          f"その欄の天井（{ce}）を超えます")
     return ng
 
 
@@ -457,6 +529,41 @@ def selftest() -> int:
           not decision_problems(
               dec(modes=[{"key": "reset", "label": "リセット後",
                           "good": 400}]), base_ms))
+        # ★★欄ごとに天井が違う機種★★（2026-09-18・Codexの2回目の指摘）
+        #   ★直す前★＝「全部の天井のいちばん深いところ」だけを見ていたので、
+        #   浅い欄に深い線を入れても通り、★書いたあとは good > その欄の天井★。
+        _two = [{"slug": "zzz_auto", "name": "試験機",
+                 "publication_policy": "page-decision/v1",
+                 "checker": {"unit": "G",
+                             "modes": [{"key": "normal", "label": "通常"},
+                                       {"key": "at", "label": "AT間"}],
+                             "normal": {"ceiling": 600},
+                             "at": {"ceiling": 1000}}}]
+        globals()["known_ceilings"] = lambda s, m=None: {600, 1000}
+        # ★「当てたあと」の受け皿ではなく、欄ごとの検査が捕まえること★
+        #   （罠③＝守りが二重だと、片方を壊しても試験が緑のまま）
+        t("★★浅い欄に、その欄の天井を超える線は入れられない★★"
+          "（★直す前は全部の天井の最大値だけを見ていた★）",
+          any("その欄の天井" in x and not x.startswith("当てたあと")
+              for x in decision_problems(
+                  dec(modes=[{"key": "normal", "label": "通常", "good": 900}]),
+                  _two)))
+        t("　同じ値でも、天井が深い欄なら通る",
+          not decision_problems(
+              dec(modes=[{"key": "at", "label": "AT間", "good": 900}]), _two))
+        # ★当てたあとの姿でも見る（決定ファイルだけでは覆えない組み合わせ）★
+        t("★当てたあとの姿でも、その欄の天井を超えていないか見る★",
+          merged_problems(
+              {"checker": {"modes": [{"key": "normal"}],
+                           "normal": {"ceiling": 600, "good": 900}}})
+          and not merged_problems(
+              {"checker": {"modes": [{"key": "normal"}],
+                           "normal": {"ceiling": 600, "good": 500}}}))
+        t("　その欄に天井が無ければ、当てたあとの検査は何も言わない",
+          not merged_problems(
+              {"checker": {"modes": [{"key": "normal"}],
+                           "normal": {"good": 900}}}))
+        globals()["known_ceilings"] = lambda s, m=None: {1000}
         t("★good が無いと通らない★",
           any("good" in x for x in decision_problems(
               dec(modes=[{"key": "normal", "label": "通常",
@@ -539,6 +646,16 @@ def selftest() -> int:
     # ★本物の読み取りも動かす★（差し替えたまま終わらない）
     t("　確かめてある天井を読める（本物）",
       isinstance(known_ceilings("zzz_does_not_exist"), set))
+    # ★★見出し付きの天井（`ceiling#bonus`）も読めること★★
+    #   （2026-09-18・Codexの指摘・実データで確かめた）＝
+    #   ★直す前は `ceiling` という名前だけを読んでいた★ので、
+    #   天井を2つ記録してある機種が「天井0件」で拒否されていた。
+    #   ★G数以外（`ceiling#point` の 1000pt）は混ぜない★
+    _ssb = known_ceilings("ssb1", _find(_machines(), "ssb1"))
+    t("★★見出し付きの天井（ceiling#bonus / #cz）も読む★★"
+      "（★直す前は0件で、その機種は永久に線を決められなかった★）",
+      {560, 899} <= _ssb)
+    t("　G数でない天井（pt）は混ぜない", 1000 not in _ssb)
     # ★★記事の全文から数字を拾っていないこと★★（Codexの指摘の対照実験）
     #   ★実データで確かめる★＝dmm_5100 の記事にはslugの番号（5100）も
     #   導入年（2026）も確率の分母もあるが、天井としては1つも出ない。

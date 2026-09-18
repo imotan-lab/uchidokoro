@@ -1302,6 +1302,55 @@ MUTATIONS = [
         "after": "    pass",
         "run": ["scripts/add_machine_run.py"],
     },
+    # ─── 2026-09-18・Codexの2回目の指摘を直したぶん ─────────────────
+    {
+        "why": "★見出し付きの天井（ceiling#bonus / #cz）を読まない"
+               "（★天井を2つ以上記録してある機種が「天井0件」で拒否され、"
+               "永久に狙い目の線を決められない★＝実測 ssb1）★",
+        "file": "scripts/checker_verdict.py",
+        "before": '        if _cv is None or _cv.base_field(_key) != "ceiling":',
+        "after": '        if _cv is None or _key != "ceiling":',
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★G数でない天井（pt・周期）も混ぜる"
+               "（★1000pt が「1000G の天井」として通り、"
+               "そこまで深い狙い目の線が入る★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": ('        if str(c.get("kind") or "") != "GAME" '
+                   'or str(c.get("unit") or "") != "G":'),
+        "after": "        if False:",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★欄ごとの天井を見ず、全部の天井の最大値だけで見る"
+               "（★浅い欄に深い線が入り、書いたあとは good がその欄の"
+               "天井を超えたチェッカーになる★＝Codexの2回目の指摘）★",
+        "file": "scripts/checker_verdict.py",
+        "before": ('        eff = _int(md.get("ceiling")) if "ceiling" in md '
+                   'else mode_ceiling(m, key)'),
+        "after": ('        eff = _int(md.get("ceiling")) if "ceiling" in md '
+                  "else None"),
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★同じ出どころかの問いを、メーカー表記の問いに相乗りさせる"
+               "（★台帳の本文が違う置き場へ案内し、答える側が質問文どおりに"
+               "動けない★＝Codexの2回目の指摘）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '    elif code == "ASK_2AI_LINEAGE":',
+        "after": "    elif False:",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★同じ出どころかの問いを、新台の出口で捨てる"
+               "（★問いが台帳にも画面にも出ず、誰にも届かない★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": ('    out["lineage_questions"] = '
+                   'list(got.get("lineage_questions") or [])'),
+        "after": '    out["lineage_questions"] = []',
+        "run": ["scripts/add_machine_run.py"],
+    },
     {
         "why": "★天井の上限を、確かめた値ではなく最大値にする"
                "（★`ceiling` を書かなければ検査が走らない、という抜け道★"

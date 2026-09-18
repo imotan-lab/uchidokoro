@@ -1200,7 +1200,11 @@ def _gather(name: str, maker: str = "", slug: str = "",
     _mrg = merge_transcription(lin.get("suspects") or [],
                                got["urls"], looks, slug)
     got["problems"] += _mrg["problems"]
-    got.setdefault("maker_questions", []).extend(_mrg["questions"])
+    # ★★メーカー表記の質問に相乗りさせない★★（2026-09-18・Codexの指摘）
+    #   ★直す前は `maker_questions` へ足していた★ので、台帳の本文が
+    #   「maker_identity_cache へ控えてください」と案内し、
+    #   質問文（「登録簿に系列を書いてください」）と食い違っていた。
+    got.setdefault("lineage_questions", []).extend(_mrg["questions"])
     for u in _mrg["dropped"]:
         _log(f"  （転載の疑い・1票にまとめるため票と材料から除外）{u}")
     got["urls"] = _mrg["urls"]
@@ -1605,9 +1609,21 @@ def transcription_wiring_problems() -> list:
     import inspect
     src = inspect.getsource(_gather)
     want = ('merge_transcription(', 'got["urls"] = _mrg["urls"]',
-            'looks = _mrg["looks"]')
-    return [f"材料集めの本体に「{w}」がありません（転載を1票にまとめる配線）"
-            for w in want if w not in src]
+            'looks = _mrg["looks"]',
+            # ★問いはメーカー表記の入れ物に相乗りさせない★（記録先が違う）
+            'got.setdefault("lineage_questions", []).extend(')
+    out = [f"材料集めの本体に「{w}」がありません（転載を1票にまとめる配線）"
+           for w in want if w not in src]
+    run = inspect.getsource(run_one)
+    # ★「入れ物がある」だけでは足りない★＝中身を受け取っているかまで見る
+    #   （`out["lineage_questions"] = []` と書かれたら問いは誰にも届かない）
+    for w in ('out["lineage_questions"] = list(got.get("lineage_questions")',
+              'for _q in out["lineage_questions"]:',
+              'code="ASK_2AI_LINEAGE"'):
+        if w not in run:
+            out.append(f"新台の出口に「{w}」がありません"
+                       "（同じ出どころかの問いが届かない・記録先が違う）")
+    return out
 
 
 def blocking_problems(problems: list) -> list:
@@ -3198,6 +3214,43 @@ def _ask_key(question: str) -> str:
     return head or "unknown"
 
 
+def ask_ledger_body(question: str, code: str = "ASK_2AI") -> str:
+    """★台帳に載せる本文★＝**記録先の案内は問いの種類ごとに書き分ける**
+
+    ★なぜ関数に切り出したか★＝ここが違う置き場へ案内すると、
+    答える側は質問文どおりに動けない（2026-09-18・Codexの指摘で実際に起きた）。
+    処理の中に埋めたままだと試験できないので、純関数にして直接確かめる。
+    """
+    # ★聞き方も記録先も違うので、案件ごとに書き分ける★（依頼192のP2）
+    #   共通文に「confirmed_values へ記録」と書いていたため、
+    #   メーカー表記の質問まで**違う置き場へ誘導**していた。
+    if code == "ASK_2AI_MAKER":
+        howto = ("手順は新台SKILL.mdの STEP 3-B-M（メーカー表記の照合）。"
+                 "見るのは記事の原文ではなく、名鑑のその機種のページと"
+                 "当事会社の公式サイトです。決まれば "
+                 "maker_identity_cache.py --record へ控え、この行は閉じられます。\n")
+    elif code == "ASK_2AI_LINEAGE":
+        # ★★同じ出どころか、の問いは記録先が違う★★（2026-09-18・Codexの指摘）
+        #   ★直す前はメーカー表記の質問に相乗りしていた★ので、
+        #   台帳の本文が `maker_identity_cache` へ誘導していた＝
+        #   質問文（「登録簿に系列を書いてください」）と正面から食い違っていた。
+        howto = ("2つの名鑑の本文が似すぎています。同じ出どころ（転載）なら、"
+                 "出典の登録簿 assets/data/source-registry.json に系列として"
+                 "書いてください。以後は自動で1票にまとまります。\n"
+                 "★『別々に取材しただけ』という答えは採りません★＝"
+                 "実測では、独立した名鑑どうしの一致率は0%です。\n")
+    else:
+        howto = ("（手元の出典→3つ目の出典→検索で別系統）。"
+                 "決まれば confirmed_values へ記録し、この行は閉じられます。\n")
+    return (f"{question}\n\n"
+            "★機械では決められない意味の判断です★\n"
+            "★人が判断する案件ではありません★＝新台タスクが同じ晩のうちに、"
+            "材料を変えながらやり直します。\n"
+            + howto
+            + "やり直しの上限に達したときだけ、人の出番になります"
+              "（上限は open_issues.py の ASK_MAX_ATTEMPTS）。")
+
+
 def _ask_ledger(slug: str, name: str, question: str, key: str = "",
                 code: str = "ASK_2AI") -> bool:
     """★2AIで決まらなかったことを台帳へ★（2026-08-12・運営者決定）
@@ -3212,22 +3265,7 @@ def _ask_ledger(slug: str, name: str, question: str, key: str = "",
         #   機種名だけだと、同じ機種の**別の質問**が同じ案件に合流し、
         #   片方の回数が満了しただけで新しい質問まで自動の輪から消える。
         f"{name}: 2AIで決まらなかった項目があります（{(key or _ask_key(question))}）",
-        f"{question}\n\n"
-        "★機械では決められない意味の判断です★\n"
-        "★人が判断する案件ではありません★＝新台タスクが同じ晩のうちに、"
-        "材料を変えながらやり直します。\n"
-        # ★聞き方も記録先も違うので、案件ごとに書き分ける★（依頼192のP2）
-        #   共通文に「confirmed_values へ記録」と書いていたため、
-        #   メーカー表記の質問まで**違う置き場へ誘導**していた。
-        + ("手順は新台SKILL.mdの STEP 3-B-M（メーカー表記の照合）。"
-           "見るのは記事の原文ではなく、名鑑のその機種のページと"
-           "当事会社の公式サイトです。決まれば "
-           "maker_identity_cache.py --record へ控え、この行は閉じられます。\n"
-           if code == "ASK_2AI_MAKER" else
-           "（手元の出典→3つ目の出典→検索で別系統）。"
-           "決まれば confirmed_values へ記録し、この行は閉じられます。\n")
-        + "やり直しの上限に達したときだけ、人の出番になります"
-        "（上限は open_issues.py の ASK_MAX_ATTEMPTS）。")
+        ask_ledger_body(question, code))
 
 
 
@@ -3355,6 +3393,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #   **同じ配列を丸ごと上書き**するため消えていた。
     #   さらに材料不足だと台帳処理の前に終わるので、★ここで台帳へ入れる★。
     out["maker_questions"] = list(got.get("maker_questions") or [])
+    out["lineage_questions"] = list(got.get("lineage_questions") or [])
     # ★例外的なメーカー関係を根拠に採否した事実を残す★（依頼226のCodex指摘）
     #   材料が足りずに早く終わるときも残す＝あとから由来を確かめられる。
     out["maker_relation_checks"] = list(
@@ -3385,6 +3424,14 @@ def run_one(name, official_url, maker, release, apply_it=False,
                                         code="ASK_2AI_MAKER"):
             out["problems"].append(
                 f"メーカーの質問を台帳に載せられません: {_q.get('key')}")
+    # ★★同じ出どころかの問いは、別の記録先へ案内する★★（2026-09-18）
+    for _q in out["lineage_questions"]:
+        _log(f"  ★2AIに聞くこと（同じ出どころか）: {_q['text'][:120]}")
+        if apply_it and not _ask_ledger(out["slug"], name, _q["text"],
+                                        key=_q.get("key"),
+                                        code="ASK_2AI_LINEAGE"):
+            out["problems"].append(
+                f"同じ出どころかの質問を台帳に載せられません: {_q.get('key')}")
     # ★公式が年月を出さない機種は、名鑑2票一致の月で先行記事にする★
     #   （2026-08-02・Codex47回目に条件つきで承認。山佐は導入年月が画像のみ）
     #   条件＝型式が一致した同じ2名鑑の月が一致（gatherが判定済み）。
@@ -3609,7 +3656,8 @@ def _review_reaches_ask():
             "material": {"adopted": {}, "ceilings": {"adopted": []},
                          "need_third": [], "setting_labels_seen": [],
                          "thin": []},
-            "maker_questions": [], "maker_relation_checks": [],
+            "maker_questions": [], "lineage_questions": [],
+            "maker_relation_checks": [],
             "observed_model_code": None}
         _cv2.merge_into = lambda mat, slug_: ["ceiling"]
         _cv2.reverify = lambda slug_, **kw: {
@@ -5493,6 +5541,23 @@ def _selftest_body() -> int:
               not _blocking(["転載の疑い: a と b の本文が 99% 一致"]))
             t("★材料集めの本体が、実際に1票へまとめている★（配線・罠③）",
               not transcription_wiring_problems())
+            # ★★台帳の本文が、質問文と同じ場所へ案内しているか★★
+            #   （2026-09-18・Codexの指摘＝相乗りさせたせいで、
+            #     「登録簿に書いて」と聞きながら本文は
+            #     「maker_identity_cache へ控えて」と案内していた）
+            _b_lin = ask_ledger_body("問い", "ASK_2AI_LINEAGE")
+            _b_mak = ask_ledger_body("問い", "ASK_2AI_MAKER")
+            _b_def = ask_ledger_body("問い")
+            t("★★同じ出どころかの問いは、登録簿へ案内する★★",
+              "source-registry.json" in _b_lin
+              and "maker_identity_cache" not in _b_lin
+              and "confirmed_values" not in _b_lin)
+            t("　メーカー表記の問いは、いままでどおり控えへ案内する",
+              "maker_identity_cache" in _b_mak
+              and "source-registry.json" not in _b_mak)
+            t("　ほかの問いは、いままでどおり確定値へ案内する",
+              "confirmed_values" in _b_def
+              and "maker_identity_cache" not in _b_def)
             t("　実データでも既存機種を見つけられる",
               _cd.find_duplicates("Lすーぱぁびん娘"))
             # ★名前が違っても、公式URL・型式名で捕まえる★（Codex指摘・2026-07-31）
