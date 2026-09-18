@@ -1586,8 +1586,12 @@ def merge_transcription(suspects: list, urls: list, looks: list,
                      f"{keep} だけを1票として数えています／"
                      "★本当に写しなら、登録簿（source-registry）に系列として"
                      "書いてください★＝以後は毎回1票として数えられます／"
-                     "★別々に取材した結果がたまたま似ているだけなら、"
-                     "そう判断した手がかりを逐語で挙げてください★"),
+                     # ★★「別々に取材しただけ」は聞かない★★（2026-09-18・Codexの3回目）
+                     #   ★直す前は手がかりを挙げてくださいと聞いていた★のに、
+                     #   台帳の本文には「その答えは採りません」と書いてあった＝
+                     #   受け取る側に正反対の指示が同時に届いていた。
+                     "★『別々に取材しただけ』という答えは採りません★＝"
+                     "実測では、独立した名鑑どうしの一致率は0%です"),
         })
     if not drop_hosts:
         return out
@@ -5552,6 +5556,16 @@ def _selftest_body() -> int:
               "source-registry.json" in _b_lin
               and "maker_identity_cache" not in _b_lin
               and "confirmed_values" not in _b_lin)
+            # ★★合成した姿で見る★★（2026-09-18・Codexの3回目の指摘）
+            #   ★直す前は案内文だけを見ていた★ので、
+            #   質問文が「独立なら手がかりを挙げて」と言い、案内文が
+            #   「その答えは採りません」と言う**正反対の指示**に気づけなかった。
+            _whole = ask_ledger_body(_mg["questions"][0]["text"],
+                                     "ASK_2AI_LINEAGE")
+            t("★★問いと案内文を合わせても、言っていることが1つ★★"
+              "（★独立なら手がかりを、と聞きながら『採りません』とは書かない★）",
+              "採りません" in _whole
+              and "手がかりを逐語で挙げて" not in _whole)
             t("　メーカー表記の問いは、いままでどおり控えへ案内する",
               "maker_identity_cache" in _b_mak
               and "source-registry.json" not in _b_mak)

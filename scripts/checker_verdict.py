@@ -225,6 +225,15 @@ def decision_problems(dec, ms=None) -> list:
         #   ★書いたあとは good 900 > その欄の天井 600 のチェッカーになった★。
         #   ★そのモードの天井＝決定に書いてあればそれ／無ければ既にある値★
         eff = _int(md.get("ceiling")) if "ceiling" in md else mode_ceiling(m, key)
+        # ★★天井が2つ以上ある機種で、その欄の天井が分からないときは断る★★
+        #   （2026-09-18・Codexの3回目）★直す前★＝いちばん深いところで
+        #   抑えていたので、ssb1（899G と 560G）の**新しい欄**に
+        #   `ceiling` を書かずに `good: 800` を入れると通っていた。
+        #   ★その欄がCZ間（560G）なら、天井より深い狙い目になる★。
+        #   天井が1つしか無い機種では迷いようがないので、いままでどおり。
+        if "ceiling" not in md and eff is None and len(nums) >= 2:
+            ng.append(f"{tag}: この機種は天井が {sorted(nums)} と複数あります。"
+                      "どの天井の欄かを ceiling で書いてください")
         if "ceiling" in md:
             ce = _int(md.get("ceiling"))
             if ce is None or not (0 < ce <= MAX_VALUE):
@@ -632,7 +641,26 @@ def selftest() -> int:
         t("★★天井が1つも確かめられていない機種では、線を決めない★★",
           any("天井が1つも確かめられていません" in x
               for x in decision_problems(dec(), base_ms)))
+        # ★★天井が2つ以上あって、その欄の天井が分からないとき★★
+        #   （2026-09-18・Codexの3回目。★実データ＝ssb1 は 899G と 560G★）
+        globals()["known_ceilings"] = lambda s, m=None: {560, 899}
+        _no_ce = [{"slug": "zzz_auto", "name": "試験機",
+                   "publication_policy": "page-decision/v1",
+                   "checker": {"unit": "G", "modes": [], }}]
+        t("★★天井が複数ある機種で、欄の天井を書かない決定は通さない★★"
+          "（★いちばん深いところで抑えると、浅い欄に深い線が入る★）",
+          any("複数あります" in x for x in decision_problems(
+              dec(modes=[{"key": "normal", "label": "通常", "good": 800}]),
+              _no_ce)))
+        t("　どの天井かを書けば通る",
+          not decision_problems(
+              dec(modes=[{"key": "normal", "label": "通常",
+                          "ceiling": 560, "good": 500}]), _no_ce))
         globals()["known_ceilings"] = lambda s, m=None: {1000}
+        t("　天井が1つだけの機種では、いままでどおり書かなくてよい",
+          not decision_problems(
+              dec(modes=[{"key": "normal", "label": "通常", "good": 800}]),
+              base_ms))
     finally:
         globals()["known_ceilings"] = real
 

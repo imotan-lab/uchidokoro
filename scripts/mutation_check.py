@@ -1323,6 +1323,31 @@ MUTATIONS = [
         "run": ["scripts/checker_verdict.py"],
     },
     {
+        "why": "★天井が複数ある機種で、欄の天井を書かない決定を通す"
+               "（★いちばん深いところで抑えると、浅い欄に深い線が入る★"
+               "＝Codexの3回目・実データ ssb1 は 899G と 560G）★",
+        "file": "scripts/checker_verdict.py",
+        "before": ('        if "ceiling" not in md and eff is None '
+                   "and len(nums) >= 2:"),
+        "after": "        if False:",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★同じ出どころかの問いで、独立取材の手がかりも聞く"
+               "（★台帳の本文は「その答えは採りません」なので、"
+               "受け取る側に正反対の指示が同時に届く★＝Codexの3回目）★",
+        "file": "scripts/add_machine_run.py",
+        "before": ('                     "★『別々に取材しただけ』という答えは'
+                   '採りません★＝"' + chr(10)
+                   + '                     "実測では、独立した名鑑どうしの'
+                     '一致率は0%です"),'),
+        "after": ('                     "★別々に取材した結果がたまたま似ている'
+                  'だけなら、"' + chr(10)
+                  + '                     "そう判断した手がかりを逐語で'
+                    '挙げてください★"),'),
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
         "why": "★G数以外の機種（pt・周期）でも狙い目の線を受け取る"
                "（★天井の読み取りはG数だけなので、単位の違う線が入る★）★",
         "file": "scripts/checker_verdict.py",
