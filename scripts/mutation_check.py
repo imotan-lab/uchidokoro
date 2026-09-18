@@ -1197,9 +1197,111 @@ MUTATIONS = [
                "（★同定に何の問題も無いのに、2AIが値を確定させても"
                "その機種は永久に記事にならない★）★",
         "file": "scripts/add_machine_run.py",
-        "before": '            "公式ページを取得できません", "既に登録されている疑い",',
-        "after": ('            "公式ページを取得できません", '
-                  '"既に登録されている疑い", "2件以上",'),
+        "before": '    "既に登録されている疑い",          # 同じ機種を二重に作らない',
+        "after": ('    "既に登録されている疑い",          # 同じ機種を二重に作らない'
+                  + chr(10) + '    "2件以上",'),
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [674],
+    },
+    # ─── 2026-09-18・「既定は2AI」へ切り替えた（運営者の方針） ────────
+    #   ★止める理由の名簿から、機械が意味を判定していたものを全部外した★。
+    #   ここは「外したものが、こっそり戻っていないか」を見る壊し方。
+    {
+        "why": "★「転載の疑い」を、また公開を止める理由に戻す"
+               "（★同じ一次情報を引いているだけの名鑑で、機種まるごと止まる★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '    "既に登録されている疑い",          # 同じ機種を二重に作らない',
+        "after": ('    "既に登録されている疑い",          # 同じ機種を二重に作らない'
+                  + chr(10) + '    "転載の疑い",'),
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [674],
+    },
+    {
+        "why": "★「読めなかった出典がある」を、止めるときだけ聞く形に戻す"
+               "（★止める理由の名簿から外した項目では、いちばん読めていない"
+               "機種で問いが1つも出なくなる＝聞かれないので永久に解けない★）★",
+        "file": "scripts/grow_machine.py",
+        "before": ('    for _q in _ba.unresolved_questions(' + chr(10)
+                   + '            got.get("problems") or [],' + chr(10)
+                   + '            got.get("all_urls") or got.get("urls"),'
+                   + chr(10)
+                   + '            complete=bool(got.get("all_urls_complete"))):'
+                   + chr(10)
+                   + '        out["questions"].append({"text": str(_q),'
+                   + chr(10)
+                   + '                                 "kind": "grow_unresolved",'
+                   + chr(10)
+                   + '                                 "slug": slug})' + chr(10)
+                   + '    blk = _amr.blocking_problems('
+                     'got.get("problems") or [])'),
+        "after": ('    blk = _amr.blocking_problems('
+                  'got.get("problems") or [])'),
+        "run": ["scripts/grow_machine.py"],
+        "issues": [674],
+    },
+    # ─── 2026-09-18・狙い目の線（チェッカー）を2AIが決めて書く ─────────
+    #   ★実測★＝新台経路の16機種は1件も線を持っていなかった＝
+    #   看板である狙い目チェッカーが、自動で作った機種では動いていなかった。
+    {
+        "why": "★狙い目の線を聞く配線を外す"
+               "（★線が空のまま誰にも聞かれず、読者の画面に狙い目が出ない★）★",
+        "file": "scripts/grow_machine.py",
+        "before": ('    for _q in _ckv.target_line_questions(cur):' + chr(10)
+                   + '        out.append({"text": str(_q), '
+                     '"kind": "grow_checker", "slug": slug})'),
+        "after": "    pass",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★狙い目の線の問いを、「検索に載っていない機種だけ」の枠へ入れる"
+               "（★載った瞬間に聞かれなくなり、線が空のまま固定される★）★",
+        "file": "scripts/grow_machine.py",
+        "before": '    if pd.get("indexable"):\n        return out',
+        "after": '    if pd.get("indexable"):\n        return []',
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★記事に書かれていない天井でも受け取る"
+               "（★2AIが天井そのものを作れてしまう＝裏付けの無い数値が"
+               "読者の道具に入る★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "            elif ce not in nums:",
+        "after": "            elif False:",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★浅い→深いの順を見ない"
+               "（★様子見のほうが狙い目より深い、という逆さまの線が通る★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        if order != sorted(order):",
+        "after": "        if False:",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★旧形式の機種も書き換えられるようにする"
+               "（★すでに線がある120機種を、この道具で上書きできてしまう★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": '    if "publication_policy" not in m:',
+        "after": "    if False:",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★判断者の契約を、この場で決め打ちにする"
+               "（★片方のAIだけで狙い目を決められる★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "    want = set(_judges_required())",
+        "after": '    want = {"claude"}',
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★読者に別の機種が出るもの（パチンコ機）まで止めなくする"
+               "（★外しすぎの側★＝2AIへ回す判断と、誤同定の被害が"
+               "大きいものを取り違えていないかを見る）★",
+        "file": "scripts/add_machine_run.py",
+        "before": ('    "パチスロのページに見えません",'
+                   '         # パチンコ機をパチスロとして出さない'),
+        "after": ('    # "パチスロのページに見えません",'
+                  '       # パチンコ機をパチスロとして出さない'),
         "run": ["scripts/add_machine_run.py"],
         "issues": [674],
     },
@@ -1254,8 +1356,10 @@ MUTATIONS = [
                "（★件数で止めるのをやめた瞬間、控えを読めないまま"
                "2AIの確定値だけで公開できるようになる★＝CodexのP0）★",
         "file": "scripts/add_machine_run.py",
-        "before": "            MAKER_CACHE_UNREADABLE,",
-        "after": "            # MAKER_CACHE_UNREADABLE,",
+        "before": ("    MAKER_CACHE_UNREADABLE,"
+                   "            # 2AIが「使わない」と決めた控えが読めない"),
+        "after": ("    # MAKER_CACHE_UNREADABLE,"
+                  "          # 2AIが「使わない」と決めた控えが読めない"),
         "run": ["scripts/add_machine_run.py"],
         "issues": [674],
     },
@@ -2374,9 +2478,10 @@ MUTATIONS = [
     {
         "why": "控えが読めなくても新台を作る（2AIの値が抜けた記事が出る・Codex6回目）",
         "file": "scripts/add_machine_run.py",
-        "before": 'BLOCKING = ("CONFIRMED_VALUES_UNREADABLE",\n'
-                  '            "AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY",',
-        "after": 'BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY",',
+        "before": ('    "CONFIRMED_VALUES_UNREADABLE",'
+                   '     # 2AIの確定値の控えが読めない'),
+        "after": ('    # "CONFIRMED_VALUES_UNREADABLE",'
+                  '   # 2AIの確定値の控えが読めない'),
         "run": ["scripts/add_machine_run.py"],
     },
     {
@@ -3192,8 +3297,8 @@ MUTATIONS = [
         "why": "★もう載っている機種にも聞いてしまう★"
                "（答える意味のない質問で2AIの時間を使う）",
         "file": "scripts/grow_machine.py",
-        "before": '    if pd.get("indexable"):\n        return []',
-        "after": "    if False:\n        return []",
+        "before": '    if pd.get("indexable"):\n        return out',
+        "after": "    if False:\n        return out",
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -3365,20 +3470,24 @@ MUTATIONS = [
         "after": "    return True",
         "run": ["scripts/style_check.py"],
     },
-    {
-        "why": "★育成で止めるときに、2AIへの問いを作らない★"
-               "（★いちばん読めていない機種で、何も聞かないまま終わる★）",
-        "file": "scripts/grow_machine.py",
-        "before": '        for _q in _ba.unresolved_questions(\n                got.get("problems") or [],\n                got.get("all_urls") or got.get("urls"),\n                complete=bool(got.get("all_urls_complete"))):\n            out["questions"].append({"text": str(_q),\n                                     "kind": "grow_unresolved",\n                                     "slug": slug})\n        return out',
-        "after": '        return out',
-        "run": ["scripts/grow_machine.py"],
-    },
+    # ★★「育成で止めるときに問いを作らない」は、置き場を移した★★
+    #   （2026-09-18）＝この問いは `if blk:` の中ではなく、その手前で
+    #   **止める・止めないに関わらず**作るようになった。
+    #   壊し方は上の「★『読めなかった出典がある』を、止めるときだけ聞く
+    #   形に戻す★」が引き継いでいる。
     {
         "why": "★育成の問いを、辞書ではなく文字列のまま足す★"
                "（★表示のところが辞書として読むので、実際に走らせると落ちる★）",
         "file": "scripts/grow_machine.py",
-        "before": '            out["questions"].append({"text": str(_q),\n                                     "kind": "grow_unresolved",\n                                     "slug": slug})\n        return out',
-        "after": '            out["questions"].append(str(_q))\n        return out',
+        "before": ('        out["questions"].append({"text": str(_q),' + chr(10)
+                   + '                                 "kind": "grow_unresolved",'
+                   + chr(10)
+                   + '                                 "slug": slug})' + chr(10)
+                   + '    blk = _amr.blocking_problems('
+                     'got.get("problems") or [])'),
+        "after": ('        out["questions"].append(str(_q))' + chr(10)
+                  + '    blk = _amr.blocking_problems('
+                    'got.get("problems") or [])'),
         "run": ["scripts/grow_machine.py"],
     },
     {

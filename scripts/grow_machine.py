@@ -1336,10 +1336,21 @@ def pending_questions(cur: dict, mat: dict = None, slug: str = "",
     ★決めるのは2AI／ここは「どこを読めばよいか」を渡すだけ★。
     ★もう載っている機種には聞かない★（答える意味がないので）。
     """
+    out = []
+    # ★★狙い目の線は、検索に載っているかに関わらず聞く★★（2026-09-18）
+    #   ★運営者の指示★＝「チェッカーの編集も撮ってきた情報で修正あるならやってね」
+    #   ★実測★＝新台経路の16機種は**1件も線を持っていなかった**
+    #   （`good` が在る機種 0／16・一覧の文も全部が空）＝
+    #   ★看板である狙い目チェッカーが、自動で作った機種では動いていなかった★。
+    #   ★下の「載っていれば聞かない」より前に置く★＝
+    #   線が無いことと検索に載っているかは別の話で、
+    #   あとに置くと★載った瞬間に聞かれなくなり、永久に空のまま★になる。
+    import checker_verdict as _ckv
+    for _q in _ckv.target_line_questions(cur):
+        out.append({"text": str(_q), "kind": "grow_checker", "slug": slug})
     pd = (cur or {}).get("page_decision") or {}
     if pd.get("indexable"):
-        return []
-    out = []
+        return out
     # ★★控えを重ねた「写し」で質問を作らせる★★（2026-09-07・Codexの指摘）
     #   ★「答えがあるから聞かない」では駄目★＝早見表の天井は、
     #   保存済みの答えが**いまの候補に無い**とき、わざと聞き直す作り。
@@ -1738,6 +1749,23 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     # ★材料が返っても「書いてはいけない理由」があれば止める★
     #   （2026-08-05・Codex102回目の指摘1。転載の疑いなどは
     #     material が作られても新台側では公開を止めている）
+    # ★★「読めなかった出典がある」は、止める・止めないに関わらず聞く★★
+    #   （2026-09-18・★既定は2AI★へ切り替えたとき）
+    #   ★直す前は下の `if blk:` の中にしか無かった★ので、
+    #   止める理由の名簿から外した項目（名鑑の一覧が読めない・
+    #   メーカー欄を読めない等）では、★いちばん読めていない機種で
+    #   問いが1つも出なくなった★＝聞かれないので永久に解けない。
+    #   ★止まらなくなったぶん、聞く側へ必ず回す★のが対になる。
+    # ★★問いは必ず辞書で持ち回る★★（2026-09-08・Codexの指摘）
+    #   ★直す前は文字列のまま足していた★ので、表示のところが
+    #   `_q.get(...)` を呼んで**実際に走らせると落ちた**。
+    for _q in _ba.unresolved_questions(
+            got.get("problems") or [],
+            got.get("all_urls") or got.get("urls"),
+            complete=bool(got.get("all_urls_complete"))):
+        out["questions"].append({"text": str(_q),
+                                 "kind": "grow_unresolved",
+                                 "slug": slug})
     blk = _amr.blocking_problems(got.get("problems") or [])
     if blk:
         out["problems"] += [f"止めました: {p}" for p in blk]
@@ -1749,16 +1777,6 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
             cur, got.get("material"), slug,
             complete=bool(got.get("all_urls_complete")),
             urls=got.get("all_urls") or got.get("urls"))
-        # ★★問いは必ず辞書で持ち回る★★（2026-09-08・Codexの指摘）
-        #   ★直す前は文字列のまま足していた★ので、表示のところが
-        #   `_q.get(...)` を呼んで**実際に走らせると落ちた**。
-        for _q in _ba.unresolved_questions(
-                got.get("problems") or [],
-                got.get("all_urls") or got.get("urls"),
-                complete=bool(got.get("all_urls_complete"))):
-            out["questions"].append({"text": str(_q),
-                                     "kind": "grow_unresolved",
-                                     "slug": slug})
         return out
     mat = got.get("material")
     if not mat:
@@ -3475,6 +3493,26 @@ def selftest() -> int:
                                 {"adopted": {}}, "zzz_q") == [])
             t("　判定書がまだ無い機種にも聞く（載っていないので）",
               len(pending_questions({}, {"adopted": {}}, "zzz_q")) >= 1)
+
+            # ★★狙い目の線が空なら、載っていても聞く★★（2026-09-18）
+            #   ★ここで見るのは「配線」★＝判定そのものは
+            #   `checker_verdict.py --selftest` が見る（罠③＝
+            #   関数だけの試験は、呼び出し行を消しても緑のまま）。
+            _cur_ck = {"slug": "zzz_q", "publication_policy": "page-decision/v1",
+                       "page_decision": {"indexable": True},
+                       "checker": {"modes": [{"key": "normal"}],
+                                   "normal": {}}}
+            _q_ck = pending_questions(_cur_ck, {"adopted": {}}, "zzz_q")
+            t("★★狙い目の線が1つも無ければ、載っていても聞く★★"
+              "（★実測＝新台経路16機種が全部これ。看板の道具が空だった★）",
+              any(x.get("kind") == "grow_checker" for x in _q_ck)
+              and all(isinstance(x, dict) for x in _q_ck))
+            t("　線が入れば聞かない",
+              not [x for x in pending_questions(
+                  dict(_cur_ck, checker={"modes": [{"key": "normal"}],
+                                         "normal": {"good": 700}}),
+                  {"adopted": {}}, "zzz_q")
+                  if x.get("kind") == "grow_checker"])
 
             # ★★足りないものを名指しして、出典を読んでもらう★★
             #   （2026-09-05・運営者の指示「2AIが天井の情報を取りに行けばいい」）
