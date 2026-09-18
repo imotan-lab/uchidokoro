@@ -1323,6 +1323,14 @@ MUTATIONS = [
         "run": ["scripts/checker_verdict.py"],
     },
     {
+        "why": "★G数以外の機種（pt・周期）でも狙い目の線を受け取る"
+               "（★天井の読み取りはG数だけなので、単位の違う線が入る★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": '    if str(ck.get("unit") or "G") != "G":',
+        "after": "    if False:",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
         "why": "★欄ごとの天井を見ず、全部の天井の最大値だけで見る"
                "（★浅い欄に深い線が入り、書いたあとは good がその欄の"
                "天井を超えたチェッカーになる★＝Codexの2回目の指摘）★",

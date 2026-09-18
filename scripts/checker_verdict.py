@@ -163,6 +163,13 @@ def decision_problems(dec, ms=None) -> list:
     if len(str(dec.get("why") or "").strip()) < MIN_WHY:
         ng.append(f"理由（why）が {MIN_WHY} 字以上ありません")
     ck = m.get("checker") or {}
+    # ★★いまはG数の機種だけ★★（2026-09-18）＝天井の読み取りがG数だけなので、
+    #   pt・周期の機種に同じ数字を書くと**単位の違う線**が入る。
+    #   ★そういう機種は、確かめた天井が0件になって下で断られる★が、
+    #   別の欄のG数天井がたまたま記録されていると通ってしまうので明示的に断る。
+    #   ★要るようになったら、そのとき実データで作る★（罠㉖）。
+    if str(ck.get("unit") or "G") != "G":
+        ng.append(f"{slug}: G数以外の機種（{ck.get('unit')}）はまだ受け取れません")
     if ck.get("exchangeRates"):
         # ★交換率ごとの線は、いまは受け取らない★＝新台経路に該当が0件で、
         #   ★一度も本物で動かしていない道を作らない★（罠㉖）。
@@ -581,6 +588,20 @@ def selftest() -> int:
               dec(modes=[{"key": "normal", "label": "通常", "good": 700},
                          {"key": "normal", "label": "通常", "good": 500}]),
               base_ms)))
+        t("★G数以外の機種（pt・周期）は、まだ受け取らない★"
+          "（★単位の違う線が入る★）",
+          any("G数以外" in x for x in decision_problems(
+              dec(), [{"slug": "zzz_auto", "name": "試験機",
+                       "publication_policy": "page-decision/v1",
+                       "checker": {"unit": "pt",
+                                   "modes": [{"key": "normal",
+                                              "label": "通常"}]}}])))
+        t("　単位が書いていなければG数として扱う（既定）",
+          not decision_problems(
+              dec(), [{"slug": "zzz_auto", "name": "試験機",
+                       "publication_policy": "page-decision/v1",
+                       "checker": {"modes": [{"key": "normal",
+                                              "label": "通常"}]}}]))
         t("★交換率を持つ機種は、まだ受け取らない★",
           any("交換率" in x for x in decision_problems(
               dec(), [{"slug": "zzz_auto", "name": "試験機",
