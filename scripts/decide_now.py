@@ -1351,6 +1351,15 @@ def _guard_problem(slug: str) -> str:
     return ""
 
 
+class _StopWrite(ValueError):
+    """★意図して書き込みを止めた★（ほかの失敗と取り違えないための型）
+
+    ★なぜ型を分けるか★（2026-09-18・Codexの指摘）＝
+    `ValueError` のまま広く捕まえると、ファイルを置き換えたあとの失敗まで
+    飲み込んで「記事は変わったのに書いていない」と誤って報告し得る。
+    """
+
+
 def apply_decision(path: str, apply_it: bool = False, *,
                    guard: bool = True) -> dict:
     """2AIが決めたとおりに直す（★消す・言い換えるだけ★）。"""
@@ -2032,6 +2041,30 @@ def apply_decision(path: str, apply_it: bool = False, *,
     for n, why in ok_to_lose.items():
         result.setdefault("removed_numbers", []).append({"n": n, "why": why})
 
+    # ★★行が増える操作と、同じ表のセル直しは同時にやらない★★
+    #   （2026-09-18・Codexの指摘／台帳#698）
+    #   ★場所（行番号）は**変更前の記事**から組む★のに、書き込みは順番に当てる。
+    #   同じ表で `split_row` が先に走ると行が増え、後ろの行がずれる。
+    #   ★書く直前の照合だけでは足りない★＝ずれた先のセルが**たまたま同じ文字**なら
+    #   照合を通ってしまい、★挿入された別のセルを書き換える★。
+    #   ★ここで断る★＝見るだけのときも同じ答えになる（書く時だけ落ちない）。
+    _splits = {}
+    for _k, _si, _bi, _a in plan:
+        if _k == "split_row":
+            _splits.setdefault((_si, _bi), []).append(int(_a.get("_ri", 0)))
+    if _splits:
+        for _k, _si, _bi, _a in plan:
+            if _k not in ("table_cell", "table_cell_in"):
+                continue
+            _ti, _ri, _ci = _bi
+            _at = [x for x in _splits.get((_si, _ti), []) if x <= _ri]
+            if _at:
+                result["problems"].append(
+                    "同じ表で「行を分ける」と「セルを直す」を一緒にはできません"
+                    f"（分ける行 {sorted(_at)} / 直すセル {_a.get('where')}）"
+                    "／★行がずれて別のセルへ書くので、分けてから決め直してください★")
+                return result
+
     for kind, si, bi, a in plan:
         result["done"].append({"op": a["op"], "why": a["why"][:60]})
 
@@ -2072,7 +2105,7 @@ def apply_decision(path: str, apply_it: bool = False, *,
                 _made, _w4 = split_row_plan(_rows[a["_ri"]], a["after"],
                                             str(a.get("sep") or ""))
                 if _w4:
-                    raise ValueError(_w4)
+                    raise _StopWrite(_w4)
                 _rows[a["_ri"]:a["_ri"] + 1] = _made
                 continue
             if kind == "replace":
@@ -2099,7 +2132,7 @@ def apply_decision(path: str, apply_it: bool = False, *,
                     _cur2 == a["before"] if kind == "table_cell"
                     else _cur2.count(a["before"]) == 1)
                 if not _okc:
-                    raise ValueError(
+                    raise _StopWrite(
                         "書く直前にセルの中身が変わっています"
                         f"（{a.get('where') or ''}）"
                         "／★行がずれた可能性があるので"
@@ -2119,28 +2152,35 @@ def apply_decision(path: str, apply_it: bool = False, *,
                 #   それでも「★書きました★ 2 件」と報告していた。
                 #   実際、表のセルを直す種類を足した日に、
                 #   ★1件しか書いていないのに2件書いたと言った★。
-                raise ValueError(
+                raise _StopWrite(
                     f"知らない書き換えの種類です: {kind!r}"
                     "／★組んだのに書けていません（黙って飛ばしません）★")
         for si, idxs in dropping.items():
             body = d["sections"][si]["body"]
             d["sections"][si]["body"] = [x for i, x in enumerate(body)
                                          if i not in idxs]
-        with io.open(tmp, "w", encoding="utf-8", newline="\n") as f:
-            json.dump(d, f, ensure_ascii=False, indent=1)
-            f.write("\n")
-        os.replace(tmp, p)
-        # ★消した段落は控えに残す★（2026-08-30・あとから戻せるように）
-        #   ★書けたときだけ残す★（書かずに終わった回の記録を作らない）
-        if result.get("removed_lines"):
-            result["removed_log"] = _record_removed(
-                slug, [x["text"] for x in result["removed_lines"]], dec)
-        result["wrote"] = True
-      except ValueError as _we:
+      except _StopWrite as _we:
         # ★ここまでの書き換えは写しの上だけ★＝本物のファイルは無傷
+        #   ★捕まえるのは「意図して止めた」ときだけ★（2026-09-18・Codexの指摘）
+        #   ★直す前はファイルを置き換えたあとまで try の中★だったので、
+        #   置き換え後に落ちると「記事は変わったのに wrote=False」と
+        #   誤って報告し得る形だった。
         result["problems"].append(str(_we))
         result["done"] = []
         result["wrote"] = False
+        return result
+      # ★★ここから先は try の外★★＝ファイルへ書くところで落ちたら、
+      #   握りつぶさずそのまま外へ出す（黙って「書いていない」と言わない）。
+      with io.open(tmp, "w", encoding="utf-8", newline="\n") as f:
+          json.dump(d, f, ensure_ascii=False, indent=1)
+          f.write("\n")
+      os.replace(tmp, p)
+      # ★消した段落は控えに残す★（2026-08-30・あとから戻せるように）
+      #   ★書けたときだけ残す★（書かずに終わった回の記録を作らない）
+      if result.get("removed_lines"):
+          result["removed_log"] = _record_removed(
+              slug, [x["text"] for x in result["removed_lines"]], dec)
+      result["wrote"] = True
     return result
 
 
@@ -3916,8 +3956,50 @@ def _selftest() -> int:
           and _rows3 == [["天井 天井2", "1200G 1300G"],
                          ["ぶどう", "1/5.94（未確認1/6.33）"]])
         t("　★止めた理由が分かる★",
-          any("行がずれた" in str(x) or "セルの中身が変わって" in str(x)
+          any("一緒にはできません" in str(x)
               for x in (_r3.get("problems") or [])))
+        # ★★移った先がたまたま同じ文字でも止まる★★
+        #   （2026-09-18・Codexの指摘）★書く直前の照合だけでは足りない★＝
+        #   ずれた先のセルが同じ文字なら照合を通り、
+        #   ★挿入された別のセルを書き換える★。だから組合せ自体を断る。
+        _p4 = os.path.join(_td2, "zzz_cell3.json")
+        _d4 = {"name": "試験機", "slug": "zzz_cell3", "sections": [
+            {"title": "基本スペック", "type": "table",
+             "tables": [{"headers": ["項目", "値"],
+                         "rows": [["前 後", "別値 対象値"],
+                                  ["ぶどう", "対象値"]]}]}]}
+        with io.open(_p4, "w", encoding="utf-8", newline="\n") as _f4:
+            json.dump(_d4, _f4, ensure_ascii=False, indent=1)
+            _f4.write("\n")
+        _sha4 = _h2.sha256(io.open(_p4, encoding="utf-8").read()
+                           .encode("utf-8").replace(bytes([13, 10]),
+                                                    bytes([10]))).hexdigest()
+        _q4 = os.path.join(_td2, "dec4.json")
+        io.open(_q4, "w", encoding="utf-8").write(json.dumps({
+            "schema_version": SCHEMA, "slug": "zzz_cell3",
+            "source_sha256": _sha4, "decided_by": ["claude", "codex"],
+            "actions": [
+                {"op": "split_row", "where": "sections[0].tables[0].rows[0]",
+                 "why": "潰れた行を分ける（試験）", "sep": " ",
+                 "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました",
+                 "before": ["前 後", "別値 対象値"],
+                 "after": [["前", "別値"], ["後", "対象値"]]},
+                {"op": "replace", "where": "sections[0].tables[0].rows[1][1]",
+                 "why": "対象値を直す（試験）",
+                 "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました",
+                 "before": "対象値", "after": "対象値2"},
+            ],
+        }, ensure_ascii=False))
+        _r4 = apply_decision(_q4, True, guard=False)
+        _a4 = json.loads(io.open(_p4, encoding="utf-8").read())
+        t("★★移った先がたまたま同じ文字でも、別のセルへ書かない★★"
+          "（★書く直前の照合だけでは通ってしまう★）",
+          not _r4.get("wrote")
+          and _a4["sections"][0]["tables"][0]["rows"]
+          == [["前 後", "別値 対象値"], ["ぶどう", "対象値"]])
+        t("　★見るだけのときも同じ答えになる★"
+          "（書く時だけ落ちる、にしない）",
+          not apply_decision(_q4, False, guard=False).get("done"))
     finally:
         globals()["DETAILS"] = _keep2
 
