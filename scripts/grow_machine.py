@@ -1817,23 +1817,14 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
         cur, mat, slug,
         complete=bool(got.get("all_urls_complete")),
         urls=got.get("all_urls") or got.get("urls"))
-    # ★★読み取りに失敗したものも、ここで聞く★★（2026-09-07）
-    #   ★直す前★＝`unresolved_questions` は新台を**作るとき**からしか
-    #   呼ばれず、★育てるときは一度も聞いていなかった★。
-    #   実測（過去7日）＝「天井の記述はあるが採れませんでした」が145回、
-    #   誰にも聞かれずに捨てられ、事実が3件に届かないまま
-    #   ★永久に検索へ載らなかった★（X-300 は35日前に導入済み）。
-    #   ＝今週直した「型」の穴とまったく同じ形。
-    #   ★もう載っている機種には聞かない★（答える意味がないので）
-    if not ((cur.get("page_decision") or {}).get("indexable")):
-        # ★読む先はその機種のページ全部★（2026-09-08・本体だけ渡すのをやめた）
-        for _q in _ba.unresolved_questions(
-                got.get("problems") or [],
-                got.get("all_urls") or got.get("urls"),
-                complete=bool(got.get("all_urls_complete"))):
-            out["questions"].append({"text": str(_q),
-                                     "kind": "grow_unresolved",
-                                     "slug": slug})
+    # ★★「読み取りに失敗したものも聞く」は、材料集めの直後へ移した★★
+    #   （2026-09-18）＝ここに在ったものと**同じ問い**を、
+    #   `blocking_problems` を見る手前で、止める・止めないに関わらず作る。
+    #   ★移した理由★＝止める理由の名簿から項目を外したので、
+    #   ここまで来ない機種（早く返る道）で問いが1つも出なくなった。
+    #   ★元の記録★＝実測（2026-09-07・過去7日）で
+    #   「天井の記述はあるが採れませんでした」が145回、誰にも聞かれずに
+    #   捨てられ、事実が3件に届かないまま永久に検索へ載らなかった。
     # ★2AIで確定した値も材料に足す★（2026-08-11・台帳#316）
     #   足す場所が add_machine_run の中の1か所にしか無かったので、
     #   **確定値を載せた機種はここで「前に載っていた内容が再現できない」**

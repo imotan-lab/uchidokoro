@@ -1187,10 +1187,24 @@ def _gather(name: str, maker: str = "", slug: str = "",
     for p_ in lin.get("problems") or []:
         if not any(p_.startswith(u) for u in _lin_failed):
             got["problems"].append(f"転載照合を実施できません: {p_[:120]}")
-    for sp in lin["suspects"]:
-        got["problems"].append(
-            f"転載の疑い: {sp['a']} と {sp['b']} の本文が {sp['ratio']:.0%} 一致"
-            f"（登録簿に系列が書かれていません）")
+    # ★★転載の疑いは「1票にまとめる」★★（2026-09-18・Codexの指摘・自分で再現した）
+    #   ★直す前★＝この疑いは `problems` に文字を足すだけで、
+    #   ★実際に止めていたのは公開の名簿（BLOCKING）だけ★だった。
+    #   名簿から外した瞬間、★同じ誤りを写した2ページが
+    #   「独立した2出典」として通る★状態になっていた
+    #   （`source_lineage.independent()` は登録簿に書かれていない転載を知らない）。
+    #   ★機種まるごと止めるのは戻さない★＝それが2か月止めた形。
+    #   ★その組の片方だけを材料と票から外す★＝写しなので値は同じ。
+    #   ★どちらを残すかは決め打ち（名前の小さいほう）★＝意味の判断をしない。
+    #   ★2AIには必ず聞く★＝本当に転載か／登録簿に系列として書くべきか。
+    _mrg = merge_transcription(lin.get("suspects") or [],
+                               got["urls"], looks, slug)
+    got["problems"] += _mrg["problems"]
+    got.setdefault("maker_questions", []).extend(_mrg["questions"])
+    for u in _mrg["dropped"]:
+        _log(f"  （転載の疑い・1票にまとめるため票と材料から除外）{u}")
+    got["urls"] = _mrg["urls"]
+    looks = _mrg["looks"]
     mv = _mc.agree(looks)
     got["model_code"] = mv.get("model_code")
     # ★採用値と観測値を分ける★（2026-08-09・依頼130 P1-2）
@@ -1528,6 +1542,72 @@ def _machine_class(slug: str) -> str:
 #   文言を足していく形は、経路が増えるたびに同じ穴が開く。
 #   ★同定の失敗にはこの印を必ず付ける★＝文言に関係なく止まる。
 IDENTITY_FAILED = "★本人性を確かめられませんでした★"
+
+
+def merge_transcription(suspects: list, urls: list, looks: list,
+                        slug: str = "") -> dict:
+    """★転載の疑いがある組を「1票」にまとめる★（2026-09-18・Codexの指摘）
+
+    ★なぜ要るか（自分で再現した）★
+      この疑いは `problems` に文字を足すだけで、★実際に止めていたのは
+      公開の名簿（BLOCKING）だけ★だった。名簿から外した瞬間、
+      ★同じ誤りを写した2ページが「独立した2出典」として通る★状態になった。
+      `source_lineage.independent()` は**登録簿に書かれていない転載を知らない**
+      ので、そこでも1票にまとまらない。
+
+    ★機種まるごと止めるのは戻さない★＝それが2か月止めた形。
+    ★その組の片方だけを材料と票から外す★＝写しなので値は同じ。
+    ★どちらを残すかは決め打ち（名前の小さいほう）★＝意味の判断をしない。
+    ★2AIには必ず聞く★＝本当に写しか／登録簿に系列として書くべきか。
+
+    返すもの: problems / questions / urls / looks / dropped
+    """
+    def _host_of(u):
+        return str(u).split("/")[2].lower().removeprefix("www.")
+
+    out = {"problems": [], "questions": [], "dropped": [],
+           "urls": list(urls or []), "looks": list(looks or [])}
+    drop_hosts = set()
+    for sp in suspects or []:
+        out["problems"].append(
+            f"転載の疑い: {sp['a']} と {sp['b']} の本文が {sp['ratio']:.0%} 一致"
+            f"（登録簿に系列が書かれていません）")
+        keep, drop = sorted([str(sp["a"]), str(sp["b"])])
+        drop_hosts.add(drop)
+        out["questions"].append({
+            "key": f"lineage:{slug}:{keep}|{drop}",
+            "text": ("★この2つは同じ出どころですか★／"
+                     f"{keep} と {drop} の本文が {sp['ratio']:.0%} 一致しています／"
+                     f"いまは安全側に倒して {drop} を材料と票から外し、"
+                     f"{keep} だけを1票として数えています／"
+                     "★本当に写しなら、登録簿（source-registry）に系列として"
+                     "書いてください★＝以後は毎回1票として数えられます／"
+                     "★別々に取材した結果がたまたま似ているだけなら、"
+                     "そう判断した手がかりを逐語で挙げてください★"),
+        })
+    if not drop_hosts:
+        return out
+    out["dropped"] = [u for u in out["urls"] if _host_of(u) in drop_hosts]
+    out["urls"] = [u for u in out["urls"] if _host_of(u) not in drop_hosts]
+    out["looks"] = [r for r in out["looks"]
+                    if _host_of(r.get("url") or "") not in drop_hosts]
+    return out
+
+
+def transcription_wiring_problems() -> list:
+    """★材料集めの本体が、本当に1票へまとめているか★（罠③）
+
+    ★これは「文字が在るか」の検査★＝動く証拠は `merge_transcription` の試験。
+    ここが見ているのは「気づかずに配線を外していないか」だけ。
+    ★なぜ要るか★＝関数だけの試験は、呼び出し行を消しても緑のまま。
+    `_gather` は通信するので、通しで動かす試験を置けない。
+    """
+    import inspect
+    src = inspect.getsource(_gather)
+    want = ('merge_transcription(', 'got["urls"] = _mrg["urls"]',
+            'looks = _mrg["looks"]')
+    return [f"材料集めの本体に「{w}」がありません（転載を1票にまとめる配線）"
+            for w in want if w not in src]
 
 
 def blocking_problems(problems: list) -> list:
@@ -5383,6 +5463,36 @@ def _selftest_body() -> int:
               and _blocking(["名鑑ごとに型式名が食い違っています: a と b"])
               and not _blocking(["公式ページと名前が一致しません"])
               and not _blocking(["転載の疑い: a と b の本文が 99% 一致"]))
+            # ★★転載の疑いは「止める」代わりに「1票にまとめる」★★
+            #   （2026-09-18・Codexの指摘＝名簿から外した瞬間、同じ誤りを
+            #     写した2ページが独立2出典として通る状態になっていた）
+            _sus = [{"a": "b.example", "b": "a.example", "ratio": 0.99}]
+            _u = ["https://a.example/x", "https://www.b.example/y",
+                  "https://c.example/z"]
+            _lk = [{"url": u} for u in _u]
+            _mg = merge_transcription(_sus, _u, _lk, "zzz")
+            t("★★転載の疑いは、片方を票と材料から外す★★"
+              "（★止めない＝機種まるごとは進む★）",
+              _mg["urls"] == ["https://a.example/x", "https://c.example/z"]
+              and _mg["dropped"] == ["https://www.b.example/y"])
+            t("　外れるのは名前の大きいほう（決め打ち＝意味の判断をしない）",
+              [r["url"] for r in _mg["looks"]]
+              == ["https://a.example/x", "https://c.example/z"])
+            t("　2AIには必ず聞く（本当に写しか・登録簿に書くべきか）",
+              len(_mg["questions"]) == 1
+              and "同じ出どころ" in _mg["questions"][0]["text"]
+              and _mg["questions"][0]["key"].startswith("lineage:zzz:"))
+            t("　疑いが無ければ1つも外さない",
+              merge_transcription([], _u, _lk, "zzz")["urls"] == _u
+              and not merge_transcription([], _u, _lk, "zzz")["dropped"])
+            t("　元の一覧は書き換えない（写しの上で作る）",
+              _u == ["https://a.example/x", "https://www.b.example/y",
+                     "https://c.example/z"])
+            t("★★止める理由には戻さない★★"
+              "（★機種まるごと止めるのが2か月止めた形★）",
+              not _blocking(["転載の疑い: a と b の本文が 99% 一致"]))
+            t("★材料集めの本体が、実際に1票へまとめている★（配線・罠③）",
+              not transcription_wiring_problems())
             t("　実データでも既存機種を見つけられる",
               _cd.find_duplicates("Lすーぱぁびん娘"))
             # ★名前が違っても、公式URL・型式名で捕まえる★（Codex指摘・2026-07-31）

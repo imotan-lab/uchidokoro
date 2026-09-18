@@ -73,18 +73,49 @@ def _find(ms: list, slug: str):
     return None
 
 
-def _detail_numbers(slug: str) -> set:
-    """★記事データにそのまま在る数字★（天井を発明させないため）
+def _lead_int(v):
+    m = re.match(r"^(\d{2,5})", str(v or "").strip())
+    n = int(m.group(1)) if m else None
+    return n if n is not None and 0 < n <= MAX_VALUE else None
 
-    ★なぜ「記事に在るか」で見るのか★＝天井は2AIが出典から確かめて
-    記事へ書いた値なので、★記事に無い天井は、どこにも裏付けが無い★。
-    ★これは意味の判定ではない★＝数字がその文字のまま在るかを見るだけ。
+
+def known_ceilings(slug: str, m: dict | None = None) -> set:
+    """★その機種で「天井」として確かめてある数字★（天井を発明させないため）
+
+    ★★記事データの全文から数字を拾ってはいけない★★
+      （2026-09-18・Codexの指摘・実データで確かめた）＝
+      直す前は記事JSON全体を `\\d{2,5}` で拾っていたので、
+      ★slugの機種番号（5100）・導入年（2026）・確率の分母・機械割★まで
+      「記事に在る天井」として通っていた。＝歯止めになっていなかった。
+
+    ★見るのは構造化された3か所だけ★
+      ①2AIが記録した早見表の天井（`checker_ceiling.games`）
+      ②2AIが記録した天井（`ceiling.value.amount` の先頭の数字・G数のみ）
+      ③その機種のチェッカーに既に入っている天井（`<mode>.ceiling`）
     """
-    path = os.path.join(DETAILS, f"{slug}.json")
-    if not os.path.exists(path):
-        return set()
-    blob = json.dumps(_sj.read_json(path, expect=dict), ensure_ascii=False)
-    return {int(x) for x in re.findall(r"\d{2,5}", blob) if int(x) <= MAX_VALUE}
+    out = set()
+    try:
+        import confirmed_values as _cv
+        got = _cv.for_slug_checked(slug) or {}
+    except Exception:                                        # noqa: BLE001
+        got = {}                          # ★読めなければ「無い」扱い（断る側へ倒す）★
+    v = ((got.get("checker_ceiling") or {}).get("value") or {}).get("games")
+    if (n := _lead_int(v)) is not None:
+        out.add(n)
+    c = (got.get("ceiling") or {}).get("value") or {}
+    if str(c.get("kind") or "") == "GAME" and str(c.get("unit") or "") == "G":
+        if (n := _lead_int(c.get("amount"))) is not None:
+            out.add(n)
+    ck = (m or {}).get("checker") or {}
+    if isinstance(ck, dict):
+        for md in (ck.get("modes") or []):
+            if not isinstance(md, dict):
+                continue
+            key = str(md.get("key") or "")
+            conf = (ck.get("modeData") or {}).get(key) or ck.get(key) or {}
+            if isinstance(conf, dict) and (n := _lead_int(conf.get("ceiling"))):
+                out.add(n)
+    return out
 
 
 def _int(v):
@@ -123,7 +154,17 @@ def decision_problems(dec, ms=None) -> list:
     modes = dec.get("modes")
     if not isinstance(modes, list) or not modes:
         return ng + ["modes が1件もありません"]
-    nums = _detail_numbers(slug)
+    # ★★天井が1つも確かめられていない機種では、線を決めない★★
+    #   （2026-09-18・Codexの指摘）★直す前★＝`ceiling` は任意だったので、
+    #   ★`ceiling` を書かずに `good: 20000` と書けば何の検査も走らなかった★。
+    #   狙い目は「どこまで深ければ座ってよいか」なので、天井が分からない
+    #   うちは決めようがない。★先に天井を確かめる★（同じ回に問いが出ている）。
+    nums = known_ceilings(slug, m)
+    if not nums:
+        return ng + [f"{slug}: 天井が1つも確かめられていません"
+                     "（先に天井を確かめてください。天井なしの機種は"
+                     "設定狙い用のチェッカーを使います）"]
+    cap = max(nums)
     seen = set()
     for i, md in enumerate(modes):
         tag = f"modes[{i}]"
@@ -153,13 +194,22 @@ def decision_problems(dec, ms=None) -> list:
         order = [vals[lv] for lv in LEVELS if lv in vals]
         if order != sorted(order):
             ng.append(f"{tag}: caution ≦ good ≦ excellent の順になっていません")
+        # ★★どのモードでも、確かめてある天井のいちばん深いところを超えない★★
+        #   （2026-09-18・Codexの指摘）★`ceiling` を省けば検査が走らない★
+        #   という抜け道を塞ぐ。リセット後のように天井を別に記録していない
+        #   モードでも、ここで上限がかかる。
+        for lv in LEVELS:
+            if lv in vals and vals[lv] > cap:
+                ng.append(f"{tag}: {lv}（{vals[lv]}）が、確かめてある天井の"
+                          f"いちばん深いところ（{cap}）を超えています")
         if "ceiling" in md:
             ce = _int(md.get("ceiling"))
             if ce is None or not (0 < ce <= MAX_VALUE):
                 ng.append(f"{tag}: ceiling が 1〜{MAX_VALUE} の整数ではありません")
             elif ce not in nums:
-                # ★記事に無い天井は受け取らない★（2AIに数字を作らせない）
-                ng.append(f"{tag}: 天井 {ce} が記事のどこにも書かれていません")
+                # ★確かめていない天井は受け取らない★（2AIに数字を作らせない）
+                ng.append(f"{tag}: 天井 {ce} は確かめた記録にありません"
+                          f"（確かめてあるのは {sorted(nums)}）")
             else:
                 for lv in LEVELS:
                     if lv in vals and vals[lv] > ce:
@@ -362,9 +412,10 @@ def selftest() -> int:
         d.update(kw)
         return d
 
-    # ★記事の数字は、本物の読み取り関数を差し替えて渡す★（罠①＝自作を採点しない）
-    real = globals()["_detail_numbers"]
-    globals()["_detail_numbers"] = lambda s: {1000, 700, 600}
+    # ★確かめてある天井は、本物の読み取り関数を差し替えて渡す★
+    #   （罠①＝自作の材料を自分で採点しない。読み取りそのものは下で本物を動かす）
+    real = globals()["known_ceilings"]
+    globals()["known_ceilings"] = lambda s, m=None: {1000}
     try:
         t("ふつうの決定は通る", not decision_problems(dec(), base_ms))
         t("★判断者が1つだと通らない★",
@@ -383,11 +434,11 @@ def selftest() -> int:
           any("順になっていません" in x for x in decision_problems(
               dec(modes=[{"key": "normal", "label": "通常",
                           "good": 600, "caution": 700}]), base_ms)))
-        t("★記事に無い天井は通らない★",
-          any("記事のどこにも" in x for x in decision_problems(
+        t("★確かめていない天井は通らない★",
+          any("確かめた記録にありません" in x for x in decision_problems(
               dec(modes=[{"key": "normal", "label": "通常", "ceiling": 1234,
                           "good": 700}]), base_ms)))
-        t("　記事に在る天井なら通る",
+        t("　確かめてある天井なら通る",
           not decision_problems(
               dec(modes=[{"key": "normal", "label": "通常", "ceiling": 1000,
                           "good": 700}]), base_ms))
@@ -395,6 +446,17 @@ def selftest() -> int:
           any("超えています" in x for x in decision_problems(
               dec(modes=[{"key": "normal", "label": "通常", "ceiling": 1000,
                           "good": 700, "excellent": 1500}]), base_ms)))
+        # ★★`ceiling` を書かなければ検査が走らない、という抜け道★★
+        #   （2026-09-18・Codexの指摘。★直す前はこれが通っていた★）
+        t("★★天井を書かずに深い線を入れても通らない★★"
+          "（★`ceiling` を省けば検査が走らない、という抜け道★）",
+          any("いちばん深いところ" in x for x in decision_problems(
+              dec(modes=[{"key": "normal", "label": "通常",
+                          "good": 20000}]), base_ms)))
+        t("　天井を書かなくても、天井より浅ければ通る",
+          not decision_problems(
+              dec(modes=[{"key": "reset", "label": "リセット後",
+                          "good": 400}]), base_ms))
         t("★good が無いと通らない★",
           any("good" in x for x in decision_problems(
               dec(modes=[{"key": "normal", "label": "通常",
@@ -437,8 +499,14 @@ def selftest() -> int:
         # ★2回当てても同じ姿★（罠㉘）
         t("★2回当てても同じ姿になる★",
           merged(merged(base_ms[0], dec()), dec()) == merged(base_ms[0], dec()))
+        # ★天井が1つも確かめられていなければ、線を決めさせない★
+        globals()["known_ceilings"] = lambda s, m=None: set()
+        t("★★天井が1つも確かめられていない機種では、線を決めない★★",
+          any("天井が1つも確かめられていません" in x
+              for x in decision_problems(dec(), base_ms)))
+        globals()["known_ceilings"] = lambda s, m=None: {1000}
     finally:
-        globals()["_detail_numbers"] = real
+        globals()["known_ceilings"] = real
 
     # ── ★狙い目の線が無い機種を問いにする★
     t("★線が1つも無ければ聞く★", len(target_line_questions(base_ms[0])) == 1)
@@ -468,9 +536,21 @@ def selftest() -> int:
     t("　問いに、決定を書き込むコマンドが入っている",
       "--apply" in target_line_questions(base_ms[0])[0])
 
-    # ★本物の記事データを読む側も動かす★（差し替えたまま終わらない）
-    t("　記事データから数字を読める（本物）",
-      isinstance(_detail_numbers("zzz_does_not_exist"), set))
+    # ★本物の読み取りも動かす★（差し替えたまま終わらない）
+    t("　確かめてある天井を読める（本物）",
+      isinstance(known_ceilings("zzz_does_not_exist"), set))
+    # ★★記事の全文から数字を拾っていないこと★★（Codexの指摘の対照実験）
+    #   ★実データで確かめる★＝dmm_5100 の記事にはslugの番号（5100）も
+    #   導入年（2026）も確率の分母もあるが、天井としては1つも出ない。
+    _real_ceils = known_ceilings("dmm_5100", _find(_machines(), "dmm_5100"))
+    t("★★記事の全文から数字を拾わない★★"
+      "（★直す前は slugの番号・導入年・確率の分母まで天井として通った★）",
+      not ({5100, 2026} & _real_ceils))
+    # ★構造化された場所からは読める★（「何も読まない」で緑にならないように）
+    _wired = known_ceilings(
+        "zzz_no_such_slug",
+        {"checker": {"modes": [{"key": "normal"}], "normal": {"ceiling": 888}}})
+    t("　チェッカーに入っている天井は読める（対照）", _wired == {888})
 
     print(f"\n{ok[0]}/{ok[1]} 合格")
     return 0 if ok[0] == ok[1] else 1

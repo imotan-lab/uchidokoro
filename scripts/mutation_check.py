@@ -1286,6 +1286,65 @@ MUTATIONS = [
         "run": ["scripts/checker_verdict.py"],
     },
     {
+        "why": "★転載の疑いがある組を、票と材料から外さない"
+               "（★同じ誤りを写した2ページが「独立した2出典」として通る★"
+               "＝2026-09-18・Codexの指摘で塞いだ）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "    if not drop_hosts:\n        return out",
+        "after": "    if True:\n        return out",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★転載を1票にまとめる配線を、材料集めの本体から外す"
+               "（★関数だけの試験は、呼び出し行を消しても緑のまま＝罠③★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '    got["urls"] = _mrg["urls"]\n    looks = _mrg["looks"]',
+        "after": "    pass",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★天井の上限を、確かめた値ではなく最大値にする"
+               "（★`ceiling` を書かなければ検査が走らない、という抜け道★"
+               "＝2026-09-18・Codexの指摘で塞いだ）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "    cap = max(nums)",
+        "after": "    cap = MAX_VALUE",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★天井が1つも確かめられていなくても、線を決めさせる"
+               "（★狙い目は天井から決まるので、裏付けなしの線が読者の道具に入る★）★",
+        # ★★`if not nums:` を False にするだけだと、あとの max() が
+        #   例外で落ちるだけになり「試験が❌」ではなく「ただ落ちた」になる（罠⑤）。
+        #   ★守りを外しても、そのまま動く形にして壊す★
+        "file": "scripts/checker_verdict.py",
+        "before": "    nums = known_ceilings(slug, m)\n    if not nums:",
+        "after": ("    nums = known_ceilings(slug, m) or {MAX_VALUE}\n"
+                  "    if not nums:"),
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★確かめた天井に、記事の全文から拾った数字を混ぜる"
+               "（★slugの機種番号・導入年・確率の分母まで天井として通る★"
+               "＝2026-09-18・Codexが実データで指摘）★",
+        "file": "scripts/checker_verdict.py",
+        "before": ('            if isinstance(conf, dict) and '
+                   '(n := _lead_int(conf.get("ceiling"))):' + chr(10)
+                   + "                out.add(n)" + chr(10)
+                   + "    return out"),
+        "after": ('            if isinstance(conf, dict) and '
+                  '(n := _lead_int(conf.get("ceiling"))):' + chr(10)
+                  + "                out.add(n)" + chr(10)
+                  + '    _p = os.path.join(DETAILS, f"{slug}.json")' + chr(10)
+                  + "    if os.path.exists(_p):" + chr(10)
+                  + "        _b = json.dumps(_sj.read_json(_p, expect=dict), "
+                    "ensure_ascii=False)" + chr(10)
+                  + '        out |= {int(x) for x in re.findall(r"\\d{2,5}", _b)'
+                    " if int(x) <= MAX_VALUE}" + chr(10)
+                  + "    return out"),
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
         "why": "★判断者の契約を、この場で決め打ちにする"
                "（★片方のAIだけで狙い目を決められる★）★",
         "file": "scripts/checker_verdict.py",
@@ -4076,21 +4135,15 @@ MUTATIONS = [
         "after": "    out = []\n    for r in []:",
         "run": ["scripts/add_machine_run.py"],
     },
-    {
-        "why": "★読み取りに失敗したものを、育成レーンで聞かない★"
-               "（★実測145回・誰にも聞かれず捨てられ、"
-               "出典に書いてあるのに永久に検索へ載らない★）",
-        "file": "scripts/grow_machine.py",
-        "before": ('    if not ((cur.get("page_decision") or {}).get("indexable")):\n'
-                   "        # ★読む先はその機種のページ全部★（2026-09-08・本体だけ渡すのをやめた）\n"
-                   "        for _q in _ba.unresolved_questions(\n"
-                   '                got.get("problems") or [],'),
-        "after": ('    if not ((cur.get("page_decision") or {}).get("indexable")):\n'
-                  "        # ★読む先はその機種のページ全部★（2026-09-08・本体だけ渡すのをやめた）\n"
-                  "        for _q in [] and _ba.unresolved_questions(\n"
-                  '                got.get("problems") or [],'),
-        "run": ["scripts/grow_machine.py"],
-    },
+    # ★★2026-09-18：「読み取りに失敗したものを、育成レーンで聞かない」を消した★★
+    #   ★理由★＝同じ問いを作る場所が材料集めの直後（`blocking_problems` の手前）
+    #   へ移り、こちらは★何も壊さない壊し方★になった。
+    #   ＝守りが二重になったので、片方を壊しても試験は赤くならない（罠③）。
+    #   ★本番の push の関所が実際に検知した★（「壊しても試験が赤くならない」）。
+    #   ★役目は「★『読めなかった出典がある』を、止めるときだけ聞く形に戻す★」
+    #   が引き継いでいる★（そちらは loop ごと消す壊し方）。
+    #   ★元の記録★＝実測145回・誰にも聞かれず捨てられ、
+    #   出典に書いてあるのに永久に検索へ載らなかった（2026-09-07）。
     {
         "why": "★材料に入っている答えを数えない★"
                "（★材料にボーナス確率があっても『足りないもの』に残り、"
