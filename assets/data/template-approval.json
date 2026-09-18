@@ -40,7 +40,7 @@
   "scripts/build_pages_artifact.py": "a3ca5192cb5df519fd39d1a8c27217c3946d4dfa75c2b866ccc7011ffc19d678",
   "scripts/build_public_data.py": "20dc3d536a809e8ff5b1ffb8abdcdf577d0648708f15e92f71840c9f4ac011fd",
   "scripts/check_duplicate.py": "d5c8221444105553cca1894ff8d44eb255ad6534cafcd0e0af8a5a8e23c16c36",
-  "scripts/checker_verdict.py": "94016393e81865a5cdb2b085033d2a4a5812662c4e07969338c7ef93c2d5a0cd",
+  "scripts/checker_verdict.py": "f88f59659e5e913fb2299857eed698d8110c008e307bd88ef242b8ac5f16bc5a",
   "scripts/ci_safe.py": "7868c74045a90bfacaeba9321c1a732c3318ee3b6a49009296d6af1a026f2c10",
   "scripts/claim_c5.py": "d5054a7e376fa39e012d0defec19fda0cf3251a8cedbf4c07dcc80aceb7867ba",
   "scripts/claim_evidence.py": "e2d8ab58b5c0170fd396f3d972bb792cfc775b65d965bfd3d2573e9830c4a800",

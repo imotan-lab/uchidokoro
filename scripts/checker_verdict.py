@@ -696,15 +696,56 @@ def selftest() -> int:
     t("　確かめてある天井を読める（本物）",
       isinstance(known_ceilings("zzz_does_not_exist"), set))
     # ★★見出し付きの天井（`ceiling#bonus`）も読めること★★
-    #   （2026-09-18・Codexの指摘・実データで確かめた）＝
+    #   （2026-09-18・Codexの指摘・本番のデータ ssb1 で見つけた）＝
     #   ★直す前は `ceiling` という名前だけを読んでいた★ので、
     #   天井を2つ記録してある機種が「天井0件」で拒否されていた。
     #   ★G数以外（`ceiling#point` の 1000pt）は混ぜない★
-    _ssb = known_ceilings("ssb1", _find(_machines(), "ssb1"))
-    t("★★見出し付きの天井（ceiling#bonus / #cz）も読む★★"
-      "（★直す前は0件で、その機種は永久に線を決められなかった★）",
-      {560, 899} <= _ssb)
-    t("　G数でない天井（pt）は混ぜない", 1000 not in _ssb)
+    #
+    # ★★本番の控えを読まない★★（2026-09-18・CIが赤くなって分かった）
+    #   ★直す前は実データ（ssb1）をそのまま読んでいた★ので、
+    #   控えがリポジトリの外にあるCIでは**必ず落ちた**（実測）。
+    #   ★「無ければ飛ばす」で逃げない★＝本物の登録関数を通して、
+    #   一時の置き場へ自分で材料を作る（罠①・CLAUDE.mdの決まり）。
+    import tempfile as _tf
+    _NAME = "L試験機ゼット"
+    _Q = {"bonus": "ボーナス間の天井は899G", "cz": "CZ間の天井は560G",
+          "point": "思春期ポイントの天井は1000pt"}
+
+    def _ff(url):
+        q = _Q["bonus"] if "zzbonus" in url else (
+            _Q["cz"] if "zzcz" in url else _Q["point"])
+        return ("<title>" + _NAME + " スロット 新台 天井 | 解析</title>"
+                "<body><h1>" + _NAME + "</h1><p>" + q + "。"
+                + ("説明。" * 30) + "</p></body>")
+
+    import confirmed_values as _cvT
+    _keep_store, _keep_bind = _cvT.STORE, _cvT.bind_machine
+    try:
+        _cvT.STORE = os.path.join(_tf.mkdtemp(prefix="ckv_cv_"),
+                                  "confirmed_values.json")
+        _cvT.bind_machine = lambda u: ("zz_ceil", _NAME)
+        _cvT.init_store()
+        for _sfx, _kind, _amt, _unit in (("bonus", "GAME", "899", "G"),
+                                         ("cz", "GAME", "560", "G"),
+                                         ("point", "POINT", "1000", "pt")):
+            _cvT.record(
+                slug="zz_ceil", field="ceiling#" + _sfx,
+                official_url="https://m.example/products/slot/z/",
+                value={"kind": _kind, "amount": _amt, "unit": _unit,
+                       "benefit": "AT"},
+                sources=[_cvT.parse_source(
+                    "https://chonborista.com/zz" + _sfx + "|" + _Q[_sfx]),
+                    _cvT.parse_source(
+                        "https://nana-press.com/zz" + _sfx + "|" + _Q[_sfx])],
+                by=["claude", "codex"], name=_NAME, fetch=_ff,
+                why="同じ原文を読んで一致しました")
+        _rec = known_ceilings("zz_ceil")
+        t("★★見出し付きの天井（ceiling#bonus / #cz）も読む★★"
+          "（★直す前は0件で、その機種は永久に線を決められなかった★）",
+          {560, 899} <= _rec)
+        t("　G数でない天井（pt）は混ぜない", 1000 not in _rec)
+    finally:
+        _cvT.STORE, _cvT.bind_machine = _keep_store, _keep_bind
     # ★★記事の全文から数字を拾っていないこと★★（Codexの指摘の対照実験）
     #   ★実データで確かめる★＝dmm_5100 の記事にはslugの番号（5100）も
     #   導入年（2026）も確率の分母もあるが、天井としては1つも出ない。
