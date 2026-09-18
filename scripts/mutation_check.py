@@ -5690,6 +5690,18 @@ MUTATIONS = [
         "run": ["scripts/decide_now.py"],
         "issues": [698],
     },
+    {
+        "why": "★本文を「種類」でまとめる（物理の場所でまとめない）"
+               "（★消す操作が検査から漏れ、同じ行を2回消す決定が"
+               "「2件やりました」と報告して1件しか効かない。"
+               "直す×消す の交差も気づけない★）★",
+        "file": "scripts/decide_now.py",
+        "before": ('        _key = (("body", _si, _bi) if _fam in ("replace", "drop")'
+                   + chr(10) + '                else (_fam, _si, str(_bi)))'),
+        "after": "        _key = (_fam, _si, str(_bi))",
+        "run": ["scripts/decide_now.py"],
+        "issues": [698],
+    },
     # ★★`except` の型を広げる壊し方は登録しない★★（2026-09-18）＝
     #   `try` の範囲を「写しの上の書き換え」だけに狭めたので、
     #   ファイルへ書く所は**もう try の外**にある。

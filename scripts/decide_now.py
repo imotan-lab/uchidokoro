@@ -2074,10 +2074,21 @@ def apply_decision(path: str, apply_it: bool = False, *,
     #   ★セルだけの問題ではない★ので、場所の種類を問わず断る。
     _seen = {}
     for _k, _si, _bi, _a in plan:
-        if _k in ("split_row", "drop"):
-            continue                      # 分ける＝上で見た／消す＝同じ行を二度指さない
+        if _k == "split_row":
+            continue                      # 分ける＝上で見た
         _fam = _k[:-3] if _k.endswith("_in") else _k
-        _seen.setdefault((_fam, _si, str(_bi)), []).append(_a)
+        # ★★本文は「種類」ではなく「物理の場所」でまとめる★★
+        #   （2026-09-18・Codexの7回目／自分で再現した）
+        #   ★消す操作を検査から外していたのが誤り★＝
+        #   同じ行を `drop_line` で2件並べると、計画には2件入るのに
+        #   実際の削除は集合に畳まれて1件＝
+        #   ★「2件やりました」と報告して1件しか効かない★（実測）。
+        #   ★種類でまとめると交差が漏れる★＝`replace` と `drop_line` は
+        #   別の種類なので、同じ行に並べても気づけない。
+        #   ★同じ文が2か所にある場合は別の行なので妨げない★（`_bi` が違う）。
+        _key = (("body", _si, _bi) if _fam in ("replace", "drop")
+                else (_fam, _si, str(_bi)))
+        _seen.setdefault(_key, []).append(_a)
     for _key, _as in _seen.items():
         if len(_as) > 1:
             result["problems"].append(
@@ -2092,7 +2103,12 @@ def apply_decision(path: str, apply_it: bool = False, *,
             if _k not in ("table_cell", "table_cell_in"):
                 continue
             _ti, _ri, _ci = _bi
-            _at = [x for x in _splits.get((_si, _ti), []) if x <= _ri]
+            # ★一律で断る★（2026-09-18・Codexの7回目で食い違いを指摘された）
+            #   ★直す前は「分ける行 ≦ 直すセルの行」だけ★だったので、
+            #   手順書・コミットに書いた「一律拒否」と実装が違っていた。
+            #   ★安全上の穴ではない★（前のセルはずれない）が、
+            #   ★書いてあることと違う★のがいちばん危ない（次に読む人が誤解する）。
+            _at = _splits.get((_si, _ti), [])
             if _at:
                 result["problems"].append(
                     "同じ表で「行を分ける」と「セルを直す」を一緒にはできません"
@@ -4126,6 +4142,63 @@ def _selftest() -> int:
           not _r7.get("wrote")
           and json.loads(io.open(_p7, encoding="utf-8").read())
           ["sections"][0]["body"] == ["前 対象 行です。"])
+
+        # ★★消す操作も同じ★★（2026-09-18・Codexの7回目／自分で再現した）
+        #   ★直す前は消す操作を検査から外していた★＝
+        #   同じ行を2回消す決定は、計画に2件入るのに削除は集合で1件に畳まれ、
+        #   ★「2件やりました」と報告して1件しか効かない★（実測）。
+        #   ★種類でまとめると交差が漏れる★ので、本文は物理の場所でまとめる。
+        _BODY8 = ["消す行です。", "残る行です。", "もう1行あります。"]
+
+        def _dec8(actions):
+            _pp = os.path.join(_td2, "zzz_dl.json")
+            io.open(_pp, "w", encoding="utf-8", newline="\n").write(
+                json.dumps({"name": "試験機", "slug": "zzz_dl", "sections": [
+                    {"title": "ヤメ時の判断", "body": list(_BODY8)}]},
+                    ensure_ascii=False, indent=1) + "\n")
+            _ss = _h2.sha256(io.open(_pp, encoding="utf-8").read()
+                             .encode("utf-8")
+                             .replace(bytes([13, 10]), bytes([10]))).hexdigest()
+            _qq = os.path.join(_td2, "dec8.json")
+            io.open(_qq, "w", encoding="utf-8").write(json.dumps({
+                "schema_version": SCHEMA, "slug": "zzz_dl",
+                "source_sha256": _ss, "decided_by": ["claude", "codex"],
+                "actions": actions}, ensure_ascii=False))
+            return _pp, _qq
+
+        _WHY8 = "2AIで読み比べ、同じ内容だと判断しました"
+        _p8, _q8 = _dec8([
+            {"op": "drop_line", "text": "消す行です。", "why": "1件目（試験）",
+             "meaning_why": _WHY8},
+            {"op": "drop_line", "text": "消す行です。", "why": "2件目（試験）",
+             "meaning_why": _WHY8},
+        ])
+        _r8 = apply_decision(_q8, True, guard=False)
+        t("★★同じ行を2回消す決定も断る★★"
+          "（★削除は集合に畳まれるので、2件と報告して1件しか効かない★）",
+          not _r8.get("wrote")
+          and not apply_decision(_q8, False, guard=False).get("done")
+          and json.loads(io.open(_p8, encoding="utf-8").read())
+          ["sections"][0]["body"] == _BODY8)
+        _p9, _q9 = _dec8([
+            {"op": "replace", "where": "body", "before": "消す行です。",
+             "after": "消す行。", "why": "1件目（試験）", "meaning_why": _WHY8},
+            {"op": "drop_line", "text": "消す行です。", "why": "2件目（試験）",
+             "meaning_why": _WHY8},
+        ])
+        _r9 = apply_decision(_q9, True, guard=False)
+        t("★★直す×消す の交差も断る★★"
+          "（★種類でまとめると別の種類なので気づけない★）",
+          not _r9.get("wrote")
+          and json.loads(io.open(_p9, encoding="utf-8").read())
+          ["sections"][0]["body"] == _BODY8)
+        t("　★同じ文が別の行にあるときは妨げない★（場所が違うので通す）",
+          len(apply_decision(_dec8([
+              {"op": "drop_line", "text": "消す行です。", "why": "その1（試験）",
+               "meaning_why": _WHY8},
+              {"op": "drop_line", "text": "残る行です。", "why": "その2（試験）",
+               "meaning_why": _WHY8},
+          ])[1], False, guard=False).get("done") or []) == 2)
     finally:
         globals()["DETAILS"] = _keep2
 
