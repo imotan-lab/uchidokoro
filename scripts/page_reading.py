@@ -31,9 +31,21 @@
   そこから採ったなら RAW_RESPONSE と名乗る（あとで説明を誤らないため）。
 
 ★指紋の細かさは答えの種類で変える★（Codexの指摘）
-  WAIVE_MISSING_USER_BOX … 生HTML全体の指紋（未知の箱が足されたら効かなくする）
+  WAIVE_MISSING_USER_BOX … ★指紋は見ていない★（2026-09-14に外した）
+    いま見るのは3つ＝①必須の箱が今も欠けている ②欠けた箱が控えの範囲内
+    ③そう判断した手がかりの逐語が、いまのページに在る。
+    ★★この3つは、外した指紋の役目を果たしていない★★
+    （2026-09-18・Codexの指摘／台帳#662・★未解決★）＝
+    ★未知の名前の箱（例 `class="opinion-v2"`）に読者の書き込みが足されると、
+    3つとも通ってしまう★（新しい箱は「欠けた必須の箱」に入らないため）。
+    後段の `looks_like_user_area` は手がかり頼りで、しかも
+    `fetched_page` の中にしか無い。★要るのは「揺れる値だけを外した構造の指紋」★。
   READ_FACTS             … 根拠の範囲の指紋（広告の日付替わりで失効させない）
-  UNUSABLE               … 生HTML全体の指紋
+  UNUSABLE               … ★「読む文字」の指紋★（2026-09-18・台帳#696）
+    ★生HTML全体だった★＝なな徹はCSSのURLにそのときのunix秒を、
+    DMMは csrf-token と画像の `?t=` を毎回変えるので、
+    ★取ってくるたびに「使わない」の判断が失効★し、同じページを
+    毎晩聞き直して3回の枠を食いつぶす。
 """
 from __future__ import annotations
 
@@ -46,6 +58,18 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import local_paths as _lp                # noqa: E402
 import read_failure as _rf               # noqa: E402
+
+
+def _text_sha(html: str) -> str:
+    """★「2AIが読む文字」の指紋★（2026-09-18・台帳#696）
+
+    ★同じ規則を2か所に書かない★＝作り方は `user_area` の1か所だけ。
+    ★掃除前のHTMLを渡してよい★＝この層が扱うのは、そもそも機械が
+    掃除・読み取りに失敗したページなので、掃除済みの本文が無い。
+    見たいのは「読者に出る文字が変わったか」だけなので、これで足りる。
+    """
+    import user_area as _ua_pr
+    return _ua_pr.readable_sha256(html or "")
 import safe_json as _sj                  # noqa: E402
 
 STORE = _lp.doc("page_reading.json")
@@ -267,7 +291,18 @@ def verify(rec: dict, raw: str, *, stage: str, missing_boxes=None,
     kind = rec["kind"]
     if kind == UNUSABLE:
         # ★ページが変わったら、この答えは効かせない★（2026-09-10・CodexのP2）
-        if _rf.sha256(raw) != str(rec.get("raw_sha256")):
+        # ★★比べるのは「読む文字」★★（2026-09-18・台帳#696）
+        #   ★直す前は生HTML全文の指紋だった★＝なな徹はCSSのURLに
+        #   そのときのunix秒を、DMMは csrf-token と画像の `?t=` を毎回変えるので、
+        #   ★「このページは使わない」という2AIの判断が取得のたびに失効★し、
+        #   同じページを毎晩聞き直して3回の枠を食いつぶす。
+        #   ★安全な向き★＝安定させると「使わない」が**長く効く**。
+        #   相手が中身を直せば読む文字が変わるので、ちゃんと聞き直しになる。
+        #   ★`raw_sha256` では比べない★＝古い控えは `text_sha256` を持たないので
+        #   自動的に失効する（fail-closed。「使わない」なので聞き直しは安全）。
+        if not str(rec.get("text_sha256") or "").strip():
+            return False, "古い形の控えです（読む文字の指紋がありません）"
+        if _text_sha(raw) != str(rec.get("text_sha256")):
             return False, "ページが変わっているので、「使わない」は効かせません"
         return False, "2AIが「このページは使わない」と決めています"
     if kind == READ_FACTS:
@@ -297,16 +332,21 @@ def verify(rec: dict, raw: str, *, stage: str, missing_boxes=None,
         #   ＝★2AIがどれだけ正しく判断しても、その答えは二度と使えない★
         #   （クチコミが1〜2件付いた新台が、出典ごと使えなくなっていた）。
         #   ★2026-09-08に出典の確かめ直しで同じ形を直したのに、ここに残っていた★（罠㊺）。
-        #   ★外しても弱くならない理由★＝この指紋が止めていたのは
-        #   「知らない箱が足された／別の箱が消えた」場合だが、それは
-        #   ・箱が戻れば `now` が空になって免除しない
-        #   ・別の箱が消えれば `now <= want` に外れて免除しない
-        #   の2つで既に止まる。さらに下で、そう判断した手がかりの逐語が
-        #   いまのページに在ることまで確かめる（控えには1件以上必須）。
+        #   ★★外した分は埋まっていない（台帳#662・未解決）★★
+        #   （2026-09-18・Codexの指摘・自分で確かめた）
+        #   ★直後にここへ「外しても弱くならない」と書いていたが、誤り★＝
+        #   いま見ているのは3つ（①箱が戻れば `now` が空 ②`now <= want`
+        #   ③手がかりの逐語が残っている）だが、
+        #   ★未知の名前の箱（例 `class="opinion-v2"`）に読者の書き込みが
+        #   足されると、3つとも通る★（新しい箱は「欠けた必須の箱」ではない）。
+        #   外した全文の指紋なら確実に失効していた。
+        #   ★要るのは「揺れる値（csrf-token・`?t=`）だけを外した構造の指紋」★。
+        #   ★運営者の判断待ち★（受容／構造の指紋を作る／DMMを一時停止）。
         for q in (rec.get("quotes") or []):
             if str(q) not in str(raw or ""):
                 return False, f"手がかりの逐語が、いまのページにありません（{str(q)[:30]}）"
-        return True, "免除してよい箱だけで、ページも変わっていません"
+        return True, ("免除してよい箱だけで、手がかりの逐語も残っています"
+                      "（★未知の箱が足された場合は見つけられません・台帳#662★）")
     return False, f"知らない答えです: {kind!r}"
 
 
@@ -326,6 +366,8 @@ def record(slug: str, url: str, stage: str, kind: str, *, raw: str,
            "why": str(why or "").strip(),
            "decided_at": str(decided_at or ""),
            "raw_sha256": _rf.sha256(raw),
+           # ★「読む文字」の指紋★（UNUSABLE の照合はこちらを使う）
+           "text_sha256": _text_sha(raw),
            "asked_schema": _rf.ASK_SCHEMA}
     if kind == READ_FACTS:
         rec["evidence"] = str(evidence or "")
@@ -565,6 +607,22 @@ def selftest() -> int:                                       # noqa: C901
         t("★★ページが変われば「使わない」も効かない★★"
           "（★相手が直して読めるようになっても、古い判断が残り続けた★）",
           not _oku2 and "効かせません" in _wu2)
+        # ★★取り直すたびに変わる飾りでは失効させない★★（2026-09-18・台帳#696）
+        #   ★直す前は生HTML全体の指紋だった★ので、
+        #   なな徹のCSS（unix秒）やDMMの csrf-token だけで毎回失効し、
+        #   同じページを毎晩2AIに聞き直して3回の枠を食いつぶしていた。
+        _noisy = ('<link href="/css/g.css?1789700770">'
+                  + RAW + '<img src="/i.png?t=1789700771">')
+        _oku3, _wu3 = verify(_uold, _noisy, stage=_rf.STAGE_USER_AREA)
+        #   ★断った理由の文まで見る★（罠㉚）＝「ページが変わっているので、
+        #   「使わない」は効かせません」にも『使わない』が入っているので、
+        #   その語を探すだけだと**失効していても緑**になる（実際になった）。
+        t("★★飾りだけ変わっても「使わない」は効き続ける★★"
+          "（★失効すると毎晩同じページを聞き直して枠を使い切る★）",
+          not _oku3 and "効かせません" not in _wu3
+          and _wu3 == "2AIが「このページは使わない」と決めています")
+        t("　★対照★＝その飾りで生HTMLの指紋のほうは実際に変わっている",
+          _rf.sha256(_noisy) != _rf.sha256(RAW))
         t("　取り除ける",
           forget("https://example.invalid/9",
                  _rf.STAGE_USER_AREA, "件数が1件以上なら投稿欄の一覧の箱がある")["state"] == "FORGOTTEN")

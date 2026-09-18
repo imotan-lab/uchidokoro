@@ -110,8 +110,32 @@ STORE = _lp.doc("maker_identity_cache.json")
 #     ②引用が、機械が取り直した本文に**そのまま在る**（言うだけでは通さない）
 #     ③本文の指紋が、判断したときと同じ
 #     ④値の採否は今までどおり独立2出典（source_lineage）
-SCHEMA = "maker-identity-cache/v4"
+# ★★v5＝指紋の意味が変わった★★（2026-09-18・台帳#696）
+#   v4 までの `body_sha256` は **掃除済みHTMLの全文**の指紋だった。
+#   ★取ってくるたびに変わるので、2AIの控えが数秒で失効していた★
+#   （なな徹はCSSのURLにそのときのunix秒／DMMは csrf-token と画像の `?t=`）。
+#   いまは **`user_area.readable_text`（2AIが読む文字）** の指紋。
+#   ★版を上げる理由★＝どちらも64桁の16進なので、控えだけ見ても区別できない。
+#   別のPCやバックアップに残った古い控えを、形の上で確実に断るため。
+SCHEMA = "maker-identity-cache/v5"
 VERDICTS = ("ACCEPT_MATERIAL", "REJECT_MATERIAL")
+
+
+def _page_sha(page) -> str:
+    """★その器がいま持っている本文から、指紋をその場で数え直す★
+
+    ★作った時の値を読まない★（2026-08-17・Codex依頼238の厚みと同じ理由）＝
+    器は書き換えられるので、`page.text_sha256` を信じない。
+    ★既定値つきの `getattr` にしない★＝直し忘れたときに空文字になって
+    **黙って「一致しない」**になり、原因が分からなくなる。
+    """
+    if page is None:
+        return ""
+    import user_area as _uas
+    # ★既定値つきの getattr にしない★（2026-09-18・Codexの指摘）＝
+    #   器を取り違えたときに AttributeError ではなく「空の本文の指紋」になり、
+    #   **黙って一致しない**になる。説明にそう書きながら実装がそうなっていた。
+    return _uas.readable_sha256(page.cleaned_html)
 # ★★v3の証明の型（廃止）★★＝読むためだけに名前を残す。
 #   ★新しい控えには書かない★／★この型を持つ古い控えは使わない★
 #   （fail-closed＝2AIが決め直す。移行の分岐を作らない）
@@ -501,8 +525,7 @@ def verdict_for(slug: str, store=None, fetch=None, material_url: str = "",
         #   「確かめた本文」と「あとで読む本文」を必ず同じ物にする。
         if runtime_page is None:
             return None
-        if str(rec.get("body_sha256") or "") != str(
-                getattr(runtime_page, "sha256", "") or ""):
+        if str(rec.get("body_sha256") or "") != _page_sha(runtime_page):
             return None                    # ★ページが書き換わったら効かない★
         # ★②根拠が今もそのページに実在するか（毎回取り直す）★
         try:
@@ -706,7 +729,10 @@ def verify_evidence(evidence: list, fetch=None, rec=None,
                 raise CacheError(
                     f"投稿欄を落としきれないページです（{url}）: "
                     f"{str(ex)[:80]}")
-        body = " ".join(_w._visible_text(html or "").split())
+        # ★★指紋と同じ物差しで探す★★（2026-09-18・台帳#696）
+        #   ★「確かめた本文」と「引用を探す本文」は必ず同じもの★
+        import user_area as _ua_rt
+        body = _ua_rt.compare_text(html or "")
         q = " ".join(str(e.get("quote") or "").split())
         if q not in body:
             raise CacheError(
@@ -783,8 +809,7 @@ def remember(slug: str, decisions, evidence: list,
         if not isinstance(e, dict):
             raise CacheError("根拠は組（辞書）で書きます")
     # ★★本文の指紋は、機械が自分で数える★★（呼ぶ側に名乗らせない）
-    _sha = str(getattr(runtime_page, "sha256", "") or "") \
-        if runtime_page is not None else ""
+    _sha = _page_sha(runtime_page) if runtime_page is not None else ""
     rec = {"target_url": target_url, "verdict": verdict, "why": why,
            "evidence": evidence, "agreed_by": by, "decided_at": decided_at,
            "body_sha256": _sha, "basis_scope": BASIS_SCOPE,
@@ -995,21 +1020,16 @@ def selftest() -> int:
 
     import fetched_page as _fp
 
-    class _Pg:
-        """取ってきた器（本物と同じく本文と指紋を持つ）。"""
-
-        def __init__(self, url, html):
-            self.requested_url = url
-            self.final_url = url
-            self.cleaned_html = html
-            import hashlib
-            self.sha256 = hashlib.sha256(
-                str(html).encode("utf-8")).hexdigest()
-
     def _pg(url=_C, html=None):
+        """★本物の器で試す★（2026-09-18・台帳#696）
+
+        ★手書きの偽物を置かない★＝指紋の作り方を変えた日に、
+        偽物だけ古い作り方のまま残り、★試験は緑のまま本番が止まる★
+        （実際に、この試験の偽物は全文の指紋を数えていた）。
+        """
         import user_area as _ua
         raw = _pages[url] if html is None else html
-        return _Pg(url, _ua.clean_html(raw, url))
+        return _fp.FetchedPage(url, url, _ua.clean_html(raw, url))
 
     _P = _pg()
 
@@ -1028,7 +1048,7 @@ def selftest() -> int:
         out = {}
         for k in who:
             out[k] = {"verdict": verdict, "why": why or _WHY,
-                      "body_sha256": sha if sha is not None else _P.sha256}
+                      "body_sha256": sha if sha is not None else _P.text_sha256}
         if only:
             out.update(only)
         return out
@@ -1063,7 +1083,7 @@ def selftest() -> int:
     t("★★題が略称のページでも、2AIが決めれば控えられる★★"
       "（★これで8晩止まっていた＝モンハンライズ★）",
       _ok(target_url=_N, runtime_page=(_pgN := _pg(_N)),
-          decisions=_dec(sha=_pgN.sha256),
+          decisions=_dec(sha=_pgN.text_sha256),
           evidence=[{"url": _N, "quote": _QC,
                      "kind": "directory_observation"}]))
     _pages[_N] = _page(day="2026/10/5")
@@ -1095,7 +1115,7 @@ def selftest() -> int:
       "（★割れたら詰めて決め直す★）",
       not _ok(decisions=_dec(only={"codex": {
           "verdict": "REJECT_MATERIAL", "why": _WHY,
-          "body_sha256": _P.sha256}})))
+          "body_sha256": _P.text_sha256}})))
     t("★★2つのAIが違う本文を読んでいたら控えない★★"
       "（★同じページを読んだ上での一致でなければ意味がない★）",
       not _ok(decisions=_dec(only={"codex": {
@@ -1105,12 +1125,12 @@ def selftest() -> int:
       not _ok(decisions=_dec(why="短い")))
     t("★★名鑑の機種ページ以外は根拠にできない★★（規約）",
       not _ok(target_url=_LIST, runtime_page=(_pLIST := _pg(_LIST)),
-              decisions=_dec(sha=_pLIST.sha256),
+              decisions=_dec(sha=_pLIST.text_sha256),
               evidence=[{"url": _LIST, "quote": _QC,
                          "kind": "directory_observation"}]))
     t("　名鑑でない登録先も根拠にできない",
       not _ok(target_url=_KIT, runtime_page=(_pKIT := _pg(_KIT)),
-              decisions=_dec(sha=_pKIT.sha256),
+              decisions=_dec(sha=_pKIT.text_sha256),
               evidence=[{"url": _KIT, "quote": _QC,
                          "kind": "directory_observation"}]))
     t("★★写しは最小限★★（長すぎる引用は控えない・規約の前提）",
@@ -1145,9 +1165,9 @@ def selftest() -> int:
     _NOQ = _page(name="別の機種", day="2026年12月1日")
     _PNOQ = _pg(_C, _NOQ)
     _st_noq = _empty()
-    _rec_noq = _rec(body_sha256=_PNOQ.sha256)
+    _rec_noq = _rec(body_sha256=_PNOQ.text_sha256)
     for _d0 in _rec_noq["decisions"].values():
-        _d0["body_sha256"] = _PNOQ.sha256
+        _d0["body_sha256"] = _PNOQ.text_sha256
     _st_noq["machines"]["dmm_5086"] = [_rec_noq]
     t("★★引用がその本文に無ければ効かせない★★"
       "（控えは手で書き足せるファイルなので、使う時に照合し直す）",

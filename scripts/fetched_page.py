@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import sys
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -57,16 +58,31 @@ class FetchedPage:
     final_url     … 実際に着いたURL（転送があればその先）
     cleaned_html  … 投稿欄・AI欄を箱ごと落としたあとのHTML
                     ★あとで読む部品には必ずこれを渡す★
-    sha256        … cleaned_html の指紋（許可証はこれで出す）
+    readable_text … そこから作った「2AIが読む文字」（逐語の照合もこの上で行う）
+    text_sha256   … readable_text の指紋（★許可証・控えの照合はこれ★）
+    html_sha256   … cleaned_html の指紋（★診断用★・採否には使わない）
+
+    ★★`sha256` という名前は捨てた★★（2026-09-18・台帳#696）
+      曖昧なまま置いておくと、次に増える照合箇所がまた全文を掴む。
+      消したので、直し忘れた場所は**その場で落ちる**（黙ってずれない）。
     """
 
-    __slots__ = ("requested_url", "final_url", "cleaned_html", "sha256")
+    __slots__ = ("requested_url", "final_url", "cleaned_html",
+                 "readable_text", "text_sha256", "html_sha256")
 
     def __init__(self, requested_url: str, final_url: str, cleaned_html: str):
+        import user_area as _ua
         self.requested_url = str(requested_url or "")
         self.final_url = str(final_url or "")
         self.cleaned_html = str(cleaned_html or "")
-        self.sha256 = hashlib.sha256(
+        self.readable_text = _ua.readable_text(self.cleaned_html)
+        # ★★指紋は必ず共通関数に作らせる★★（2026-09-18）
+        #   ★ここで自分で数えない★＝一度それをやったら、この器は「行の形」で、
+        #   照合する側（`maker_identity_cache` / `model_code_lookup`）は
+        #   「詰めた形」で数えていて、**同じページなのに永久に一致しなかった**
+        #   （直している最中に実際に作ってしまった）。
+        self.text_sha256 = _ua.readable_sha256(self.cleaned_html)
+        self.html_sha256 = hashlib.sha256(
             self.cleaned_html.encode("utf-8")).hexdigest()
 
     def redirected(self) -> bool:
@@ -76,7 +92,8 @@ class FetchedPage:
 
     def __repr__(self) -> str:                       # 目で見るときだけ
         return (f"FetchedPage({self.requested_url} → {self.final_url} / "
-                f"{len(self.cleaned_html)}字 / {self.sha256[:12]}…)")
+                f"{len(self.cleaned_html)}字 / 読む文字{len(self.readable_text)}字"
+                f" / {self.text_sha256[:12]}…)")
 
 
 def fetch(url: str, purpose: str = "claim_material", get=None) -> FetchedPage:
@@ -127,6 +144,107 @@ def fetch(url: str, purpose: str = "claim_material", get=None) -> FetchedPage:
     return FetchedPage(url, fin, cleaned)
 
 
+def _restructure(html: str) -> str:
+    """★表をやめて、セルを1つずつ div にする★（CSSで組んだ表への作り替え）
+
+    ★読む文字も指紋も1文字も変わらない★＝セルごとに行が分かれるのは同じ。
+    ＝★指紋では原理的に気づけない構造の変更★（実在する作り替え方）。
+
+    ★何のためか★＝この指紋は「読む文字」で取るので、
+    **構造だけの変更は検出しない**（2026-09-18・Codexの指摘）。
+    そこで「検出しないこと」を放置せず、
+    ★構造が変わったときに読取器が別の値を採らないか★を機械で確かめる。
+
+    ★1種類の作り替えを試しただけ★＝rowspan/colspan や別の表との競合など、
+    見える文字の順を保つ構造変更の全部を保証するものではない（Codexの指摘）。
+    """
+    h = re.sub(r"<table[^>]*>|</table>|<tbody[^>]*>|</tbody>"
+               r"|<tr[^>]*>|</tr>", "", html)
+    h = re.sub(r"<t[hd][^>]*>", "<div>", h)
+    return h.replace("</th>", "</div>").replace("</td>", "</div>")
+
+
+def structure_only_change_problems() -> list:
+    """★構造だけ変わっても、読取器が「別の値」を採らないこと★
+
+    ★この指紋が保証しないもの★＝表の構造。
+    文字が同じ順で残ったまま `<table>` が消えても指紋は変わらないので、
+    ★2AIの「このページを材料に使う」という控えはそのまま効き続ける★。
+    そのとき読取器が**黙って違う値を採る**なら、それは誤情報の経路になる。
+
+    ★求める線は「同じ値か、何も採らないか」★（違う値を採ったら異常）。
+    ★材料そのものが空だったら異常として出す★＝
+    空どうしを比べても何も確かめたことにならない（罠㊴）。
+    """
+    import at_spec_lookup as _al
+    import ceiling_lookup as _cl
+    import cz_lookup as _zl
+    import spec_lookup as _sl
+    import user_area as _uap
+
+    cases = [
+        ("天井", _cl.from_table,
+         "<h3>AT天井</h3><table>"
+         "<tr><th>天井G数</th><td>1200G</td></tr>"
+         "<tr><th>恩恵</th><td>AT当選</td></tr></table>"),
+        ("ATの仕様", _al.from_tables,
+         '<h3>AT「試験ライブ」</h3><table>'
+         "<tr><th>継続G数</th><td>1セット100G</td></tr>"
+         "<tr><th>純増</th><td>約2.8枚/G</td></tr></table>"),
+        ("CZ", _zl.from_tables,
+         '<h3><span>CZ「すぱ娘チャレンジ」</span></h3><table><tbody>'
+         "<tr><th>タイプ</th><td>ST</td></tr>"
+         "<tr><th>継続G数</th><td>4G＋α</td></tr>"
+         "<tr><th>期待度</th><td>約40%</td></tr></tbody></table>"),
+        ("ボーナス確率", lambda h: _sl.bonus_matrix_from_tables(h)[0],
+         "<table>"
+         "<tr><th>設定</th><th>BIG</th><th>REG</th><th>合算</th></tr>"
+         "<tr><td>設定1</td><td>1/273.1</td><td>1/439.8</td>"
+         "<td>1/168.5</td></tr>"
+         "<tr><td>設定6</td><td>1/240.1</td><td>1/240.1</td>"
+         "<td>1/120.0</td></tr></table>"),
+    ]
+    ng = []
+    for name, read, table_html in cases:
+        flat = _restructure(table_html)
+        # ★前提＝指紋では区別できないこと★（2026-09-18・Codexの指摘で直した）
+        #   ★逐語を探す形（compare_text）で見ていたのは誤り★＝
+        #   あちらは改行も潰すので、指紋が区別できる違いまで「同じ」に見えた。
+        if _uap.readable_sha256(table_html) != _uap.readable_sha256(flat):
+            ng.append(f"{name}: 指紋が変わってしまっています"
+                      "／★指紋で気づける変更は、この検査の対象ではありません★")
+            continue
+        got_a = read(table_html)
+        got_b = read(flat)
+        if not got_a:
+            ng.append(f"{name}: 表の形でも何も採れていません"
+                      "／★空どうしを比べても何も確かめたことになりません★")
+            continue
+        if got_b and got_b != got_a:
+            ng.append(f"{name}: 構造だけ変えたら**別の値**を採りました"
+                      f"（表 {got_a} → 崩した形 {got_b}）"
+                      "／★指紋では気づけないので、ここで止めます★")
+    return ng
+
+
+def _wiring_problems() -> list:
+    """★上の検査が、本当に自己試験から呼ばれているか★（2026-09-18）
+
+    ★なぜ要るか★＝この検査は「問題が無ければ空の一覧」を返すので、
+    ★呼び出しを `[]` に書き換えても緑のまま★になる（罠㊸）。
+    検査を書いただけでは、気づかずに外されたことに誰も気づけない。
+    ★これは「文字が在るか」の検査★＝動く証拠は検査そのものの結果のほう。
+    """
+    import inspect
+    src = inspect.getsource(selftest)
+    ng = []
+    if "structure_only_change_problems()" not in src:
+        ng.append("自己試験が、構造だけ変わったときの検査を呼んでいません")
+    if "_restructure(" not in src:
+        ng.append("自己試験に、崩した形の対照がありません")
+    return ng
+
+
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
@@ -151,17 +269,101 @@ def selftest() -> int:
 
     p = fetch(C, get=_get_ok)
     t("★★取ってきた本文と指紋を一緒に持つ★★",
-      p.requested_url == C and p.final_url == C and len(p.sha256) == 64)
+      p.requested_url == C and p.final_url == C and len(p.text_sha256) == 64)
     t("★★投稿欄は落ちている★★（読者の書き込みが本文に残らない）",
       "読者の書き込み" not in p.cleaned_html
       and "機種名 L試験機" in p.cleaned_html)
-    t("　同じ本文なら指紋も同じ", fetch(C, get=_get_ok).sha256 == p.sha256)
+    t("　同じ本文なら指紋も同じ", fetch(C, get=_get_ok).text_sha256 == p.text_sha256)
 
     def _get_changed(u, timeout=20):
         _w.LAST_FINAL_URL["url"] = u
         return HTML.replace("京楽", "サミー")
     t("★★本文が変わったら指紋も変わる★★",
-      fetch(C, get=_get_changed).sha256 != p.sha256)
+      fetch(C, get=_get_changed).text_sha256 != p.text_sha256)
+
+    # ★★取り直すたびに変わる飾りでは、指紋を変えない★★
+    #   （2026-09-18・台帳#696＝新台3件が11晩止まった原因）
+    #   なな徹はCSSのURLに**そのときのunix秒**を、DMMは csrf-token と
+    #   画像の `?t=` を毎回変える。実測した2つの形をそのまま試験にする。
+    #   ★時計で作らない★＝Windowsの時刻は刻みが粗く、2回の取得が同じ値に
+    #   なることがある。★そのとき飾りは一度も動いておらず、試験は
+    #   何も確かめずに緑になる★（実際にそうなった）。数え上げで必ず動かす。
+    _tick = [0]
+
+    def _get_noisy(u, timeout=20):
+        _w.LAST_FINAL_URL["url"] = u
+        _tick[0] += 1
+        n = 1789700770 + _tick[0]
+        return (f'<link href="/css/g.css?{n}">'
+                f'<meta name="csrf-token" content="tok{n}">'
+                + HTML
+                + f'<img src="/i.png?t={n}">')
+    _n1 = fetch(C, get=_get_noisy)
+    _n2 = fetch(C, get=_get_noisy)
+    t("★★飾りが毎回変わっても「読む文字」の指紋は変わらない★★"
+      "／★これが無いと2AIの控えが数秒で失効する★",
+      _n1.text_sha256 == _n2.text_sha256)
+    t("　★対照★＝そのときHTMLの指紋のほうは実際に変わっている"
+      "（＝飾りが本当に動いていることの証拠）",
+      _n1.html_sha256 != _n2.html_sha256)
+    t("　読む文字には飾りが入らない",
+      "csrf" not in _n1.readable_text and "g.css" not in _n1.readable_text
+      and "機種名 L試験機" in _n1.readable_text)
+
+    # ★★逐語の照合と同じ物差しであること★★
+    #   ここがずれると「確かめた本文」と「引用を探す本文」が別物になる。
+    import new_machine_watch as _wv
+    import user_area as _ua_t
+    import hashlib as _hs
+    t("★★逐語照合の物差しは `readable_text` から作られている★★",
+      _ua_t.compare_text(p.cleaned_html)
+      == " ".join(_wv._visible_text(p.cleaned_html).split()))
+    t("★★器の指紋と、照合する側が数え直す指紋が一致する★★"
+      "／★割れると同じページなのに永久に一致しない★",
+      p.text_sha256 == _ua_t.readable_sha256(p.cleaned_html)
+      == _hs.sha256(_ua_t.fingerprint_text(p.cleaned_html)
+                    .encode("utf-8")).hexdigest())
+    # ★★2AIが読む形が違えば、指紋も違う★★（2026-09-18・Codexの指摘）
+    #   ★直す前は成り立っていなかった★＝指紋を `compare_text`（改行も
+    #   1個の空白に潰す形）で取っていたので、
+    #   「天井G数／改行／1200G」と「天井G数 1200G」が同じ指紋になった。
+    #   ＝★2AIが読んだ中身が変わっても気づけない★。実測で確認した。
+    _L1 = "<div>天井G数</div><div>1200G</div>"
+    _L2 = "<div>天井G数 1200G</div>"
+    t("★★2AIが読む形が違えば指紋も違う★★"
+      "（★行が変わるのは「読むものが変わった」ということ★）",
+      _ua_t.readable_text(_L1) != _ua_t.readable_text(_L2)
+      and _ua_t.readable_sha256(_L1) != _ua_t.readable_sha256(_L2))
+    t("　★対照★＝逐語を探す形のほうは、行をまたいでも当たる"
+      "（2AIが行をまたいで引用しても照合できる）",
+      _ua_t.compare_text(_L1) == _ua_t.compare_text(_L2))
+    t("　行の中の余分な空白だけは詰める（整形の揺れで失効させない）",
+      _ua_t.fingerprint_text("<div>天井G数    1200G</div>")
+      == _ua_t.fingerprint_text(_L2))
+
+    t("★★曖昧な `sha256` は残っていない★★（次の照合箇所が掴まないように）",
+      not hasattr(p, "sha256"))
+
+    # ★★この指紋が「見ていないもの」を、放置しない★★（2026-09-18・Codexの指摘）
+    _sp = structure_only_change_problems()
+    t("★★構造だけ変わっても、読取器は別の値を採らない★★"
+      "（指紋は構造を見ないので、ここが最後の歯止め）"
+      + ("／" + " ／ ".join(_sp[:2]) if _sp else ""),
+      not _sp)
+    # ★★対照★★＝「構造だけ変える」が本当に構造を変えているか
+    #   （何も変えていない材料で緑になっていたら、この検査は飾り）
+    _TBL = ("<h3>AT天井</h3><table>"
+            "<tr><th>天井G数</th><td>1200G</td></tr>"
+            "<tr><th>恩恵</th><td>AT当選</td></tr></table>")
+    import ceiling_lookup as _clc
+    t("　★対照★＝崩した形では表として読めなくなっている"
+      "（＝本当に構造が変わっている証拠）",
+      bool(_clc.from_table(_TBL)) and not _clc.from_table(_restructure(_TBL)))
+    _wp = _wiring_problems()
+    t("★★その検査が、ここから本当に呼ばれている★★"
+      "（★空の一覧を返す検査は、呼び出しを外しても緑のまま★）"
+      + ("／" + " ／ ".join(_wp) if _wp else ""),
+      not _wp)
 
     def _get_redir(u, timeout=20):
         _w.LAST_FINAL_URL["url"] = "https://chonborista.com/slot/x/999/"

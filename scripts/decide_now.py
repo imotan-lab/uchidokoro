@@ -65,6 +65,7 @@ import argparse
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -132,6 +133,58 @@ def _detail(slug: str):
     if not os.path.isfile(p):
         return None
     return _sj.read_json(p, expect=dict)
+
+
+def _pochi_rates(slug: str, path: str = "") -> dict:
+    """★ポチポチくん（setting.html）がその機種で使う確率★（2026-09-18・台帳#698）
+
+    ★何のためか★＝読者が設定を推測するときに**実際に使う数値**。
+    記事の本文と食い違っていたら、それは★外部の出典を見なくても分かる★食い違い。
+
+    ★読むだけ・決めない★／★無い機種は空を返す★（Aタイプ以外は入っていない）。
+    ★分数はそのまま文字で返す★＝計算して新しい数字を作らない。
+
+    ★`path` は試験のためだけ★＝本物の機種の中身を合否にすると、
+    その機種を直した日に**守りを1行も壊していないのに赤くなる**（罠㉙）。
+    本番は既定の `setting.html` を読む。
+
+    ★★切り出しは `extract_setting_rates.extract_rates` に任せる★★
+    （2026-09-18・Codexの指摘）＝★自分で正規表現を書かない★。
+    ★直す前に残っていた混入の道★＝
+      ①`MACHINE_CONFIGS` の中に限定せず、ファイル全体から最初の区画を探していた
+      ②最後の機種は対応する波括弧ではなく**固定4000文字**で切っていた
+      ③読めない書き方のとき、例外ではなく静かに空を返していた
+    あちらは `MACHINE_CONFIGS` を見つけて**波括弧を数えて**切るので、
+    ★別の機種・別のJSの数値がこの機種のものとして2AIへ渡らない★。
+    """
+    import extract_setting_rates as _esr
+    p = str(path or "") or os.path.join(BASE, "setting.html")
+    if not os.path.isfile(p):
+        return {}
+    with open(p, encoding="utf-8") as f:
+        src = f.read()
+    got = {k: dict(v) for k, v in
+           (_esr.extract_rates(src).get(slug) or {}).items()}
+    # ★その機種の区画そのものは在るか★（注記の取り出しにも使う）
+    block = ""
+    m = re.search(r"const MACHINE_CONFIGS\s*=\s*\{", src)
+    if m:
+        body, _ = _esr._find_block(src, m.end() - 1)
+        mm = re.search(r"(?m)^\s*" + re.escape(slug) + r"\s*:\s*\{", body)
+        if mm:
+            block, _ = _esr._find_block(body, mm.end() - 1)
+    if not got:
+        # ★★「そもそも無い」と「在るのに読めない」を分ける★★
+        #   （2026-09-18・Codexの指摘）★直す前はどちらも空を返していた★ので、
+        #   書き方が変わって読めなくなっても、
+        #   ★#698 以前の「渡していない状態」へ静かに戻れた★。
+        #   ★無い機種は101件ある★ので、無いこと自体は異常ではない。
+        return {"_unreadable": slug} if block else {}
+    if block:
+        note = re.search(r"note:\s*'([^']*)'", block)
+        if note:
+            got["_note"] = note.group(1)
+    return got
 
 
 def gather(slug: str) -> dict:
@@ -205,8 +258,36 @@ def gather(slug: str) -> dict:
         out.setdefault("problems", []).append(
             f"機種データを読めません: {type(e).__name__}")
 
+    # ★★ポチポチくんが使う数値も渡す★★（2026-09-18・台帳#698）
+    #   ★渡していなかったせいで起きたこと★＝
+    #   ファンキージャグラー2の記事に、ぶどう確率が2通り書かれていた
+    #   （本文「設定1で1/5.94、設定6で1/5.67」／
+    #     噂欄「公式の解析値（設定1：1/6.33〜設定6：1/6.09）」）。
+    #   2AIは「どの出典にも載っていないので決められない」と結論し、
+    #   ★台帳へ落ちた★。ところがポチポチくんには
+    #     grape: {1:1/5.94, ... 6:1/5.67}
+    #   と★読者が実際に使う値★が入っていて、本文と一致していた。
+    #   ＝外部の出典など要らない、サイト内で閉じた食い違いだった。
+    #   ★goji_eva（machines.json を渡していなかった件）と同じ形で3件目★
+    out["counter"] = {}
+    try:
+        _ct = _pochi_rates(slug)
+        if _ct.get("_unreadable"):
+            # ★★静かに「渡していない状態」へ戻さない★★（2026-09-18）
+            out.setdefault("problems", []).append(
+                "ポチポチくんにこの機種の区画はありますが、確率を読めません"
+                "（書き方が変わった可能性。★記事との食い違いに気づけません★）")
+        else:
+            out["counter"] = _ct
+    except Exception as e:                                   # noqa: BLE001
+        out.setdefault("problems", []).append(
+            f"ポチポチくんの数値を読めません: {type(e).__name__}")
+
     out["how_to_decide"] = (
-        "★記事データと機種データの両方を読んでください★。"
+        "★記事データ・機種データ・ポチポチくんの数値を読んでください★。"
+        "ポチポチくんの数値は**読者が実際に設定推測に使う値**なので、"
+        "記事の本文がそれと違う数値を書いていたら、"
+        "★それは外部の出典を見なくても分かる食い違いです★。"
         "『当サイトの狙い目』のような節は、機種データの strategy や "
         "チェッカーの区切りと食い違っていることがあります"
         "（★それは外部の出典を見なくても分かる食い違いです★）。"
@@ -217,6 +298,18 @@ def gather(slug: str) -> dict:
         "数字が食い違っているとき、片方を消すのは"
         "『もう片方が正解だ』と決めたのと同じなので、出典を見ずにやらないでください"
         "（機械も受け取りません）。"
+        # ★★ただし「サイトの中で閉じた食い違い」は別★★
+        #   （2026-09-18・Codexの指摘／台帳#698）
+        #   ★直す前は、この2文が矛盾していた★＝
+        #   すぐ上で「カウンターとの食い違いは外部の出典を見なくても分かる」と
+        #   言いながら、ここで「出典を見ずにやるな」と言っていたので、
+        #   ★2AIがまた保留する余地が残っていた★（実際に保留された）。
+        "★例外＝読者が実際に使う値（ポチポチくんの確率）と食い違っている時★は、"
+        "外部の出典は要りません。読者が押して使う値のほうが、"
+        "そのサイトで実際に効いている値だからです。"
+        "消す数値は numbers_removed に1つずつ理由つきで名指ししてください"
+        "（★理由は「誤りだ」と断定せず、"
+        "「裏付けを確認できず、読者が使う値とも違う」のように書く★）。"
     )
 
     # ① 同じ判断を2度読ませている候補（★どちらを消すかは決めない★）
@@ -523,6 +616,18 @@ def _elems(d: dict, where: str) -> list:
     """`where` で指す置き換え先の文字列を全部集める（★場所の特定用★）。"""
     out = []
     w = str(where or "")
+    # ★★セルの座標なら、そのセル1個だけ★★（2026-09-18・Codexの指摘）
+    #   ★直す前は0件になっていた★＝セルの一部だけを直すとき、
+    #   「文のまとまりまで広げて確かめる」検査（`check_range`）が
+    #   **候補0件で素通り**し、指定した短い文字のまま後段へ渡っていた。
+    _cc = cell_target(w)
+    if _cc:
+        _si, _ti, _ri, _ci = _cc
+        try:
+            _cell = d["sections"][_si]["tables"][_ti]["rows"][_ri][_ci]
+        except Exception:                                    # noqa: BLE001
+            _cell = None
+        return [_cell] if isinstance(_cell, str) else []
     if w in ("", "body", "table_note"):
         for sec in (d.get("sections") or []):
             if not isinstance(sec, dict):
@@ -642,6 +747,74 @@ def row_target(where: str):
     if not m:
         return None
     return tuple(int(x) for x in m.groups())
+
+
+_CELL_AT = None
+
+
+def cell_target(where: str):
+    """`where` から (節, 表, 行, 列) を取り出す（2026-09-18・台帳#698）。
+
+    ★汎用の指し方にしない★＝この形だけを受ける。
+      例: "sections[1].tables[0].rows[7][1]"
+    """
+    global _CELL_AT
+    if _CELL_AT is None:
+        import re as _re5
+        _CELL_AT = _re5.compile(
+            r"\Asections\[(\d+)\]\.tables\[(\d+)\]\.rows\[(\d+)\]\[(\d+)\]\Z")
+    m = _CELL_AT.match(str(where or ""))
+    if not m:
+        return None
+    return tuple(int(x) for x in m.groups())
+
+
+def _cell_at(sec, si, want_si, ti, ri, ci):
+    """いま見ている節が指定の節なら、そのセルの中身を返す（無ければ None）。
+
+    ★節の番号まで一致を求める★＝別の節の同じ位置を書き換えないため。
+    ★文字のセルだけ★（バッジの辞書は設定示唆の専用なので触らない）。
+    """
+    if si != want_si:
+        return None
+    try:
+        cell = sec["tables"][ti]["rows"][ri][ci]
+    except Exception:                                        # noqa: BLE001
+        return None
+    return cell if isinstance(cell, str) else None
+
+
+def cell_plan(sec, si: int, where: str, before: str):
+    """★セルを直すときの組み立て★＝ここだけが決める（2026-09-18・台帳#698）
+
+    戻り値＝(種類, (表, 行, 列)) か None。
+    ★同じ規則を2か所に書かない★＝本番も試験もこの関数を通す（罠③）。
+    """
+    ct = cell_target(where)
+    if not ct:
+        return None
+    _si, _ti, _ri, _ci = ct
+    cell = _cell_at(sec, si, _si, _ti, _ri, _ci)
+    if cell is None:
+        return None
+    if cell == before:
+        return ("table_cell", (_ti, _ri, _ci))
+    if before and cell.count(before) == 1:
+        return ("table_cell_in", (_ti, _ri, _ci))
+    return None
+
+
+def _plan_kinds(detail: dict, where: str, before: str, after: str) -> list:
+    """★試験用★＝その指定で、どの種類の書き換えが組まれるかを見る。
+
+    ★判定は本番と同じ `cell_plan` を通す★（手作りの答えを採点しない・罠①）。
+    """
+    out = []
+    for si, sec in enumerate(detail.get("sections") or []):
+        got = cell_plan(sec, si, where, before)
+        if got:
+            out.append(got[0])
+    return out
 
 
 def _cell_text(c):
@@ -1058,6 +1231,12 @@ def _simulate(detail: dict, plan: list) -> str:
             _ln = d["sections"][si]["body"][bi]
             d["sections"][si]["body"][bi] = _ln.replace(
                 a["before"], a["after"], 1)
+        elif kind in ("table_cell", "table_cell_in"):
+            _ti, _ri, _ci = bi
+            _cur = d["sections"][si]["tables"][_ti]["rows"][_ri][_ci]
+            d["sections"][si]["tables"][_ti]["rows"][_ri][_ci] = (
+                _cur.replace(a["before"], a["after"], 1)
+                if kind == "table_cell_in" else a["after"])
         elif kind == "table_note":
             d["sections"][si]["tables"][bi]["note"] = a["after"]
         elif kind == "table_note_in":
@@ -1620,13 +1799,20 @@ def apply_decision(path: str, apply_it: bool = False, *,
         #   例: sections[6].tables[0].rows[5]
         if a["op"] == "split_row" and row_target(where):
             pass
+        # ★表のセルを指す形★（2026-09-18・台帳#698）
+        elif a["op"] == "replace" and cell_target(where):
+            pass
         elif where and where not in ("body", "table_note",
                                      "fact", "summary", "lead"):
             result["problems"].append(f"直す場所の指定が不明です: {where!r}")
             return result
         if a.get("op") == "replace":
             spots = _where_hits(d, a.get("before"))
-            if where:
+            if where and cell_target(where):
+                # ★セルは1か所を名指ししている★＝場所は確定しているので、
+                #   ここで数えない（同じ文字が他所にあっても、直すのはそのセル）
+                spots = []
+            elif where:
                 # ★場所を言っていても、その場所に2つあるなら決められない★
                 _kind = {"body": "本文", "table_note": "表の注記",
                          "fact": "基本情報表", "summary": "要約ボックス",
@@ -1693,7 +1879,8 @@ def apply_decision(path: str, apply_it: bool = False, *,
         for si, sec in enumerate(d.get("sections") or []):
             if hit:
                 break
-            if where and where not in ("body", "table_note"):
+            if where and where not in ("body", "table_note") \
+                    and not cell_target(where):
                 break
             body = sec.get("body") or []
             for bi, line in enumerate(body):
@@ -1715,6 +1902,19 @@ def apply_decision(path: str, apply_it: bool = False, *,
             # 表の注記も見る
             if where == "body":
                 continue
+            # ★★表のセルも直せるようにする★★（2026-09-18・台帳#698）
+            #   ★直す前は本文・注記・基本情報表・要約ボックス・リード文だけ★＝
+            #   **表のセルにある事実は、更新タスクから一切直せなかった**
+            #   （実測＝86記事・1,724セル）。
+            #   基本スペックを表へ移した機種ほど直せない、という状態だった。
+            #   ★どのセルかは `where` で言わせる★（同じ文字が他にもあるため）
+            #   例: "sections[1].tables[0].rows[7][1]"
+            _cp = (cell_plan(sec, si, where, a.get("before") or "")
+                   if a["op"] == "replace" else None)
+            if _cp:
+                plan.append((_cp[0], si, _cp[1], a))
+                hit = True
+                break
             for ti, tbl in enumerate(sec.get("tables") or []):
                 if a["op"] == "replace" and tbl.get("note") == a["before"]:
                     plan.append(("table_note", si, ti, a))
@@ -1854,6 +2054,11 @@ def apply_decision(path: str, apply_it: bool = False, *,
             return result
 
     if apply_it:
+      # ★★書き込みの途中で断ったら、1文字も書かずに理由を返す★★
+      #   （2026-09-18）＝例外のまま外へ投げると、
+      #   呼ぶ側（無人タスク）が理由を受け取れず落ちるだけになる。
+      #   ★書き込みは最後にまとめて行う★ので、途中で止めても記事は無傷。
+      try:
         for kind, si, bi, a in plan:
             if kind in OUTSIDE_KINDS:
                 # ★節の外は sections を触らない★（場所の指し方が違う）
@@ -1876,12 +2081,47 @@ def apply_decision(path: str, apply_it: bool = False, *,
                 # ★段落の一部だけを直す★（2026-08-30・台帳#512）
                 _ln = sec["body"][bi]
                 sec["body"][bi] = _ln.replace(a["before"], a["after"], 1)
+            elif kind in ("table_cell", "table_cell_in"):
+                # ★表のセル★（2026-09-18・台帳#698）
+                _ti2, _ri2, _ci2 = bi
+                # ★★書く直前に、そのセルをもう一度照合する★★
+                #   （2026-09-18・Codexの指摘）
+                #   ★なぜ要るか★＝場所（行番号）は**変更前の記事**から組むのに、
+                #   書き込みは順番に当てる。同じ表で `split_row` が先に走ると
+                #   行が増えて**後ろの行がずれる**ので、
+                #   ★狙ったセルの1つ手前（別のセル）へ書いてしまう★。
+                #   ★組んだときの中身と違えば、1文字も書かずに止める★
+                try:
+                    _cur2 = sec["tables"][_ti2]["rows"][_ri2][_ci2]
+                except Exception:                            # noqa: BLE001
+                    _cur2 = None
+                _okc = isinstance(_cur2, str) and (
+                    _cur2 == a["before"] if kind == "table_cell"
+                    else _cur2.count(a["before"]) == 1)
+                if not _okc:
+                    raise ValueError(
+                        "書く直前にセルの中身が変わっています"
+                        f"（{a.get('where') or ''}）"
+                        "／★行がずれた可能性があるので"
+                        "1文字も書きません★")
+                sec["tables"][_ti2]["rows"][_ri2][_ci2] = (
+                    _cur2.replace(a["before"], a["after"], 1)
+                    if kind == "table_cell_in" else a["after"])
             elif kind == "table_note":
                 sec["tables"][bi]["note"] = a["after"]
             elif kind == "table_note_in":
                 _nt = sec["tables"][bi]["note"]
                 sec["tables"][bi]["note"] = _nt.replace(
                     a["before"], a["after"], 1)
+            elif kind != "drop":
+                # ★★知らない種類は黙って飛ばさない★★（2026-09-18・自分で踏んだ）
+                #   ★直す前★＝組んだ種類をここが知らないと、**何もせずに次へ進み**、
+                #   それでも「★書きました★ 2 件」と報告していた。
+                #   実際、表のセルを直す種類を足した日に、
+                #   ★1件しか書いていないのに2件書いたと言った★。
+                raise ValueError(
+                    f"知らない書き換えの種類です: {kind!r}"
+                    "／★組んだのに書けていません（黙って飛ばしません）★")
         for si, idxs in dropping.items():
             body = d["sections"][si]["body"]
             d["sections"][si]["body"] = [x for i, x in enumerate(body)
@@ -1896,6 +2136,11 @@ def apply_decision(path: str, apply_it: bool = False, *,
             result["removed_log"] = _record_removed(
                 slug, [x["text"] for x in result["removed_lines"]], dec)
         result["wrote"] = True
+      except ValueError as _we:
+        # ★ここまでの書き換えは写しの上だけ★＝本物のファイルは無傷
+        result["problems"].append(str(_we))
+        result["done"] = []
+        result["wrote"] = False
     return result
 
 
@@ -3461,6 +3706,231 @@ def _selftest() -> int:
           {"sections": [{"body": ["あああ。"]}]},
           {"before": "あああ", "after": "", "where": "body"})[2] or ""))
 
+    # ★★ポチポチくんの数値を材料に渡す★★（2026-09-18・台帳#698）
+    #   ★本物の setting.html から読む★＝手作りの材料を採点しない（罠①）。
+    #   ★ファンキージャグラー2で実際に起きた★＝記事に2通りのぶどう確率があり、
+    #   2AIは「どの出典にも無い」と結論して台帳へ落としたが、
+    #   読者が使う値はここに入っていて、本文の片方と一致していた。
+    #   ★値の合否は試料で見る★＝本物の機種の中身を使うと、その機種を
+    #   直した日に守りを1行も壊していないのに赤くなる（罠㉙）。
+    import tempfile as _tf
+    #   ★本物と同じ形にする★（2026-09-18・Codexの指摘）＝
+    #   試料に `const MACHINE_CONFIGS = {` が無いと、
+    #   ★「その名簿の中だけを読む」を一度も試験していない★ことになる。
+    #   だから**その外側に、同じ形の偽物**を置いて、拾わないことを見る。
+    _FIX = ("<script>\n"
+            "// ★名簿の外にある同名の区画★（ここを拾ったら間違い）\n"
+            "const OTHER = {\n"
+            "  zzz_shiken: {\n    rates: {\n"
+            "      grape: {1:1/1.11, 6:1/1.22}\n    }\n  },\n"
+            "};\n"
+            "const MACHINE_CONFIGS = {\n"
+            "  zzz_mae: {\n    rates: {\n"
+            "      bell:  {1:1/7.10, 6:1/6.50}\n    }\n  },\n"
+            "  zzz_shiken: {\n"
+            "    note: 'ぶどうは通常時のみカウント。',\n"
+            "    rates: {\n"
+            "      big:   {1:1/266.4, 6:1/219.9},\n"
+            "      grape: {1:1/5.94,  6:1/5.67}\n    }\n  },\n"
+            # ★自分の確率を持たない機種★＝区画で切らないと、
+            #   **次の機種の確率をこの機種のものとして渡す**
+            "  zzz_karappo: {\n    note: 'この機種は確率を持ちません。',\n  },\n"
+            "  zzz_ato: {\n    rates: {\n"
+            "      grape: {1:1/9.99, 6:1/9.11}\n    }\n  },\n"
+            "};\n"
+            "// ★名簿の後ろにも同じ形を置く★（最後の機種が持たない時に拾わないか）\n"
+            "const AFTER = { zzz_karappo: { rates: {\n"
+            "      grape: {1:1/3.33, 6:1/3.44}\n    } } };\n"
+            "</script>\n")
+    _fd, _fp1 = _tf.mkstemp(suffix=".html")
+    os.close(_fd)
+    io.open(_fp1, "w", encoding="utf-8", newline="").write(_FIX)
+    try:
+        _pg1 = _pochi_rates("zzz_shiken", _fp1)
+        t("★★ポチポチくんが使う確率を読める★★"
+          "（★これが無いと、サイトが自分で持っている答えに2AIが気づけない★）",
+          _pg1.get("grape", {}).get("1") == "1/5.94"
+          and _pg1.get("grape", {}).get("6") == "1/5.67")
+        t("　★前後の機種の区画へはみ出さない★"
+          "（前の機種の bell も、次の機種の grape も混ざらない）",
+          set(_pg1) == {"big", "grape", "_note"}
+          and _pg1["big"]["6"] == "1/219.9"
+          and "9.99" not in json.dumps(_pg1))
+        t("　★入っていない機種は空を返す★（Aタイプ以外は入っていない）",
+          _pochi_rates("zzz_nai", _fp1) == {})
+        # ★★「そもそも無い」と「在るのに読めない」を分ける★★
+        #   ★直す前はどちらも空★＝書き方が変わって読めなくなっても、
+        #   静かに「渡していない状態」へ戻れた（誰も気づかない）。
+        t("★★区画は在るのに読めないときは、そうと分かる★★"
+          "（★静かに『渡していない状態』へ戻らない★）",
+          _pochi_rates("zzz_karappo", _fp1).get("_unreadable")
+          == "zzz_karappo")
+        t("　★そもそも無い機種と取り違えない★",
+          "_unreadable" not in _pochi_rates("zzz_nai", _fp1))
+        # ★★ここが本当に危ない形★★＝自分の確率を持たない機種。
+        #   区画で切らないと、**次の機種の確率をこの機種のものとして渡す**
+        #   ＝2AIが別の機種の数値を根拠に記事を直してしまう。
+        t("★★自分の確率を持たない機種に、次の機種の数値を渡さない★★",
+          "9.99" not in json.dumps(_pochi_rates("zzz_karappo", _fp1)))
+        # ★★名簿（MACHINE_CONFIGS）の中だけを読む★★（2026-09-18・Codexの指摘）
+        #   ★直す前★＝ファイル全体から最初の区画を探していたので、
+        #   同じ名前の区画が前にあればそちらを読んだ。
+        t("★★名簿の外にある同名の区画を読まない★★"
+          "（★前に置かれた別のJSの数値を、この機種のものとして渡さない★）",
+          "1.11" not in json.dumps(_pg1))
+        t("★★名簿の後ろにある同名の区画も読まない★★"
+          "（★最後の機種が確率を持たないとき、その先を拾わない★）",
+          "3.33" not in json.dumps(_pochi_rates("zzz_karappo", _fp1)))
+        t("　★新しい数字を作らない★（分数は文字のまま）",
+          all(isinstance(v, str) and v.startswith("1/")
+              for v in _pg1.get("grape", {}).values()))
+    finally:
+        os.unlink(_fp1)
+    # ★★表のセルを直せること★★（2026-09-18・台帳#698）
+    #   ★直す前は本文・注記・基本情報表・要約ボックス・リード文だけ★＝
+    #   **表のセルにある事実は、更新タスクから一切直せなかった**
+    #   （実測＝86記事・1,724セル）。基本スペックを表へ移した機種ほど
+    #   直せない、という状態だった。
+    _CELLD = {"name": "試験機",
+              "sections": [{"title": "基本スペック", "type": "table",
+                            "tables": [{"headers": ["項目", "値"],
+                                        "rows": [["天井", "1200G"],
+                                                 ["ぶどう", "1/5.94（未確認1/6.33）"]]}]},
+                           {"title": "本文",
+                            "body": ["1/5.94（未確認1/6.33）です。",
+                                     # ★出どころに使う逐語★＝書き換え後と
+                                     #   同じ係り先（1/ のあとで終わる）
+                                     "1/5.94"]}]}
+    _cw = "sections[0].tables[0].rows[1][1]"
+    t("★★表のセルを名指しで直せる★★"
+      "（★これが無いと、表へ移した事実は誰も直せない★）",
+      cell_target(_cw) == (0, 0, 1, 1))
+    t("　★節・表・行・列が全部そろわないと受け取らない★",
+      cell_target("sections[0].tables[0].rows[1]") is None
+      and cell_target("tables[0].rows[1][1]") is None)
+    t("★★同じ文字が本文にもあっても、名指ししたセルだけを直す★★"
+      "（★場所を言っているのに『2か所あります』で止まらない★）",
+      _plan_kinds(_CELLD, _cw, "1/5.94（未確認1/6.33）", "1/5.94")
+      == ["table_cell"])
+    t("　★別の節の同じ位置は書き換えない★",
+      _plan_kinds(_CELLD, "sections[1].tables[0].rows[1][1]",
+                  "1/5.94（未確認1/6.33）", "1/5.94") == [])
+    t("　★セルの一部だけも直せる★",
+      _plan_kinds(_CELLD, _cw, "（未確認1/6.33）", "") == ["table_cell_in"])
+
+    # ★★セルの一部だけを直すときも、文のまとまりまで広げて確かめる★★
+    #   （2026-09-18・Codexの指摘）★直す前は候補0件で素通り★＝
+    #   検査の単位が「セルの中の文」ではなく、指定した短い文字のままだった。
+    #   ＝数値の係り先が**短い断片**で見られ、弱い照合になっていた。
+    _rc = {"sections": [{"tables": [
+        {"rows": [["x", "通常時は1200G、リセット後は500Gです。"]]}]}]}
+    _rb, _ra, _rw = check_range(
+        _rc, {"before": "500G", "after": "600G",
+              "where": "sections[0].tables[0].rows[0][1]"})
+    t("★★セルの一部を直すときは、その文まで広げて確かめる★★"
+      "（★広げないと数値の係り先が短い断片で見られる★）",
+      _rw is None and _rb == "通常時は1200G、リセット後は500Gです。"
+      and _ra == "通常時は1200G、リセット後は600Gです。")
+
+    # ★★通しで書き込むところまで見る★★（2026-09-18・自分で踏んだ）
+    #   ★組めるだけでは足りない★＝書き込み側がその種類を知らないと、
+    #   **何もせずに次へ進んで「書きました」と報告する**（実際にそうなった）。
+    import tempfile as _tf2
+    _td2 = _tf2.mkdtemp()
+    _keep2 = globals()["DETAILS"]
+    globals()["DETAILS"] = _td2
+    try:
+        _p2 = os.path.join(_td2, "zzz_cell.json")
+        _d2 = json.loads(json.dumps(_CELLD))
+        _d2["slug"] = "zzz_cell"
+        with io.open(_p2, "w", encoding="utf-8", newline="\n") as _f2:
+            json.dump(_d2, _f2, ensure_ascii=False, indent=1)
+            _f2.write("\n")
+        import hashlib as _h2
+        _sha2 = _h2.sha256(io.open(_p2, encoding="utf-8").read()
+                           .encode("utf-8").replace(bytes([13, 10]),
+                                                    bytes([10]))).hexdigest()
+        _q2 = os.path.join(_td2, "dec.json")
+        io.open(_q2, "w", encoding="utf-8").write(json.dumps({
+            "schema_version": SCHEMA, "slug": "zzz_cell",
+            "source_sha256": _sha2, "decided_by": ["claude", "codex"],
+            "actions": [{"op": "replace", "where": _cw,
+                         "why": "裏付けの無い値を落とす",
+                         "meaning_why": "残す数値は変えていない（試験）",
+                         "before": "1/5.94（未確認1/6.33）",
+                         "after": "1/5.94",
+                         "numbers_from": "1/5.94"}],
+            "numbers_removed": [{"n": "6.33", "why": "裏付けを確認できないため"}],
+        }, ensure_ascii=False))
+        _r2 = apply_decision(_q2, True, guard=False)
+        _after2 = json.loads(io.open(_p2, encoding="utf-8").read())
+        t("★★組んだだけでなく、セルが本当に書き換わる★★"
+          "（★書き込み側が種類を知らないと、黙って飛ばして"
+          "「書きました」と報告する★）",
+          _r2.get("wrote")
+          and _after2["sections"][0]["tables"][0]["rows"][1][1] == "1/5.94")
+        t("　★指していない行は1文字も動かない★",
+          _after2["sections"][0]["tables"][0]["rows"][0] == ["天井", "1200G"]
+          and _after2["sections"][1]["body"][0] == "1/5.94（未確認1/6.33）です。")
+
+        # ★★行が増える操作と組み合わせても、別のセルへ書かない★★
+        #   （2026-09-18・Codexの指摘）★場所は「変更前の記事」から組む★のに
+        #   書き込みは順番に当てるので、先に行が増えると後ろの行がずれる。
+        #   ＝★狙ったセルの1つ手前（別のセル）へ書いてしまう★。
+        _p3 = os.path.join(_td2, "zzz_cell2.json")
+        _d3 = json.loads(json.dumps(_CELLD))
+        _d3["slug"] = "zzz_cell2"
+        # ★分けられる形の行にする★＝分けたセルを区切りでつなぐと元に戻ること
+        _d3["sections"][0]["tables"][0]["rows"][0] = ["天井 天井2",
+                                                     "1200G 1300G"]
+        with io.open(_p3, "w", encoding="utf-8", newline="\n") as _f3:
+            json.dump(_d3, _f3, ensure_ascii=False, indent=1)
+            _f3.write("\n")
+        _sha3 = _h2.sha256(io.open(_p3, encoding="utf-8").read()
+                           .encode("utf-8").replace(bytes([13, 10]),
+                                                    bytes([10]))).hexdigest()
+        _q3 = os.path.join(_td2, "dec3.json")
+        io.open(_q3, "w", encoding="utf-8").write(json.dumps({
+            "schema_version": SCHEMA, "slug": "zzz_cell2",
+            "source_sha256": _sha3, "decided_by": ["claude", "codex"],
+            "actions": [
+                {"op": "split_row", "where": "sections[0].tables[0].rows[0]",
+                 "why": "潰れた行を分ける（試験）", "sep": " ",
+                 "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました",
+                 "before": ["天井 天井2", "1200G 1300G"],
+                 "after": [["天井", "1200G"], ["天井2", "1300G"]]},
+                {"op": "replace", "where": _cw,
+                 "why": "裏付けの無い値を落とす（試験）",
+                 "meaning_why": "残す数値は変えていない（試験）",
+                 "before": "1/5.94（未確認1/6.33）", "after": "1/5.94",
+                 "numbers_from": "1/5.94"},
+            ],
+            "numbers_removed": [{"n": "6.33", "why": "裏付けを確認できないため"}],
+        }, ensure_ascii=False))
+        _r3 = apply_decision(_q3, True, guard=False)
+        _a3 = json.loads(io.open(_p3, encoding="utf-8").read())
+        _rows3 = _a3["sections"][0]["tables"][0]["rows"]
+        t("★★行が増える操作と一緒でも、別のセルへ書かない★★"
+          "（★組んだときの中身と違えば1文字も書かない★）",
+          not _r3.get("wrote")
+          and _rows3 == [["天井 天井2", "1200G 1300G"],
+                         ["ぶどう", "1/5.94（未確認1/6.33）"]])
+        t("　★止めた理由が分かる★",
+          any("行がずれた" in str(x) or "セルの中身が変わって" in str(x)
+              for x in (_r3.get("problems") or [])))
+    finally:
+        globals()["DETAILS"] = _keep2
+
+    # ★本物では「形」だけ見る★＝どの機種がいくつかは合否にしない
+    _real = _pochi_rates("funky_juggler2")
+    t("★★本番の setting.html からも読める★★（試料だけで緑にしない）",
+      bool(_real.get("grape"))
+      and all(str(v).startswith("1/") for v in _real["grape"].values()))
+    t("★★gather がそれを本当に渡している★★"
+      "（★読むだけの関数を作っても、繋いでいなければ2AIには届かない★）",
+      (gather("funky_juggler2").get("counter") or {}).get("grape")
+      == _real.get("grape"))
+
     print(f"{ran[0] - len(ng)}/{ran[0]} " + ("合格" if not ng else "不合格"))
     return 1 if ng else 0
 
@@ -3508,6 +3978,19 @@ def main() -> int:
                 print("  " + str(line))
             for note in sec.get("notes") or []:
                 print("  （表の注記）" + str(note))
+        # ★★ポチポチくんが使う数値★★（読者が実際に設定推測に使う値）
+        #   ★記事と食い違っていたら、外部の出典を見なくても分かる食い違い★
+        _ct = g.get("counter") or {}
+        if _ct:
+            print("【ポチポチくんが使う確率】"
+                  "★読者が実際に押して使う数値です★")
+            for _k, _v in _ct.items():
+                if _k == "_note":
+                    print("  （注記）" + str(_v))
+                    continue
+                print(f"  {_k} ｜ "
+                      + " / ".join(f"設定{s}={x}" for s, x in
+                                   sorted(_v.items(), key=lambda kv: kv[0])))
         print()
         print(f"★機械が気づけた手がかり★ {len(g['candidates'])} 件  "
               f"{g.get('counts')}")

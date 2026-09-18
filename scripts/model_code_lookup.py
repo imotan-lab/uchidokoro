@@ -677,8 +677,12 @@ def material_page_identity_ok(page, official_name: str, *,
     #   作った時の指紋を信じない。★いま持っている本文から数える★
     _sha = ""
     if not isinstance(page, str):
-        import hashlib
-        _sha = hashlib.sha256(str(html or "").encode("utf-8")).hexdigest()
+        # ★★許可証の鍵は「2AIが読む文字」の指紋★★（2026-09-18・台帳#696）
+        #   ★ここを直し忘れると材料が丸ごと読めなくなる★＝
+        #   鍵を出す側（add_machine_run）が文字の指紋にしたのに、
+        #   受け取るここが全文を数え直していると**必ず不一致**になる。
+        import user_area as _uag
+        _sha = _uag.readable_sha256(str(html or ""))
         # ★★取りに行った先と着いた先が違うページは、通常でも使わない★★
         #   （2026-08-17・Codex依頼238のP1）
         #   ★穴だったところ★＝控えで救う側は転送を拒否していたのに、
@@ -2011,7 +2015,7 @@ def selftest() -> int:
       "（★これで8晩止まっていた＝モンハンライズ★）",
       material_page_identity_ok(
           _PG690, "L試験機", url=_PG690.requested_url,
-          grant={_PG690.sha256: {}})[0] is True)
+          grant={_PG690.text_sha256: {}})[0] is True)
     t("　（対照）許可証が無ければ、落ち方をそのまま返して使わない",
       material_page_identity_ok(
           _PG690, "L試験機", url=_PG690.requested_url)[1]
@@ -2029,7 +2033,7 @@ def selftest() -> int:
       "（★直す前は GRANT_MAKER_UNREADABLE で必ず断っていた★）",
       material_page_identity_ok(
           _PG690, "L試験機", expected_maker="sammy",
-          url=_PG690.requested_url, grant={_PG690.sha256: {}})[0] is True)
+          url=_PG690.requested_url, grant={_PG690.text_sha256: {}})[0] is True)
 
     # ─── ★★落ち方の3分類★★（2026-09-15・台帳#675） ───────────────
     t("★★何も落ちていなければ ACCEPT★★",

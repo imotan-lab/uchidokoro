@@ -209,7 +209,7 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                 #   もう一度落とそうとすると「箱が見つかりません」になり、
                 #   ★全部のページが使えなくなった★（実際にそうなった）。
                 got[where] = {"url": url, "publisher": publisher,
-                              "text": (_ua.visible_text(page) if cleaned
+                              "text": (_ua.readable_text(page) if cleaned
                                        else _ua.clean_text(page, url))}
             except Exception as e:        # noqa: BLE001
                 got[where] = {"url": url, "publisher": publisher,
@@ -698,20 +698,17 @@ def selftest() -> int:
                 "<div>メーカー 京楽</div>"
                 "<div>導入日 2026年10月5日</div></div>")
 
-    class _MvPg:
-        def __init__(self, url, html):
-            import hashlib
-            self.requested_url = url
-            self.final_url = url
-            self.cleaned_html = html
-            self.sha256 = hashlib.sha256(html.encode("utf-8")).hexdigest()
+    # ★本物の器で試す★（2026-09-18・台帳#696）＝手書きの偽物を置くと、
+    #   指紋の作り方を変えた日に偽物だけ古いまま残り、試験は緑で本番が止まる。
+    import fetched_page as _fp_mv
 
     def _mv_fetch(u):
         import new_machine_watch as _w_t
         _w_t.LAST_FINAL_URL["url"] = u
         return _MV_HTML
 
-    _mv_pg = _MvPg(_MV_URL, _ua_t.clean_html(_MV_HTML, _MV_URL))
+    _mv_pg = _fp_mv.FetchedPage(_MV_URL, _MV_URL,
+                                _ua_t.clean_html(_MV_HTML, _MV_URL))
     _mv_ev = [{"url": _MV_URL,
                "quote": f"機種名 {_MV_MN} メーカー 京楽 導入日 2026年10月5日",
                "kind": "directory_observation"}]
@@ -723,9 +720,9 @@ def selftest() -> int:
             _mic_t.remember(
                 "dmm_5073",
                 {"claude": {"verdict": _vd, "why": _w_mv,
-                            "body_sha256": _mv_pg.sha256},
+                            "body_sha256": _mv_pg.text_sha256},
                  "codex": {"verdict": _vd, "why": _w_mv,
-                           "body_sha256": _mv_pg.sha256}},
+                           "body_sha256": _mv_pg.text_sha256}},
                 _mv_ev, "2026-09-17",
                 target_url=_MV_URL, store=_mv_st, fetch=_mv_fetch,
                 runtime_page=_mv_pg)

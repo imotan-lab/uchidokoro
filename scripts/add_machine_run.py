@@ -521,7 +521,7 @@ def grant_for(decision, pages) -> dict:
             "reason_codes": tuple(
                 _n.get("reason_codes_seen") or _n.get("reason_codes") or ()),
         }
-    return {pages[u].sha256: _meta.get(u, {"expected": "",
+    return {pages[u].text_sha256: _meta.get(u, {"expected": "",
                                            "reason_codes": ()})
             for u in ((decision or {}).get("accepted") or ())
             if u in pages}
@@ -707,7 +707,7 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
             "text": _review_question(
                 r, _url, maker, machine_name, release_date,
                 body_sha256=str(getattr((pages or {}).get(_url),
-                                        "sha256", "") or "")),
+                                        "text_sha256", "") or "")),
         })
 
     # ★★材料に残せるのは、2AIが「使う」と決めたものだけ★★
@@ -4306,9 +4306,9 @@ def _selftest_body() -> int:
             _mic.remember(
                 "dmm_5073",
                 {"claude": {"verdict": "ACCEPT_MATERIAL", "why": _w2ai,
-                            "body_sha256": _pg2.sha256},
+                            "body_sha256": _pg2.text_sha256},
                  "codex": {"verdict": "ACCEPT_MATERIAL", "why": _w2ai,
-                           "body_sha256": _pg2.sha256}},
+                           "body_sha256": _pg2.text_sha256}},
                 [{"url": _TU2,
                   "quote": f"機種名 {_MN2} メーカー 京楽 導入日 2026年10月5日",
                   "kind": "directory_observation"}],
@@ -4334,7 +4334,7 @@ def _selftest_body() -> int:
         _grant2 = grant_for(_dec2, {_TU2: _pg2})
         t("★★本番の許可証生成が、採否の結果から許可証を作る★★"
           "（手作りの許可証で試すと、ここを空に壊しても気づけない）",
-          set(_grant2) == {_pg2.sha256})
+          set(_grant2) == {_pg2.text_sha256})
         _keep_sl_read2 = _sl.read_page
         _sl.read_page = real_read
         try:

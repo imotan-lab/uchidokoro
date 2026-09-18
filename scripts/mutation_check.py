@@ -227,11 +227,12 @@ MUTATIONS = [
         "file": "scripts/maker_identity_cache.py",
         "before": ("        if runtime_page is None:" + chr(10)
                    + "            return None" + chr(10)
-                   + '        if str(rec.get("body_sha256") or "") != str('),
+                   + '        if str(rec.get("body_sha256") or "")'
+                   + " != _page_sha(runtime_page):"),
         "after": ("        if False:" + chr(10)
                   + "            return None" + chr(10)
-                  + "        if False and str(" + chr(10)
-                  + '                rec.get("body_sha256") or "") != str('),
+                  + '        if False and str(rec.get("body_sha256") or "")'
+                  + " != _page_sha(runtime_page):"),
         "run": ["scripts/maker_identity_cache.py"],
         "issues": [696],
     },
@@ -1567,8 +1568,8 @@ MUTATIONS = [
         "why": "★許可証を空にする（採否で「使う」と決めたのに、読取器へ何も渡らず、その機種は材料を1つも読めない）★"
                "／★手作りの許可証で試験していると気づけない接続部分★",
         "file": "scripts/add_machine_run.py",
-        "before": '    return {pages[u].sha256: _meta.get(u, {"expected": "",',
-        "after": '    return {} if True else {pages[u].sha256: _meta.get(u, {"expected": "",',
+        "before": '    return {pages[u].text_sha256: _meta.get(u, {"expected": "",',
+        "after": '    return {} if True else {pages[u].text_sha256: _meta.get(u, {"expected": "",',
         "run": ["scripts/add_machine_run.py"],
         "issues": [607],
     },
@@ -3558,7 +3559,7 @@ MUTATIONS = [
         "why": "★「使わない」を、ページが直っても効かせ続ける★"
                "（★相手が直して読める状態になっても、その機種は止まったまま★）",
         "file": "scripts/page_reading.py",
-        'before': ('        if _rf.sha256(raw) != str(rec.get("raw_sha256")):\n'
+        'before': ('        if _text_sha(raw) != str(rec.get("text_sha256")):\n'
                    '            return False, "ページが変わっているので、「使わない」は効かせません"\n'
                    '        return False, "2AIが「このページは使わない」と決めています"'),
         'after': '        return False, "2AIが「このページは使わない」と決めています"',
@@ -3656,7 +3657,7 @@ MUTATIONS = [
         "why": "★「このページは使わない」という答えを、ページが変わっても"
                "そのまま効かせる（★別の中身になったページにも効き続ける★）",
         "file": "scripts/page_reading.py",
-        "before": '        if _rf.sha256(raw) != str(rec.get("raw_sha256")):',
+        "before": '        if _text_sha(raw) != str(rec.get("text_sha256")):',
         "after": '        if False:',
         "run": ["scripts/page_reading.py"],
     },
@@ -5476,6 +5477,191 @@ MUTATIONS = [
         "before": "        if _dirty():\n            print(\"★閉じません★ 未コミットの変更があります\"",
         "after": "        if False:\n            print(\"★閉じません★ 未コミットの変更があります\"",
         "run": ["scripts/ledger_sweep.py"],
+    },
+    # ─── 2026-09-18・ページの指紋（台帳#696） ─────────────────────
+    {
+        "why": "★ページの指紋を「読む文字」から全文へ戻す"
+               "（なな徹のCSSのunix秒・DMMのcsrf-tokenだけで指紋が変わり、"
+               "2AIが決めた控えが数秒で失効して新台が永久に作れない）★",
+        "file": "scripts/fetched_page.py",
+        "before": "        self.text_sha256 = _ua.readable_sha256(self.cleaned_html)",
+        "after": ("        self.text_sha256 = hashlib.sha256("
+                  + chr(10)
+                  + "            self.cleaned_html.encode(\"utf-8\")).hexdigest()"),
+        "run": ["scripts/fetched_page.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★控えと突き合わせる側だけ全文の指紋に戻す"
+               "（器の側と作り方が割れ、同じページなのに永久に一致しない）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "    return _uas.readable_sha256(page.cleaned_html)",
+        "after": ("    import hashlib as _hx" + chr(10)
+                  + "    return _hx.sha256(str(getattr(page, \"cleaned_html\", \"\")"
+                  + " or \"\").encode(\"utf-8\")).hexdigest()"),
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★許可証を受け取る側だけ全文の指紋に戻す"
+               "（鍵を出す側と食い違い、材料を1つも読めなくなる）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": "        _sha = _uag.readable_sha256(str(html or \"\"))",
+        "after": ("        import hashlib as _hy" + chr(10)
+                  + "        _sha = _hy.sha256(str(html or \"\")"
+                  + ".encode(\"utf-8\")).hexdigest()"),
+        "run": ["scripts/model_code_lookup.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★逐語を探す形の空白詰めをやめる"
+               "（2AIが行をまたいで引用すると照合できなくなる）★",
+        "file": "scripts/user_area.py",
+        "before": "    return \" \".join(readable_text(cleaned_html).split())",
+        "after": "    return readable_text(cleaned_html)",
+        "run": ["scripts/fetched_page.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★指紋を数える形で、行の境目まで潰す"
+               "（★2AIが読む形が違うのに指紋が同じになる★＝"
+               "「天井G数／改行／1200G」と「天井G数 1200G」を区別できない。"
+               "＝読むものが変わっても控えが効き続ける）★",
+        "file": "scripts/user_area.py",
+        "before": ("    return \"\\n\".join(\" \".join(ln.split())" + chr(10)
+                   + "                     for ln in readable_text(cleaned_html).splitlines()"
+                   + chr(10) + "                     if ln.strip())"),
+        "after": "    return \" \".join(readable_text(cleaned_html).split())",
+        "run": ["scripts/fetched_page.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★「使わない」の控えを生HTML全文の指紋で照合する"
+               "（飾りが変わるだけで毎回失効し、同じページを毎晩聞き直して"
+               "3回の枠を食いつぶす）★",
+        "file": "scripts/page_reading.py",
+        "before": "        if _text_sha(raw) != str(rec.get(\"text_sha256\")):",
+        "after": "        if _rf.sha256(raw) != str(rec.get(\"raw_sha256\")):",
+        "run": ["scripts/page_reading.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★構造だけ変わったときの読取器の検査を、呼ばずに素通りさせる"
+               "（空の一覧を返す検査なので、呼び出しを外しても緑のまま＝罠㊸。"
+               "呼び出しそのものを見る検査で止める）★",
+        "file": "scripts/fetched_page.py",
+        "before": "    _sp = structure_only_change_problems()",
+        "after": "    _sp = []  # structure_only_change_problems は呼ばない",
+        "run": ["scripts/fetched_page.py"],
+        "issues": [696],
+    },
+    {
+        "why": "★「構造だけ変える」を何も変えないものにする"
+               "（崩していない材料どうしを比べて、検査が飾りになる）★",
+        "file": "scripts/fetched_page.py",
+        "before": "    return h.replace(\"</th>\", \"</div>\").replace(\"</td>\", \"</div>\")",
+        "after": "    return html",
+        "run": ["scripts/fetched_page.py"],
+        "issues": [696],
+    },
+    # ─── 2026-09-18・ポチポチくんの数値を2AIへ渡す（台帳#698） ────
+    {
+        "why": "★ポチポチくんが使う確率を2AIへ渡さない"
+               "（読者が実際に設定推測に使う値なのに、2AIは記事だけを見て"
+               "「どの出典にも無いので決められない」と結論し、台帳へ落ちる）★",
+        "file": "scripts/decide_now.py",
+        "before": "            out[\"counter\"] = _ct",
+        "after": "            out[\"counter\"] = {}",
+        "run": ["scripts/decide_now.py"],
+        "issues": [698],
+    },
+    {
+        "why": "★名簿（MACHINE_CONFIGS）の中だけを読むのをやめ、"
+               "ファイル全体から同名の区画を探す"
+               "（別のJSにある同じ名前の数値が、この機種の材料として2AIに渡る）★",
+        "file": "scripts/decide_now.py",
+        "before": ("    got = {k: dict(v) for k, v in" + chr(10)
+                   + "           (_esr.extract_rates(src).get(slug) or {}).items()}"),
+        "after": ("    _mv = re.search(r\"(?m)^\\s*\" + re.escape(slug)"
+                  + " + r\"\\s*:\\s*\\{\", src)" + chr(10)
+                  + "    _blk = src[_mv.end():_mv.end() + 4000] if _mv else \"\""
+                  + chr(10)
+                  + "    got = {}" + chr(10)
+                  + "    for _f, _i in re.findall("
+                  + "r\"([a-zA-Z_]+):\\s*\\{([^{}]*)\\}\", _blk):" + chr(10)
+                  + "        _v = {s_: \"1/\" + x_ for s_, x_ in"
+                  + " re.findall(r\"(\\d+)\\s*:\\s*1/([\\d.]+)\", _i)}" + chr(10)
+                  + "        if _v:" + chr(10)
+                  + "            got.setdefault(_f, _v)"),
+        "run": ["scripts/decide_now.py"],
+        "issues": [698],
+    },
+    {
+        "why": "★表のセルを直せなくする"
+               "（表へ移した事実は更新タスクから一切直せなくなる＝"
+               "実測86記事・1,724セルが読者に誤った値を出したまま止まる）★",
+        "file": "scripts/decide_now.py",
+        "before": "    ct = cell_target(where)\n    if not ct:\n        return None",
+        "after": "    ct = cell_target(where)\n    if True:\n        return None",
+        "run": ["scripts/decide_now.py"],
+        "issues": [698],
+    },
+    {
+        "why": "★指した節と違う節のセルも書き換える"
+               "（同じ位置にある別の節の値を、黙って壊す）★",
+        "file": "scripts/decide_now.py",
+        "before": "    if si != want_si:\n        return None",
+        "after": "    if False:\n        return None",
+        "run": ["scripts/decide_now.py"],
+        "issues": [698],
+    },
+    {
+        "why": "★「そもそも無い」と「区画は在るのに読めない」を混ぜる"
+               "（ポチポチくんの書き方が変わって読めなくなっても、"
+               "静かに『渡していない状態』へ戻り、誰も気づかない）★",
+        "file": "scripts/decide_now.py",
+        "before": "        return {\"_unreadable\": slug} if block else {}",
+        "after": "        return {}",
+        "run": ["scripts/decide_now.py"],
+        "issues": [698],
+    },
+    {
+        # ★★「知らない種類は例外で止める」行そのものは登録しない★★
+        #   （2026-09-18）＝いま全部の種類が処理されているので**発火しない**＝
+        #   どの試験も捕まえられない（罠㊻＝捕まらない壊し方は証拠にならない）。
+        #   あれは「あとで種類を足した人」への runtime の受け皿として残す。
+        #   ★代わりに、書き込み側から種類を落とす★＝
+        #   組めるのに書かれない、が本当に赤くなることを見る。
+        "why": "★組んだ書き換えを、書き込み側で処理しない"
+               "（★組んだのに書いていないのに「書きました N 件」と報告する★）★",
+        "file": "scripts/decide_now.py",
+        "before": ("            elif kind in (\"table_cell\", \"table_cell_in\"):"
+                   + chr(10) + "                # ★表のセル★"
+                   + "（2026-09-18・台帳#698）"),
+        "after": ("            elif False:" + chr(10)
+                  + "                # ★表のセル★（2026-09-18・台帳#698）"),
+        "run": ["scripts/decide_now.py"],
+        "issues": [698],
+    },
+    {
+        "why": "★書く直前にセルの中身を照合しない"
+               "（★行が増える操作が先に走ると行がずれ、"
+               "狙ったセルではない別のセルへ値を書き込む★）★",
+        "file": "scripts/decide_now.py",
+        "before": "                if not _okc:",
+        "after": "                if False:",
+        "run": ["scripts/decide_now.py"],
+        "issues": [698],
+    },
+    {
+        "why": "★セルの座標を「場所の特定」から外す"
+               "（★セルの一部だけを直すとき、文のまとまりまで広げて確かめる"
+               "検査が候補0件で素通りする★）★",
+        "file": "scripts/decide_now.py",
+        "before": "    _cc = cell_target(w)\n    if _cc:",
+        "after": "    _cc = cell_target(w)\n    if False:",
+        "run": ["scripts/decide_now.py"],
+        "issues": [698],
     },
 ]
 

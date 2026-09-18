@@ -212,6 +212,79 @@ def strip_tree(node, rules: list) -> int:
     return n
 
 
+def readable_text(cleaned_html: str) -> str:
+    """★掃除済みHTMLから「2AIが読む文字」を作る唯一の場所★（2026-09-18・台帳#696）
+
+    ★なぜ要るか★＝同じ1ページを「同じものか」と比べる場所が3か所あり、
+    それぞれ別の作り方をしていた。
+      ・ページの指紋      … `cleaned_html` の全文（`fetched_page`）
+      ・逐語引用の照合    … `_visible_text` ＋ 空白詰め（`maker_identity_cache`）
+      ・2AIへ渡す材料     … `visible_text`（`collect_evidence`）
+    ★指紋だけが全文だったので、取ってくるたびに変わっていた★＝
+    なな徹はCSSのURLに**そのときのunix秒**を焼き込み、DMMは
+    csrf-token と画像の `?t=` が毎回変わる（2026-09-18に実測）。
+    ＝2AIが正しく決めた控えが、翌日どころか★数秒で失効★し、
+    新台3件が11晩作れなかった。
+
+    ★この関数が決める線★＝**指紋が変わる＝2AIが読む文字が変わった**。
+    逐語の照合もこの文字列の上で行うので、
+    ★「確かめた本文」と「引用を探す本文」が必ず同じもの★になる。
+
+    ★URLは受け取らない★（2026-09-18・Codexの助言のうちここだけ採らなかった）＝
+    渡すものは**もう掃除済み**なので、`visible_text(cleaned, url)` を呼ぶと
+    投稿欄の必須の箱がもう無く、★例外で落ちる★（実測で確認）。
+    `collect_evidence` が2026-08-29に踏んだ退行と同じ形。
+
+    ★この指紋が保証しないもの★＝**表の構造**。
+    文字が同じ順で残ったまま `<table>` だけ消えても気づかない。
+    値の採否は独立2出典（`source_lineage`）と2AIの確定値が守る。
+
+    ★★取り出しは1つ・詰め方だけ分ける★★＝
+    2AIが読むときは**行の形を残す**（見出しの次の行に値、が読めなくなるため）。
+    比べるときだけ空白を詰める（`compare_text`）。
+    ★どちらも同じ `_visible_text` から作る★ので、
+    「指紋が同じ＝2AIが読んだ中身も同じ」が崩れない。
+    """
+    import new_machine_watch as _nw
+    return _nw._visible_text(cleaned_html or "")
+
+
+def compare_text(cleaned_html: str) -> str:
+    """★逐語引用を探すためだけの形★＝空白も改行も全部1個の空白に詰める。
+
+    ★引用側も `" ".join(q.split())` で同じ形にそろえる★ので、
+    2AIが行をまたいで引用しても当たる。
+    ★指紋には使わない★（下の `fingerprint_text` を見ること）。
+    """
+    return " ".join(readable_text(cleaned_html).split())
+
+
+def fingerprint_text(cleaned_html: str) -> str:
+    """★指紋を数えるための形★＝各行の中の空白だけ詰め、★行の境目は残す★。
+
+    ★なぜ `compare_text` を使わないか★（2026-09-18・Codexの指摘）＝
+    `" ".join(s.split())` は**改行も1個の空白に潰す**ので、
+      「天井G数／（改行）／1200G」と「天井G数 1200G」が同じ文字列になる。
+    ＝★2AIが読む形（`readable_text`）は違うのに指紋が一致する★
+    （実測で確認した）。それでは
+    「指紋が同じ＝2AIが読んだ中身も同じ」が成り立たない。
+
+    ★出発点は同じ `readable_text`★＝逐語照合と物差しがずれることはない。
+    ★逐語照合と完全に同じ文字列である必要は無い★＝
+    あちらは「引用が在るか」、こちらは「読むものが変わっていないか」。
+    """
+    return "\n".join(" ".join(ln.split())
+                     for ln in readable_text(cleaned_html).splitlines()
+                     if ln.strip())
+
+
+def readable_sha256(cleaned_html: str) -> str:
+    """★「2AIが読む文字」の指紋★（採否・許可証の照合はこれ）"""
+    import hashlib
+    return hashlib.sha256(
+        fingerprint_text(cleaned_html).encode("utf-8")).hexdigest()
+
+
 def clean_text(html: str, url: str = "", conf: dict | None = None) -> str:
     """★出典として読んでよい本文★（ここだけを呼ぶ）
 
