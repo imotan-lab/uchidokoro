@@ -2049,9 +2049,44 @@ def apply_decision(path: str, apply_it: bool = False, *,
     #   照合を通ってしまい、★挿入された別のセルを書き換える★。
     #   ★ここで断る★＝見るだけのときも同じ答えになる（書く時だけ落ちない）。
     _splits = {}
+    _cells = {}
     for _k, _si, _bi, _a in plan:
         if _k == "split_row":
             _splits.setdefault((_si, _bi), []).append(int(_a.get("_ri", 0)))
+        elif _k in ("table_cell", "table_cell_in"):
+            _cells.setdefault((_si,) + tuple(_bi), []).append(_a)
+    # ★同じ表を2回は分けられない★（2026-09-18・Codexの6回目）
+    #   ★1回目が行を増やすと、2回目の行番号がずれる★＝
+    #   ずれた先がたまたま同じ文字なら、分ける検査も通って
+    #   **挿入された行のほうを分けてしまう**（本来の行は残る）。
+    for _key, _ris in _splits.items():
+        if len(_ris) > 1:
+            result["problems"].append(
+                f"同じ表で「行を分ける」を2回以上はできません（行 {sorted(_ris)}）"
+                "／★1回目で行がずれるので、1回ずつ決め直してください★")
+            return result
+    # ★★同じ場所を2回は直せない★★（2026-09-18・Codexの6回目＋自分で確かめた）
+    #   ★計画はどれも「変更前の記事」から組まれる★ので全部通ってしまう。
+    #   ・セル … 書くときに2件目が「中身が変わっている」で止まる
+    #            ＝**見るだけでは成功、書くと失敗**という食い違い
+    #   ・本文 … ★黙って2件目だけが効く★のに「2件やりました」と報告する
+    #            （自分で再現した＝「前 対象 行です。」に2件当てると「前です。」）
+    #   ★セルだけの問題ではない★ので、場所の種類を問わず断る。
+    _seen = {}
+    for _k, _si, _bi, _a in plan:
+        if _k in ("split_row", "drop"):
+            continue                      # 分ける＝上で見た／消す＝同じ行を二度指さない
+        _fam = _k[:-3] if _k.endswith("_in") else _k
+        _seen.setdefault((_fam, _si, str(_bi)), []).append(_a)
+    for _key, _as in _seen.items():
+        if len(_as) > 1:
+            result["problems"].append(
+                f"同じ場所を{len(_as)}回は直せません"
+                f"（{_as[0].get('where') or _key[0]}）"
+                "／★どれも『変更前の記事』から組まれるので、"
+                "後のものだけが効いたり、書く時だけ失敗したりします。"
+                "1件ずつ決め直してください★")
+            return result
     if _splits:
         for _k, _si, _bi, _a in plan:
             if _k not in ("table_cell", "table_cell_in"):
@@ -4000,6 +4035,97 @@ def _selftest() -> int:
         t("　★見るだけのときも同じ答えになる★"
           "（書く時だけ落ちる、にしない）",
           not apply_decision(_q4, False, guard=False).get("done"))
+
+        # ★★同じ表を2回分けるのも同じ型★★（2026-09-18・Codexの6回目）
+        #   1回目が行を増やすと2回目の行番号がずれ、ずれた先が同じ文字なら
+        #   ★挿入された行のほうを分けてしまう★（本来の行は残る）。
+        def _dec5(actions, rows):
+            _pp = os.path.join(_td2, "zzz_c5.json")
+            io.open(_pp, "w", encoding="utf-8", newline="\n").write(
+                json.dumps({"name": "試験機", "slug": "zzz_c5", "sections": [
+                    {"title": "基本スペック", "type": "table",
+                     "tables": [{"headers": ["値"], "rows": rows}]}]},
+                    ensure_ascii=False, indent=1) + "\n")
+            _ss = _h2.sha256(io.open(_pp, encoding="utf-8").read()
+                             .encode("utf-8")
+                             .replace(bytes([13, 10]), bytes([10]))).hexdigest()
+            _qq = os.path.join(_td2, "dec5.json")
+            io.open(_qq, "w", encoding="utf-8").write(json.dumps({
+                "schema_version": SCHEMA, "slug": "zzz_c5",
+                "source_sha256": _ss, "decided_by": ["claude", "codex"],
+                "actions": actions}, ensure_ascii=False))
+            return _pp, _qq
+
+        _ROWS5 = [["前 対象 行"], ["対象 行"]]
+        _p5, _q5 = _dec5([
+            {"op": "split_row", "where": "sections[0].tables[0].rows[0]",
+             "why": "1件目（試験）", "sep": " ",
+             "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました",
+             "before": ["前 対象 行"], "after": [["前"], ["対象 行"]]},
+            {"op": "split_row", "where": "sections[0].tables[0].rows[1]",
+             "why": "2件目（試験）", "sep": " ",
+             "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました",
+             "before": ["対象 行"], "after": [["対象"], ["行"]]},
+        ], _ROWS5)
+        _r5 = apply_decision(_q5, True, guard=False)
+        t("★★同じ表を2回は分けない★★"
+          "（★1回目で行がずれ、挿入された行のほうを分けてしまう★）",
+          not _r5.get("wrote")
+          and json.loads(io.open(_p5, encoding="utf-8").read())
+          ["sections"][0]["tables"][0]["rows"] == _ROWS5)
+
+        # ★★同じセルを2回直すのも断る★★（同上）
+        #   ★計画はどちらも「変更前の記事」から組まれる★ので両方通り、
+        #   書くときに2件目が止まる＝見るだけでは成功、書くと失敗になる。
+        _p6, _q6 = _dec5([
+            {"op": "replace", "where": "sections[0].tables[0].rows[0][0]",
+             "why": "1件目（試験）",
+             "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました",
+             "before": "前 対象 行", "after": "前 対象"},
+            {"op": "replace", "where": "sections[0].tables[0].rows[0][0]",
+             "why": "2件目（試験）",
+             "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました",
+             "before": "前 対象 行", "after": "前"},
+        ], _ROWS5)
+        _r6 = apply_decision(_q6, True, guard=False)
+        t("★★同じセルを2回は直さない★★"
+          "（★見るだけでは成功、書くと失敗、という食い違いを作らない★）",
+          not _r6.get("wrote")
+          and json.loads(io.open(_p6, encoding="utf-8").read())
+          ["sections"][0]["tables"][0]["rows"] == _ROWS5)
+        t("　★見るだけでも同じ答え★",
+          not apply_decision(_q6, False, guard=False).get("done")
+          and not apply_decision(_q5, False, guard=False).get("done"))
+
+        # ★★セルだけの問題ではない★★（2026-09-18・自分で確かめた）
+        #   同じ本文の行に2件並べると、★黙って2件目だけが効く★のに
+        #   「2件やりました」と報告していた（実測）。場所の種類を問わず断る。
+        _p7 = os.path.join(_td2, "zzz_dup.json")
+        io.open(_p7, "w", encoding="utf-8", newline="\n").write(json.dumps(
+            {"name": "試験機", "slug": "zzz_dup", "sections": [
+                {"title": "ヤメ時の判断", "body": ["前 対象 行です。"]}]},
+            ensure_ascii=False, indent=1) + "\n")
+        _sha7 = _h2.sha256(io.open(_p7, encoding="utf-8").read()
+                           .encode("utf-8").replace(bytes([13, 10]),
+                                                    bytes([10]))).hexdigest()
+        _q7 = os.path.join(_td2, "dec7.json")
+        io.open(_q7, "w", encoding="utf-8").write(json.dumps({
+            "schema_version": SCHEMA, "slug": "zzz_dup",
+            "source_sha256": _sha7, "decided_by": ["claude", "codex"],
+            "actions": [
+                {"op": "replace", "where": "body", "why": "1件目（試験）",
+                 "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました",
+                 "before": "前 対象 行です。", "after": "前 対象です。"},
+                {"op": "replace", "where": "body", "why": "2件目（試験）",
+                 "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました",
+                 "before": "前 対象 行です。", "after": "前です。"},
+            ]}, ensure_ascii=False))
+        _r7 = apply_decision(_q7, True, guard=False)
+        t("★★同じ本文の行も2回は直さない★★"
+          "（★黙って2件目だけが効くのに「2件やりました」と報告していた★）",
+          not _r7.get("wrote")
+          and json.loads(io.open(_p7, encoding="utf-8").read())
+          ["sections"][0]["body"] == ["前 対象 行です。"])
     finally:
         globals()["DETAILS"] = _keep2
 
