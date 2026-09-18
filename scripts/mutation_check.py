@@ -5691,14 +5691,26 @@ MUTATIONS = [
         "issues": [698],
     },
     {
+        # ★説明は「実際に漏れるもの」だけを書く★（2026-09-18・Codexの8回目）
+        #   ★鍵を種類へ戻しても `drop_line × drop_line` は捕まる★
+        #   （同じ種類・同じ位置なので）。漏れるのは**交差**だけ。
         "why": "★本文を「種類」でまとめる（物理の場所でまとめない）"
-               "（★消す操作が検査から漏れ、同じ行を2回消す決定が"
-               "「2件やりました」と報告して1件しか効かない。"
-               "直す×消す の交差も気づけない★）★",
+               "（★直す × 消す の交差が同じ鍵に入らず、"
+               "同じ行に両方並べても気づけない★）★",
         "file": "scripts/decide_now.py",
         "before": ('        _key = (("body", _si, _bi) if _fam in ("replace", "drop")'
                    + chr(10) + '                else (_fam, _si, str(_bi)))'),
         "after": "        _key = (_fam, _si, str(_bi))",
+        "run": ["scripts/decide_now.py"],
+        "issues": [698],
+    },
+    {
+        "why": "★消す操作を「同じ場所」の検査から外す"
+               "（★同じ行を2回消す決定が、計画に2件入るのに削除は集合に畳まれて"
+               "1件になり、「2件やりました」と報告して1件しか効かない★）★",
+        "file": "scripts/decide_now.py",
+        "before": '        if _k == "split_row":\n            continue',
+        "after": '        if _k in ("split_row", "drop"):\n            continue',
         "run": ["scripts/decide_now.py"],
         "issues": [698],
     },

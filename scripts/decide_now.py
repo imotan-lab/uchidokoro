@@ -4192,13 +4192,42 @@ def _selftest() -> int:
           not _r9.get("wrote")
           and json.loads(io.open(_p9, encoding="utf-8").read())
           ["sections"][0]["body"] == _BODY8)
-        t("　★同じ文が別の行にあるときは妨げない★（場所が違うので通す）",
-          len(apply_decision(_dec8([
-              {"op": "drop_line", "text": "消す行です。", "why": "その1（試験）",
-               "meaning_why": _WHY8},
-              {"op": "drop_line", "text": "残る行です。", "why": "その2（試験）",
-               "meaning_why": _WHY8},
-          ])[1], False, guard=False).get("done") or []) == 2)
+        # ★★対照＝「同じ文が別の行」にあるときは妨げない★★
+        #   （2026-09-18・Codexの8回目で「別の文になっている」と指摘された）
+        #   ★`drop_line` は毎回いちばん最初の一致行を選ぶ★ので対照に使えない。
+        #   `drop` は使っていない行を順に選ぶので、同じ文でも別の行を指す。
+        _SAME = ["同じ文です。", "同じ文です。", "同じ文です。"]
+        _p10 = os.path.join(_td2, "zzz_same.json")
+
+        def _dec10():
+            io.open(_p10, "w", encoding="utf-8", newline="\n").write(
+                json.dumps({"name": "試験機", "slug": "zzz_same", "sections": [
+                    {"title": "ヤメ時の判断", "body": list(_SAME)}]},
+                    ensure_ascii=False, indent=1) + "\n")
+            _ss = _h2.sha256(io.open(_p10, encoding="utf-8").read()
+                             .encode("utf-8")
+                             .replace(bytes([13, 10]), bytes([10]))).hexdigest()
+            _qq = os.path.join(_td2, "dec10.json")
+            io.open(_qq, "w", encoding="utf-8").write(json.dumps({
+                "schema_version": SCHEMA, "slug": "zzz_same",
+                "source_sha256": _ss, "decided_by": ["claude", "codex"],
+                "actions": [
+                    {"op": "drop", "text": "同じ文です。", "why": "その1（試験）",
+                     "meaning_why": _WHY8},
+                    {"op": "drop", "text": "同じ文です。", "why": "その2（試験）",
+                     "meaning_why": _WHY8},
+                ]}, ensure_ascii=False))
+            return _qq
+
+        t("　★対照★＝同じ文が別の行にあるときは妨げない（見るだけ）",
+          len(apply_decision(_dec10(), False,
+                             guard=False).get("done") or []) == 2)
+        _r10 = apply_decision(_dec10(), True, guard=False)
+        t("　★対照★＝書いても2行だけ消えて1行残る"
+          "（★場所が違うものまで断っていないことの証拠★）",
+          _r10.get("wrote")
+          and json.loads(io.open(_p10, encoding="utf-8").read())
+          ["sections"][0]["body"] == ["同じ文です。"])
     finally:
         globals()["DETAILS"] = _keep2
 
