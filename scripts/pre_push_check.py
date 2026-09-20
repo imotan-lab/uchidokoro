@@ -29,6 +29,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import local_paths as _lp        # noqa: E402
@@ -470,6 +471,52 @@ def _check_gate_wiring(fail_script: str, name: str) -> list:
     if not any("audit_site.py" in c and "--skill-audit" in c for c in calls):
         bad.append("手順書の監査が呼ばれていません")
     return bad
+
+
+def _ci_like_problems(touched, run=None) -> list:
+    """★GitHubと同じ条件でも、触ったスクリプトの試験が通るか★
+
+    ★GitHubと手元の違いは「控えがあるかどうか」★＝
+    確定値・台帳・ログはリポジトリの外にあり、GitHubの機械には無い。
+    GitHubは**空の控えを作ってから**試験を流すので、ここでも同じ形にする。
+    ★空の置き場をそのまま使うと「控えが無い」で全部落ちる★ので、
+    `confirmed_values --init` を必ず先に通す（＝GitHubと同じ手順）。
+
+    ★試験を持たないスクリプトは飛ばす★（`--selftest` が無いものは
+    そもそもGitHubでも動かない）。
+    """
+    out = []
+    items = [p for p in (touched or [])
+             if p.startswith("scripts/") and p.endswith(".py")]
+    if not items:
+        return out
+    run = run or (lambda args, env: subprocess.run(
+        args, cwd=BASE, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", env=env))
+    docs = tempfile.mkdtemp(prefix="ci_like_docs_")
+    env = dict(os.environ, UCHIDOKORO_DOCS=docs, PYTHONIOENCODING="utf-8",
+               PYTHONDONTWRITEBYTECODE="1")
+    run([sys.executable, os.path.join(BASE, "scripts", "confirmed_values.py"),
+         "--init"], env)
+    for p in items:
+        full = os.path.join(BASE, p)
+        try:
+            with open(full, encoding="utf-8", errors="replace") as fh:
+                if "--selftest" not in fh.read():
+                    continue
+        except OSError:
+            continue                      # 消したファイルは見ない
+        r = run([sys.executable, full, "--selftest"], env)
+        if r.returncode != 0:
+            tail = [x for x in (r.stdout or "").splitlines()
+                    if x.startswith("❌") or "想定外" in x][:2]
+            out.append("★NG " + p + " がGitHubと同じ条件（控えが空）で"
+                       "落ちます: " + (" ／ ".join(tail)[:160] or "理由不明"))
+    if out:
+        out.append("→ 試験が★リポジトリの外の控え★を読んでいないか"
+                   "確かめてください（本物の登録関数を通して、"
+                   "一時の置き場へ自分で材料を作る）")
+    return out
 
 
 def hub_check_reachable() -> str:
@@ -928,6 +975,53 @@ def _selftest() -> int:
     t("　似た名前でも、記事の置き場でなければ求めない",
       touches_articles(["assets/data/machines-backup.json",
                         "assets/css/practical.css"]) is False)
+
+    # ★★GitHubと同じ条件でも試験を通す★★（2026-09-20・運営者の判断）
+    #   ★2026-09-18に実際にやらかした型★＝試験がリポジトリの外の控えを
+    #   読んでいると、手元は緑・GitHubだけ赤になる。
+    #   ★通信も実行もしない形で確かめる★＝走らせる役を差し替える。
+    _calls = []
+
+    class _R:
+        def __init__(self, code, out=""):
+            self.returncode, self.stdout, self.stderr = code, out, ""
+
+    def _fake(bad_names):
+        def _run(args, env):
+            _calls.append((list(args), dict(env)))
+            name = os.path.basename(str(args[-2] if len(args) > 2 else args[-1]))
+            if any(b in str(args) for b in bad_names):
+                return _R(1, "❌ ★★見出し付きの天井も読む★★\n43/44 合格\n")
+            return _R(0, "44/44 合格\n")
+        return _run
+
+    _calls.clear()
+    _ok = _ci_like_problems(["scripts/adoption_basis.py"], run=_fake([]))
+    t("★★GitHubと同じ条件で通れば、何も言わない★★", _ok == [])
+    t("　控えを先に作ってから試験を流す（GitHubと同じ手順）",
+      bool(_calls) and "confirmed_values.py" in " ".join(_calls[0][0])
+      and "--init" in _calls[0][0])
+    t("　控えの置き場を一時の場所へ向けている（本番の控えを見せない）",
+      bool(_calls) and _calls[0][1].get("UCHIDOKORO_DOCS")
+      and _calls[0][1]["UCHIDOKORO_DOCS"] != _lp.DOCS)
+    _ng = _ci_like_problems(["scripts/adoption_basis.py"],
+                            run=_fake(["adoption_basis"]))
+    t("★★落ちたら、どのスクリプトかと落ちた行を出す★★",
+      len(_ng) >= 2 and "adoption_basis.py" in _ng[0]
+      and "見出し付きの天井" in _ng[0])
+    t("　直し方（外の控えを読んでいないか）も出す",
+      any("リポジトリの外の控え" in x for x in _ng))
+    t("　スクリプト以外は見ない",
+      _ci_like_problems(["assets/data/machines.json"],
+                        run=_fake(["machines"])) == [])
+    t("　実在しないスクリプトは飛ばす（消したファイルで止めない）",
+      _ci_like_problems(["scripts/zzz_no_such_file.py"],
+                        run=_fake(["zzz"])) == [])
+    # ★試験を持たないスクリプトは飛ばす★（GitHubでも動かないため）
+    t("　試験を持たないスクリプトは飛ばす",
+      _ci_like_problems(["scripts/__init__.py"], run=_fake(["__init__"]))
+      == [] if os.path.exists(os.path.join(BASE, "scripts", "__init__.py"))
+      else True)
     # ★★この関数を実際に呼ぶ★★（2026-08-30・Codexの指摘＋自分で踏んだ）
     #   判断を gate_active() へ切り出したとき、消し忘れた局所変数のせいで
     #   ★push しようとした瞬間に例外★になった。
@@ -1142,6 +1236,19 @@ def main() -> int:
             print("   → 手前に別の守りを足したせいで、"
                   "奥の守りを一度も試さなくなっていないか確かめてください")
             ng.append("壊し方（触った分）")
+        # ★★GitHubと同じ条件でも試験を通す★★（2026-09-20・運営者の判断）
+        #   ★なぜ要るか（2026-09-18に実際にやらかした）★＝
+        #   試験が**リポジトリの外にある控え**の実データを読んでいると、
+        #   手元は緑・GitHubだけ赤になる。★この関所も、壊し方を確かめる
+        #   道具も、本番の控えをそのまま使う★（控えごと移すと「壊す前から
+        #   赤い」になるため）＝**原理的に素通りする型**だった。
+        #   その日は運営者にエラーメールが2通届いた。
+        #   ★通っている正規の押し出しを止めないことを先に数えた★＝
+        #   試験がある108本のうち106本が通る（落ちる2本は
+        #   CIでも壊し方の道具でも動かしていない）。
+        for _l in _ci_like_problems(_touched):
+            print("   " + _l)
+            ng.append("GitHubと同じ条件の試験")
     # ★★早見表（ハブ4ページ）が古いままでないか★★（2026-09-01新設）
     #   ★実際に起きたこと★＝machines.json を並べ替えたのに
     #   `build_hub_pages.py --legacy` を流さず、早見表が古いまま残り、

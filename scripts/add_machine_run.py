@@ -992,9 +992,10 @@ def _gather(name: str, maker: str = "", slug: str = "",
         #   ★記事があるのに索引に出ない★ことが実際に起きる（台帳#468）。
         #   控えに別の発行者の出典があるなら、それは「DMM単独」ではない。
         #   ★読めないときは例外を通さない★（fail-closed）
+        # ★★ここでは仮に置くだけ★★（2026-09-20・運営者の判断＝C案）
+        #   ★同定・メーカー照合・転載照合で外れる分は、ここまで来ても
+        #   まだ確定していない★ので、材料を読む直前に数え直す（下の再計算）。
         _other, _other_why = _ab.other_sources_known(slug, got["urls"])
-        if _other:
-            _log(f"  ★単独確認の例外は使いません★: {_other_why[:120]}")
         _adopt_ctx = {"release_date": str(release_date),
                       # ★この導入日はDMMの機種ページで確かめたもの★
                       "release_source": "dmm-ptown",
@@ -1293,6 +1294,19 @@ def _gather(name: str, maker: str = "", slug: str = "",
         # ★DMM単独の例外の文脈を渡す★（空なら今までどおり独立2票のみ）
         return mod.compare(pages, ctx=_adopt_ctx)
 
+    # ★★「確かめられなかった相手」は、材料を読む直前に数え直す★★
+    #   （2026-09-20・運営者の判断＝C案）
+    #   ★入口で数えた値のままだと古い★＝同定・メーカー照合・転載照合で
+    #   外れた分は、ここまで来て初めて確定する。
+    #   ★読めた相手が「調査中」なのは止める理由にしない★＝
+    #   止めるのは「控えに在るのに索引へ出ていない」「読めなかった」だけ。
+    if _adopt_ctx:
+        _o2, _w2 = _ab.other_sources_known(slug, got["urls"],
+                                           unread=got.get("unread"))
+        _adopt_ctx["other_sources_known"] = bool(_o2)
+        _adopt_ctx["other_sources_why"] = _w2
+        if _o2:
+            _log(f"  ★単独確認の例外は使いません★: {_w2[:120]}")
     got["material"] = _read(_sl, "基本スペック")
     # ★型式名の正本は mv（独立2票）★（2026-08-02・Codex29回目）
     #   基本スペック側は文字列の完全一致で拾うため、空白差があると採用されず、
@@ -1599,6 +1613,31 @@ def merge_transcription(suspects: list, urls: list, looks: list,
     out["urls"] = [u for u in out["urls"] if _host_of(u) not in drop_hosts]
     out["looks"] = [r for r in out["looks"]
                     if _host_of(r.get("url") or "") not in drop_hosts]
+    return out
+
+
+def solo_ctx_wiring_problems() -> list:
+    """★「確かめられなかった相手」を、材料を読む直前に数え直しているか★
+
+    ★なぜ要るか（2026-09-20・C案）★＝入口で数えた値のままだと、
+    同定・メーカー照合・転載照合で外れた分が反映されない。
+    ★`_gather` は通信するので通しの試験が置けない★ので、配線だけを見る。
+    ★これは「文字が在るか」の検査★＝判定そのものは
+    `adoption_basis --selftest` が見る。
+    """
+    import inspect
+    src = inspect.getsource(_gather)
+    want = ('unread=got.get("unread")',
+            '_adopt_ctx["other_sources_known"] = bool(_o2)',
+            'got["material"] = _read(')
+    out = [f"材料集めの本体に「{w}」がありません（単独確認の数え直しの配線）"
+           for w in want if w not in src]
+    # ★順番まで見る★＝数え直しが材料を読むより後ろだと、意味がない
+    if not out:
+        if src.index('unread=got.get("unread")') > src.index(
+                'got["material"] = _read('):
+            out.append("数え直しが、材料を読むより後ろにあります"
+                       "（読む時点では古い値が使われます）")
     return out
 
 
@@ -5545,6 +5584,9 @@ def _selftest_body() -> int:
               not _blocking(["転載の疑い: a と b の本文が 99% 一致"]))
             t("★材料集めの本体が、実際に1票へまとめている★（配線・罠③）",
               not transcription_wiring_problems())
+            t("★「確かめられなかった相手」を材料を読む直前に数え直している★"
+              "（配線・罠③。判定そのものは adoption_basis の試験が見る）",
+              not solo_ctx_wiring_problems())
             # ★★台帳の本文が、質問文と同じ場所へ案内しているか★★
             #   （2026-09-18・Codexの指摘＝相乗りさせたせいで、
             #     「登録簿に書いて」と聞きながら本文は

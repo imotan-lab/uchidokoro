@@ -118,7 +118,7 @@ def near_release(release_date: str, today: _dt.date | None = None) -> bool:
     return (today or _today_jst()) >= d - _dt.timedelta(days=NEAR_RELEASE_DAYS)
 
 
-def other_sources_known(slug: str, index_urls) -> tuple:
+def other_sources_known(slug: str, index_urls, unread=None) -> tuple:
     """★索引に出ていないだけで、別の出典を知っていないか★
 
     ★なぜ要るか（2026-08-23・Codexの敵対的レビューP0）★
@@ -167,23 +167,44 @@ def other_sources_known(slug: str, index_urls) -> tuple:
     #     ⑤★「DMM単独」として採用が復活する★
     #   ＝塞いだはずの「知っている別出典との食い違いを見ない経路」が残っていた。
     #   ★索引に載っているかを問わず、DMM以外を1件でも知っていれば止める★
-    # ★★2026-09-19：見る向きを変えた★★（単独で採ってよい出典を3社へ広げたため）
-    #   ★直す前は「DMM以外を知っているか」★だったが、単独で採ってよい出典が
-    #   DMMだけではなくなったので、その聞き方はもう意味をなさない。
-    #   ★いまの問い＝「発行元を2社以上知っているか」★
-    #   （知っているのに読めていない相手がいるなら、食い違いを確かめられない）。
-    known, others = {}, []
+    # ★★2026-09-20：止めるのは「確かめられなかった相手」だけにした★★
+    #   （運営者の判断＝C案）
+    #   ＞ 他社を読んだうえで空欄なら1社でも採る。読めなかった時だけ止める
+    #   ★直す前は「発行元を2社以上知っていたら止める」★だったので、
+    #   3社ともページが在って2社が「調査中」の機種（実測3件＝モンハンライズ・
+    #   アカマター・ツインエンジェル2）は、★中身を確かめたうえで空欄なのに
+    #   永久に止まっていた★。
+    #   ★この守りの目的は「食い違いを確かめられないこと」★なので、
+    #   読めた相手が値を書いていないのは、止める理由にならない。
     try:
-        cand = [str(u) for u in (index_urls or []) if u]
+        idx = {}
+        for u in (index_urls or []):
+            if u:
+                idx.setdefault(_vote_key_of(str(u)), str(u))
     except Exception:                                        # noqa: BLE001
         return True, "URLをそろえて比べられません"
-    cand += [str((rec or {}).get("url") or "") for rec in (saved or [])]
-    for u in cand:
-        if not u:
-            continue
-        known.setdefault(_vote_key_of(u), u)
-    if len(known) >= 2:
-        others = list(known.values())
+    cached = {}
+    for rec in (saved or []):
+        u = str((rec or {}).get("url") or "")
+        if u:
+            cached.setdefault(_vote_key_of(u), u)
+    others = []
+    if unread is None:
+        # ★呼ぶ側が「読めたか」を持っていないときは安全側★（今までどおり）
+        known = dict(cached)
+        known.update(idx)
+        if len(known) >= 2:
+            others = list(known.values())
+    else:
+        # ①控えに在るのに、今回の索引に出ていない＝取りに行っていない
+        others += [u for k, u in cached.items() if k not in idx]
+        # ②今回読もうとして読めなかった
+        bad = {str(x).strip().lower() for x in (unread or ()) if str(x).strip()}
+        for k, u in idx.items():
+            host = str(u).split("/")[2].lower() if "//" in str(u) else ""
+            if host and any(host == b or host.endswith("." + b)
+                            or b.endswith(host) for b in bad):
+                others.append(u)
     if others:
         # ★同じURLを2度言わない★（索引と控えの両方にあることは普通）
         uniq = []
@@ -194,8 +215,8 @@ def other_sources_known(slug: str, index_urls) -> tuple:
                 return True, "URLをそろえて比べられません"
             if k not in [x[0] for x in uniq]:
                 uniq.append((k, u))
-        return True, ("発行元を2社以上知っています"
-                      "（索引・控えのどちらかにあります）: "
+        return True, ("確かめられなかった発行元があります"
+                      "（控えに在るが索引に出ていない／読めなかった）: "
                       + " / ".join(u for _, u in uniq[:2]))
     return False, ""
 
@@ -397,6 +418,56 @@ def selftest() -> int:
     t("★★控えを読めないときは「別の出典を知っている」に倒す★★"
       "／★控えが壊れた日に1出典で公開させない★",
       _broken[0] is True and "控えを読めません" in _broken[1])
+
+    # ★★2026-09-20：止めるのは「確かめられなかった相手」だけ★★（C案）
+    #   ★控えは実データに触らない★＝空の控えを返す形にして、
+    #   索引と `unread` だけで判定を確かめる（昨日CIを赤くした型を繰り返さない）。
+    def _with_empty_ledger(idx, unread):
+        import machine_sources as _ms
+        _bak = _ms.urls_for
+        try:
+            _ms.urls_for = lambda slug, data=None: []
+            return other_sources_known("zzz", idx, unread=unread)
+        finally:
+            _ms.urls_for = _bak
+
+    _IDX = ["https://p-town.dmm.com/machines/1",
+            "https://chonborista.com/slot/x/1/",
+            "https://nana-press.com/kaiseki/machine/1/"]
+    _all_read = _with_empty_ledger(_IDX, set())
+    t("★★3社とも読めたなら止めない★★"
+      "（★読めた相手が『調査中』なのは止める理由にしない＝実測3機種が"
+      "ここで永久に止まっていた★）",
+      _all_read[0] is False)
+    _one_bad = _with_empty_ledger(_IDX, {"nana-press.com"})
+    t("★★読めなかった発行元がいれば止める★★（食い違いを確かめられない）",
+      _one_bad[0] is True and "nana-press" in _one_bad[1])
+    t("　ドメインの書き方が違っても当てる（www付き・部分）",
+      _with_empty_ledger(["https://www.chonborista.com/slot/x/1/",
+                          "https://p-town.dmm.com/machines/1"],
+                         {"chonborista.com"})[0] is True)
+    t("★★unread を渡さないときは、今までどおり安全側★★"
+      "（★呼ぶ側が読めたかを持っていないときに緩めない★）",
+      _with_empty_ledger(_IDX, None)[0] is True)
+
+    def _with_cached_only(idx, unread):
+        import machine_sources as _ms
+        _bak = _ms.urls_for
+        try:
+            _ms.urls_for = lambda slug, data=None: [
+                {"url": "https://chonborista.com/slot/x/9/"}]
+            return other_sources_known("zzz", idx, unread=unread)
+        finally:
+            _ms.urls_for = _bak
+
+    t("★★控えに在るのに索引へ出ていない発行元は止める★★"
+      "（★取りに行っていない＝食い違いを確かめられない・台帳#468★）",
+      _with_cached_only(["https://p-town.dmm.com/machines/1"], set())[0]
+      is True)
+    t("　その発行元が索引にも出ていれば止めない",
+      _with_cached_only(["https://p-town.dmm.com/machines/1",
+                         "https://chonborista.com/slot/x/1/"], set())[0]
+      is False)
     t("　そのときは例外そのものが通らない",
       not classify_support([D], {**OK_CTX,
                                  "other_sources_known": _broken[0],

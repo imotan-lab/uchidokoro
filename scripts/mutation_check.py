@@ -1302,6 +1302,76 @@ MUTATIONS = [
         "after": "    pass",
         "run": ["scripts/add_machine_run.py"],
     },
+    # ─── 2026-09-20・関所に「GitHubと同じ条件でも試験を通す」を足した ───
+    {
+        "why": "★GitHubと同じ条件の試験で落ちても、pushを止めない"
+               "（★2026-09-18に実際にCIを2回赤くした型が、そのまま通る★）★",
+        "file": "scripts/pre_push_check.py",
+        "before": '            ng.append("GitHubと同じ条件の試験")',
+        "after": "            pass",
+        "run": ["scripts/pre_push_check.py"],
+    },
+    {
+        "why": "★控えを作らずにGitHubと同じ条件の試験を流す"
+               "（★「控えが無い」で全部落ちる＝毎回止まって使いものにならない★）★",
+        "file": "scripts/pre_push_check.py",
+        "before": ('    run([sys.executable, os.path.join(BASE, "scripts", '
+                   '"confirmed_values.py"),' + chr(10)
+                   + '         "--init"], env)'),
+        "after": "    pass",
+        "run": ["scripts/pre_push_check.py"],
+    },
+    {
+        "why": "★本番の控えを見せたまま試験する"
+               "（★GitHubとの違いを再現しないので、この関所が何も見つけない★）★",
+        "file": "scripts/pre_push_check.py",
+        # ★向け直しを外すだけ★＝子は本番の控えをそのまま見る。
+        #   （置き場の名前をここに書くと、監査38が「使っているのに
+        #     読み込んでいない」と誤検知する）
+        "before": '    env = dict(os.environ, UCHIDOKORO_DOCS=docs,',
+        "after": "    env = dict(os.environ,",
+        "run": ["scripts/pre_push_check.py"],
+    },
+    # ─── 2026-09-20・単独確認の条件を「確かめられなかった相手だけ」へ（C案）───
+    {
+        "why": "★読めなかった発行元がいても止めない"
+               "（★食い違いを確かめられないまま1社の値を載せる★）★",
+        "file": "scripts/adoption_basis.py",
+        "before": ('        bad = {str(x).strip().lower() '
+                   'for x in (unread or ()) if str(x).strip()}'),
+        "after": "        bad = set()",
+        "run": ["scripts/adoption_basis.py"],
+    },
+    {
+        "why": "★控えに在るのに索引へ出ていない発行元を見ない"
+               "（★取りに行っていない相手との食い違いを見逃す・台帳#468★）★",
+        "file": "scripts/adoption_basis.py",
+        "before": "        others += [u for k, u in cached.items() if k not in idx]",
+        "after": "        others += []",
+        "run": ["scripts/adoption_basis.py"],
+    },
+    {
+        "why": "★読めたかを渡されなくても、ゆるいほうで判定する"
+               "（★呼ぶ側が持っていないのに、止めない側へ倒す★）★",
+        "file": "scripts/adoption_basis.py",
+        "before": "    if unread is None:",
+        "after": "    if False:",
+        "run": ["scripts/adoption_basis.py"],
+    },
+    {
+        "why": "★材料を読む直前の数え直しをやめる"
+               "（★同定・メーカー照合・転載照合で外れた分が反映されず、"
+               "古い値のまま採否を決める★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": ('        _o2, _w2 = _ab.other_sources_known('
+                   'slug, got["urls"],' + chr(10)
+                   + '                                           '
+                     'unread=got.get("unread"))'),
+        # ★壊した跡に元の文字を残さない★（罠⑧＝飾りだけ壊しても意味がない。
+        #   配線の検査は文字で見るので、コメントに残すと素通りする）
+        "after": "        _o2, _w2 = (_other, _other_why)",
+        "run": ["scripts/add_machine_run.py"],
+    },
     # ─── 2026-09-18・Codexの2回目の指摘を直したぶん ─────────────────
     {
         "why": "★見出し付きの天井（ceiling#bonus / #cz）を読まない"
