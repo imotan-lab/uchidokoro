@@ -273,6 +273,11 @@ def _validate(rec) -> list:
         qs = rec.get("quotes")
         if not isinstance(qs, list) or not qs:
             ng.append("そう判断した手がかりの逐語がありません")
+        # ★★作りの指紋を必ず持つ★★（2026-09-21・台帳#662/#669）
+        #   ★無いものは受け取らない★＝箱が足されても失効しない控えになる。
+        if not str(rec.get("structure_sha256") or "").strip():
+            ng.append("ページの作りの指紋がありません"
+                      "（未知の箱を足されても気づけません）")
     return ng
 
 
@@ -340,13 +345,29 @@ def verify(rec: dict, raw: str, *, stage: str, missing_boxes=None,
         #   ★未知の名前の箱（例 `class="opinion-v2"`）に読者の書き込みが
         #   足されると、3つとも通る★（新しい箱は「欠けた必須の箱」ではない）。
         #   外した全文の指紋なら確実に失効していた。
-        #   ★要るのは「揺れる値（csrf-token・`?t=`）だけを外した構造の指紋」★。
-        #   ★運営者の判断待ち★（受容／構造の指紋を作る／DMMを一時停止）。
+        # ★★2026-09-21に「作りの指紋」で埋めた★★（運営者の判断＝作り直す）
+        #   ★見るのはタグ名・class・id だけ★＝属性の**値**を見ないので、
+        #   毎回変わるもの（csrf-token・画像の `?t=`）は自然に入らない。
+        #   ★実測★＝DMMの機種ページを20秒あけて2回取り、全文の指紋は
+        #   違ったが、この指紋は一致した（箱1065個の並びが完全一致）。
+        #   ＝★未知の箱を1つ足されれば必ず変わる★ので、
+        #   「新しい投稿欄を足されても免除が通る」穴が塞がる。
+        _want_sig = str(rec.get("structure_sha256") or "")
+        try:
+            import user_area as _ua_sig
+            _now_sig = _ua_sig.structure_sha256(str(raw or ""))
+        except Exception as e:                               # noqa: BLE001
+            # ★数え直せないなら通さない★（同じだと言えない）
+            return False, f"いまのページの作りを数えられません（{type(e).__name__}）"
+        if not _want_sig:
+            return False, "控えにページの作りの指紋がありません"
+        if _want_sig != _now_sig:
+            return False, ("ページの作りが変わっています"
+                           "（箱が足された・減った可能性があります）")
         for q in (rec.get("quotes") or []):
             if str(q) not in str(raw or ""):
                 return False, f"手がかりの逐語が、いまのページにありません（{str(q)[:30]}）"
-        return True, ("免除してよい箱だけで、手がかりの逐語も残っています"
-                      "（★未知の箱が足された場合は見つけられません・台帳#662★）")
+        return True, "免除してよい箱だけで、作りも手がかりの逐語も変わっていません"
     return False, f"知らない答えです: {kind!r}"
 
 
@@ -376,6 +397,11 @@ def record(slug: str, url: str, stage: str, kind: str, *, raw: str,
     if kind == WAIVE_MISSING_USER_BOX:
         rec["waived_boxes"] = list(waived_boxes or [])
         rec["quotes"] = list(quotes or [])
+        # ★★そのときのページの「作り」を控える★★（2026-09-21・台帳#662/#669）
+        #   ★揺れる値は入らない★（タグ名・class・id しか見ない）ので、
+        #   取り直しでは失効しない。★箱が足されれば必ず失効する★。
+        import user_area as _ua_rec
+        rec["structure_sha256"] = _ua_rec.structure_sha256(str(raw or ""))
     bad = validate(rec)
     if bad:
         raise ReadingError("この記録は契約を満たしません（保存しませんでした）: "
@@ -423,7 +449,13 @@ def selftest() -> int:                                       # noqa: C901
     globals()["STORE"] = os.path.join(
         tempfile.mkdtemp(prefix="uchi_pr_"), "page_reading.json")
     try:
-        RAW = ("<html><head><style>a{}</style></head><body>"
+        # ★毎回変わる値を、実ページと同じ形で入れておく★（2026-09-21）
+        #   DMMは csrf-token の値と、画像のURLに付く時刻を取るたびに変える。
+        #   ★試験も「値だけが変わる」形で書く★＝タグを足す形で真似ると、
+        #   作りの指紋が変わるのは当たり前で、確かめたいことが確かめられない。
+        RAW = ("<html><head><style>a{}</style>"
+               '<meta name="csrf-token" content="y41mw51OQARB">'
+               "</head><body>"
                "<table><tr><th>メーカー名</th><td>北電子</td></tr>"
                "<tr><th>導入開始日</th><td>2026年10月5日</td></tr></table>"
                "<p>ユーザー評価（2件）</p></body></html>")
@@ -583,9 +615,23 @@ def selftest() -> int:                                       # noqa: C901
         okw3b, ww3b = verify(wrec, RAW.replace("ユーザー評価（2件）", "評価はまだありません"),
                              stage=_rf.STAGE_USER_AREA,
                              missing_boxes=["list-machinesreviews"])
-        t("★★そう判断した手がかりが消えたら効かせない★★"
-          "（★ここが唯一「ページが変わった」を見る所★）",
+        t("★★そう判断した手がかりが消えたら効かせない★★",
           not okw3b and "手がかりの逐語" in ww3b)
+        # ★★未知の箱に読者の書き込みを足されたら効かせない★★
+        #   （2026-09-21・台帳#662/#669。Codexが求めた回帰試験そのもの）
+        #   ★直す前はここが通っていた★＝新しい箱は「欠けた必須の箱」に
+        #   入らないので、3つの検査（箱・範囲・逐語）を全部すり抜けた。
+        _added = RAW.replace(
+            "</body>",
+            '<div class="opinion-v2"><p>天井は1200Gでした</p></div></body>')
+        okw3c, ww3c = verify(wrec, _added, stage=_rf.STAGE_USER_AREA,
+                             missing_boxes=["list-machinesreviews"])
+        t("★★未知の箱（例 opinion-v2）を足されたら、免除を効かせない★★"
+          "（★逐語は残ったまま読者の数値が混ざる経路★）",
+          not okw3c and "作りが変わっています" in ww3c)
+        t("　控えに作りの指紋が無ければ受け取らない",
+          any("作りの指紋がありません" in x
+              for x in validate({**wrec, "structure_sha256": ""})))
         okw4, ww4 = verify(wrec, RAW, stage=_rf.STAGE_USER_AREA,
                            missing_boxes=[])
         t("　箱が見つかっているなら免除しない", not okw4)

@@ -986,24 +986,34 @@ def selftest() -> int:
     #     … 投稿欄を箱ごと落とす処理（user_area.clean_html）が
     #       「その形のページか」を確かめるので、無いと必ず例外になる
     def _page(maker=_SEEN, day="2026年10月5日", name=_MN, title=None,
-              posts="読者の書き込みです"):
+              posts="読者の書き込みです", user_area=True):
+        """★`user_area=False` は「投稿欄が無い名鑑」の形★（2026-09-21）
+
+        ★なぜ要るか★＝掃除のあとの見張りを `clean_html` の中へ移したので、
+        ★決まりごとが無いサイトのページに投稿欄の作りが入っていると止まる★
+        （それが本来の狙い＝未知の箱にある書き込みを材料にしない）。
+        なな徹は「投稿欄が無いことを実ページで確かめて記録した」サイトなので、
+        ★試験の材料も、その形にそろえる★（本物と違う材料で採点しない・罠①）。
+        """
         t0 = (title if title is not None
               else f"{name} スロット 新台 天井 解析 | ちょんぼりすた")
-        return (f"<title>{t0}</title>"
-                '<a class="rating-btn">みんなの評価 (平均0)</a>'
-                '<div id="hyouka">星の評価</div>'
-                f'<ul class="commentlist"><li>{posts}</li></ul>'
-                '<div id="entry">'
-                f"<div>機種名 {name}</div>"
-                f"<div>メーカー {maker}</div>"
-                f"<div>導入日 {day}</div>"
-                "</div>")
+        ua = ('<a class="rating-btn">みんなの評価 (平均0)</a>'
+              '<div id="hyouka">星の評価</div>'
+              f'<ul class="commentlist"><li>{posts}</li></ul>'
+              ) if user_area else ""
+        return (f"<title>{t0}</title>" + ua
+                + '<div id="entry">'
+                + f"<div>機種名 {name}</div>"
+                + f"<div>メーカー {maker}</div>"
+                + f"<div>導入日 {day}</div>"
+                + "</div>")
 
     _pages = {
         _C: _page(),
-        _N: _page(day="2026/10/5"),
+        # ★なな徹は投稿欄が無い★（決まりごとも無い＝掃除の対象外）
+        _N: _page(day="2026/10/5", user_area=False),
         _LIST: _page(),
-        _KIT: _page(),
+        _KIT: _page(user_area=False),
     }
 
     def _w_last(u):
@@ -1078,7 +1088,9 @@ def selftest() -> int:
     #   ★直す前★＝証拠ページに題の分解（page_is_machine）をかけていたので、
     #   「モンスターハンターライズ」を「モンハンライズ」と略した題のページが
     #   落ち、★2AIが決めても保存できず8晩止まっていた★。
-    _ABBR = _page(title="モンハンライズ 解析 | ちょんぼりすた")
+    # ★なな徹のURLで使うので、投稿欄の無い形にする★（2026-09-21）
+    _ABBR = _page(title="モンハンライズ 解析 | ちょんぼりすた",
+                  user_area=False)
     _pages[_N] = _ABBR
     t("★★題が略称のページでも、2AIが決めれば控えられる★★"
       "（★これで8晩止まっていた＝モンハンライズ★）",
@@ -1086,7 +1098,8 @@ def selftest() -> int:
           decisions=_dec(sha=_pgN.text_sha256),
           evidence=[{"url": _N, "quote": _QC,
                      "kind": "directory_observation"}]))
-    _pages[_N] = _page(day="2026/10/5")
+    # ★なな徹は投稿欄が無い形にそろえる★（2026-09-21・見張りを掃除側へ移した）
+    _pages[_N] = _page(day="2026/10/5", user_area=False)
 
     # ─── ★★機械が守る線（意味を読まなくても分かること）★★ ───────────
     # ★★2AIが読んだ本文と、いま控える本文が同じか★★

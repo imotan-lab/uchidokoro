@@ -1302,6 +1302,48 @@ MUTATIONS = [
         "after": "    pass",
         "run": ["scripts/add_machine_run.py"],
     },
+    # ─── 2026-09-21・投稿欄の見張りを掃除側へ移し、作りの指紋を作った ───
+    #   （運営者の判断＝作り直す。台帳#662/#669）
+    {
+        "why": "★未知の箱を足されても、2AIの免除を効かせる"
+               "（★逐語は残したまま読者の数値が材料へ混ざる★"
+               "＝Codexが求めた回帰試験そのもの）★",
+        "file": "scripts/page_reading.py",
+        "before": "        if _want_sig != _now_sig:",
+        "after": "        if False:",
+        "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★作りの指紋を持たない控えも受け取る"
+               "（★箱を足されても失効しない控えができる★）★",
+        "file": "scripts/page_reading.py",
+        "before": ('        if not str(rec.get("structure_sha256") '
+                   'or "").strip():'),
+        "after": "        if False:",
+        "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★作りの指紋に、属性の値まで入れる"
+               "（★csrf-token が毎回変わるので、2AIの答えが数秒で失効する★）★",
+        "file": "scripts/user_area.py",
+        "before": ('            cls = " ".join(sorted(str(d.get("class") '
+                   'or "").split()))' + chr(10)
+                   + "            self.rows.append("
+                     "f\"{tag}|{cls}|{d.get('id') or ''}\")"),
+        "after": ('            cls = " ".join(sorted(str(d.get("class") '
+                  'or "").split()))' + chr(10)
+                  + "            self.rows.append("
+                    'f"{tag}|{cls}|{sorted(d.items())}")'),
+        "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★掃除のあとの見張りを、掃除する場所から外す"
+               "（★生HTMLを直接掃除する3経路が、一度も見張りを通らなくなる★）★",
+        "file": "scripts/user_area.py",
+        "before": "    hint = looks_like_user_area(cleaned or \"\")",
+        "after": "    hint = []",
+        "run": ["scripts/user_area.py", "scripts/maker_identity_cache.py"],
+    },
     # ─── 2026-09-21・秘密の見張りの報告を2つに分けた（運営者の判断）───
     {
         "why": "★「読めなかっただけ」のものを『秘密パターン検知』として数える"
@@ -2923,14 +2965,18 @@ MUTATIONS = [
         "run": ["scripts/audit_site.py"],
     },
     {
+        # ★★2026-09-21：置き場が `user_area.clean_html` へ移った★★
+        #   （台帳#669＝生HTMLを直接掃除する3経路が見張りを通らなかった）
+        #   ★同じ壊し方を、移った先で登録し直した★＝
+        #   「掃除のあとの見張りを、掃除する場所から外す」。
         "why": "残存検査を「決まりごとが無いサイト」だけにする（Codex14回目）",
-        "file": "scripts/fetched_page.py",
-        "before": "    hint = _ua.looks_like_user_area(cleaned)",
-        "after": "    hint = ([] if [r for r in "
-                 "(_ua.conf_for_url(url).get(\"drop\") or [])\n"
-                 "            if isinstance(r, dict)]\n"
-                 "            else _ua.looks_like_user_area(cleaned))",
-        "run": ["scripts/fetched_page.py"],
+        "file": "scripts/user_area.py",
+        "before": '    hint = looks_like_user_area(cleaned or "")',
+        "after": ("    hint = ([] if [r for r in "
+                  '(conf_for_url(url).get("drop") or [])' + chr(10)
+                  + "            if isinstance(r, dict)]" + chr(10)
+                  + '            else looks_like_user_area(cleaned or ""))'),
+        "run": ["scripts/user_area.py"],
     },
     {
         "why": "投稿欄の語を行切りと別々に持つ（片方だけ見逃す・Codex14回目）",

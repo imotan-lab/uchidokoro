@@ -128,19 +128,15 @@ def fetch(url: str, purpose: str = "claim_material", get=None) -> FetchedPage:
             if hasattr(e, _k):
                 setattr(_pe, _k, getattr(e, _k))
         raise _pe
-    # ★★掃除のあとに投稿欄が残っていないか★★（2026-08-24・Codexの14回目）
-    #   ★行切りは文章にしか効かない★＝天井・スペック・AT・CZは
-    #   **HTMLの表を直接読む**ので、投稿欄の中に表があれば材料に入る。
-    #   ★全サイトで見る★＝決まりごとが無いサイトだけでなく、
-    #   **決まりごとがあるサイトが別の箱で投稿欄を足した場合**も止める
-    #   （古い箱があるので必須箱の検査は通ってしまう）。
-    #   決まりごとが正しければ、ここでは何も出ない。
-    #   ★止めるだけ★＝どこが投稿欄かは2AIが判断し、名鑑に決まりごとを登録する。
-    hint = _ua.looks_like_user_area(cleaned)
-    if hint:
-        raise PageError(
-            f"掃除のあとにも投稿欄が残っています（{url}）: {hint[:3]}"
-            "／★2AIで投稿欄の場所を決めて名鑑に登録してください★")
+    # ★★掃除のあとの見張りは `clean_html` の中にある★★
+    #   （2026-09-21に移した・台帳#669）
+    #   ★直す前はここだけにあった★ので、`model_code_lookup` /
+    #   `maker_identity_cache` / `collect_evidence` は自分で生HTMLを取って
+    #   `clean_html` を直接呼び、★この見張りを一度も通らなかった★。
+    #   ＝未知の箱にある読者の書き込みが材料に混ざり得た。
+    #   ★ここに残すと守りが二重になる★＝片方を壊しても試験が緑のまま（罠③）。
+    #   上の `except` が `UserAreaError` を `PageError` へ包み直すので、
+    #   呼ぶ側から見た形（止まる・理由が残る）は同じ。
     return FetchedPage(url, fin, cleaned)
 
 

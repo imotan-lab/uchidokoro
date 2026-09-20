@@ -53,6 +53,15 @@ import safe_json as _sj              # noqa: E402
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CATALOGS = os.path.join(BASE, "assets", "data", "directory-catalogs.json")
 
+# ★★満たせなかった決まりの名前は1か所に書く★★（2026-09-21・台帳#662）
+#   ★直す前は2か所に直書きだった★＝落ちるときに名乗る名前と、
+#   2AIの免除を探すときの名前。★片方だけ変えると免除が永久に効かない★
+#   （実際にそうなった。決まりごとの中身を直したときに気づいた）。
+#   ★名前に「何件から」を書かない★＝件数から箱の有無は決められない
+#   （実測＝1件・2件では一覧の箱が無く、4件・83件では有る）ので、
+#   件数を名前に残すと、また実態と食い違う。
+MISSING_BOX_CONTRACT = "落とすはずの投稿欄の箱がある"
+
 
 class UserAreaError(Exception):
     """投稿欄を落としきれない（★そのページは使わない★）。
@@ -361,7 +370,7 @@ def visible_text(html: str, url: str = "", conf: dict | None = None) -> str:
                 f"落とすはずの箱が見つかりません（{miss_b}）"
                 "／★2AIにこのページを読んでもらってください★",
                 stage=_rf0().STAGE_USER_AREA,
-                failed_contract="件数が1件以上なら投稿欄の一覧の箱がある",
+                failed_contract=MISSING_BOX_CONTRACT,
                 observations={"missing_boxes": ",".join(_names)},
                 url=url, raw=html)
     dropped = strip_tree(root, rules)
@@ -492,6 +501,56 @@ _UA_ATTR_STRONG = ("bbs", "kuchikomi", "respond", "userpost", "userposts",
 _UA_ATTR_WEAK = ("comment", "comments", "review", "reviews", "rating",
                  "ratings", "posts", "voice", "voices", "reply", "thread")
 _UA_ATTR_HINTS = _UA_ATTR_STRONG + _UA_ATTR_WEAK
+
+
+def structure_sha256(html: str) -> str:
+    """★揺れる値を外した「箱の並び」の指紋★（2026-09-21・台帳#662/#669）
+
+    ★何のためか★＝2AIが「この欠けた箱は本当に無い」と決めた控えを、
+    ★ページの作りが変わったら失効させる★ため。
+    ★直す前★＝控えは指紋を見ていなかった（2026-09-14に全文の指紋を外した）ので、
+    ★未知の名前の箱（例 `class="opinion-v2"`）に読者の書き込みを足されても
+    3つの検査が全部通った★（新しい箱は「欠けた必須の箱」に入らないため）。
+
+    ★全文の指紋は使えない★（実測）＝DMMは `csrf-token` と画像の `?t=`、
+    なな徹はCSS/JSのURLに、そのときの時刻を毎回入れる。
+    ＝★2AIが正しく決めた控えが数秒で失効する★（新台3件が11晩止まった）。
+
+    ★見るのは「タグ名・class・id」だけ★＝属性の**値**を見ないので、
+    揺れるものは自然に入らない。箱が1つ増えれば必ず変わる。
+    ★実測（2026-09-21）★＝DMMの機種ページを20秒あけて2回取り、
+    全文の指紋は違ったが、この指紋は一致した（箱1065個の並びが完全一致）。
+
+    ★これは「読む文字」の指紋とは別物★＝あちらは2AIが読む中身が
+    変わっていないかを見る（`readable_sha256`）。こちらは**作り**を見る。
+    """
+    import hashlib as _hl
+    import html.parser as _hp2
+
+    class _Sig(_hp2.HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.rows = []
+
+        def _add(self, tag, attrs):
+            d = dict(attrs or [])
+            cls = " ".join(sorted(str(d.get("class") or "").split()))
+            self.rows.append(f"{tag}|{cls}|{d.get('id') or ''}")
+
+        def handle_starttag(self, tag, attrs):
+            self._add(tag, attrs)
+
+        def handle_startendtag(self, tag, attrs):
+            self._add(tag, attrs)
+
+    p = _Sig()
+    try:
+        p.feed(str(html or ""))
+        p.close()
+    except Exception as e:                                   # noqa: BLE001
+        # ★読めないなら指紋を作らない★＝「同じ」と言えないので失効させる
+        raise UserAreaError(f"作りの指紋を取れません: {str(e)[:80]}")
+    return _hl.sha256("\n".join(p.rows).encode("utf-8")).hexdigest()
 
 
 def looks_like_user_area(html: str) -> list:
@@ -711,7 +770,7 @@ def _waiver_for(url: str, html: str, names: list) -> bool:
     try:
         import page_reading as _pr
         rec = _pr.find(url, _rf0().STAGE_USER_AREA,
-                       "件数が1件以上なら投稿欄の一覧の箱がある")
+                       MISSING_BOX_CONTRACT)
         if not rec:
             return False
         ok, _why = _pr.verify(rec, html, stage=_rf0().STAGE_USER_AREA,
@@ -730,7 +789,7 @@ def clean_html(html: str, url: str = "", conf: dict | None = None) -> str:
     ua = conf if conf is not None else conf_for_url(url)
     rules = [r for r in (ua.get("drop") or []) if isinstance(r, dict)]
     if not rules or not html:
-        return html
+        return _guard_after_clean(html, url)
     # ★落とす前に守る対象が居るか／落とした後に本文が残るか★は
     #   visible_text と同じ物差しで見る（そちらが例外を出す）。
     visible_text(html, url, ua)
@@ -747,7 +806,30 @@ def clean_html(html: str, url: str = "", conf: dict | None = None) -> str:
         out.append(html[last:a])
         last = b
     out.append(html[last:])
-    return "".join(out)
+    return _guard_after_clean("".join(out), url)
+
+
+def _guard_after_clean(cleaned: str, url: str = "") -> str:
+    """★掃除のあとに投稿欄が残っていたら、そのページを使わせない★
+
+    ★★2026-09-21に置き場をここへ移した★★（台帳#669・Codexの指摘）
+      ★直す前は `fetched_page.fetch()` の中だけ★にあった。ところが
+      `model_code_lookup` / `maker_identity_cache` / `collect_evidence` は
+      ★自分で生HTMLを取って `clean_html` を直接呼ぶ★ので、
+      この見張りを**一度も通らなかった**。
+      ＝未知の箱にある読者の書き込みが、材料に混ざり得た。
+      ★掃除する場所に置けば、掃除を通る全員が守られる★。
+    """
+    hint = looks_like_user_area(cleaned or "")
+    if not hint:
+        return cleaned
+    raise UserAreaError(
+        f"掃除のあとにも投稿欄が残っています（{url}）: {hint[:3]}"
+        "／★2AIで投稿欄の場所を決めて名鑑に登録してください★",
+        stage=_rf0().STAGE_USER_AREA,
+        failed_contract="掃除のあとに投稿欄が残っていない",
+        observations={"left": ",".join(str(x) for x in hint[:3])},
+        url=url, raw=cleaned)
 
 
 # ---------------------------------------------------------------- selftest
@@ -801,17 +883,20 @@ def _waiver_tests(t) -> None:
     _pr.STORE = _o.path.join(_tf.mkdtemp(prefix="uchi_ua610_"),
                              "page_reading.json")
     try:
-        _url = "https://p-town.dmm.com/machines/5090"
+        # ★★2026-09-21：試す名鑑を、ちょんぼりすたに変えた★★（台帳#662）
+        #   ★直す前はDMMで「一覧の箱が無い」を免除していた★が、
+        #   その必須条件そのものを外した（★実測＝1件・2件では一覧の箱が無い★）。
+        #   ★DMMでは免除の出番が無くなった★＝必須なのは枠だけで、
+        #   その枠には落とす合図（「ユーザー評価」）が入っているので、
+        #   枠が消えたページは合図の検査で必ず止まる（免除しても意味が無い）。
+        #   ★仕組み自体は要る★＝ちょんぼりすたは一覧（commentlist）が必須で、
+        #   コメントを閉じたページでは消える。そちらで確かめる。
+        _url = "https://chonborista.com/slot/test-slot/9999/"
         _html = ("<html><body>"
-                 "<div class='machine-userreview'>"
-                 "<p class='label'>ユーザー評価"
-                 "<span class='count'>（2件）</span></p>"
-                 "<a href='/machines/5090/review'>口コミをもっと見る</a>"
+                 "<div id='entry'>"
+                 "<p>この機種の天井は999Gです。</p>"
+                 "<a href='/slot/test-slot/9999/#comments'>コメントを見る</a>"
                  "</div>"
-                 "<div class='list-machineinformation'>"
-                 "<table><tr><th>メーカー名</th><td>ユニバーサル</td></tr>"
-                 "</table></div>"
-                 "<div class='wysiwyg-box'>本文です。</div>"
                  "</body></html>")
         _typed = None
         try:
@@ -822,16 +907,16 @@ def _waiver_tests(t) -> None:
           "（★直す前は文章だけで、2AIへの問いにならなかった★）",
           _typed is not None
           and getattr(_typed, "stage", "") == _rf.STAGE_USER_AREA
-          and "list-machinesreviews"
+          and "commentlist"
           in str(getattr(_typed, "observations", {}).get("missing_boxes", "")))
-        _pr.record("dmm_5090", _url, _rf.STAGE_USER_AREA,
+        _pr.record("zz_test", _url, _rf.STAGE_USER_AREA,
                    _pr.WAIVE_MISSING_USER_BOX, raw=_html,
-                   failed_contract="件数が1件以上なら投稿欄の一覧の箱がある",
+                   failed_contract=MISSING_BOX_CONTRACT,
                    agreed_by=["claude", "codex"],
                    why="件数の表示はあるが、書き込みの本文はこのHTMLに無い",
                    decided_at="2026-09-10",
-                   waived_boxes=["list-machinesreviews"],
-                   quotes=["ユーザー評価", "/machines/5090/review"])
+                   waived_boxes=["commentlist"],
+                   quotes=["コメントを見る", "天井は999G"])
         # ★例外で落ちるのを「止まった」と数えない★（罠⑤）
         try:
             _out = clean_html(_html, _url)
@@ -839,7 +924,7 @@ def _waiver_tests(t) -> None:
             _out = "落ちました: " + type(_e3).__name__
         t("★★2AIが決めたら、その箱の不足だけ免除して続ける★★"
           "（★ページを丸ごと外す、をやめる★）",
-          "machine-userreview" not in _out and "メーカー名" in _out)
+          "天井は999G" in _out and "落ちました" not in _out)
     finally:
         _pr.STORE = _keep
 
@@ -1076,8 +1161,17 @@ def selftest() -> int:
 
         out["zero"] = _run("dmm_reviews_zero.html")
         out["many"] = _run("dmm_reviews_many.html")
-        # ★44件と言っているのに一覧の箱が消えた形★＝相手が名前を変えた疑い
+        # ★★2026-09-21：名前を変える箱を「枠」にした★★（台帳#662）
+        #   ★直す前は一覧（list-machinesreviews）で試していた★が、
+        #   その必須条件は外した（★実測＝1件・2件では一覧の箱が無い★ので、
+        #   「無い＝名前を変えた疑い」と決めつけられない）。
+        #   ★枠（machine-userreview）は件数に関係なく必ずある★ので、
+        #   そこが消えたら「相手が名前を変えた」と言える。
         out["many_renamed"] = _run(
+            "dmm_reviews_many.html",
+            lambda h: h.replace("machine-userreview", "userreview-renamed"))
+        # ★一覧だけが消えた形は、いまは止めない★（口コミ1〜2件の実ページと同じ）
+        out["list_gone"] = _run(
             "dmm_reviews_many.html",
             lambda h: h.replace("list-machinesreviews", "list-renamed"))
         return out
@@ -1089,6 +1183,41 @@ def selftest() -> int:
             return ("OK", got)
         except UserAreaError as e:
             return ("NG", str(e))
+
+    # ★★掃除のあとの見張りは、掃除する場所にある★★（2026-09-21・台帳#669）
+    #   ★なぜここに置いたか★＝`model_code_lookup` / `maker_identity_cache` /
+    #   `collect_evidence` は**自分で生HTMLを取って `clean_html` を直接呼ぶ**。
+    #   見張りが `fetched_page` の中にしか無かったので、この3経路は
+    #   ★一度も見張りを通らなかった★（未知の箱にある書き込みが材料へ混ざり得た）。
+    _left = ('<html><body><div class="spec">天井999G</div>'
+             '<h2>みんなの口コミ</h2>'
+             '<div class="opinion-v2"><p>昨日打ったら天井1200Gでした。'
+             '朝一はリセットっぽい挙動で、夕方まで粘って勝てました。</p></div>'
+             "</body></html>")
+
+    def _clean_raises(html, url, conf=None):
+        try:
+            clean_html(html, url, conf=conf)
+            return ""
+        except UserAreaError as e:
+            return str(e)
+
+    t("★★決まりごとが無いサイトでも、掃除の入口で止める★★"
+      "（★3経路が直接ここを呼ぶ＝ここに無いと素通りする★）",
+      "掃除のあとにも投稿欄が残っています"
+      in _clean_raises(_left, "https://unknown.test/x", conf={}))
+    t("★★決まりごとがあるサイトが、別の箱で投稿欄を足した場合も止める★★"
+      "（★古い箱があるので必須の箱の検査は通ってしまう★）",
+      "掃除のあとにも投稿欄が残っています"
+      # ★★本当に登録してあるホストのURLで試す★★（2026-09-21）
+      #   ★試験用のホスト（cg.test）だと、決まりごとが「無い」側に入る★ので、
+      #   「登録済みのサイトは見張らない」という壊し方を捕まえられなかった。
+      in _clean_raises(
+          _page % ("44", _rev + _left),
+          "https://p-town.dmm.com/machines/1", conf=_CG))
+    t("　投稿欄が残っていなければ、今までどおり通す",
+      _clean_raises('<html><body><div class="spec">天井999G</div></body></html>',
+                    "https://unknown.test/x", conf={}) == "")
 
     t("★★0件と書いてあれば、一覧が無くても通す★★"
       "／これが無いとレビューの付かない機種は永久に使えない",
@@ -1119,9 +1248,18 @@ def selftest() -> int:
       _real["many"][0] == "OK"
       and "machine-userreview" not in _real["many"][1]
       and "list-machinesreviews" not in _real["many"][1])
-    t("★★実物：44件なのに一覧の箱を消したら止まる★★"
+    t("★★実物：枠の名前が変わったら止まる★★"
       "／相手が箱の名前を変えた形をここで捕まえる",
       _real["many_renamed"][0] == "NG")
+    # ★★2026-09-21（台帳#662）★★＝口コミ1〜2件の実ページと同じ形。
+    #   ★直す前はここで止まっていた★ので、口コミが付き始めた新台は
+    #   DMMごと出典に使えず、DMMしか出典が無い新台は材料0件で止まった（実害3機種）。
+    #   ★実測（2026-09-14・実ページ5件）★＝1件・2件では一覧の箱が無く、
+    #   4件・83件では有る＝件数から有無は決められない。
+    t("★★実物：一覧の箱だけが無くても止めない★★"
+      "（★口コミ1〜2件の新台が、DMMごと使えなくなっていた★）",
+      _real["list_gone"][0] == "OK"
+      and "machine-userreview" not in _real["list_gone"][1])
 
     # ★★掃除のあとに投稿欄が残っていないか★★（2026-08-24・Codexの14回目）
     #   ★下の形は実ページで踏んだもの★＝
