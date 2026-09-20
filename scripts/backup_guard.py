@@ -1036,13 +1036,36 @@ def cmd_scan(root: str) -> int:
     print(f"内訳: 中身をまったく確かめられなかったファイル {_nv}件"
           f"（走査 {total}ファイル中／秘密が見つかったものは含みません）")
     _log(f"scan: 内訳 確かめられない {_nv}件 / 走査 {total}")
-    if fresh:
-        print(f"⚠ 秘密パターン検知: {len(fresh)}件"
+    # ★★「秘密が見つかった」と「読めなかった」を混ぜて数えない★★
+    #   （2026-09-21・運営者の判断）
+    #   ★直す前★＝新しい検知を全部「⚠ 秘密パターン検知: N件」で出していた。
+    #   実測＝30件と出ていたが、★中身は全部「読めなかった」だけ★で、
+    #   秘密は1件も見つかっていなかった（FAXのPDF・グラフ画像・batなど）。
+    #   ＝毎朝「秘密パターン検知30件」と読める形になり、
+    #   ★本物の警告が埋もれる★（CLAUDE.mdが避けたいと書いている状態）。
+    #   ★番人の決まりは元から分かれている★（中身を読んだ検知は🟠／
+    #   読めなかったは件数だけ）ので、★検査する側が分けて返す★のが筋。
+    #   ★見張りは1ミリも弱めていない★＝検知の条件も終了コードも同じ。
+    #   ★「確かめられなかったものは通さない」は守る★（2026-09-04に
+    #   一度緩めて自分で5通りの穴を作った）。
+    secret = [(r, f) for r, f in fresh
+              if not all(_is_unverifiable(x) for x in f)]
+    unread = [(r, f) for r, f in fresh if (r, f) not in secret]
+    if secret:
+        print(f"⚠ 秘密パターン検知: {len(secret)}件"
               f"（走査 {total}ファイル／承知済み {len(known)}件は除く）")
-        for rel, findings in fresh:
+        for rel, findings in secret:
             line = f"  - {rel} → {', '.join(findings)}"
             print(line)
             _log(f"scan: ⚠ {rel} → {', '.join(findings)}")
+    if unread:
+        # ★見出しを分ける★＝番人はこちらを🟠にしない（件数だけ見る）
+        print(f"ℹ 中身を確かめられなかった新しいファイル: {len(unread)}件"
+              "（★秘密が見つかったわけではありません★）")
+        for rel, findings in unread:
+            print(f"  - {rel} → {', '.join(findings)}")
+            _log(f"scan: ℹ 確かめられない {rel}")
+    if fresh:
         return 1
     print(f"✅ 新しい検知なし（走査 {total}ファイル／承知済み {len(known)}件）")
     _log(f"scan: ✅ 新しい検知なし（{root}・{total}ファイル・承知済み{len(known)}件）")
@@ -1156,6 +1179,46 @@ def _baseline_tests(t) -> None:
         with open(p2, "w", encoding="utf-8") as f:
             f.write("github_token = ghp_DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD")
         t("★新しいファイルが増えたら知らせる★", cmd_scan(root) == 1)
+
+        # ★★「秘密が見つかった」と「読めなかった」を混ぜて数えない★★
+        #   （2026-09-21・運営者の判断）
+        #   ★実測＝「⚠ 秘密パターン検知30件」と出ていたが、中身は全部
+        #   「読めなかった」だけで、秘密は1件も無かった★。
+        #   ＝本物の警告が埋もれる形だった。
+        #   ★見張りは弱めない★＝終了コードは両方とも1のまま。
+        import contextlib as _cl2
+        import io as _io2
+
+        def _say(fn):
+            _b = _io2.StringIO()
+            with _cl2.redirect_stdout(_b):
+                _c = fn()
+            return _c, _b.getvalue()
+
+        cmd_accept(root)
+        _pu = os.path.join(root, "画像.png")
+        with open(_pu, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n" + b"\xff\xfe" * 40)
+        _code_u, _out_u = _say(lambda: cmd_scan(root))
+        t("★★読めないだけのものを『秘密パターン検知』と言わない★★"
+          "（★本物の警告が埋もれる★）",
+          "⚠ 秘密パターン検知" not in _out_u
+          and "中身を確かめられなかった新しいファイル: 1件" in _out_u)
+        t("　それでも通さない（確かめられない＝緑にしない）", _code_u == 1)
+        # ★本物の秘密は、いままでどおり⚠で名指しする★（対照）
+        _ps = os.path.join(root, "c.txt")
+        with open(_ps, "w", encoding="utf-8") as f:
+            f.write("github_token = ghp_" + "F" * 36)
+        _code_s, _out_s = _say(lambda: cmd_scan(root))
+        t("★（対照）本物の秘密は⚠で名指しする★",
+          "⚠ 秘密パターン検知: 1件" in _out_s and "c.txt" in _out_s
+          and _code_s == 1)
+        t("　同じ回に両方あれば、両方とも別の見出しで出る",
+          "⚠ 秘密パターン検知: 1件" in _out_s
+          and "中身を確かめられなかった新しいファイル: 1件" in _out_s)
+        os.remove(_ps)
+        os.remove(_pu)
+        cmd_accept(root)
 
         # ★★確かめられなかったものは緑にしない★★（2026-09-04・Codexの指摘）
         #   ★試験は終了コードで見る★＝`content_findings()` が空でないことだけを

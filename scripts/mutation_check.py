@@ -1302,6 +1302,26 @@ MUTATIONS = [
         "after": "    pass",
         "run": ["scripts/add_machine_run.py"],
     },
+    # ─── 2026-09-21・秘密の見張りの報告を2つに分けた（運営者の判断）───
+    {
+        "why": "★「読めなかっただけ」のものを『秘密パターン検知』として数える"
+               "（★実測30件が全部これで、本物の警告が埋もれる★）★",
+        "file": "scripts/backup_guard.py",
+        "before": ('    secret = [(r, f) for r, f in fresh' + chr(10)
+                   + '              if not all(_is_unverifiable(x) '
+                     'for x in f)]'),
+        "after": "    secret = list(fresh)",
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★読めなかっただけなら緑にする"
+               "（★確かめられない＝安全ではない。2026-09-04に一度緩めて"
+               "自分で5通りの穴を作った★）★",
+        "file": "scripts/backup_guard.py",
+        "before": "    if fresh:\n        return 1",
+        "after": "    if secret:\n        return 1",
+        "run": ["scripts/backup_guard.py"],
+    },
     # ─── 2026-09-21・無人の日は壊し方の仕組みへ「足す」だけ（運営者の判断A）───
     {
         "why": "★無人の日でも、壊し方の行を消せるようにする"
