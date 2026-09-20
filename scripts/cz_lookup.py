@@ -484,10 +484,17 @@ def selftest() -> int:
       len(_ok["adopted"]) == 1
       and _ok["adopted"][0]["name"] == "すぱ娘チャレンジ")
     t("★★採った根拠が値ごとに残る★★（読者への名乗りをここから作る）",
-      _ok["adopted"][0]["basis"] == _ab.DMM_SINGLE_NEAR_RELEASE
-      and _ok["adopted"][0]["games_basis"] == _ab.DMM_SINGLE_NEAR_RELEASE)
-    t("★★ちょんぼりすた単独は ctx があっても採らない★★（例外はDMMだけ）",
-      compare([mk("chonborista.com",
+      _ok["adopted"][0]["basis"] == _ab.SINGLE_NEAR_RELEASE
+      and _ok["adopted"][0]["games_basis"] == _ab.SINGLE_NEAR_RELEASE)
+    # ★★2026-09-19：単独で採ってよい出典を3社へ広げた★★（運営者の指示）
+    #   ＞ 他にも大手であればOKにだけしておこうか
+    #   実測で、1社しか値を持たない機種のその1社は解析サイトのほうだった。
+    t("★★ちょんぼりすた単独でも採る★★（2026-09-19・運営者の指示）",
+      len(compare([mk("chonborista.com",
+                      [one("すぱ娘チャレンジ", "4G+α", "約40%")])],
+                  _DMM_CTX)["adopted"]) == 1)
+    t("　名簿に無い発行元は、いまも採らない",
+      compare([mk("slopachi-quest.com",
                   [one("すぱ娘チャレンジ", "4G+α", "約40%")])],
               _DMM_CTX)["adopted"] == [])
     t("★★導入がまだ先ならDMM単独でも採らない★★",

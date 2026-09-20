@@ -94,7 +94,7 @@ BASIS_SUFFIX = {
     #   ★6条件を通った1件であって0件ではない★＝「未確認」だと実態より弱い。
     #   ★断り書きが隣に無い箱がある★（天井・AT・ゲーム性・リセット）ので、
     #   名乗りが単独で立っても意味が通る言葉にする。
-    "DMM_SINGLE_NEAR_RELEASE": "（確認1件のみ）",
+    "SINGLE_NEAR_RELEASE": "（確認1件のみ）",
 }
 # ★単独確認が混ざったときだけ足す断り書き★
 # ★★サイト名を出さない★★（2026-08-26・運営者の指示）
@@ -273,7 +273,7 @@ def _has_single_source(items) -> bool:
         if not isinstance(c, dict):
             continue
         for k in ("basis", "games_basis", "rate_basis"):
-            if str(c.get(k) or "") == "DMM_SINGLE_NEAR_RELEASE":
+            if str(c.get(k) or "") == "SINGLE_NEAR_RELEASE":
                 return True
     return False
 
@@ -2002,7 +2002,7 @@ def selftest() -> int:
     #   ★私はCZの表しか直しておらず★、機械割・50枚あたり・天井・AT・
     #   factTable には**断りなしで単独確認の値が出る**状態だった。
     #   ＝台帳#443（sf6・確かめていない「2件で一致」の名乗り）と同じ型。
-    SS = {"basis": "DMM_SINGLE_NEAR_RELEASE"}
+    SS = {"basis": "SINGLE_NEAR_RELEASE"}
     MAT_SS = {"adopted": {
         "payout_range": {**SS, "value": {"low": 97.0, "high": 110.0,
                                          "unit": "%"}, "sources": ["a"]},
@@ -2035,7 +2035,7 @@ def selftest() -> int:
     _texts = _all_text(_d_ss)
     _NUM_MARKS = ("97.0%", "36.1G", "999G", "約1.0枚", "8G", "110.0%")
     # ★名乗りの文言は正本から取る★（2026-08-26。文言を変えても試験が追随する）
-    _MARK_SS = BASIS_SUFFIX["DMM_SINGLE_NEAR_RELEASE"]
+    _MARK_SS = BASIS_SUFFIX["SINGLE_NEAR_RELEASE"]
     _naked = [t for t in _texts
               if any(m in t for m in _NUM_MARKS)
               and _MARK_SS not in t]

@@ -229,12 +229,12 @@ def _single_source(v) -> bool:
       ★2026-08-29から、それでよいことにした★（運営者の判断）。
     """
     return (isinstance(v, dict)
-            and str(v.get("basis") or "") == "DMM_SINGLE_NEAR_RELEASE")
+            and str(v.get("basis") or "") == "SINGLE_NEAR_RELEASE")
 
 
 # ★★検索の濃さに数えてよい根拠★★（2026-08-29・運営者の指示）
 #   ★白名簿★＝ここに無い根拠（保存し忘れ・空）は数えない（安全側）。
-INDEX_COUNTABLE_BASIS = ("INDEPENDENT_MULTI", "DMM_SINGLE_NEAR_RELEASE")
+INDEX_COUNTABLE_BASIS = ("INDEPENDENT_MULTI", "SINGLE_NEAR_RELEASE")
 
 
 def _skip_for_index(v, count_confirmed: bool) -> bool:
@@ -1058,7 +1058,7 @@ def selftest() -> int:
     #   1社しか扱わない機種を検索から締め出すより、載せる方を選んだ。
     #   ★単独で採ってよい条件は `adoption_basis` が6つとも見ている★／
     #   ★読者には「（確認1件のみ）」の名乗りが記事に残る★。
-    SS = {"basis": "DMM_SINGLE_NEAR_RELEASE"}
+    SS = {"basis": "SINGLE_NEAR_RELEASE"}
     MAT_SS = {"adopted": {"payout_range": {**SS, "value": {"low": 97,
                                                            "high": 110}},
                           "games_per_50": {**SS, "value": {"games": 36.1}}},
@@ -1170,7 +1170,7 @@ def selftest() -> int:
     #   ＝claim を数える関数を直接呼ぶ。
     _bp_broken = {"adopted": {"bonus_prob": {
         "value": {"1": "1/300"},          # ★昔の平たい形（壊れている）★
-        "basis": "DMM_SINGLE_NEAR_RELEASE",
+        "basis": "SINGLE_NEAR_RELEASE",
         "sources": ["a"]}}}
     try:
         _bonus_claim(_bp_broken, False)
@@ -1183,7 +1183,7 @@ def selftest() -> int:
     t("　正しい形の単独確認は、いまは濃さに数える（2026-08-29）",
       _bonus_claim({"adopted": {"bonus_prob": {
           "value": {"1": {"big": "1/300", "reg": "1/450"}},
-          "basis": "DMM_SINGLE_NEAR_RELEASE", "sources": ["a"]}}},
+          "basis": "SINGLE_NEAR_RELEASE", "sources": ["a"]}}},
           False) == ["bonus_prob"])
     t("　正しい形で2出典なら数える",
       _bonus_claim({"adopted": {"bonus_prob": {

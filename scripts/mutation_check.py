@@ -2116,7 +2116,7 @@ MUTATIONS = [
         "why": "★確定値と単独確認を、検索の濃さに数えなくする★",
         "file": "scripts/page_decision.py",
         "before": 'INDEX_COUNTABLE_BASIS = ("INDEPENDENT_MULTI", '
-                  '"DMM_SINGLE_NEAR_RELEASE")',
+                  '"SINGLE_NEAR_RELEASE")',
         "after": 'INDEX_COUNTABLE_BASIS = ()',
         "run": ["scripts/page_decision.py", "scripts/adoption_basis.py"],
     },
@@ -2937,8 +2937,8 @@ MUTATIONS = [
     {
         "why": "記事にサイト名を出す（ほかサイトのコピーに見える・2026-08-26の運営者の指示）",
         "file": "scripts/build_new_article.py",
-        "before": "    \"DMM_SINGLE_NEAR_RELEASE\": \"（確認1件のみ）\",",
-        "after": "    \"DMM_SINGLE_NEAR_RELEASE\": \"（DMMぱちタウン単独確認）\",",
+        "before": "    \"SINGLE_NEAR_RELEASE\": \"（確認1件のみ）\",",
+        "after": "    \"SINGLE_NEAR_RELEASE\": \"（DMMぱちタウン単独確認）\",",
         "run": ["scripts/build_new_article.py"],
     },
     {

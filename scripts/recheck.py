@@ -2171,7 +2171,7 @@ def _selftest():
     #   ★正本＝build_new_article.BASIS_SUFFIX★。直に書くと、
     #   名乗りを変えるたびに試験を手で直すことになる（実際そうなりかけた）。
     import build_new_article as _ba_ms
-    _mark_ss = _ba_ms.BASIS_SUFFIX["DMM_SINGLE_NEAR_RELEASE"]
+    _mark_ss = _ba_ms.BASIS_SUFFIX["SINGLE_NEAR_RELEASE"]
     t("★★記事にサイト名が出たら、名乗りであっても数える★★"
       "／★サイト名は出さない取り決めになった（2026-08-26）★",
       _competitor_hits("天井は999G（DMMぱちタウン単独確認）です。"))
@@ -2258,7 +2258,7 @@ def _selftest():
     #   ★話題まるごと免除だと、根拠のない断定が同じ箱に紛れても素通りする★
     #   ＝ここは「読者に誤情報が出る経路」なので、必ず行で見る。
     import build_new_article as _ba18
-    _mark18 = _ba18.BASIS_SUFFIX["DMM_SINGLE_NEAR_RELEASE"]
+    _mark18 = _ba18.BASIS_SUFFIX["SINGLE_NEAR_RELEASE"]
     _keepm, _keepd = _machine, _load_detail
     # ★★控えが空の機械でも同じ結果にする★★（2026-09-08）
     #   ★控えが無いと読み込みが止まる（fail-closed）★ので、
@@ -2567,7 +2567,7 @@ def _selftest():
                 globals()["_load_detail"] = lambda sl: (_detail, "", "")
                 return _dv({"slug": slug24})["result"]
 
-            _SS24 = {"basis": "DMM_SINGLE_NEAR_RELEASE"}
+            _SS24 = {"basis": "SINGLE_NEAR_RELEASE"}
             _mat_dmm = {"adopted": {
                 "payout_rate": {**_SS24, "value": {"1": "97.0%", "6": "110.0%"},
                                 "sources": ["a"]}}}

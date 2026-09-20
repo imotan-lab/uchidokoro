@@ -994,7 +994,7 @@ def _gather(name: str, maker: str = "", slug: str = "",
         #   ★読めないときは例外を通さない★（fail-closed）
         _other, _other_why = _ab.other_sources_known(slug, got["urls"])
         if _other:
-            _log(f"  ★DMM単独の例外は使いません★: {_other_why[:120]}")
+            _log(f"  ★単独確認の例外は使いません★: {_other_why[:120]}")
         _adopt_ctx = {"release_date": str(release_date),
                       # ★この導入日はDMMの機種ページで確かめたもの★
                       "release_source": "dmm-ptown",

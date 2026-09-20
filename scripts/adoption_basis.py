@@ -23,7 +23,7 @@
 
 ★根拠区分★
   INDEPENDENT_MULTI          … 独立2票以上で一致（今までどおり）
-  DMM_SINGLE_NEAR_RELEASE    … DMM単独。導入7日前以降の例外
+  SINGLE_NEAR_RELEASE    … DMM単独。導入7日前以降の例外
   （それ以外は採用しない）
 
 ★検索の品質点にも数える★（2026-08-29）
@@ -50,11 +50,22 @@ import source_lineage as _sl              # noqa: E402
 
 # ★根拠区分★（この4つ以外を作らない）
 INDEPENDENT_MULTI = "INDEPENDENT_MULTI"
-DMM_SINGLE_NEAR_RELEASE = "DMM_SINGLE_NEAR_RELEASE"
+SINGLE_NEAR_RELEASE = "SINGLE_NEAR_RELEASE"
 NOT_ADOPTED = "NOT_ADOPTED"
 
-# ★例外を許す出典はDMMだけ★（票のかたまりの名前で見る）
-_DMM_VOTE_KEYS = ("vote:dmm-ptown", "dmm-ptown")
+# ★★単独で採ってよい出典★★（票のかたまりの名前で見る）
+#   ★2026-09-19・運営者の指示★＝「他にも大手であればOKにだけしておこうか」
+#   ★直す前はDMMだけだった★＝ところが実際に1社しか無い機種を数えたら、
+#   その1社は**DMMではなく解析サイトのほう**だった（2026-09-19の実測）＝
+#     モンハンライズ（導入10/5）… ちょんぼりすたに設定別の確率・出玉率・純増・CZ
+#     アカマター（12/7）        … なな徹に仕様・純増・天井999G
+#     ツインエンジェル2（12/7） … ちょんぼりすたに設定別ボーナス確率・天井非搭載
+#   ＝例外がDMM専用だったので、**いちばん中身のある1社が使えなかった**。
+#   ★名簿にするのは「巡回してよい先」と同じ3社だけ★（増やすときは規約から）。
+#   ★ほかの条件は変えていない★＝導入7日前以降・日まで確定・
+#     導入日の出どころがDMM・DMMの機種ページで本人性確認済み・
+#     別の値を出す出典が無い・索引外の別出典を知らない。
+SINGLE_OK_PUBLISHERS = ("dmm-ptown", "chonborista", "nana-press")
 # ★導入の何日前から例外を認めるか★（運営者決定）
 NEAR_RELEASE_DAYS = 7
 
@@ -73,17 +84,20 @@ def _today_jst() -> _dt.date:
             + _dt.timedelta(hours=9)).date()
 
 
-def is_dmm_only(vote_keys) -> bool:
-    """その値を支持しているのがDMMだけか。
+def is_single_major(vote_keys) -> bool:
+    """★その値を支持しているのが、単独で採ってよい出典だけか★
 
     ★票のかたまりで見る★＝同じ発行者の2ページは1票なので、
     URLの数ではなく `source_lineage` が作るキーで判断する。
+    ★名簿は `SINGLE_OK_PUBLISHERS`★（2026-09-19・運営者の指示で3社へ広げた）。
+    ★末尾一致で見る★＝キーは `vote:chonborista` の形でも素の発行者名でも来る。
     """
     keys = {str(k).strip() for k in (vote_keys or ()) if str(k or "").strip()}
     if not keys:
         return False
-    return all(any(k == d or k.endswith(d) for d in _DMM_VOTE_KEYS)
-               for k in keys)
+    ok = tuple(p for pid in SINGLE_OK_PUBLISHERS
+               for p in ("vote:" + pid, pid))
+    return all(any(k == d or k.endswith(d) for d in ok) for k in keys)
 
 
 def near_release(release_date: str, today: _dt.date | None = None) -> bool:
@@ -153,20 +167,23 @@ def other_sources_known(slug: str, index_urls) -> tuple:
     #     ⑤★「DMM単独」として採用が復活する★
     #   ＝塞いだはずの「知っている別出典との食い違いを見ない経路」が残っていた。
     #   ★索引に載っているかを問わず、DMM以外を1件でも知っていれば止める★
-    others = []
+    # ★★2026-09-19：見る向きを変えた★★（単独で採ってよい出典を3社へ広げたため）
+    #   ★直す前は「DMM以外を知っているか」★だったが、単独で採ってよい出典が
+    #   DMMだけではなくなったので、その聞き方はもう意味をなさない。
+    #   ★いまの問い＝「発行元を2社以上知っているか」★
+    #   （知っているのに読めていない相手がいるなら、食い違いを確かめられない）。
+    known, others = {}, []
     try:
-        for u in (index_urls or []):
-            if u and not is_dmm_only([_vote_key_of(str(u))]):
-                others.append(str(u))
+        cand = [str(u) for u in (index_urls or []) if u]
     except Exception:                                        # noqa: BLE001
         return True, "URLをそろえて比べられません"
-    for rec in (saved or []):
-        u = str((rec or {}).get("url") or "")
+    cand += [str((rec or {}).get("url") or "") for rec in (saved or [])]
+    for u in cand:
         if not u:
             continue
-        if is_dmm_only([_vote_key_of(u)]):
-            continue                      # DMM自身の別ページは「別の出典」ではない
-        others.append(u)
+        known.setdefault(_vote_key_of(u), u)
+    if len(known) >= 2:
+        others = list(known.values())
     if others:
         # ★同じURLを2度言わない★（索引と控えの両方にあることは普通）
         uniq = []
@@ -177,7 +194,7 @@ def other_sources_known(slug: str, index_urls) -> tuple:
                 return True, "URLをそろえて比べられません"
             if k not in [x[0] for x in uniq]:
                 uniq.append((k, u))
-        return True, ("DMM以外の出典を知っています"
+        return True, ("発行元を2社以上知っています"
                       "（索引・控えのどちらかにあります）: "
                       + " / ".join(u for _, u in uniq[:2]))
     return False, ""
@@ -213,8 +230,8 @@ def classify_support(vote_keys, ctx: dict | None = None,
     reasons = []
     if n != 1:
         reasons.append(f"票が{n}件")
-    if not is_dmm_only(vote_keys):
-        reasons.append("支持がDMMだけではありません")
+    if not is_single_major(vote_keys):
+        reasons.append("単独で採ってよい出典ではありません")
     if not c.get("identity_verified"):
         reasons.append("DMMの機種ページで本人性を確かめていません")
     if str(c.get("release_source") or "") not in ("dmm-ptown", "dmm"):
@@ -236,7 +253,7 @@ def classify_support(vote_keys, ctx: dict | None = None,
                 "basis": NOT_ADOPTED, "index_countable": False,
                 "why": "／".join(reasons)}
     return {"accepted": True, "independent_votes": 1,
-            "basis": DMM_SINGLE_NEAR_RELEASE,
+            "basis": SINGLE_NEAR_RELEASE,
             # ★★検索の濃さにも数える★★（2026-08-29・運営者の判断）
             #   ★運営者の言葉★＝「全部やろう　マイナー機種は仕方がない」
             #   1社しか扱わない機種を検索から締め出すより、載せる方を選んだ。
@@ -245,7 +262,7 @@ def classify_support(vote_keys, ctx: dict | None = None,
             #   （食い違ったまま残すと、あとで読み違える）。
             #   ★読者には「（確認1件のみ）」の名乗りが記事に残る★。
             "index_countable": True,
-            "why": "DMMぱちタウン単独確認（導入7日前以降の例外）"}
+            "why": "単独確認（導入7日前以降の例外）"}
 
 
 # 読者に見せる言い方（★根拠区分から作る。表示文から逆算しない★）
@@ -259,11 +276,11 @@ def _reader_label_map() -> dict:
         import build_new_article as _ba
         # ★INDEPENDENT_MULTI は内部の呼び名★（記事には出さない）
         return {INDEPENDENT_MULTI: "独立2出典で一致",
-                DMM_SINGLE_NEAR_RELEASE:
-                    _ba.BASIS_SUFFIX.get(DMM_SINGLE_NEAR_RELEASE, "").strip("（）")}
+                SINGLE_NEAR_RELEASE:
+                    _ba.BASIS_SUFFIX.get(SINGLE_NEAR_RELEASE, "").strip("（）")}
     except Exception:                                        # noqa: BLE001
         return {INDEPENDENT_MULTI: "独立2出典で一致",
-                DMM_SINGLE_NEAR_RELEASE: "未確認"}
+                SINGLE_NEAR_RELEASE: "未確認"}
 
 
 READER_LABEL = _reader_label_map()
@@ -294,15 +311,26 @@ def selftest() -> int:
     t("★★DMM単独＋導入7日前以降なら採用する★★（運営者決定）",
       classify_support([D], OK_CTX, DAY)["accepted"]
       and classify_support([D], OK_CTX, DAY)["basis"]
-      == DMM_SINGLE_NEAR_RELEASE)
+      == SINGLE_NEAR_RELEASE)
     t("★★DMM単独の値も検索の濃さに数える★★"
       "／★件数に期待して安全だと思わない★（Codexの指摘）",
       classify_support([D], OK_CTX, DAY)["index_countable"] is True)
-    # ★★ここが「1票でよい」にしなかった理由★★
-    t("★★ちょんぼりすた単独は通さない★★（例外はDMMだけ）",
-      not classify_support([C], OK_CTX, DAY)["accepted"])
-    t("★★なな徹単独も通さない★★",
-      not classify_support([N], OK_CTX, DAY)["accepted"])
+    # ★★2026-09-19：単独で採ってよい出典を3社へ広げた★★（運営者の指示）
+    #   ＞ 他にも大手であればOKにだけしておこうか
+    #   ★実測でこうなっていた★＝1社しか値を持たない機種の、その1社は
+    #   **DMMではなく解析サイトのほう**だった（モンハンライズ＝ちょんぼりすた／
+    #   アカマター＝なな徹／ツインエンジェル2＝ちょんぼりすた）。
+    #   ＝例外がDMM専用だったので、いちばん中身のある1社が使えなかった。
+    t("★★ちょんぼりすた単独も通す★★（2026-09-19・運営者の指示）",
+      classify_support([C], OK_CTX, DAY)["accepted"]
+      and classify_support([C], OK_CTX, DAY)["basis"] == SINGLE_NEAR_RELEASE)
+    t("★★なな徹単独も通す★★",
+      classify_support([N], OK_CTX, DAY)["accepted"])
+    t("★★名簿に無い発行元は、いまも通さない★★"
+      "（★「大手であれば」＝巡回してよい3社のことで、どこでもよいではない★）",
+      not classify_support(["vote:slopachi-quest"], OK_CTX, DAY)["accepted"]
+      and "単独で採ってよい出典ではありません"
+      in classify_support(["vote:slopachi-quest"], OK_CTX, DAY)["why"])
     t("★★導入がまだ8日以上先なら通さない★★",
       not classify_support([D], {**OK_CTX, "release_date": "2026-09-30"},
                            DAY)["accepted"])
@@ -380,7 +408,7 @@ def selftest() -> int:
       classify_support([D, N], OK_CTX, DAY)["basis"] == INDEPENDENT_MULTI)
     t("　読者に出す言い方は根拠区分から作る",
       reader_label(INDEPENDENT_MULTI) == "独立2出典で一致"
-      and reader_label(DMM_SINGLE_NEAR_RELEASE) == READER_LABEL[DMM_SINGLE_NEAR_RELEASE]
+      and reader_label(SINGLE_NEAR_RELEASE) == READER_LABEL[SINGLE_NEAR_RELEASE]
       and reader_label("知らない区分") == "")
     t("★★判定日は日本時間で決める★★（CIのUTCで1日ずれない）",
       isinstance(_today_jst(), _dt.date))
@@ -421,7 +449,7 @@ def _end_to_end_tests(t) -> None:
     #   ★2026-08-26に取り違えた★＝READER_LABEL を記事の文言だと思って比べ、
     #   試験が丸ごと落ちた（＝壊し方が16件「壊す前から赤い」になった）。
     _MARK_ART = __import__("build_new_article").BASIS_SUFFIX[
-        DMM_SINGLE_NEAR_RELEASE]
+        SINGLE_NEAR_RELEASE]
     import build_new_article as _ba
     import page_decision as _pd
 
@@ -576,7 +604,7 @@ def _end_to_end_tests(t) -> None:
             t(f"★★本物の{_name}の抽出器が根拠を保存している★★"
               "／★手作りの材料では、保存し忘れに気づけない★",
               bool(_rows) and all(
-                  r.get("basis") == DMM_SINGLE_NEAR_RELEASE for r in _rows))
+                  r.get("basis") == SINGLE_NEAR_RELEASE for r in _rows))
             _mat_real = _mat_of(_res, _box)
             t(f"　{_name}：単独確認も検索の濃さに数える",
               _pd.index_claims_from_material(_mat_real) != [])
@@ -587,7 +615,7 @@ def _end_to_end_tests(t) -> None:
             # ★文言は正本から取る★（2026-08-26。直に書くと、正本を変えても
             #   古い文言のまま期待し続ける＝この日それで16件が確かめられなかった）
             t(f"　{_name}：記事にすると裏付けの弱さの断りが付く",
-              _ba_mod.BASIS_SUFFIX[DMM_SINGLE_NEAR_RELEASE] in _txt)
+              _ba_mod.BASIS_SUFFIX[SINGLE_NEAR_RELEASE] in _txt)
             _mat_bare = _strip(_mat_real, _box)
             t(f"★★{_name}：根拠を落とした材料は公開を断る★★"
               "／★空で流すと断りなしの普通の値として読者に出る★",
