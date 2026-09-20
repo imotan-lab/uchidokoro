@@ -473,24 +473,18 @@ def _check_gate_wiring(fail_script: str, name: str) -> list:
     return bad
 
 
-def unattended_today(load=None) -> bool:
-    """★今日、無人タスクが動いたか★（記録が読めないときは「動いた」に倒す）
+def _lock_is_live() -> bool:
+    """★いま無人タスクが動いているか★（task_guard.lock_is_live の1か所）
 
-    ★判定そのものは `gate_active` の1か所★（同じ規則を2か所に書かない・罠③）。
+    ★「今日動いたか」ではない★＝更新タスクは毎朝動くので、
+    その数え方だと**毎日ずっと効いて**しまい、対話セッションが
+    壊し方を1行消すだけで押し出しが止まった（2026-09-21・自分で踏んだ）。
+    ★これは認可ではない★＝同じ権限ならロックは作れる。
+    止めているのは「うっかり消すこと」であって、悪意ではない
+    （manual-commit が記録であって認可でないのと同じ）。
     """
-    def _default():
-        state = _lp.doc("task_guard.json")
-        if not os.path.exists(state):
-            return None                    # 記録が無い＝無人タスクは動いていない
-        with open(state, encoding="utf-8") as fh:
-            return json.load(fh)
-    try:
-        data = (load or _default)()
-    except Exception:                                        # noqa: BLE001
-        return True                        # ★読めないときは厳しい側★
-    if data is None:
-        return False
-    return bool(gate_active(data, datetime.now().strftime("%Y-%m-%d"))[0])
+    import task_guard as _tg
+    return bool(_tg.lock_is_live())
 
 
 def append_only_problem(changed, diff_of=None, unattended=False) -> str:
@@ -508,7 +502,9 @@ def append_only_problem(changed, diff_of=None, unattended=False) -> str:
     ★関所を足す前に、いま通っている通行人を数える★の実行。
 
     ★消えた行が1行でもあれば止める★＝並べ替え・書き直しも「足す」ではない。
-    ★人が動かした日は見ない★（自己修正の条件は無人タスクの話）。
+    ★対話セッションは見ない★（自己修正の条件は無人タスクの話）＝
+    人が守りを動かしたら、その壊し方も動かすしかない。
+    ★見分けるのは「いま無人が動いているか」★（_lock_is_live）。
     """
     if not unattended:
         return ""
@@ -1138,13 +1134,17 @@ def _selftest() -> int:
       "読めません" in append_only_problem(
           ["scripts/mutation_check.py"],
           diff_of=lambda p: None, unattended=True))
-    # ★無人かどうかの判定★（記録が読めないときは厳しい側）
-    t("　記録が無ければ「人が動かした日」",
-      unattended_today(load=lambda: None) is False)
-    t("★記録が読めないときは「無人が動いた」に倒す★",
-      unattended_today(
-          load=lambda: (_ for _ in ()).throw(ValueError("壊れています")))
-      is True)
+    # ★どの合図で効かせているか★（罠⓸＝出口の無い関所を作らないため）
+    #   ★「今日無人が動いたか」で効かせてはいけない★＝更新タスクは毎朝動くので
+    #   事実上いつも効き、対話セッションが壊し方を1行消すだけで止まる。
+    import inspect as _insp2
+    _src = _insp2.getsource(main)
+    t("★足すだけの決まりは「いま動いているか」で効かせる★",
+      "append_only_problem(changed, unattended=_lock_is_live())" in _src)
+    t("　「今日動いたか」を合図にしていない",
+      "unattended_today" not in _src)
+    t("　合図は task_guard の1か所から取る",
+      "_tg.lock_is_live()" in _insp2.getsource(_lock_is_live))
 
     # ★★関所の本体を1回通す★★（罠③＝関数だけの試験では、`ng` へ入れる行を
     #   消しても緑のまま。実際に2026-09-20、押し出しの関所が自分で止めた）
@@ -1408,11 +1408,15 @@ def main() -> int:
         for _l in _ci_like_problems(_touched):
             print("   " + _l)
             ng.append("GitHubと同じ条件の試験")
-    # ★★無人の日は、壊し方の仕組みへ「足す」ことしかできない★★
+    # ★★無人タスクは、壊し方の仕組みへ「足す」ことしかできない★★
     #   （2026-09-21・運営者の判断＝自己修正の条件③と⑤の食い違いを解く）
     #   ★守るのは `mutation_check.py` だけ★＝ほかまで禁止すると
     #   毎朝の記事直しが止まる（実測して決めた）。
-    _ao = append_only_problem(changed, unattended=unattended_today())
+    #   ★★合図は「いま動いているか」★★＝「今日動いたか」で効かせていたら、
+    #   毎朝5:05の更新タスクが毎日動くので**事実上いつも効き**、
+    #   対話セッションが壊し方を1行消すだけで押し出しが止まった
+    #   （★守りが移れば壊し方も移すしかないので出口が無い★・自分で踏んだ）。
+    _ao = append_only_problem(changed, unattended=_lock_is_live())
     if _ao:
         print()
         print("   " + _ao)

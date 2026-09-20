@@ -759,6 +759,17 @@ MUTATIONS = [
         "run": ["scripts/publish_new_machine.py"],
     },
     {
+        "why": "★足すだけの決まりを「今日無人が動いたか」で効かせる"
+               "（更新タスクは毎朝動くので事実上いつも効き、"
+               "対話セッションが壊し方を1行消すだけで押し出しが止まる＝"
+               "守りが移れば壊し方も移すしかないので出口が無い）★",
+        "file": "scripts/pre_push_check.py",
+        "before": "    _ao = append_only_problem(changed, "
+                  "unattended=_lock_is_live())",
+        "after": "    _ao = append_only_problem(changed, unattended=True)",
+        "run": ["scripts/pre_push_check.py"],
+    },
+    {
         "why": "★Pythonの版をコメントから読む"
                "（実際の設定ではなくコメントを読み、ずれが緑になる）★",
         "file": "scripts/pre_push_check.py",
@@ -1381,20 +1392,6 @@ MUTATIONS = [
         "file": "scripts/pre_push_check.py",
         "before": "    if diff is None:",
         "after": "    if False:",
-        "run": ["scripts/pre_push_check.py"],
-    },
-    {
-        "why": "★担当の記録が読めないときに「人が動かした日」へ倒す"
-               "（★記録を壊すだけで、足すだけの決まりを外せる★）★",
-        "file": "scripts/pre_push_check.py",
-        "before": ("    except Exception:                                "
-                   "        # noqa: BLE001" + chr(10)
-                   + "        return True                        "
-                     "# ★読めないときは厳しい側★"),
-        "after": ("    except Exception:                                "
-                  "        # noqa: BLE001" + chr(10)
-                  + "        return False                       "
-                    "# ★読めないときは厳しい側★"),
         "run": ["scripts/pre_push_check.py"],
     },
     # ─── 2026-09-20・関所に「GitHubと同じ条件でも試験を通す」を足した ───
