@@ -473,6 +473,69 @@ def _check_gate_wiring(fail_script: str, name: str) -> list:
     return bad
 
 
+def _check_ci_like_wiring() -> list:
+    """★GitHubと同じ条件の試験が「本当に呼ばれ、失敗が関所へ伝わる」か★
+
+    （2026-09-20・この守りを足したその日に、押し出しの関所が自分で
+      「この守りを見ている試験がありません」と止めた＝狙いどおり）
+    ★関数だけの試験では足りない★＝`ng` へ入れる行を消しても緑のまま（罠③）。
+    ★本物の `main()` を1回通す★＝外に出る所は全部差し替える。
+    ★落とすのは調べている1つだけ★（罠④）＝ほかは全部通す。
+    """
+    import contextlib as _cl
+    import io as _io
+
+    seen = []
+
+    class _R:
+        def __init__(self, code, out):
+            self.returncode, self.stdout, self.stderr = code, out, ""
+
+    g = globals()
+    fakes = {
+        "_warn_unreported": lambda: None,
+        "_verified_range": lambda: [],
+        "_changed_paths": lambda: ["scripts/adoption_basis.py"],
+        "git_unknown": lambda: [],
+        "push_ranges": lambda *_a, **_k: [],
+        "_ci_like_problems": lambda touched, run=None: (
+            seen.append(list(touched or [])) or ["★NG 偽物（試験）"]),
+    }
+    real = {n: g[n] for n in fakes}
+    real_run = subprocess.run
+    keep_argv, keep_stdin = sys.argv, sys.stdin
+    for n, f in fakes.items():
+        g[n] = f
+    subprocess.run = lambda cmd, *a, **k: _R(0, "")
+    sys.argv = ["pre_push_check.py"]
+    sys.stdin = _io.StringIO("")
+    try:
+        buf = _io.StringIO()
+        with _cl.redirect_stdout(buf):
+            code = main()
+        out = buf.getvalue()
+    except Exception as e:                                   # noqa: BLE001
+        return [f"関所の本体が例外で終わりました（{type(e).__name__}: {e}）"]
+    finally:
+        for n in real:
+            g[n] = real[n]
+        subprocess.run = real_run
+        sys.argv, sys.stdin = keep_argv, keep_stdin
+
+    bad = []
+    if not seen:
+        bad.append("GitHubと同じ条件の試験が呼ばれていません"
+                   "（スクリプトを変えた push で届いていない）")
+    elif "scripts/adoption_basis.py" not in seen[0]:
+        bad.append("触ったスクリプトが渡されていません")
+    if code != 1:
+        bad.append("GitHubと同じ条件の試験が赤なのに push を止めません"
+                   f"（返り {code}）")
+    if "偽物（試験）" not in out:
+        bad.append("落ちた理由が画面に出ていません")
+    return bad
+
+
 def _ci_like_problems(touched, run=None) -> list:
     """★GitHubと同じ条件でも、触ったスクリプトの試験が通るか★
 
@@ -994,6 +1057,14 @@ def _selftest() -> int:
                 return _R(1, "❌ ★★見出し付きの天井も読む★★\n43/44 合格\n")
             return _R(0, "44/44 合格\n")
         return _run
+
+    # ★★関所の本体を1回通す★★（罠③＝関数だけの試験では、`ng` へ入れる行を
+    #   消しても緑のまま。実際に2026-09-20、押し出しの関所が自分で止めた）
+    _cw = _check_ci_like_wiring()
+    for _x in _cw:
+        t("★関所の配線★ " + _x, False)
+    t("★★関所の本体を1回通すと、GitHubと同じ条件の試験が呼ばれ、"
+      "失敗が伝わる★★", not _cw)
 
     _calls.clear()
     _ok = _ci_like_problems(["scripts/adoption_basis.py"], run=_fake([]))
