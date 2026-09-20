@@ -473,6 +473,63 @@ def _check_gate_wiring(fail_script: str, name: str) -> list:
     return bad
 
 
+def unattended_today(load=None) -> bool:
+    """★今日、無人タスクが動いたか★（記録が読めないときは「動いた」に倒す）
+
+    ★判定そのものは `gate_active` の1か所★（同じ規則を2か所に書かない・罠③）。
+    """
+    def _default():
+        state = _lp.doc("task_guard.json")
+        if not os.path.exists(state):
+            return None                    # 記録が無い＝無人タスクは動いていない
+        with open(state, encoding="utf-8") as fh:
+            return json.load(fh)
+    try:
+        data = (load or _default)()
+    except Exception:                                        # noqa: BLE001
+        return True                        # ★読めないときは厳しい側★
+    if data is None:
+        return False
+    return bool(gate_active(data, datetime.now().strftime("%Y-%m-%d"))[0])
+
+
+def append_only_problem(changed, diff_of=None, unattended=False) -> str:
+    """★無人の日は、壊し方の仕組みへ「足す」ことしかできない★ → 問題の文
+
+    ★なぜ要るか（2026-09-21・運営者の判断）★＝自己修正の条件が
+    ③「壊し方を登録しろ」と⑤「壊して確かめる仕組みに触るな」で食い違い、
+    ★無人タスクは自己修正を原理的に完了できなかった★（実例＝#635）。
+    運営者の判断＝**足すだけなら許す**。
+
+    ★ここで守るのは `mutation_check.py` だけ★（2026-09-21・実測して決めた）＝
+    ほかの見張り（承認の記録など）まで禁止にすると、
+    ★毎朝の記事直しが全部止まる★（無人タスクは記事を直すたびに
+    `template-approval.json` を書き換えている＝正規の動き）。
+    ★関所を足す前に、いま通っている通行人を数える★の実行。
+
+    ★消えた行が1行でもあれば止める★＝並べ替え・書き直しも「足す」ではない。
+    ★人が動かした日は見ない★（自己修正の条件は無人タスクの話）。
+    """
+    if not unattended:
+        return ""
+    target = "scripts/mutation_check.py"
+    if target not in set(changed or []):
+        return ""
+    diff = (diff_of or (lambda p: _git("diff", "--unified=0",
+                                       "@{u}...HEAD", "--", p)))(target)
+    if diff is None:
+        return (f"{target} の差分を読めません"
+                "（無人の日は『足すだけ』かを確かめられません）")
+    gone = [x for x in str(diff).splitlines()
+            if x.startswith("-") and not x.startswith("---")]
+    if not gone:
+        return ""
+    return (f"★無人の日に {target} から {len(gone)} 行が消えています★"
+            "／自己修正で触ってよいのは**足すことだけ**です"
+            "（既存の壊し方の書き換え・削除は禁止）"
+            f"／消えた行の例: {gone[0][:70]}")
+
+
 def _check_ci_like_wiring() -> list:
     """★GitHubと同じ条件の試験が「本当に呼ばれ、失敗が関所へ伝わる」か★
 
@@ -1058,6 +1115,37 @@ def _selftest() -> int:
             return _R(0, "44/44 合格\n")
         return _run
 
+    # ★★無人の日は、壊し方の仕組みへ足すだけ★★（2026-09-21・運営者の判断A）
+    _ADD = "+    {\"why\": \"新しい壊し方\"},"
+    _DEL = "-    {\"why\": \"前からある壊し方\"},"
+    t("★★無人の日に、壊し方の行が消えていたら止める★★"
+      "（★自己修正で触ってよいのは足すことだけ★）",
+      "消えています" in append_only_problem(
+          ["scripts/mutation_check.py"],
+          diff_of=lambda p: _ADD + "\n" + _DEL, unattended=True))
+    t("　足すだけなら通す",
+      append_only_problem(["scripts/mutation_check.py"],
+                          diff_of=lambda p: _ADD, unattended=True) == "")
+    t("★人が動かした日は見ない★（自己修正の条件は無人タスクの話）",
+      append_only_problem(["scripts/mutation_check.py"],
+                          diff_of=lambda p: _DEL, unattended=False) == "")
+    t("★★守るのは壊し方の仕組みだけ★★"
+      "（★承認の記録まで禁止すると、毎朝の記事直しが全部止まる★・実測）",
+      append_only_problem(["assets/data/template-approval.json",
+                           "scripts/grow_machine.py"],
+                          diff_of=lambda p: _DEL, unattended=True) == "")
+    t("★差分を読めないときは止める★（足すだけか確かめられない）",
+      "読めません" in append_only_problem(
+          ["scripts/mutation_check.py"],
+          diff_of=lambda p: None, unattended=True))
+    # ★無人かどうかの判定★（記録が読めないときは厳しい側）
+    t("　記録が無ければ「人が動かした日」",
+      unattended_today(load=lambda: None) is False)
+    t("★記録が読めないときは「無人が動いた」に倒す★",
+      unattended_today(
+          load=lambda: (_ for _ in ()).throw(ValueError("壊れています")))
+      is True)
+
     # ★★関所の本体を1回通す★★（罠③＝関数だけの試験では、`ng` へ入れる行を
     #   消しても緑のまま。実際に2026-09-20、押し出しの関所が自分で止めた）
     _cw = _check_ci_like_wiring()
@@ -1320,6 +1408,15 @@ def main() -> int:
         for _l in _ci_like_problems(_touched):
             print("   " + _l)
             ng.append("GitHubと同じ条件の試験")
+    # ★★無人の日は、壊し方の仕組みへ「足す」ことしかできない★★
+    #   （2026-09-21・運営者の判断＝自己修正の条件③と⑤の食い違いを解く）
+    #   ★守るのは `mutation_check.py` だけ★＝ほかまで禁止すると
+    #   毎朝の記事直しが止まる（実測して決めた）。
+    _ao = append_only_problem(changed, unattended=unattended_today())
+    if _ao:
+        print()
+        print("   " + _ao)
+        ng.append("壊し方の仕組みは足すだけ")
     # ★★早見表（ハブ4ページ）が古いままでないか★★（2026-09-01新設）
     #   ★実際に起きたこと★＝machines.json を並べ替えたのに
     #   `build_hub_pages.py --legacy` を流さず、早見表が古いまま残り、

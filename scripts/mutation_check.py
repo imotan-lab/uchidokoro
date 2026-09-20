@@ -1302,6 +1302,39 @@ MUTATIONS = [
         "after": "    pass",
         "run": ["scripts/add_machine_run.py"],
     },
+    # ─── 2026-09-21・無人の日は壊し方の仕組みへ「足す」だけ（運営者の判断A）───
+    {
+        "why": "★無人の日でも、壊し方の行を消せるようにする"
+               "（★自己修正で既存の守りを外せてしまう★）★",
+        "file": "scripts/pre_push_check.py",
+        "before": ('    gone = [x for x in str(diff).splitlines()' + chr(10)
+                   + '            if x.startswith("-") '
+                     'and not x.startswith("---")]'),
+        "after": "    gone = []",
+        "run": ["scripts/pre_push_check.py"],
+    },
+    {
+        "why": "★差分を読めなくても通す"
+               "（★足すだけか確かめられないのに素通りする★）★",
+        "file": "scripts/pre_push_check.py",
+        "before": "    if diff is None:",
+        "after": "    if False:",
+        "run": ["scripts/pre_push_check.py"],
+    },
+    {
+        "why": "★担当の記録が読めないときに「人が動かした日」へ倒す"
+               "（★記録を壊すだけで、足すだけの決まりを外せる★）★",
+        "file": "scripts/pre_push_check.py",
+        "before": ("    except Exception:                                "
+                   "        # noqa: BLE001" + chr(10)
+                   + "        return True                        "
+                     "# ★読めないときは厳しい側★"),
+        "after": ("    except Exception:                                "
+                  "        # noqa: BLE001" + chr(10)
+                  + "        return False                       "
+                    "# ★読めないときは厳しい側★"),
+        "run": ["scripts/pre_push_check.py"],
+    },
     # ─── 2026-09-20・関所に「GitHubと同じ条件でも試験を通す」を足した ───
     {
         "why": "★GitHubと同じ条件の試験で落ちても、pushを止めない"
