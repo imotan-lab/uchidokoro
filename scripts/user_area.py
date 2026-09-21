@@ -571,6 +571,17 @@ def structure_sha256(html: str, _rows: bool = False):
         def handle_startendtag(self, tag, attrs):
             self._add(tag, attrs, len(self.stack))
 
+        def handle_data(self, data):
+            # ★★文字の「場所」も残す★★（2026-09-21・Codexの指摘）
+            #   ★直す前は開き札だけ★だったので、
+            #   `<div><p>投稿</p>天井1200G</div>` と
+            #   `<div><p>投稿</p></div>天井1200G` が**同じ並び**になった。
+            #   ＝その箱を落とすと、前者では天井の行が消え、後者では残る。
+            #   ★中身は入れない★（文字が変わるたびに変わると、
+            #   店の宣伝文のような揺れで失効してしまう）。
+            if str(data or "").strip():
+                self.rows.append(f"T|{len(self.stack)}")
+
     p = _Sig()
     try:
         p.feed(str(html or ""))
@@ -822,6 +833,30 @@ def clean_html(html: str, url: str = "", conf: dict | None = None) -> str:
     # ★落とす前に守る対象が居るか／落とした後に本文が残るか★は
     #   visible_text と同じ物差しで見る（そちらが例外を出す）。
     visible_text(html, url, ua)
+    return _guard_after_clean(drop_boxes(html, url, ua), url)
+
+
+def drop_boxes(html: str, url: str = "", conf: dict | None = None) -> str:
+    """★決まりごとの箱を落とすだけ★（★見張りも免除も通らない★）
+
+    ★★なぜ切り出したか★★（2026-09-21・Codexの指摘・実測で確かめた）＝
+    2AIの免除の指紋を**生HTML全体**で取っていたので、
+    ★設置店舗が1軒増えるだけで免除が失効していた★
+    （DMMの機種ページには設置店の一覧があり、日々変わる）。
+    掃除したあとの姿で取れば、店舗は落ちているので変わらない。
+
+    ★実測（2026-09-21・実ページ）★
+      生HTML全体 … 店舗を1件足すと ★変わる★
+      掃除後     … 店舗を1件足しても **同じ**／
+                   未知の箱に書き込みを足すと ★変わる（正しい）★
+
+    ★ここから `clean_html` を呼んではいけない★＝あちらは免除を見に行くので、
+    免除の指紋を作るために免除を見る、という堂々巡りになる。
+    """
+    ua = conf if conf is not None else conf_for_url(url)
+    rules = [r for r in (ua.get("drop") or []) if isinstance(r, dict)]
+    if not rules or not html:
+        return html
     p = _Cutter(html, rules)
     try:
         p.feed(html)
@@ -835,7 +870,25 @@ def clean_html(html: str, url: str = "", conf: dict | None = None) -> str:
         out.append(html[last:a])
         last = b
     out.append(html[last:])
-    return _guard_after_clean("".join(out), url)
+    return "".join(out)
+
+
+def waiver_fingerprints(html: str, url: str = "",
+                        conf: dict | None = None) -> dict:
+    """★2AIの免除を「まだ効くか」で照合するための指紋★（2026-09-21）
+
+    ★2つ取る★
+      structure … 箱の並び（タグ・class・id・入れ子の深さ・文字の場所）
+      text      … 読める文字そのもの
+
+    ★どちらも掃除したあとの姿で取る★＝揺れる場所（設置店の一覧）は
+    決まりごとで落ちるので入らない。
+    ★文字の指紋が要る理由★＝既存の汎用の `<p>` の中へ読者の文字だけを
+    足されると、タグも class も深さも変わらないので構造だけでは気づけない。
+    """
+    cut = drop_boxes(html, url, conf)
+    return {"structure_sha256": structure_sha256(cut),
+            "text_sha256": readable_sha256(cut)}
 
 
 def _guard_after_clean(cleaned: str, url: str = "") -> str:
@@ -1287,13 +1340,55 @@ def selftest() -> int:
     t("　閉じ札が来ないタグは深さに積まない"
       "（積むと、画像1つで以後の深さが全部ずれる）",
       structure_sha256('<div><img src="a"><b>x</b></div>', _rows=True)
-      == ["0|div||", "1|img||", "1|b||"])
+      == ["0|div||", "1|img||", "1|b||", "T|2"])
     t("　入れ子はちゃんと深くなる（深さを全部0にされたら気づく）",
       structure_sha256("<div><i><b>x</b></i></div>", _rows=True)
-      == ["0|div||", "1|i||", "2|b||"])
+      == ["0|div||", "1|i||", "2|b||", "T|3"])
+    # ★★閉じ札が文字をまたいだ形★★（2026-09-21・Codexが挙げた反例）
+    #   ★直す前は同じ並びになった★＝開き札しか残していなかったので、
+    #   `hyouka` を落としたとき、前者は天井の行まで消え、後者は残る、という
+    #   ★材料が変わる違い★に気づけなかった。
+    _tn_a = '<div id="hyouka"><p>投稿</p>天井1200G</div>'
+    _tn_b = '<div id="hyouka"><p>投稿</p></div>天井1200G'
+    t("★★閉じ札が文字をまたいだら、指紋は変わる★★"
+      "（★落とすと材料が変わるのに、開き札だけでは同じに見えた★）",
+      structure_sha256(_tn_a) != structure_sha256(_tn_b))
+    t("　文字の中身は指紋に入れない（店の宣伝文で失効しないため）",
+      structure_sha256("<p>あいうえお</p>")
+      == structure_sha256("<p>かきくけこ</p>"))
+
+    # ★★免除の指紋は「掃除したあとの姿」で取る★★（2026-09-21・Codexの指摘）
+    #   ★実測★＝生HTML全体で取っていたので、DMMの設置店が1軒増えるだけで
+    #   2AIの判断が失効していた。
+    _wf_conf = {"drop": [{"class": "shops"}], "markers": []}
+    _wf_1 = ('<html><body><div class="spec">天井999G</div>'
+             '<div class="shops"><p>A店</p></div></body></html>')
+    _wf_2 = ('<html><body><div class="spec">天井999G</div>'
+             '<div class="shops"><p>A店</p><p>B店</p></div></body></html>')
+    _wf_3 = ('<html><body><div class="spec">天井999G 追記</div>'
+             '<div class="shops"><p>A店</p></div></body></html>')
+    t("★★落とす箱の中が増えても、免除は効いたまま★★"
+      "（★これが無いと、店が1軒増えるだけで2AIの判断が失効する★）",
+      waiver_fingerprints(_wf_1, "https://x.test/", _wf_conf)
+      == waiver_fingerprints(_wf_2, "https://x.test/", _wf_conf))
+    t("★★残る箱の中の文字が変わったら、免除は失効する★★"
+      "（★既存の汎用タグへ読者の文字だけ足された形★＝Codexの反例）",
+      waiver_fingerprints(_wf_1, "https://x.test/", _wf_conf)
+      != waiver_fingerprints(_wf_3, "https://x.test/", _wf_conf))
+    t("　作りと読む文字の2つを返す",
+      sorted(waiver_fingerprints(_wf_1, "https://x.test/", _wf_conf))
+      == ["structure_sha256", "text_sha256"])
+    t("★掃除だけの層は、見張りも免除も通らない★"
+      "（通すと、免除の指紋を作るために免除を見る堂々巡りになる）",
+      (lambda _i: "_guard_after_clean" not in _i.getsource(drop_boxes)
+       and "_waiver_for" not in _i.getsource(drop_boxes))(
+          __import__("inspect")))
+    t("　落とす決まりが無ければ、そのまま返す",
+      drop_boxes("<p>x</p>", "https://x.test/", {}) == "<p>x</p>")
+
     t("　class は並べ替えて入れる／id も入れる",
       structure_sha256('<p id="q" class="b a">x</p>', _rows=True)
-      == ["0|p|a b|q"])
+      == ["0|p|a b|q", "T|1"])
 
     t("★★0件と書いてあれば、一覧が無くても通す★★"
       "／これが無いとレビューの付かない機種は永久に使えない",

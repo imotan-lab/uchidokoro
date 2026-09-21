@@ -35,6 +35,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import re
@@ -54,6 +55,97 @@ MAX_VALUE = 20000
 MIN_WHY = 15
 # ★モードの鍵は英小文字と数字と下線だけ★（置き場の外を触られないため）
 KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
+
+
+import local_paths as _lp                                   # noqa: E402
+
+# ★★「線を引かない」と決めた控え★★（2026-09-21・台帳#704）
+#   ★リポジトリの外★＝2AIの判断の記録であって、読者に出るものではない。
+NO_LINE_STORE = _lp.doc("checker_no_line.json")
+NO_LINE = "NO_LINE"
+
+
+def _confirmed_fields(slug: str) -> list:
+    """★その機種について、いま確かめてある項目の名前★（並べ替え済み）
+
+    ★何に使うか★＝「線を引かない」と決めた時点の顔ぶれを控えておき、
+    ★材料が増えたら、もう一度2AIに聞く★ため。
+    ★見るのは名前だけ★＝中身が足りるかどうかは2AIの判断なので機械は決めない。
+    ★読めないときは空★＝空は「増えていない」ではなく
+    控えた顔ぶれと食い違うので、もう一度聞く側に倒れる。
+    """
+    try:
+        import confirmed_values as _cv_f
+        got = _cv_f.load(strict=False) or {}
+    except Exception:                                        # noqa: BLE001
+        return []
+    rows = got.get("machines") if isinstance(got, dict) else None
+    per = (rows or {}).get(slug) if isinstance(rows, dict) else None
+    if not isinstance(per, dict):
+        return []
+    return sorted(str(k) for k in per)
+
+
+def _no_line_all() -> dict:
+    try:
+        if not os.path.exists(NO_LINE_STORE):
+            return {}
+        got = _sj.read_json(NO_LINE_STORE, expect=dict)
+        rows = got.get("machines")
+        return rows if isinstance(rows, dict) else {}
+    except Exception:                                        # noqa: BLE001
+        return {}                          # ★読めないときは「控え無し」＝また聞く★
+
+
+def no_line_record(slug: str) -> dict | None:
+    """★その機種は「線を引かない」と決めてあるか★（★材料が増えていたら無効★）"""
+    rec = _no_line_all().get(str(slug or ""))
+    if not isinstance(rec, dict):
+        return None
+    if list(rec.get("confirmed_fields") or []) != _confirmed_fields(slug):
+        return None                        # ★材料の顔ぶれが変わった＝もう一度聞く★
+    return rec
+
+
+def no_line_problems(dec, ms=None) -> list:
+    """★「線を引かない」という決定を受け取れる形か★"""
+    ng, m = _common_problems(dec, ms)
+    if m is None:
+        return ng
+    slug = str(dec.get("slug") or "")
+    if dec.get("modes"):
+        ng.append("線を引かない決定に modes は書けません（どちらか一方）")
+    # ★すでに線がある機種には書かせない★（消す道具にしない）
+    if has_target_line(m):
+        ng.append(f"{slug}: すでに狙い目の線があります"
+                  "（この決定は線を消す道具ではありません）")
+    return ng
+
+
+def record_no_line(dec: dict) -> int:
+    """★「線を引かない」を控える★（全か無か・書いたら読み直す）"""
+    slug = str(dec.get("slug") or "")
+    rows = _no_line_all()
+    rows[slug] = {
+        "decision": NO_LINE,
+        "why": str(dec.get("why") or "").strip(),
+        "judges": sorted({str(x).lower() for x in (dec.get("judges") or [])}),
+        "decided_at": str(dec.get("decided_at") or ""),
+        "waiting_for": [str(x) for x in (dec.get("waiting_for") or [])],
+        "confirmed_fields": _confirmed_fields(slug),
+    }
+    tmp = NO_LINE_STORE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"schema_version": "checker-no-line/v1", "machines": rows},
+                  f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.replace(tmp, NO_LINE_STORE)
+    if no_line_record(slug) is None:
+        print("★書いた後の読み直しが合いません★（手で確かめてください）")
+        return 1
+    print(f"{slug}: ★線を引かない★と控えました（以後この機種は聞きません）")
+    print("★材料の顔ぶれが増えたら、もう一度聞きます★")
+    return 0
 
 
 def _judges_required() -> tuple:
@@ -139,18 +231,21 @@ def _int(v):
     return v if isinstance(v, int) and not isinstance(v, bool) else None
 
 
-def decision_problems(dec, ms=None) -> list:
-    """★決定ファイルが受け取れる形か★（★1件でも駄目なら何も書かない★）"""
+def _common_problems(dec, ms=None) -> tuple:
+    """★どの決定にも共通の検査★（2026-09-21・罠③＝同じ規則を2か所に書かない）
+
+    返すのは（問題の一覧, その機種の行）。★行が無ければ一覧だけ見る★。
+    """
     ng = []
     if not isinstance(dec, dict):
-        return ["決定ファイルが辞書ではありません"]
+        return ["決定ファイルが辞書ではありません"], None
     slug = str(dec.get("slug") or "")
-    if not KEY_RE.match(slug or " ") and not re.match(r"^[a-z0-9_]+$", slug):
+    if not re.match(r"^[a-z0-9_]+$", slug or " "):
         ng.append("slug が英小文字・数字・下線ではありません")
     ms = _machines() if ms is None else ms
     m = _find(ms, slug)
     if m is None:
-        return ng + [f"{slug}: machines.json にありません"]
+        return ng + [f"{slug}: machines.json にありません"], None
     if "publication_policy" not in m:
         # ★旧形式は触らない★＝すでに線があり、書き換える理由が無い。
         #   ★誤爆を構造で止める★（「気をつける」にしない）。
@@ -162,6 +257,15 @@ def decision_problems(dec, ms=None) -> list:
                   % ("・".join(sorted(want)), "・".join(sorted(who)) or "なし"))
     if len(str(dec.get("why") or "").strip()) < MIN_WHY:
         ng.append(f"理由（why）が {MIN_WHY} 字以上ありません")
+    return ng, m
+
+
+def decision_problems(dec, ms=None) -> list:
+    """★決定ファイルが受け取れる形か★（★1件でも駄目なら何も書かない★）"""
+    ng, m = _common_problems(dec, ms)
+    if m is None:
+        return ng
+    slug = str(dec.get("slug") or "")
     ck = m.get("checker") or {}
     # ★★いまはG数の機種だけ★★（2026-09-18）＝天井の読み取りがG数だけなので、
     #   pt・周期の機種に同じ数字を書くと**単位の違う線**が入る。
@@ -348,6 +452,12 @@ def target_line_questions(m: dict) -> list:
     if has_target_line(m):
         return []
     slug = str(m.get("slug") or "")
+    # ★★2AIが「引かない」と決めてあれば聞かない★★（2026-09-21・台帳#704）
+    #   ★直す前は控える道が無かった★ので、決着しているのに毎朝同じ問いが出て、
+    #   「3回聞いても決まらなければ人へ」の数えに乗って運営者へメールが飛んだ。
+    #   ★材料の顔ぶれが増えたら控えは効かなくなる★（`no_line_record` が見る）。
+    if no_line_record(slug) is not None:
+        return []
     return ["★この機種の狙い目（チェッカーの線）を決めてください★"
             "／★いまは線が1つも無いので、読者の画面に狙い目が出ていません★"
             f"／材料を見る: python scripts/checker_verdict.py --slug {slug}"
@@ -394,6 +504,24 @@ def merged(m: dict, dec: dict) -> dict:
 def apply_decision(path: str, dry_run: bool = False) -> int:
     dec = _sj.read_json(path, expect=dict)
     ms = _machines()
+    # ★★「線を引かない」という結論も受け取る★★（2026-09-21・台帳#704）
+    #   ★天井が分かっても、座ってよいゲーム数を出せないことはある★
+    #   （平均投資・当選時の期待枚数が確認できていない機種）。
+    #   ★決めたことを控えられないと、毎朝おなじ問いが出続ける★。
+    if str(dec.get("decision") or "") == NO_LINE:
+        ng = no_line_problems(dec, ms)
+        if ng:
+            print("★書きません★（1件でも通らなければ何も書かない）")
+            for x in ng:
+                print("  ・" + x)
+            return 1
+        if dry_run:
+            print("%s: ★線を引かない★と控えます（材料の顔ぶれ: %s）"
+                  % (dec.get("slug"),
+                     "・".join(_confirmed_fields(str(dec.get("slug") or "")))
+                     or "なし"))
+            return 0
+        return record_no_line(dec)
     ng = decision_problems(dec, ms)
     if ng:
         print("★書きません★（1件でも通らなければ何も書かない）")
@@ -759,8 +887,68 @@ def selftest() -> int:
         {"checker": {"modes": [{"key": "normal"}], "normal": {"ceiling": 888}}})
     t("　チェッカーに入っている天井は読める（対照）", _wired == {888})
 
+    _no_line_tests(t)
     print(f"\n{ok[0]}/{ok[1]} 合格")
     return 0 if ok[0] == ok[1] else 1
+
+
+def _no_line_tests(t) -> None:
+    """★「線を引かない」の控え★（2026-09-21・台帳#704）
+
+    ★本番の置き場へは書かない★＝一時の場所へ向けてから動かす
+    （罠㊿＝試験が本番の記録を埋めると、本物が埋もれる）。
+    """
+    import tempfile
+    global NO_LINE_STORE
+    _bak_store = NO_LINE_STORE
+    _bak_fields = globals()["_confirmed_fields"]
+    _bak_ms = globals()["_machines"]
+    _row = {"slug": "zz_no_line", "publication_policy": "page-decision/v1",
+            "checker": {"unit": "G", "modes": [{"key": "normal"}]}}
+    _fields = {"now": ["at", "ceiling"]}
+    try:
+        NO_LINE_STORE = os.path.join(tempfile.mkdtemp(prefix="nl_"), "x.json")
+        globals()["_confirmed_fields"] = lambda slug: list(_fields["now"])
+        globals()["_machines"] = lambda: [_row]
+        dec = {"slug": "zz_no_line", "decision": NO_LINE,
+               "judges": ["claude", "codex"], "decided_at": "2026-09-21",
+               "why": "平均投資と当選時の期待枚数が未確認のため算定できない"}
+        t("　控える前は、狙い目の線を聞く問いが出る",
+          bool(target_line_questions(_row)))
+        t("　判断者が1人なら受け取らない",
+          any("判断者" in x for x in no_line_problems(
+              {**dec, "judges": ["claude"]}, [_row])))
+        t("　理由が短ければ受け取らない",
+          any("理由" in x for x in no_line_problems(
+              {**dec, "why": "無理"}, [_row])))
+        t("　線を引く決定と混ぜて書けない",
+          any("どちらか一方" in x for x in no_line_problems(
+              {**dec, "modes": [{"key": "normal", "good": 500}]}, [_row])))
+        t("　問題が無ければ受け取る", no_line_problems(dec, [_row]) == [])
+        t("★★控えたら、その機種は聞かない★★"
+          "（★直す前は控える道が無く、毎朝おなじ問いが出た★）",
+          record_no_line(dec) == 0 and target_line_questions(_row) == [])
+        _fields["now"] = ["at", "ceiling", "payout_rate"]
+        t("★★材料の顔ぶれが増えたら、もう一度聞く★★"
+          "（★控えたまま永久に黙ると、材料が揃っても線が入らない★）",
+          no_line_record("zz_no_line") is None
+          and bool(target_line_questions(_row)))
+        _fields["now"] = ["at", "ceiling"]
+        t("　顔ぶれが戻れば、控えはまた効く",
+          no_line_record("zz_no_line") is not None)
+        _row2 = {**_row, "checker": {"unit": "G", "modes": [{"key": "normal"}],
+                                     "normal": {"good": 500}}}
+        t("★すでに線がある機種には書けない★（線を消す道具にしない）",
+          any("すでに狙い目の線" in x
+              for x in no_line_problems(dec, [_row2])))
+        with io.open(NO_LINE_STORE, "w", encoding="utf-8") as _f:
+            _f.write("{")
+        t("　控えが読めないときは、また聞く側へ倒れる",
+          no_line_record("zz_no_line") is None)
+    finally:
+        NO_LINE_STORE = _bak_store
+        globals()["_confirmed_fields"] = _bak_fields
+        globals()["_machines"] = _bak_ms
 
 
 def main() -> int:

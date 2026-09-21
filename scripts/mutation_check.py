@@ -769,6 +769,49 @@ MUTATIONS = [
         "after": "    _ao = append_only_problem(changed, unattended=True)",
         "run": ["scripts/pre_push_check.py"],
     },
+    # ─── 2026-09-21・Codex178の指摘 ───
+    {
+        "why": "★免除の指紋を、生HTML全体で取る"
+               "（★設置店が1軒増えるだけで2AIの判断が失効する★）★",
+        "file": "scripts/user_area.py",
+        "before": "    cut = drop_boxes(html, url, conf)",
+        "after": "    cut = str(html or \"\")",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "★読む文字の指紋を免除の条件から外す"
+               "（★既存の汎用タグの中へ読者の文字だけ足されても通る★）★",
+        "file": "scripts/page_reading.py",
+        "before": "        if _want_txt != _now.get(\"text_sha256\"):",
+        "after": "        if False:",
+        "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★文字の場所を作りの指紋から外す"
+               "（★閉じ札が文字をまたいだ違いに気づけない＝"
+               "その箱を落とすと材料が変わるのに同じに見える★）★",
+        "file": "scripts/user_area.py",
+        "before": "                self.rows.append(f\"T|{len(self.stack)}\")",
+        "after": "                pass",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "★空欄の判定に、決まり文句を書き写す"
+               "（★表のセルの『確認中』だけが残った機種が、"
+               "育成から永久に外れる★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "            return bool(o.strip()) and _pending_check(o)",
+        "after": "            return \"\u672a\u78ba\u8a8d\uff08\" in o",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★降格で止まったとき、2AIにも台帳にも回さない"
+               "（★毎日おなじ理由で止まり続け、誰も気づかない★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        _act = grow_result(slug, False, _dwhy[:900])",
+        "after": "        _act = {\"do\": \"none\", \"round\": 0, \"detail\": \"\"}",
+        "run": ["scripts/grow_machine.py"],
+    },
     # ─── 2026-09-21・Codex177の指摘（掃除の入口／作りの指紋の入れ子）───
     {
         "why": "★材料として読む入口だけ、掃除のあとの見張りを通さない"
@@ -1376,7 +1419,7 @@ MUTATIONS = [
                "（★逐語は残したまま読者の数値が材料へ混ざる★"
                "＝Codexが求めた回帰試験そのもの）★",
         "file": "scripts/page_reading.py",
-        "before": "        if _want_sig != _now_sig:",
+        "before": "        if _want_sig != _now.get(\"structure_sha256\"):",
         "after": "        if False:",
         "run": ["scripts/page_reading.py"],
     },

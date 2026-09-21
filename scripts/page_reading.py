@@ -278,6 +278,9 @@ def _validate(rec) -> list:
         if not str(rec.get("structure_sha256") or "").strip():
             ng.append("ページの作りの指紋がありません"
                       "（未知の箱を足されても気づけません）")
+        if not str(rec.get("text_sha256") or "").strip():
+            ng.append("ページの読める文字の指紋がありません"
+                      "（既存の箱の中へ読者の文字を足されても気づけません）")
     return ng
 
 
@@ -352,18 +355,30 @@ def verify(rec: dict, raw: str, *, stage: str, missing_boxes=None,
         #   違ったが、この指紋は一致した（箱1065個の並びが完全一致）。
         #   ＝★未知の箱を1つ足されれば必ず変わる★ので、
         #   「新しい投稿欄を足されても免除が通る」穴が塞がる。
+        # ★★掃除したあとの姿で取る★★（2026-09-21・Codexの指摘・実測で確かめた）
+        #   ★直す前は生HTML全体★だったので、DMMの設置店が1軒増えるだけで
+        #   ★2AIの判断が失効していた★（店舗の一覧は日々変わる）。
+        #   掃除したあとなら店舗は落ちているので入らない。
+        # ★★読む文字の指紋も見る★★＝既存の汎用の `<p>` の中へ
+        #   読者の文字だけを足されると、タグも class も深さも変わらないので
+        #   作りだけでは気づけない（Codexが挙げた反例）。
         _want_sig = str(rec.get("structure_sha256") or "")
+        _want_txt = str(rec.get("text_sha256") or "")
         try:
             import user_area as _ua_sig
-            _now_sig = _ua_sig.structure_sha256(str(raw or ""))
+            _now = _ua_sig.waiver_fingerprints(str(raw or ""),
+                                               str(rec.get("url") or ""))
         except Exception as e:                               # noqa: BLE001
             # ★数え直せないなら通さない★（同じだと言えない）
             return False, f"いまのページの作りを数えられません（{type(e).__name__}）"
-        if not _want_sig:
-            return False, "控えにページの作りの指紋がありません"
-        if _want_sig != _now_sig:
+        if not _want_sig or not _want_txt:
+            return False, "控えにページの指紋がありません"
+        if _want_sig != _now.get("structure_sha256"):
             return False, ("ページの作りが変わっています"
                            "（箱が足された・減った可能性があります）")
+        if _want_txt != _now.get("text_sha256"):
+            return False, ("ページの読める文字が変わっています"
+                           "（読者の書き込みが足された可能性があります）")
         for q in (rec.get("quotes") or []):
             if str(q) not in str(raw or ""):
                 return False, f"手がかりの逐語が、いまのページにありません（{str(q)[:30]}）"
@@ -401,7 +416,7 @@ def record(slug: str, url: str, stage: str, kind: str, *, raw: str,
         #   ★揺れる値は入らない★（タグ名・class・id しか見ない）ので、
         #   取り直しでは失効しない。★箱が足されれば必ず失効する★。
         import user_area as _ua_rec
-        rec["structure_sha256"] = _ua_rec.structure_sha256(str(raw or ""))
+        rec.update(_ua_rec.waiver_fingerprints(str(raw or ""), str(url or "")))
     bad = validate(rec)
     if bad:
         raise ReadingError("この記録は契約を満たしません（保存しませんでした）: "
@@ -458,7 +473,9 @@ def selftest() -> int:                                       # noqa: C901
                "</head><body>"
                "<table><tr><th>メーカー名</th><td>北電子</td></tr>"
                "<tr><th>導入開始日</th><td>2026年10月5日</td></tr></table>"
-               "<p>ユーザー評価（2件）</p></body></html>")
+               "<p>ユーザー評価（2件）</p>"
+               '<a href="/machines/5090/review">くちこみ</a>'
+               "</body></html>")
         CAP = ("<table><tr><th>メーカー名</th><td>北電子</td></tr>"
                "<tr><th>導入開始日</th><td>2026年10月5日</td></tr></table>")
         _ok = record("dmm_5054", "https://example.invalid/5054",
@@ -587,7 +604,11 @@ def selftest() -> int:                                       # noqa: C901
                     why="件数の表示はあるが本文はこのHTMLに無い",
                     decided_at="2026-09-10",
                     waived_boxes=["list-machinesreviews"],
-                    quotes=["ユーザー評価（2件）"])
+                    # ★逐語は「印つきの場所」も1件入れる★＝
+                    #   作り（タグ・class・id・深さ）にも読む文字にも
+                    #   出ない属性の値が変わった形を、逐語の層だけで捕まえる。
+                    quotes=["ユーザー評価（2件）",
+                            '<a href="/machines/5090/review">'])
         t("★無い箱の免除を控えられる★", _w["state"] == "RECORDED")
         wrec = find("https://example.invalid/5090",
                     _rf.STAGE_USER_AREA, "件数が1件以上なら投稿欄の一覧の箱がある")
@@ -616,7 +637,32 @@ def selftest() -> int:                                       # noqa: C901
                              stage=_rf.STAGE_USER_AREA,
                              missing_boxes=["list-machinesreviews"])
         t("★★そう判断した手がかりが消えたら効かせない★★",
-          not okw3b and "手がかりの逐語" in ww3b)
+          not okw3b and ("読める文字が変わっています" in ww3b
+                         or "手がかりの逐語" in ww3b))
+        # ★★逐語の層だけを測る★★（2026-09-21）＝
+        #   作りにも読む文字にも出ない所（リンクの飛び先）だけを変える。
+        #   ★これが無いと、読む文字の指紋が手前で止めるので
+        #   逐語の層が一度も試されない★（罠③と同じ形）。
+        _mark = '<a href="/machines/5090/review">'
+        okw3c, ww3c = verify(
+            wrec, RAW.replace(_mark, '<a href="/machines/9999/review">'),
+            stage=_rf.STAGE_USER_AREA,
+            missing_boxes=["list-machinesreviews"])
+        t("★飛び先だけ変えた形は、逐語の層が捕まえる★"
+          "（作りも読む文字も変わらない）",
+          not okw3c and "手がかりの逐語" in ww3c)
+        # ★★読む文字の層だけを測る★★（2026-09-21・Codexの反例そのもの）
+        #   既存のタグの中へ文字だけを足す＝タグも class も深さも
+        #   文字の場所も変わらず、逐語も全部残る。
+        #   ★これを捕まえられるのは読む文字の指紋だけ★
+        okw3d, ww3d = verify(
+            wrec, RAW.replace("<td>北電子</td>",
+                              "<td>北電子 天井1200G引けました</td>"),
+            stage=_rf.STAGE_USER_AREA,
+            missing_boxes=["list-machinesreviews"])
+        t("★★既存の箱の中へ読者の文字だけ足された形を捕まえる★★"
+          "（★作りも逐語も変わらないので、ここでしか気づけない★）",
+          not okw3d and "読める文字が変わっています" in ww3d)
         # ★★未知の箱に読者の書き込みを足されたら効かせない★★
         #   （2026-09-21・台帳#662/#669。Codexが求めた回帰試験そのもの）
         #   ★直す前はここが通っていた★＝新しい箱は「欠けた必須の箱」に

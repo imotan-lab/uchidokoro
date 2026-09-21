@@ -32,14 +32,14 @@
   "scripts/new_machine_watch.py": "b354fe5344243db9a6f14afa5920025b0fd93a52768062caaad4e8643967d0b4",
   "scripts/page_corpus.py": "7fada297f9c552f337ef4736481f46fbb019865c0f59416914f363cf61607072",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
-  "scripts/page_reading.py": "005ced3b8b25c85ee33d399d9f0196469d7ec23950095be1c3937c0d6d851362",
+  "scripts/page_reading.py": "542179db5e3e77aec1242550b5d1a74449ba56ebf64c378b2f10a1713c216f4d",
   "scripts/pending_machines.py": "00b3371b6372c6efd9a3e8e431eb6565c98e8cb3f1f64f1ee9855b24876d18ff",
   "scripts/read_failure.py": "be1280280387ea03708afdd281a97289c311a9aa70ef53a62dffd438de9b96fe",
   "scripts/selftest_log_guard.py": "0de496b6ac4774489492a6c66f47c80ca3c546aa30f77209bbd0c69fee8b3aab",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "706cbbd437ba491995e233e9758a73f7672e27a47021cfc1274f0c2e9d9f79ed",
   "scripts/spec_lookup.py": "8c165305e7fb540dc7c517b5d40101b0b2cf8a216255ca3099b607c3b9d58bfe",
-  "scripts/user_area.py": "a1143b749a8de1aad3dc2871f454340e50ccf3bc08a253d03679da6bb33d523a"
+  "scripts/user_area.py": "4900059ce6c370a5688ea937540a14eb71d8934bbc089b277b371498bdc0d480"
  },
  "imports": {
   "scripts/add_machine_run.py": [

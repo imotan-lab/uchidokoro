@@ -185,15 +185,17 @@ def parse_release(release: str):
 def has_unconfirmed(slug: str, detail: dict | None = None) -> bool:
     """★その記事に、まだ中身の無い欄が残っているか★（2026-09-21・台帳#702）
 
-    ★言い方の正本は記事を作る側★（`build_new_article`）＝
-    ここに文言を書き写すと、向こうが変えたときに黙って食い違う。
+    ★★判定は `_pending_check` の1か所★★（2026-09-21・Codexの指摘）＝
+    ★直す前は決まり文句を3つ書き写していた★。ところが記事を作る側は
+    表のセルに `"確認中"` とも書くし、`_units` は
+    「値が確認できていないため掲載していません」「出典で食い違い」なども
+    ★あとで埋まってよい欄★として扱う。
+    ＝その形だけが残った機種は、★育成から永久に外れる★。
+    ★実測（2026-09-21・16機種）★＝本物の判定へ替えても答えは全部同じ。
+
+    ★空文字は数えない★＝`_pending_check("")` は True を返すので、
+    そのまま数えると**どの記事も永久に空欄あり**になる。
     """
-    import build_new_article as _ba_u
-    marks = [x for x in (
-        getattr(_ba_u, "PENDING_ITEM", ""),
-        getattr(_ba_u, "PENDING_TEXT", ""),
-        getattr(_ba_u, "PENDING_TEXT_OLD", ""),
-    ) if x]
     if detail is None:
         path = os.path.join(DETAILS, f"{slug}.json")
         if not os.path.exists(path):
@@ -205,7 +207,7 @@ def has_unconfirmed(slug: str, detail: dict | None = None) -> bool:
 
     def _walk(o) -> bool:
         if isinstance(o, str):
-            return any(mk in o for mk in marks)
+            return bool(o.strip()) and _pending_check(o)
         if isinstance(o, dict):
             return any(_walk(v) for v in o.values())
         if isinstance(o, (list, tuple)):
@@ -2030,9 +2032,27 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     #   ★材料は増えるだけ（条件5）なので普通は起きない★が、
     #   起きたときに気づけないのがいちばん悪いので、書く前に止める。
     if out["was"] == "AUTO_INDEXABLE" and out["now"] != "AUTO_INDEXABLE":
-        out["problems"].append(
-            f"作り直すと検索から外れます（{out['was']} → {out['now']}）"
-            "／★載っている記事を降ろさない★")
+        _dwhy = (f"作り直すと検索から外れます（{out['was']} → {out['now']}）"
+                 "／★載っている記事を降ろさない★")
+        out["problems"].append(_dwhy)
+        # ★★止めるだけで終わらせない★★（2026-09-21・Codexの指摘）
+        #   ★直す前はここで戻るだけ★だった＝毎日おなじ理由で止まり続け、
+        #   ★2AIにも台帳にも届かなかった★（`grow_result` を通らないため）。
+        #   ★通す道は、内容が消える更新とまったく同じ★
+        #   ＝1〜2回目は2AIに聞き、3回目で人へ報告する。
+        _act = grow_result(slug, False, _dwhy[:900])
+        if _act["do"] == "ask":
+            out.setdefault("questions", []).append({
+                "text": (_dwhy + "／★どちらが正しいか決めてください★"
+                         "＝いまの区分: " + str(out["was"])
+                         + " ／ 作り直すと: " + str(out["now"])),
+                "kind": "grow_demote", "slug": slug, "round": _act["round"]})
+            out.setdefault("notes", []).append(
+                f"2AIに聞きます（{_act['round']}回目・台帳へは積みません）")
+        else:
+            ledger_once(slug,
+                        "作り直すと検索から外れるので書けません（育てる処理を止めています）",
+                        _act["detail"], round_=_act["round"])
         return out
     # ★★うまく育ったので、行き詰まりの回数を0に戻す★★（2026-08-27）
     #   ★昔の失敗をいつまでも数えない★（数え続けると、次に1回詰まっただけで
@@ -2758,10 +2778,17 @@ def selftest() -> int:
     t("　空の欄が無ければ False",
       has_unconfirmed("x", {"sections": [{"body": ["天井は1200Gです。"]}]})
       is False)
-    t("　言い方は書き写さず、記事を作る側から取る"
-      "（向こうが変えたら黙って食い違うため）",
-      "PENDING_ITEM" in inspect.getsource(has_unconfirmed)
+    t("★言い方を書き写さず、本物の判定を通す★"
+      "（★書き写すと、表のセルの『確認中』だけが残った機種が"
+      "永久に育成から外れる★＝Codexの指摘）",
+      "_pending_check" in inspect.getsource(has_unconfirmed)
+      and "PENDING_ITEM" not in inspect.getsource(has_unconfirmed)
       and "未確認（" not in inspect.getsource(has_unconfirmed))
+    t("　表のセルが「確認中」だけでも空欄とみなす",
+      has_unconfirmed("x", {"sections": [{"tables": [
+          {"headers": ["名前", "値"], "rows": [["CZ", "確認中"]]}]}]}) is True)
+    t("　空文字は数えない（数えるとどの記事も永久に空欄ありになる）",
+      has_unconfirmed("x", {"sections": [{"body": ["", "  "]}]}) is False)
     # ★区分ごとの線★（`grow_scope_problem` が唯一の判定箇所）
     t("　まだ載っていない機種は対象",
       grow_scope_problem(_st_row()) == "")
@@ -2788,6 +2815,10 @@ def selftest() -> int:
     t("★★載っている記事を降ろさない★★（作り直すと外れるなら書かない）",
       'out["was"] == "AUTO_INDEXABLE" and out["now"] != "AUTO_INDEXABLE"'
       in inspect.getsource(plan_one))
+    t("★降格で止まったときも、2AI→台帳の道へ乗せる★"
+      "（★直す前は戻るだけで、毎日おなじ理由で止まり続けた★）",
+      '"kind": "grow_demote"' in inspect.getsource(plan_one)
+      and inspect.getsource(plan_one).count("grow_result(slug, False") >= 2)
 
     # ★卒業した形は「判定書の indexable を True に書き換える」では作れない★
     #   ＝`machine_class` は claims から計算し直して突き合わせるので、
