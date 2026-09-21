@@ -769,6 +769,34 @@ MUTATIONS = [
         "after": "    _ao = append_only_problem(changed, unattended=True)",
         "run": ["scripts/pre_push_check.py"],
     },
+    # ─── 2026-09-21・「点検済み」の日付を機械で止める（運営者の指示）───
+    {
+        "why": "★Codexを待っている件があっても「点検済み」を押す"
+               "（★その機種が直近10日ぶん順番から外れる＝"
+               "拾おうとした台が忘れられる★）★",
+        "file": "scripts/mark_reviewed.py",
+        "before": "        if str(r.get(\"state\") or \"\") in FINISHED:",
+        "after": "        if True:",
+        "run": ["scripts/mark_reviewed.py"],
+    },
+    {
+        "why": "★直しの記録を読めないときも「無い」として押す"
+               "（★記録が壊れた日に、静かに順番から外れる★）★",
+        "file": "scripts/mark_reviewed.py",
+        "before": "        return [f\"\u76f4\u3057\u306e\u8a18\u9332\u3092"
+                  "\u8aad\u3081\u307e\u305b\u3093"
+                  "\uff08{type(e).__name__}: {str(e)[:60]}\uff09\"]",
+        "after": "        return []",
+        "run": ["scripts/mark_reviewed.py"],
+    },
+    {
+        "why": "★書いた後に読み直さない"
+               "（★書けていなくても「点検済みにした」と言う★）★",
+        "file": "scripts/mark_reviewed.py",
+        "before": "    if str(got.get(slug) or \"\") != day:",
+        "after": "    if False:",
+        "run": ["scripts/mark_reviewed.py"],
+    },
     # ─── 2026-09-21・Codex179の指摘 ───
     {
         "why": "★免除の照合で、どのページを見たかを忘れる"
