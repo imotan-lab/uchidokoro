@@ -126,75 +126,6 @@
   }
  },
  {
-  "slug": "pw_10543",
-  "name": "Lパチスロ 彼女、お借りします",
-  "seo": {
-   "title": "Lパチスロ 彼女、お借りします スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [
-    "cz",
-    "gameplay",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "ceiling",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at:MAIN_AT",
-    "cz:レンカノチャレンジ",
-    "games_per_50",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-09-08",
-   "input_digest": "sha256:f047a5e4dc55710dbd62e1df185837f766da9262ce864821b860b39b8737b1f2"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-09-07",
-  "identity": {
-   "manufacturer_id": "sankyo",
-   "official_product_url": "https://p-town.dmm.com/machines/5065",
-   "announced_name": "Lパチスロ 彼女、お借りします",
-   "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5065 型式=Lレンタル彼女bK メーカー=SANKYO 導入=2026-09-07 確認日=2026-08-16",
-   "market_release_date": "2026-09-07",
-   "_model_code_sources": [
-    "chonborista.com",
-    "p-town.dmm.com",
-    "p-world.co.jp"
-   ],
-   "_legacy_evidence_ref": "pworld:10543 型式=Lレンタル彼女bK 検定=630270 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10543",
-   "regulatory_model_code": "Lレンタル彼女bK"
-  },
-  "checker": {
-   "coinRate": 31.0,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {}
-  }
- },
- {
   "slug": "tokyo_ghoul",
   "name": "L 東京喰種",
   "seo": {
@@ -451,6 +382,75 @@
   }
  },
  {
+  "slug": "pw_10543",
+  "name": "Lパチスロ 彼女、お借りします",
+  "seo": {
+   "title": "Lパチスロ 彼女、お借りします スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "cz",
+    "gameplay",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "ceiling",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "cz:レンカノチャレンジ",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-08",
+   "input_digest": "sha256:f047a5e4dc55710dbd62e1df185837f766da9262ce864821b860b39b8737b1f2"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-09-07",
+  "identity": {
+   "manufacturer_id": "sankyo",
+   "official_product_url": "https://p-town.dmm.com/machines/5065",
+   "announced_name": "Lパチスロ 彼女、お借りします",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5065 型式=Lレンタル彼女bK メーカー=SANKYO 導入=2026-09-07 確認日=2026-08-16",
+   "market_release_date": "2026-09-07",
+   "_model_code_sources": [
+    "chonborista.com",
+    "p-town.dmm.com",
+    "p-world.co.jp"
+   ],
+   "_legacy_evidence_ref": "pworld:10543 型式=Lレンタル彼女bK 検定=630270 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10543",
+   "regulatory_model_code": "Lレンタル彼女bK"
+  },
+  "checker": {
+   "coinRate": 31.0,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {}
+  }
+ },
+ {
   "slug": "sao2",
   "name": "スマスロ ソードアート・オンラインⅡ",
   "release_date": "2026-06-08",
@@ -549,35 +549,6 @@
    "rate55": "通常（CZ間）340G〜 / リセット120G〜",
    "rate50": "通常（CZ間）350G〜 / リセット120G〜",
    "rate45": "通常（CZ間）360G〜 / リセット120G〜"
-  }
- },
- {
-  "slug": "toaru_index2",
-  "name": "スマスロ とある魔術の禁書目録2",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "スマスロ とある魔術の禁書目録2 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（AT間1200G／CZ間800G+α）",
-  "aliases": [
-   "禁書目録2",
-   "とある魔術の禁書目録2",
-   "インデックス2",
-   "きんしょもくろく2",
-   "とある2",
-   "とあるまじゅつのきんしょもくろく2"
-  ],
-  "limit": null,
-  "original": {
-   "title": "とある魔術の禁書目録",
-   "kind": "ライトノベル",
-   "search": "とある魔術の禁書目録 小説"
-  },
-  "identity": {
-   "manufacturer_id": "fujishoji",
-   "regulatory_model_code": "Lとある魔術の禁書目録2FA",
-   "market_release_date": "2026-08-03"
   }
  },
  {
@@ -707,69 +678,32 @@
   }
  },
  {
-  "slug": "pw_10510",
-  "name": "スマスロ タコスロ",
+  "slug": "toaru_index2",
+  "name": "スマスロ とある魔術の禁書目録2",
+  "release_date": "2026-08-03",
   "seo": {
-   "title": "スマスロ タコスロ スペック・基本情報"
+   "title": "スマスロ とある魔術の禁書目録2 狙い目・天井・解析まとめ"
   },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "BONUS",
-   "ceiling_state": "NONE",
-   "confirmed_topics": [
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "cz",
-    "ceiling",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "bonus_prob",
-    "games_per_50",
-    "payout_range"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-09-10",
-   "input_digest": "sha256:45abfffa62972fc46dfbbfd52b630daa25351b82b5a23315a7f5e11f8c3b29f4"
+  "info": "スマスロAT",
+  "strategy": "算定中（AT間1200G／CZ間800G+α）",
+  "aliases": [
+   "禁書目録2",
+   "とある魔術の禁書目録2",
+   "インデックス2",
+   "きんしょもくろく2",
+   "とある2",
+   "とあるまじゅつのきんしょもくろく2"
+  ],
+  "limit": null,
+  "original": {
+   "title": "とある魔術の禁書目録",
+   "kind": "ライトノベル",
+   "search": "とある魔術の禁書目録 小説"
   },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-09-07",
   "identity": {
-   "manufacturer_id": "universal",
-   "official_product_url": "https://p-town.dmm.com/machines/5049",
-   "announced_name": "スマスロ タコスロ",
-   "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5049 型式=LB/タコスロBD メーカー=ユニバーサルブロス 導入=2026-09-07 確認日=2026-08-16",
-   "market_release_date": "2026-09-07",
-   "_legacy_evidence_ref": "pworld:10510 型式=LB／タコスロBD 検定=6S0085 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10510",
-   "regulatory_model_code": "LB/タコスロBD",
-   "_model_code_sources": [
-    "1geki.jp",
-    "p-world.co.jp"
-   ]
-  },
-  "checker": {
-   "coinRate": 36.6,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {}
+   "manufacturer_id": "fujishoji",
+   "regulatory_model_code": "Lとある魔術の禁書目録2FA",
+   "market_release_date": "2026-08-03"
   }
  },
  {
@@ -896,73 +830,6 @@
   }
  },
  {
-  "slug": "pw_10523",
-  "name": "モグモグ風林火山 大海戦の巻",
-  "seo": {
-   "title": "モグモグ風林火山 大海戦の巻 スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [
-    "ceiling",
-    "cz",
-    "gameplay"
-   ],
-   "pending_topics": [
-    "spec",
-    "setting",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at:MAIN_AT",
-    "ceiling:GAME:",
-    "cz:モグモグ大戦"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-09-08",
-   "input_digest": "sha256:a2bd2d1804cea4caeaceee48606097c20665fb6a94a2c8d9e8278912fd1b63a0"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-09-07",
-  "identity": {
-   "manufacturer_id": "net",
-   "official_product_url": "https://p-town.dmm.com/machines/5059",
-   "announced_name": "モグモグ風林火山 大海戦の巻",
-   "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5059 型式=Lモグモグ風林火山 大海戦の巻ZB メーカー=ネット 導入=2026-09-07 確認日=2026-08-16",
-   "market_release_date": "2026-09-07",
-   "_legacy_evidence_ref": "pworld:10523 型式=Lモグモグ風林火山 大海戦の巻ZB 検定=531225 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10523",
-   "regulatory_model_code": "Lモグモグ風林火山 大海戦の巻ZB",
-   "_model_code_sources": [
-    "p-town.dmm.com",
-    "p-world.co.jp"
-   ]
-  },
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "ceiling": 699
-   }
-  }
- },
- {
   "slug": "enen2",
   "name": "Lパチスロ炎炎ノ消防隊2",
   "seo": {
@@ -1009,47 +876,6 @@
    "kind": "漫画",
    "search": "炎炎ノ消防隊 漫画"
   }
- },
- {
-  "slug": "karakuri2",
-  "name": "Lからくりサーカス2",
-  "release_date": "2026-07-06",
-  "seo": {
-   "title": "Lからくりサーカス2 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価 液晶800G〜（当サイト目安）/ 5.6枚・現金は交換条件が悪いほど深く（個別ライン未確定）",
-  "aliases": [
-   "からくりサーカス2",
-   "カラサー2",
-   "カラクリサーカス2",
-   "からくり2",
-   "karakuri2",
-   "からくりサーカス2スマスロ"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常（液晶G数・等価基準）"
-    }
-   ],
-   "normal": {
-    "excellent": 1101,
-    "good": 800,
-    "caution": 800,
-    "note": "CZ間天井は液晶（モード別最深1200/800/100G）または実890Gの消化で天井到達（前兆経由）・AT間2500G。判定は液晶ゲーム数・等価交換の当サイト目安（暫定。5.6枚持ち・現金投資は交換条件が悪いほど深くなります）。天井到達時の当選先は滞在モードで異なり上位ATは非保証。リセット後は液晶天井が最深500Gに短縮（リセット狙い目は解析待ち）。"
-   },
-   "equivOnly": true
-  },
-  "limit": 1200,
-  "original": {
-   "title": "からくりサーカス",
-   "kind": "漫画",
-   "search": "からくりサーカス 漫画"
-  },
-  "tenjo_display": "液晶1200G/実890G"
  },
  {
   "slug": "monkeyv",
@@ -1383,25 +1209,6 @@
   }
  },
  {
-  "slug": "yajikita_mairu",
-  "name": "スマスロ やじきた道中記参る！",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "スマスロ やじきた道中記参る！ 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（天井は999まいる／6スルー）",
-  "aliases": [
-   "やじきた道中記参る",
-   "やじきた",
-   "やじきた道中記",
-   "やじきた参る",
-   "やじきたどうちゅうき",
-   "参る"
-  ],
-  "limit": null
- },
- {
   "slug": "shinuchi_yoshimune",
   "name": "真打 吉宗",
   "seo": {
@@ -1528,25 +1335,102 @@
   }
  },
  {
-  "slug": "sengoku_collection6",
-  "name": "L戦国コレクション6",
+  "slug": "karakuri2",
+  "name": "Lからくりサーカス2",
   "release_date": "2026-07-06",
   "seo": {
-   "title": "L戦国コレクション6 天井・狙い目・解析まとめ"
+   "title": "Lからくりサーカス2 狙い目・天井・解析まとめ"
   },
   "info": "スマスロAT",
-  "strategy": "チェッカー基準 通常720G〜",
+  "strategy": "等価 液晶800G〜（当サイト目安）/ 5.6枚・現金は交換条件が悪いほど深く（個別ライン未確定）",
   "aliases": [
-   "戦国コレクション6",
-   "戦コレ6",
-   "せんごくコレクション6",
-   "せんこれ6",
-   "sengoku_collection6",
-   "sencolle6",
-   "L戦国コレクション6",
-   "戦国コレクション6スマスロ"
+   "からくりサーカス2",
+   "カラサー2",
+   "カラクリサーカス2",
+   "からくり2",
+   "karakuri2",
+   "からくりサーカス2スマスロ"
   ],
   "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常（液晶G数・等価基準）"
+    }
+   ],
+   "normal": {
+    "excellent": 1101,
+    "good": 800,
+    "caution": 800,
+    "note": "CZ間天井は液晶（モード別最深1200/800/100G）または実890Gの消化で天井到達（前兆経由）・AT間2500G。判定は液晶ゲーム数・等価交換の当サイト目安（暫定。5.6枚持ち・現金投資は交換条件が悪いほど深くなります）。天井到達時の当選先は滞在モードで異なり上位ATは非保証。リセット後は液晶天井が最深500Gに短縮（リセット狙い目は解析待ち）。"
+   },
+   "equivOnly": true
+  },
+  "limit": 1200,
+  "original": {
+   "title": "からくりサーカス",
+   "kind": "漫画",
+   "search": "からくりサーカス 漫画"
+  },
+  "tenjo_display": "液晶1200G/実890G"
+ },
+ {
+  "slug": "pw_10510",
+  "name": "スマスロ タコスロ",
+  "seo": {
+   "title": "スマスロ タコスロ スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "BONUS",
+   "ceiling_state": "NONE",
+   "confirmed_topics": [
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "bonus_prob",
+    "games_per_50",
+    "payout_range"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-10",
+   "input_digest": "sha256:45abfffa62972fc46dfbbfd52b630daa25351b82b5a23315a7f5e11f8c3b29f4"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-09-07",
+  "identity": {
+   "manufacturer_id": "universal",
+   "official_product_url": "https://p-town.dmm.com/machines/5049",
+   "announced_name": "スマスロ タコスロ",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5049 型式=LB/タコスロBD メーカー=ユニバーサルブロス 導入=2026-09-07 確認日=2026-08-16",
+   "market_release_date": "2026-09-07",
+   "_legacy_evidence_ref": "pworld:10510 型式=LB／タコスロBD 検定=6S0085 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10510",
+   "regulatory_model_code": "LB/タコスロBD",
+   "_model_code_sources": [
+    "1geki.jp",
+    "p-world.co.jp"
+   ]
+  },
+  "checker": {
+   "coinRate": 36.6,
    "unit": "G",
    "modes": [
     {
@@ -1554,41 +1438,27 @@
      "label": "通常"
     }
    ],
-   "normal": {
-    "excellent": 850,
-    "good": 720,
-    "caution": 580,
-    "note": "G数天井999G+αと周期天井最大6周期の複合型。リセット後は周期天井が最大3周期に短縮（リセット狙い目ラインは解析待ち）。"
-   }
-  },
-  "limit": 999,
-  "original": {
-   "title": "戦国コレクション",
-   "kind": "ゲーム",
-   "search": "戦国コレクション ゲーム"
+   "normal": {}
   }
  },
  {
-  "slug": "world_dai_star",
-  "name": "スマスロ ワールドダイスター",
+  "slug": "yajikita_mairu",
+  "name": "スマスロ やじきた道中記参る！",
   "release_date": "2026-08-03",
   "seo": {
-   "title": "スマスロ ワールドダイスター 狙い目・天井・解析まとめ"
+   "title": "スマスロ やじきた道中記参る！ 狙い目・天井・解析まとめ"
   },
   "info": "スマスロAT",
-  "strategy": "算定中（天井は通常時999G+α）",
+  "strategy": "算定中（天井は999まいる／6スルー）",
   "aliases": [
-   "ワールドダイスター",
-   "ワルスタ",
-   "わーるどだいすたー",
-   "ワールドダイスタァ"
+   "やじきた道中記参る",
+   "やじきた",
+   "やじきた道中記",
+   "やじきた参る",
+   "やじきたどうちゅうき",
+   "参る"
   ],
-  "limit": null,
-  "original": {
-   "title": "ワールドダイスター",
-   "kind": "アニメ",
-   "search": "ワールドダイスター"
-  }
+  "limit": null
  },
  {
   "slug": "valvrave2",
@@ -2128,10 +1998,10 @@
   }
  },
  {
-  "slug": "pw_10501",
-  "name": "パチスロ見える子ちゃん",
+  "slug": "pw_10523",
+  "name": "モグモグ風林火山 大海戦の巻",
   "seo": {
-   "title": "パチスロ見える子ちゃん スペック・基本情報"
+   "title": "モグモグ風林火山 大海戦の巻 スペック・基本情報"
   },
   "info": "",
   "strategy": "",
@@ -2141,14 +2011,14 @@
    "schema_version": "page-decision/v2",
    "indexable": true,
    "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
+   "ceiling_state": "PRESENT",
    "confirmed_topics": [
+    "ceiling",
     "cz",
-    "gameplay",
-    "spec"
+    "gameplay"
    ],
    "pending_topics": [
-    "ceiling",
+    "spec",
     "setting",
     "strategy",
     "reset"
@@ -2156,30 +2026,42 @@
    "reason_codes": [],
    "claims": [
     "at:MAIN_AT",
-    "cz:恐怖トノ遭遇",
-    "payout_range"
+    "ceiling:GAME:",
+    "cz:モグモグ大戦"
    ],
    "policy_mode": "normal",
    "decided_at": "2026-09-08",
-   "input_digest": "sha256:571b831776a1278733e8691d8eb1405f3e462d9594423b1b7b7b51dc31efe0bd"
+   "input_digest": "sha256:a2bd2d1804cea4caeaceee48606097c20665fb6a94a2c8d9e8278912fd1b63a0"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
   "identity": {
-   "manufacturer_id": "pioneer",
-   "official_product_url": "https://p-town.dmm.com/machines/5042",
-   "announced_name": "パチスロ見える子ちゃん",
+   "manufacturer_id": "net",
+   "official_product_url": "https://p-town.dmm.com/machines/5059",
+   "announced_name": "モグモグ風林火山 大海戦の巻",
    "identity_tier": "CATALOG_CODE_MATCHED",
    "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5042 型式=L見える子ちゃんSC メーカー=パイオニア 導入=2026-09-07 確認日=2026-08-16",
+   "identity_evidence_ref": "dmm:5059 型式=Lモグモグ風林火山 大海戦の巻ZB メーカー=ネット 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
-   "_legacy_evidence_ref": "pworld:10501 型式=L見える子ちゃんSC 検定=6S0265 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10501",
-   "regulatory_model_code": "L見える子ちゃんSC",
+   "_legacy_evidence_ref": "pworld:10523 型式=Lモグモグ風林火山 大海戦の巻ZB 検定=531225 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10523",
+   "regulatory_model_code": "Lモグモグ風林火山 大海戦の巻ZB",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
    ]
+  },
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "ceiling": 699
+   }
   }
  },
  {
@@ -2303,6 +2185,172 @@
    "title": "マギアレコード",
    "kind": "ゲーム",
    "search": "マギアレコード"
+  }
+ },
+ {
+  "slug": "sengoku_collection6",
+  "name": "L戦国コレクション6",
+  "release_date": "2026-07-06",
+  "seo": {
+   "title": "L戦国コレクション6 天井・狙い目・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 通常720G〜",
+  "aliases": [
+   "戦国コレクション6",
+   "戦コレ6",
+   "せんごくコレクション6",
+   "せんこれ6",
+   "sengoku_collection6",
+   "sencolle6",
+   "L戦国コレクション6",
+   "戦国コレクション6スマスロ"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "excellent": 850,
+    "good": 720,
+    "caution": 580,
+    "note": "G数天井999G+αと周期天井最大6周期の複合型。リセット後は周期天井が最大3周期に短縮（リセット狙い目ラインは解析待ち）。"
+   }
+  },
+  "limit": 999,
+  "original": {
+   "title": "戦国コレクション",
+   "kind": "ゲーム",
+   "search": "戦国コレクション ゲーム"
+  }
+ },
+ {
+  "slug": "world_dai_star",
+  "name": "スマスロ ワールドダイスター",
+  "release_date": "2026-08-03",
+  "seo": {
+   "title": "スマスロ ワールドダイスター 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "算定中（天井は通常時999G+α）",
+  "aliases": [
+   "ワールドダイスター",
+   "ワルスタ",
+   "わーるどだいすたー",
+   "ワールドダイスタァ"
+  ],
+  "limit": null,
+  "original": {
+   "title": "ワールドダイスター",
+   "kind": "アニメ",
+   "search": "ワールドダイスター"
+  }
+ },
+ {
+  "slug": "milliongod_kiseki",
+  "name": "スマスロ ミリオンゴッド-神々の軌跡-",
+  "seo": {
+   "title": "スマスロ ミリオンゴッド-神々の軌跡- 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 通常670G〜 / リセット380G〜",
+  "aliases": [
+   "ミリオンゴッド",
+   "神々の軌跡",
+   "みりおんごっど",
+   "ゴッド",
+   "god",
+   "milliongod"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 1480,
+    "good": 670,
+    "caution": 670,
+    "note": "GG間天井1480G。"
+   },
+   "reset": {
+    "excellent": 1480,
+    "good": 380,
+    "caution": 380,
+    "note": "設定変更後は510G / 1000G / 1480G から抽選（15.2% / 20.3% / 64.5%）。"
+   }
+  },
+  "limit": 1480,
+  "original": {
+   "title": "ミリオンゴッド",
+   "kind": "シリーズ",
+   "search": "ミリオンゴッド"
+  }
+ },
+ {
+  "slug": "pw_10501",
+  "name": "パチスロ見える子ちゃん",
+  "seo": {
+   "title": "パチスロ見える子ちゃん スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "cz",
+    "gameplay",
+    "spec"
+   ],
+   "pending_topics": [
+    "ceiling",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "cz:恐怖トノ遭遇",
+    "payout_range"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-08",
+   "input_digest": "sha256:571b831776a1278733e8691d8eb1405f3e462d9594423b1b7b7b51dc31efe0bd"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-09-07",
+  "identity": {
+   "manufacturer_id": "pioneer",
+   "official_product_url": "https://p-town.dmm.com/machines/5042",
+   "announced_name": "パチスロ見える子ちゃん",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5042 型式=L見える子ちゃんSC メーカー=パイオニア 導入=2026-09-07 確認日=2026-08-16",
+   "market_release_date": "2026-09-07",
+   "_legacy_evidence_ref": "pworld:10501 型式=L見える子ちゃんSC 検定=6S0265 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10501",
+   "regulatory_model_code": "L見える子ちゃんSC",
+   "_model_code_sources": [
+    "p-town.dmm.com",
+    "p-world.co.jp"
+   ]
   }
  },
  {
@@ -3146,54 +3194,6 @@
    "rate55": "あべし間840あべし〜 / リセット625あべし〜",
    "rate50": "あべし間950あべし〜 / リセット625あべし〜",
    "rate45": "あべし間1000あべし〜 / リセット625あべし〜"
-  }
- },
- {
-  "slug": "milliongod_kiseki",
-  "name": "スマスロ ミリオンゴッド-神々の軌跡-",
-  "seo": {
-   "title": "スマスロ ミリオンゴッド-神々の軌跡- 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "チェッカー基準 通常670G〜 / リセット380G〜",
-  "aliases": [
-   "ミリオンゴッド",
-   "神々の軌跡",
-   "みりおんごっど",
-   "ゴッド",
-   "god",
-   "milliongod"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 1480,
-    "good": 670,
-    "caution": 670,
-    "note": "GG間天井1480G。"
-   },
-   "reset": {
-    "excellent": 1480,
-    "good": 380,
-    "caution": 380,
-    "note": "設定変更後は510G / 1000G / 1480G から抽選（15.2% / 20.3% / 64.5%）。"
-   }
-  },
-  "limit": 1480,
-  "original": {
-   "title": "ミリオンゴッド",
-   "kind": "シリーズ",
-   "search": "ミリオンゴッド"
   }
  },
  {
