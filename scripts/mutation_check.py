@@ -769,6 +769,41 @@ MUTATIONS = [
         "after": "    _ao = append_only_problem(changed, unattended=True)",
         "run": ["scripts/pre_push_check.py"],
     },
+    # ─── 2026-09-21・Codex179の指摘 ───
+    {
+        "why": "★免除の照合で、どのページを見たかを忘れる"
+               "（★掃除の決まりごとを引けず、DMMでは免除が"
+               "一度も保存できない＝実際に再現した★）★",
+        "file": "scripts/page_reading.py",
+        "before": "        _url = str(rec.get(\"url\") or \"\")",
+        "after": "        _url = \"\"",
+        "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★控えにページのURLを残さない"
+               "（★あとから同じ姿を作り直せない★）★",
+        "file": "scripts/page_reading.py",
+        "before": "           \"url\": str(url or \"\"),",
+        "after": "           \"_url_unused\": str(url or \"\"),",
+        "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★「線を引かない」の照合を、項目名だけで見る"
+               "（★同じ名前のまま中身が直っても永久に聞き直さない★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "    if str(rec.get(\"confirmed_sha256\") or \"\") != now[0]:",
+        "after": "    if sorted(rec.get(\"confirmed_fields\") or []) != now[1]:",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★確かめてある値を読めないときも、0件として扱う"
+               "（★控えが消えた日に、質問が止まったまま気づけない★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        return None                        "
+                  "# ★読めない★＝免除を効かせない",
+        "after": "        return (\"\", [])",
+        "run": ["scripts/checker_verdict.py"],
+    },
     # ─── 2026-09-21・Codex178の指摘 ───
     {
         "why": "★免除の指紋を、生HTML全体で取る"
@@ -1427,7 +1462,7 @@ MUTATIONS = [
         "why": "★作りの指紋を持たない控えも受け取る"
                "（★箱を足されても失効しない控えができる★）★",
         "file": "scripts/page_reading.py",
-        "before": ('        if not str(rec.get("structure_sha256") '
+        "before": ('        if not str(rec.get("waiver_structure_sha256") '
                    'or "").strip():'),
         "after": "        if False:",
         "run": ["scripts/page_reading.py"],

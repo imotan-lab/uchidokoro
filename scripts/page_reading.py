@@ -275,12 +275,15 @@ def _validate(rec) -> list:
             ng.append("そう判断した手がかりの逐語がありません")
         # ★★作りの指紋を必ず持つ★★（2026-09-21・台帳#662/#669）
         #   ★無いものは受け取らない★＝箱が足されても失効しない控えになる。
-        if not str(rec.get("structure_sha256") or "").strip():
+        if not str(rec.get("waiver_structure_sha256") or "").strip():
             ng.append("ページの作りの指紋がありません"
                       "（未知の箱を足されても気づけません）")
-        if not str(rec.get("text_sha256") or "").strip():
+        if not str(rec.get("waiver_text_sha256") or "").strip():
             ng.append("ページの読める文字の指紋がありません"
                       "（既存の箱の中へ読者の文字を足されても気づけません）")
+        if not str(rec.get("url") or "").strip():
+            ng.append("どのページを見て決めたかがありません"
+                      "（掃除の決まりごとを引けず、同じ姿を作り直せません）")
     return ng
 
 
@@ -362,12 +365,16 @@ def verify(rec: dict, raw: str, *, stage: str, missing_boxes=None,
         # ★★読む文字の指紋も見る★★＝既存の汎用の `<p>` の中へ
         #   読者の文字だけを足されると、タグも class も深さも変わらないので
         #   作りだけでは気づけない（Codexが挙げた反例）。
-        _want_sig = str(rec.get("structure_sha256") or "")
-        _want_txt = str(rec.get("text_sha256") or "")
+        _want_sig = str(rec.get("waiver_structure_sha256") or "")
+        _want_txt = str(rec.get("waiver_text_sha256") or "")
+        _url = str(rec.get("url") or "")
+        if not _url:
+            # ★どのページを見て決めたか分からなければ通さない★＝
+            #   掃除の決まりごとを引けないので、同じ姿を作り直せない。
+            return False, "控えにページのURLがありません（同じ姿を作り直せません）"
         try:
             import user_area as _ua_sig
-            _now = _ua_sig.waiver_fingerprints(str(raw or ""),
-                                               str(rec.get("url") or ""))
+            _now = _ua_sig.waiver_fingerprints(str(raw or ""), _url)
         except Exception as e:                               # noqa: BLE001
             # ★数え直せないなら通さない★（同じだと言えない）
             return False, f"いまのページの作りを数えられません（{type(e).__name__}）"
@@ -401,6 +408,12 @@ def record(slug: str, url: str, stage: str, kind: str, *, raw: str,
            "agreed_by": list(agreed_by or []),
            "why": str(why or "").strip(),
            "decided_at": str(decided_at or ""),
+           # ★★どのページを見て決めたか★★（2026-09-21・Codexの指摘）
+           #   ★直す前は控えに入っていなかった★ので、照合のときに
+           #   空のURLで掃除の決まりごとを引き、★DMMでは `drop` が
+           #   1つも当たらなかった★＝免除は保存の直前の自己照合で必ず落ち、
+           #   **一度も使えなかった**（実際に再現した）。
+           "url": str(url or ""),
            "raw_sha256": _rf.sha256(raw),
            # ★「読む文字」の指紋★（UNUSABLE の照合はこちらを使う）
            "text_sha256": _text_sha(raw),
@@ -416,7 +429,12 @@ def record(slug: str, url: str, stage: str, kind: str, *, raw: str,
         #   ★揺れる値は入らない★（タグ名・class・id しか見ない）ので、
         #   取り直しでは失効しない。★箱が足されれば必ず失効する★。
         import user_area as _ua_rec
-        rec.update(_ua_rec.waiver_fingerprints(str(raw or ""), str(url or "")))
+        # ★★名前を分ける★★（2026-09-21）＝`text_sha256` は「読めない」の
+        #   控えが**生の本文**の指紋として使っている鍵。同じ名前に
+        #   掃除後の指紋を入れると、★同じ鍵が型によって別の意味★になる。
+        _wf = _ua_rec.waiver_fingerprints(str(raw or ""), str(url or ""))
+        rec["waiver_structure_sha256"] = _wf["structure_sha256"]
+        rec["waiver_text_sha256"] = _wf["text_sha256"]
     bad = validate(rec)
     if bad:
         raise ReadingError("この記録は契約を満たしません（保存しませんでした）: "
@@ -597,26 +615,42 @@ def selftest() -> int:                                       # noqa: C901
           any("表として読めません" in x for x in validate(_notable)))
 
         # ── 投稿欄の免除 ──────────────────────────
-        _w = record("dmm_5090", "https://example.invalid/5090",
-                    _rf.STAGE_USER_AREA, WAIVE_MISSING_USER_BOX, raw=RAW,
-                    failed_contract="件数が1件以上なら投稿欄の一覧の箱がある",
-                    agreed_by=["claude", "codex"],
-                    why="件数の表示はあるが本文はこのHTMLに無い",
-                    decided_at="2026-09-10",
-                    waived_boxes=["list-machinesreviews"],
+        def _rec_ok(**kw):
+            """★断られても死なない★＝例外は「試験が❌」として数える
+            （罠⑤＝落ちると『ただ落ちただけ』に化けて守りの証拠にならない）。
+            """
+            try:
+                return record(**kw)
+            except Exception as e:                           # noqa: BLE001
+                return {"state": "★断られました★ " + str(e)[:80]}
+
+        _w = _rec_ok(slug="dmm_5090", url="https://example.invalid/5090",
+                     stage=_rf.STAGE_USER_AREA, kind=WAIVE_MISSING_USER_BOX,
+                     raw=RAW,
+                     failed_contract="件数が1件以上なら投稿欄の一覧の箱がある",
+                     agreed_by=["claude", "codex"],
+                     why="件数の表示はあるが本文はこのHTMLに無い",
+                     decided_at="2026-09-10",
+                     waived_boxes=["list-machinesreviews"],
                     # ★逐語は「印つきの場所」も1件入れる★＝
                     #   作り（タグ・class・id・深さ）にも読む文字にも
                     #   出ない属性の値が変わった形を、逐語の層だけで捕まえる。
-                    quotes=["ユーザー評価（2件）",
-                            '<a href="/machines/5090/review">'])
+                     quotes=["ユーザー評価（2件）",
+                             '<a href="/machines/5090/review">'])
         t("★無い箱の免除を控えられる★", _w["state"] == "RECORDED")
         wrec = find("https://example.invalid/5090",
                     _rf.STAGE_USER_AREA, "件数が1件以上なら投稿欄の一覧の箱がある")
-        okw, _ = verify(wrec, RAW, stage=_rf.STAGE_USER_AREA,
-                        missing_boxes=["list-machinesreviews"])
+        def _vw(rec, html, boxes=None):
+            """★控えが無くても死なない★（上と同じ理由）。"""
+            if not rec:
+                return False, "★控えがありません★"
+            return verify(rec, html, stage=_rf.STAGE_USER_AREA,
+                          missing_boxes=(["list-machinesreviews"]
+                                         if boxes is None else boxes))
+
+        okw, _ = _vw(wrec, RAW)
         t("　その箱が無いときだけ通る", okw)
-        okw2, ww2 = verify(wrec, RAW, stage=_rf.STAGE_USER_AREA,
-                           missing_boxes=["list-machinesreviews", "別の箱"])
+        okw2, ww2 = _vw(wrec, RAW, ["list-machinesreviews", "別の箱"])
         t("★★控えに無い箱まで免除しない★★"
           "（★1つ免除したら全部通る、にしない★）",
           not okw2 and "控えに無い箱" in ww2)
@@ -660,6 +694,76 @@ def selftest() -> int:                                       # noqa: C901
                               "<td>北電子 天井1200G引けました</td>"),
             stage=_rf.STAGE_USER_AREA,
             missing_boxes=["list-machinesreviews"])
+        # ★★★掃除の決まりごとを持つホストで通す★★★（2026-09-21・Codexの指摘）
+        #   ★直す前は `example.invalid`（決まりごと無し）だけ★だったので、
+        #   ★照合でURLが失われ `drop` が1つも当たらない★配線切れを
+        #   捕まえられなかった（実際にDMMでは免除が**一度も保存できなかった**）。
+        _dmm = "https://p-town.dmm.com/machines/5090"
+        _dmm_html = (
+            "<html><body>"
+            '<div class="machine-userreview"><p>ユーザー評価（2件）</p></div>'
+            '<div class="machine-shop-by-prefecture"><p>A店</p></div>'
+            '<div class="list-machineinformation">'
+            "<table><tr><th>メーカー名</th><td>ユニバーサル</td></tr>"
+            "<tr><th>導入開始日</th><td>2026年10月5日</td></tr></table></div>"
+            '<div class="wysiwyg-box">天井は1200Gです。</div>'
+            "</body></html>")
+        _dw = _rec_ok(slug="dmm_5090", url=_dmm, stage=_rf.STAGE_USER_AREA,
+                      kind=WAIVE_MISSING_USER_BOX,
+                      raw=_dmm_html,
+                      failed_contract="件数が1件以上なら投稿欄の一覧の箱がある",
+                      agreed_by=["claude", "codex"],
+                      why="件数の表示はあるが本文はこのHTMLに無い",
+                      decided_at="2026-09-21",
+                      waived_boxes=["list-machinesreviews"],
+                      quotes=["ユーザー評価（2件）"])
+        t("★★掃除の決まりごとを持つホストでも控えられる★★"
+          "（★直す前は保存の直前の自己照合で必ず落ちた★）",
+          _dw["state"] == "RECORDED")
+        _drec = find(_dmm, _rf.STAGE_USER_AREA,
+                     "件数が1件以上なら投稿欄の一覧の箱がある")
+        t("　控えにページのURLが入っている（掃除の決まりごとを引くため）",
+          str((_drec or {}).get("url") or "") == _dmm)
+
+        def _v(rec, html):
+            """★控えが無くても死なない★（上と同じ理由）。"""
+            if not rec:
+                return False, "★控えがありません★"
+            return verify(rec, html, stage=_rf.STAGE_USER_AREA,
+                          missing_boxes=["list-machinesreviews"])
+
+        _dok, _ = _v(_drec, _dmm_html)
+        t("　同じHTMLなら通る", _dok)
+        _dok2, _ = _v(
+            _drec, _dmm_html.replace("<p>A店</p>", "<p>A店</p><p>B店</p>"))
+        t("★★設置店が1軒増えても、2AIの判断は効いたまま★★"
+          "（★生HTMLで取ると、店が増えるたびに失効する★）",
+          _dok2)
+        _dok3, _dwhy3 = _v(
+            _drec,
+            _dmm_html.replace("</body>",
+                              '<div class="opinion-v2">'
+                              "<p>昨日は天井1200Gまでハマりました。"
+                              "朝一はリセットっぽい挙動でした。</p>"
+                              "</div></body>"))
+        t("★★未知の箱に書き込みが足されたら失効する★★",
+          not _dok3)
+        _dok4, _dwhy4 = _v(
+            _drec,
+            _dmm_html.replace("<td>ユニバーサル</td>",
+                              "<td>ユニバーサル 天井1200G引けました</td>"))
+        t("★★残る箱の中へ文字だけ足されても失効する★★",
+          not _dok4 and "読める文字が変わっています" in _dwhy4)
+        _nourl = {k: v for k, v in (_drec or {}).items() if k != "url"}
+        _dok5, _dwhy5 = _v(_nourl, _dmm_html)
+        t("★URLの無い控えは通さない★（同じ姿を作り直せない）"
+          "／★止めるのは契約の層★＝照合の側の同じ検査は受け皿"
+          "（契約を通ったものしか来ないので、普段は発火しない）",
+          not _dok5 and "どのページを見て決めたか" in _dwhy5)
+        t("　契約もURLを求める",
+          any("どのページを見て決めたか" in x
+              for x in validate({**(_drec or {}), "url": ""})))
+
         t("★★既存の箱の中へ読者の文字だけ足された形を捕まえる★★"
           "（★作りも逐語も変わらないので、ここでしか気づけない★）",
           not okw3d and "読める文字が変わっています" in ww3d)
@@ -677,9 +781,8 @@ def selftest() -> int:                                       # noqa: C901
           not okw3c and "作りが変わっています" in ww3c)
         t("　控えに作りの指紋が無ければ受け取らない",
           any("作りの指紋がありません" in x
-              for x in validate({**wrec, "structure_sha256": ""})))
-        okw4, ww4 = verify(wrec, RAW, stage=_rf.STAGE_USER_AREA,
-                           missing_boxes=[])
+              for x in validate({**wrec, "waiver_structure_sha256": ""})))
+        okw4, ww4 = _vw(wrec, RAW, [])
         t("　箱が見つかっているなら免除しない", not okw4)
         # ★使わないという答え★
         _u = record("dmm_9999", "https://example.invalid/9", _rf.STAGE_USER_AREA,

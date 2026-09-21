@@ -65,25 +65,39 @@ NO_LINE_STORE = _lp.doc("checker_no_line.json")
 NO_LINE = "NO_LINE"
 
 
-def _confirmed_fields(slug: str) -> list:
-    """★その機種について、いま確かめてある項目の名前★（並べ替え済み）
+def _confirmed_state(slug: str):
+    """★その機種について、いま確かめてある材料の姿★
 
-    ★何に使うか★＝「線を引かない」と決めた時点の顔ぶれを控えておき、
-    ★材料が増えたら、もう一度2AIに聞く★ため。
-    ★見るのは名前だけ★＝中身が足りるかどうかは2AIの判断なので機械は決めない。
-    ★読めないときは空★＝空は「増えていない」ではなく
-    控えた顔ぶれと食い違うので、もう一度聞く側に倒れる。
+    返すのは `(指紋, 項目名の一覧)` ／ ★読めないときは `None`★。
+
+    ★★名前だけでは足りない★★（2026-09-21・Codexの指摘）＝
+    同じ項目名のまま**中身だけ**直せる（`confirmed_values.record()` は
+    同名を上書きできる）。名前の一覧だけを見ていると、
+    ★値や根拠が良くなっても「線を引かない」が永久に効いたまま★になる。
+    ＝**材料が揃ったのに、その機種だけ狙い目が空のまま**。
+    そこで**中身そのものの指紋**で比べる。
+
+    ★★「読めない」と「0件」を分ける★★（同・Codexの指摘）＝
+    どちらも空で返していたので、★控えが消えた日に
+    「0件で記録した免除」と一致して質問が止まった★。
+    読めないときは `None` を返し、免除は必ず無効にする。
     """
     try:
         import confirmed_values as _cv_f
-        got = _cv_f.load(strict=False) or {}
+        got = _cv_f.load(strict=False)
     except Exception:                                        # noqa: BLE001
-        return []
-    rows = got.get("machines") if isinstance(got, dict) else None
-    per = (rows or {}).get(slug) if isinstance(rows, dict) else None
-    if not isinstance(per, dict):
-        return []
-    return sorted(str(k) for k in per)
+        return None                        # ★読めない★＝免除を効かせない
+    if not isinstance(got, dict):
+        return None
+    rows = got.get("machines")
+    if not isinstance(rows, dict):
+        return None                        # ★入れ物が壊れている★
+    per = rows.get(slug)
+    per = per if isinstance(per, dict) else {}
+    import hashlib as _hl_cf
+    blob = json.dumps(per, ensure_ascii=False, sort_keys=True)
+    return (_hl_cf.sha256(blob.encode("utf-8")).hexdigest(),
+            sorted(str(k) for k in per))
 
 
 def _no_line_all() -> dict:
@@ -98,12 +112,15 @@ def _no_line_all() -> dict:
 
 
 def no_line_record(slug: str) -> dict | None:
-    """★その機種は「線を引かない」と決めてあるか★（★材料が増えていたら無効★）"""
+    """★その機種は「線を引かない」と決めてあるか★（★材料が変わっていたら無効★）"""
     rec = _no_line_all().get(str(slug or ""))
     if not isinstance(rec, dict):
         return None
-    if list(rec.get("confirmed_fields") or []) != _confirmed_fields(slug):
-        return None                        # ★材料の顔ぶれが変わった＝もう一度聞く★
+    now = _confirmed_state(slug)
+    if now is None:
+        return None                        # ★控えを読めない＝もう一度聞く★
+    if str(rec.get("confirmed_sha256") or "") != now[0]:
+        return None                        # ★材料が変わった＝もう一度聞く★
     return rec
 
 
@@ -125,14 +142,22 @@ def no_line_problems(dec, ms=None) -> list:
 def record_no_line(dec: dict) -> int:
     """★「線を引かない」を控える★（全か無か・書いたら読み直す）"""
     slug = str(dec.get("slug") or "")
+    state = _confirmed_state(slug)
+    if state is None:
+        print("★書きません★: 確かめてある値の控えを読めません"
+              "（読めないまま控えると、控えが壊れた日に質問が止まります）")
+        return 1
     rows = _no_line_all()
     rows[slug] = {
         "decision": NO_LINE,
         "why": str(dec.get("why") or "").strip(),
         "judges": sorted({str(x).lower() for x in (dec.get("judges") or [])}),
         "decided_at": str(dec.get("decided_at") or ""),
+        # ★待っているもの★＝2AIが読むための覚え書き（★判定には使わない★）
         "waiting_for": [str(x) for x in (dec.get("waiting_for") or [])],
-        "confirmed_fields": _confirmed_fields(slug),
+        "confirmed_sha256": state[0],
+        # ★項目名は読む人のための添え物★（判定は上の指紋だけで決める）
+        "confirmed_fields": state[1],
     }
     tmp = NO_LINE_STORE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
@@ -516,10 +541,12 @@ def apply_decision(path: str, dry_run: bool = False) -> int:
                 print("  ・" + x)
             return 1
         if dry_run:
+            _st = _confirmed_state(str(dec.get("slug") or ""))
+            if _st is None:
+                print("★書きません★: 確かめてある値の控えを読めません")
+                return 1
             print("%s: ★線を引かない★と控えます（材料の顔ぶれ: %s）"
-                  % (dec.get("slug"),
-                     "・".join(_confirmed_fields(str(dec.get("slug") or "")))
-                     or "なし"))
+                  % (dec.get("slug"), "・".join(_st[1]) or "なし"))
             return 0
         return record_no_line(dec)
     ng = decision_problems(dec, ms)
@@ -901,14 +928,25 @@ def _no_line_tests(t) -> None:
     import tempfile
     global NO_LINE_STORE
     _bak_store = NO_LINE_STORE
-    _bak_fields = globals()["_confirmed_fields"]
+    _bak_state = globals()["_confirmed_state"]
     _bak_ms = globals()["_machines"]
     _row = {"slug": "zz_no_line", "publication_policy": "page-decision/v1",
             "checker": {"unit": "G", "modes": [{"key": "normal"}]}}
-    _fields = {"now": ["at", "ceiling"]}
+    # ★「いま確かめてある材料」を丸ごと差し替えられる形にする★
+    #   （★名前だけでなく中身も持つ★＝中身だけ直された形を試せる）
+    _mat = {"now": {"at": {"v": 1}, "ceiling": {"v": 900}}}
+
+    def _fake_state(slug):
+        if _mat["now"] is None:
+            return None                    # ★控えを読めない★
+        import hashlib as _h
+        blob = json.dumps(_mat["now"], ensure_ascii=False, sort_keys=True)
+        return (_h.sha256(blob.encode("utf-8")).hexdigest(),
+                sorted(_mat["now"]))
+
     try:
         NO_LINE_STORE = os.path.join(tempfile.mkdtemp(prefix="nl_"), "x.json")
-        globals()["_confirmed_fields"] = lambda slug: list(_fields["now"])
+        globals()["_confirmed_state"] = _fake_state
         globals()["_machines"] = lambda: [_row]
         dec = {"slug": "zz_no_line", "decision": NO_LINE,
                "judges": ["claude", "codex"], "decided_at": "2026-09-21",
@@ -928,14 +966,36 @@ def _no_line_tests(t) -> None:
         t("★★控えたら、その機種は聞かない★★"
           "（★直す前は控える道が無く、毎朝おなじ問いが出た★）",
           record_no_line(dec) == 0 and target_line_questions(_row) == [])
-        _fields["now"] = ["at", "ceiling", "payout_rate"]
-        t("★★材料の顔ぶれが増えたら、もう一度聞く★★"
+        _mat["now"] = {"at": {"v": 1}, "ceiling": {"v": 900},
+                       "payout_rate": {"v": 97}}
+        t("★★材料が増えたら、もう一度聞く★★"
           "（★控えたまま永久に黙ると、材料が揃っても線が入らない★）",
           no_line_record("zz_no_line") is None
           and bool(target_line_questions(_row)))
-        _fields["now"] = ["at", "ceiling"]
-        t("　顔ぶれが戻れば、控えはまた効く",
+        _mat["now"] = {"at": {"v": 1}, "ceiling": {"v": 900}}
+        t("　材料が戻れば、控えはまた効く",
           no_line_record("zz_no_line") is not None)
+        # ★★項目名は同じまま、中身だけ直された形★★（2026-09-21・Codexの指摘）
+        #   ★直す前は名前の一覧だけを比べていた★ので、値や根拠が良くなっても
+        #   ★「線を引かない」が永久に効いたまま★だった。
+        _mat["now"] = {"at": {"v": 1}, "ceiling": {"v": 1200}}
+        t("★★項目名が同じでも、中身が変われば聞き直す★★"
+          "（★名前だけを見ていると、値が直っても永久に黙る★）",
+          no_line_record("zz_no_line") is None
+          and bool(target_line_questions(_row)))
+        _mat["now"] = {"at": {"v": 1}, "ceiling": {"v": 900}}
+        t("　（対照）中身が戻れば、また効く",
+          no_line_record("zz_no_line") is not None)
+        # ★★控えを読めないときは、必ず聞き直す★★（同）
+        _mat["now"] = None
+        t("★★確かめてある値の控えを読めないときは、免除を効かせない★★"
+          "（★直す前は「読めない」も「0件」も空で、"
+          "控えが消えた日に質問が止まった★）",
+          no_line_record("zz_no_line") is None
+          and bool(target_line_questions(_row)))
+        t("　読めないときは、新しく控えることもできない",
+          record_no_line(dec) == 1)
+        _mat["now"] = {"at": {"v": 1}, "ceiling": {"v": 900}}
         _row2 = {**_row, "checker": {"unit": "G", "modes": [{"key": "normal"}],
                                      "normal": {"good": 500}}}
         t("★すでに線がある機種には書けない★（線を消す道具にしない）",
@@ -945,9 +1005,29 @@ def _no_line_tests(t) -> None:
             _f.write("{")
         t("　控えが読めないときは、また聞く側へ倒れる",
           no_line_record("zz_no_line") is None)
+        # ★★本物の `_confirmed_state` の「読めない」を通す★★
+        #   （罠①＝差し替えた偽物だけで試すと、本物の分岐を一度も通らない）
+        globals()["_confirmed_state"] = _bak_state
+        import confirmed_values as _cv_t
+        _bak_load = _cv_t.load
+        try:
+            _cv_t.load = lambda *a, **k: (_ for _ in ()).throw(
+                RuntimeError("控えが壊れています"))
+            t("★本物の読み取りでも、読めなければ None★"
+              "（★0件と同じ空で返すと、控えが消えた日に質問が止まる★）",
+              _confirmed_state("zz_no_line") is None)
+            _cv_t.load = lambda *a, **k: {"machines": "こわれた"}
+            t("　入れ物が壊れているときも None",
+              _confirmed_state("zz_no_line") is None)
+            _cv_t.load = lambda *a, **k: {"machines": {}}
+            _st0 = _confirmed_state("zz_no_line")
+            t("　0件のときは None ではなく（指紋, 空の一覧）",
+              _st0 is not None and _st0[1] == [])
+        finally:
+            _cv_t.load = _bak_load
     finally:
         NO_LINE_STORE = _bak_store
-        globals()["_confirmed_fields"] = _bak_fields
+        globals()["_confirmed_state"] = _bak_state
         globals()["_machines"] = _bak_ms
 
 

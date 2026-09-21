@@ -32,7 +32,7 @@
   "scripts/new_machine_watch.py": "b354fe5344243db9a6f14afa5920025b0fd93a52768062caaad4e8643967d0b4",
   "scripts/page_corpus.py": "7fada297f9c552f337ef4736481f46fbb019865c0f59416914f363cf61607072",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
-  "scripts/page_reading.py": "542179db5e3e77aec1242550b5d1a74449ba56ebf64c378b2f10a1713c216f4d",
+  "scripts/page_reading.py": "d993398c2b658fa06753f45262b5b8795e9591a739d1b1d75d2e35f273642589",
   "scripts/pending_machines.py": "00b3371b6372c6efd9a3e8e431eb6565c98e8cb3f1f64f1ee9855b24876d18ff",
   "scripts/read_failure.py": "be1280280387ea03708afdd281a97289c311a9aa70ef53a62dffd438de9b96fe",
   "scripts/selftest_log_guard.py": "0de496b6ac4774489492a6c66f47c80ca3c546aa30f77209bbd0c69fee8b3aab",
