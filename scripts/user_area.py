@@ -307,7 +307,14 @@ def clean_text(html: str, url: str = "", conf: dict | None = None) -> str:
     """
     import ceiling_lookup as _cl
     ua = conf if conf is not None else conf_for_url(url)
-    got = visible_text(html, url, ua)
+    # ★★掃除は `clean_html` に通す★★（2026-09-21・Codexの指摘）
+    #   ★直す前は `visible_text` を直に呼んでいた★ので、
+    #   掃除のあとの見張り（`_guard_after_clean`）を**通らなかった**。
+    #   `collect_evidence` は生HTMLのときこの関数を呼ぶので、
+    #   ★別名の投稿欄が足されたページが、そのまま材料に混ざり得た★。
+    #   ★実ページ4件（DMM・なな徹・ちょんぼりすた）で、直す前と
+    #     1字も変わらないことを確かめてから入れ替えた★。
+    got = readable_text(clean_html(html, url, ua))
     if [r for r in (ua.get("drop") or []) if isinstance(r, dict)]:
         return _cl._norm(got)
     return _cl._norm(_cl.cut_user_area(got))
@@ -503,7 +510,13 @@ _UA_ATTR_WEAK = ("comment", "comments", "review", "reviews", "rating",
 _UA_ATTR_HINTS = _UA_ATTR_STRONG + _UA_ATTR_WEAK
 
 
-def structure_sha256(html: str) -> str:
+_VOID_TAGS = frozenset((
+    "area", "base", "br", "col", "embed", "hr", "img",
+    "input", "link", "meta", "param", "source", "track",
+    "wbr"))
+
+
+def structure_sha256(html: str, _rows: bool = False):
     """★揺れる値を外した「箱の並び」の指紋★（2026-09-21・台帳#662/#669）
 
     ★何のためか★＝2AIが「この欠けた箱は本当に無い」と決めた控えを、
@@ -531,17 +544,32 @@ def structure_sha256(html: str) -> str:
         def __init__(self):
             super().__init__(convert_charrefs=True)
             self.rows = []
+            self.stack = []
 
-        def _add(self, tag, attrs):
+        def _add(self, tag, attrs, depth):
             d = dict(attrs or [])
             cls = " ".join(sorted(str(d.get("class") or "").split()))
-            self.rows.append(f"{tag}|{cls}|{d.get('id') or ''}")
+            self.rows.append(f"{depth}|{tag}|{cls}|{d.get('id') or ''}")
 
         def handle_starttag(self, tag, attrs):
-            self._add(tag, attrs)
+            # ★★深さも入れる★★（2026-09-21・Codexの指摘）
+            #   ★直す前は開き札だけを並べていた★ので、
+            #   開き札の順番を保ったまま★閉じ札の位置だけ動かす★と、
+            #   箱の持ち分（どこまでが投稿欄か）が変わっても指紋が一致した。
+            #   ＝掃除する範囲が変わったことに気づけない。
+            self._add(tag, attrs, len(self.stack))
+            if tag not in _VOID_TAGS:
+                self.stack.append(tag)
+
+        def handle_endtag(self, tag):
+            # ★同じ名前のいちばん内側まで畳む★（閉じ忘れに強くする）
+            if tag in self.stack:
+                while self.stack:
+                    if self.stack.pop() == tag:
+                        break
 
         def handle_startendtag(self, tag, attrs):
-            self._add(tag, attrs)
+            self._add(tag, attrs, len(self.stack))
 
     p = _Sig()
     try:
@@ -550,7 +578,8 @@ def structure_sha256(html: str) -> str:
     except Exception as e:                                   # noqa: BLE001
         # ★読めないなら指紋を作らない★＝「同じ」と言えないので失効させる
         raise UserAreaError(f"作りの指紋を取れません: {str(e)[:80]}")
-    return _hl.sha256("\n".join(p.rows).encode("utf-8")).hexdigest()
+    return p.rows if _rows else _hl.sha256(
+        "\n".join(p.rows).encode("utf-8")).hexdigest()
 
 
 def looks_like_user_area(html: str) -> list:
@@ -1218,6 +1247,53 @@ def selftest() -> int:
     t("　投稿欄が残っていなければ、今までどおり通す",
       _clean_raises('<html><body><div class="spec">天井999G</div></body></html>',
                     "https://unknown.test/x", conf={}) == "")
+
+    # ★★材料として読む入口も、同じ見張りを通る★★（2026-09-21・Codexの指摘）
+    #   ★直す前は `clean_text` が `visible_text` を直に呼んでいた★ので、
+    #   `collect_evidence` が生HTMLを渡す経路だけ見張りを通らなかった。
+    #   ＝別名の投稿欄が足されたページが、そのまま材料に混ざり得た。
+    def _text_raises(html, url, conf=None):
+        try:
+            clean_text(html, url, conf=conf)
+            return ""
+        except UserAreaError as e:
+            return str(e)
+
+    t("★★材料として読むときも、掃除のあとの見張りを通る★★"
+      "（★`collect_evidence` は生HTMLのときここを呼ぶ★）",
+      "掃除のあとにも投稿欄が残っています"
+      in _text_raises(_left, "https://unknown.test/x", conf={}))
+    t("　決まりごとがあるサイトでも同じ",
+      "掃除のあとにも投稿欄が残っています"
+      in _text_raises(_page % ("44", _rev + _left),
+                      "https://p-town.dmm.com/machines/1", conf=_CG))
+    t("　投稿欄が無ければ、今までどおり本文を返す",
+      "天井999G" in clean_text(
+          '<html><body><div class="spec">天井999G</div></body></html>',
+          "https://unknown.test/x", conf={}))
+
+    # ★★作りの指紋は、入れ子の深さまで見る★★（2026-09-21・Codexの指摘）
+    #   ★直す前は開き札だけを並べていた★ので、開き札の順番を保ったまま
+    #   ★閉じ札の位置だけ動かす★と、箱の持ち分が変わっても指紋が一致した。
+    _nest_a = ('<html><body><div class="wrap"><div class="box">'
+               '<p>天井</p></div><p>外</p></div></body></html>')
+    _nest_b = ('<html><body><div class="wrap"><div class="box">'
+               '<p>天井</p><p>外</p></div></div></body></html>')
+    t("★★閉じ札の位置だけ動かしても、指紋は変わる★★"
+      "（★開き札の並びは同じなので、深さを見ないと一致した★）",
+      structure_sha256(_nest_a) != structure_sha256(_nest_b))
+    t("　同じHTMLなら同じ指紋",
+      structure_sha256(_nest_a) == structure_sha256(_nest_a))
+    t("　閉じ札が来ないタグは深さに積まない"
+      "（積むと、画像1つで以後の深さが全部ずれる）",
+      structure_sha256('<div><img src="a"><b>x</b></div>', _rows=True)
+      == ["0|div||", "1|img||", "1|b||"])
+    t("　入れ子はちゃんと深くなる（深さを全部0にされたら気づく）",
+      structure_sha256("<div><i><b>x</b></i></div>", _rows=True)
+      == ["0|div||", "1|i||", "2|b||"])
+    t("　class は並べ替えて入れる／id も入れる",
+      structure_sha256('<p id="q" class="b a">x</p>', _rows=True)
+      == ["0|p|a b|q"])
 
     t("★★0件と書いてあれば、一覧が無くても通す★★"
       "／これが無いとレビューの付かない機種は永久に使えない",

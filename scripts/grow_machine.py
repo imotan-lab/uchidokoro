@@ -14,7 +14,8 @@
   ここは**上書き専用**として分け、条件を別に持つ。
 
 ★上げてよい条件（すべてAND・1つでも欠けたら何も書かない）★
-  1. いまの区分がちょうど `AUTO_PENDING`
+  1. 育てる対象である（`grow_scope_problem` が唯一の判定箇所）
+     ＝`AUTO_PENDING`、または `AUTO_INDEXABLE` で**空の欄が残っている**
   2. 検索方針が `normal`（緊急スイッチが入っていない）
   3. 台帳に「止めるべき」案件が無い
   4. 公式（または同じ公式の一覧カード）で**本人性を確かめ直せる**
@@ -179,6 +180,69 @@ def parse_release(release: str):
         return _dt.date(int(m.group(1)), int(m.group(2)), 1), "month"
     except ValueError:
         return None, ""
+
+
+def has_unconfirmed(slug: str, detail: dict | None = None) -> bool:
+    """★その記事に、まだ中身の無い欄が残っているか★（2026-09-21・台帳#702）
+
+    ★言い方の正本は記事を作る側★（`build_new_article`）＝
+    ここに文言を書き写すと、向こうが変えたときに黙って食い違う。
+    """
+    import build_new_article as _ba_u
+    marks = [x for x in (
+        getattr(_ba_u, "PENDING_ITEM", ""),
+        getattr(_ba_u, "PENDING_TEXT", ""),
+        getattr(_ba_u, "PENDING_TEXT_OLD", ""),
+    ) if x]
+    if detail is None:
+        path = os.path.join(DETAILS, f"{slug}.json")
+        if not os.path.exists(path):
+            return False
+        try:
+            detail = _sj.read_json(path, expect=dict)
+        except Exception:                                    # noqa: BLE001
+            return False
+
+    def _walk(o) -> bool:
+        if isinstance(o, str):
+            return any(mk in o for mk in marks)
+        if isinstance(o, dict):
+            return any(_walk(v) for v in o.values())
+        if isinstance(o, (list, tuple)):
+            return any(_walk(v) for v in o)
+        return False
+
+    return _walk(detail)
+
+
+def grow_scope_problem(m: dict) -> str:
+    """★育てる対象か★を決める**唯一の場所**（空文字＝対象）
+
+    ★★2026-09-21に広げた（台帳#702）★★＝直す前は
+    「区分がちょうど `AUTO_PENDING`」だけだった。
+    ＝★検索に載った瞬間に、この処理が見なくなる★。
+    ところが記事直し（更新タスクのSTEP 1）は**消す・言い換えるだけ**で、
+    空の欄を埋められない。
+    ＝★載ったあとは、どの自動タスクからも中身を足せなかった★
+    （実測＝13機種・空の欄が合計91件）。
+
+    ★いまの決まり★＝
+      ・`AUTO_PENDING`   … 対象（検索に載せるのが目的）
+      ・`AUTO_INDEXABLE` … ★空の欄が残っているあいだは対象★
+      ・それ以外（旧形式）… 対象外（`grow_legacy` の担当）
+    ★空の欄が無くなったら外れる★＝際限なく見に行かないため。
+    """
+    try:
+        cls = _pdz.machine_class(m)
+    except _pdz.DecisionError as e:
+        return f"いまの判定書が壊れています: {e}"
+    if cls == "AUTO_PENDING":
+        return ""
+    if cls == "AUTO_INDEXABLE":
+        if has_unconfirmed(str(m.get("slug") or "")):
+            return ""
+        return "育てる対象ではありません（中身の無い欄が残っていません）"
+    return f"育てる対象ではありません（いまの区分: {cls}）"
 
 
 def interval_days(release: str, today, conf=None) -> int:
@@ -417,12 +481,10 @@ def targets(rows: list, today=None, state: dict = None,
     """
     out = []
     for m in rows:
-        try:
-            if _pdz.machine_class(m) != "AUTO_PENDING":
-                continue
-        except _pdz.DecisionError as e:
-            if broken is not None:
-                broken.append(f"{m.get('slug')}: {str(e)[:70]}")
+        prob = grow_scope_problem(m)
+        if prob:
+            if broken is not None and "判定書が壊れています" in prob:
+                broken.append(f"{m.get('slug')}: {prob[:70]}")
             continue                       # 壊れているものは別途 audit が拾う
         if today is not None and not due(m["slug"],
                                         str(m.get("release_date") or ""),
@@ -1601,8 +1663,9 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     except _pdz.DecisionError as e:
         out["problems"].append(f"いまの判定書が壊れています: {e}")
         return out
-    if out["was"] != "AUTO_PENDING":
-        out["problems"].append(f"育てる対象ではありません（いまの区分: {out['was']}）")
+    _scope = grow_scope_problem(cur)
+    if _scope:
+        out["problems"].append(_scope)
         return out
     mode = (_pdz.load_policy() or {}).get("mode")
     if mode != "normal":
@@ -1958,6 +2021,18 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
         out["now"] = _pdz.machine_class(machine)
     except _pdz.DecisionError as e:
         out["problems"].append(f"新しい判定書が壊れています: {e}")
+        return out
+    # ★★すでに検索に載っている機種を、降ろさない★★（2026-09-21・台帳#702）
+    #   ★載ったあとも育てるようにしたので、ここが要る★＝
+    #   直す前は対象が `AUTO_PENDING` だけで、上がることしか起きなかった。
+    #   いまは載っている機種も書き直すので、★作り直した結果が品質ラインを
+    #   割ったら、読者から見えていた記事が黙って検索から消える★。
+    #   ★材料は増えるだけ（条件5）なので普通は起きない★が、
+    #   起きたときに気づけないのがいちばん悪いので、書く前に止める。
+    if out["was"] == "AUTO_INDEXABLE" and out["now"] != "AUTO_INDEXABLE":
+        out["problems"].append(
+            f"作り直すと検索から外れます（{out['was']} → {out['now']}）"
+            "／★載っている記事を降ろさない★")
         return out
     # ★★うまく育ったので、行き詰まりの回数を0に戻す★★（2026-08-27）
     #   ★昔の失敗をいつまでも数えない★（数え続けると、次に1回詰まっただけで
@@ -2674,6 +2749,46 @@ def selftest() -> int:
       "／★実機種に貼り付けると、その機種が卒業した日に全部が"
       "『早期return』になり、何も試さず緑になる試験まで出る★",
       _pdz.machine_class(_st_row()) == "AUTO_PENDING")
+    # ★★★#702 育てる対象の線★★★（2026-09-21）
+    #   ★実測★＝直す前は `AUTO_PENDING` だけを見ていたので、
+    #   検索に載った13機種（空の欄が合計91件）を**どの自動タスクも見なかった**。
+    t("★空の欄が残っているかを、記事を作る側の言い方で見る★",
+      has_unconfirmed("x", {"sections": [{"body": [
+          f"**機械割**：{_ba.PENDING_ITEM}"]}]}) is True)
+    t("　空の欄が無ければ False",
+      has_unconfirmed("x", {"sections": [{"body": ["天井は1200Gです。"]}]})
+      is False)
+    t("　言い方は書き写さず、記事を作る側から取る"
+      "（向こうが変えたら黙って食い違うため）",
+      "PENDING_ITEM" in inspect.getsource(has_unconfirmed)
+      and "未確認（" not in inspect.getsource(has_unconfirmed))
+    # ★区分ごとの線★（`grow_scope_problem` が唯一の判定箇所）
+    t("　まだ載っていない機種は対象",
+      grow_scope_problem(_st_row()) == "")
+    _sc_has = {"has": True}
+    _sc_bak = globals()["has_unconfirmed"]
+    _sc_cls = _pdz.machine_class
+    try:
+        globals()["has_unconfirmed"] = lambda *a, **k: _sc_has["has"]
+        _pdz.machine_class = lambda m: "AUTO_INDEXABLE"
+        t("★★検索に載っていても、空の欄が残っていれば対象★★"
+          "（★直す前はここで外れ、中身を足す道が無くなっていた★）",
+          grow_scope_problem(_st_row()) == "")
+        _sc_has["has"] = False
+        t("　空の欄が無くなったら外れる（際限なく見に行かない）",
+          "中身の無い欄" in grow_scope_problem(_st_row()))
+    finally:
+        globals()["has_unconfirmed"] = _sc_bak
+        _pdz.machine_class = _sc_cls
+    # ★呼び出しの配線★（罠③＝関数だけ試すと、呼び出しを消しても緑）
+    t("　候補を選ぶ側が、その1か所を通る",
+      "grow_scope_problem(m)" in inspect.getsource(targets))
+    t("　1機種を組み立てる側も、その1か所を通る",
+      "grow_scope_problem(cur)" in inspect.getsource(plan_one))
+    t("★★載っている記事を降ろさない★★（作り直すと外れるなら書かない）",
+      'out["was"] == "AUTO_INDEXABLE" and out["now"] != "AUTO_INDEXABLE"'
+      in inspect.getsource(plan_one))
+
     # ★卒業した形は「判定書の indexable を True に書き換える」では作れない★
     #   ＝`machine_class` は claims から計算し直して突き合わせるので、
     #   手書きの True は必ず弾かれる（＝そういう守りがある）。

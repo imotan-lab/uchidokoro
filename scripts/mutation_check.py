@@ -769,6 +769,62 @@ MUTATIONS = [
         "after": "    _ao = append_only_problem(changed, unattended=True)",
         "run": ["scripts/pre_push_check.py"],
     },
+    # ─── 2026-09-21・Codex177の指摘（掃除の入口／作りの指紋の入れ子）───
+    {
+        "why": "★材料として読む入口だけ、掃除のあとの見張りを通さない"
+               "（★collect_evidence は生HTMLのときここを呼ぶので、"
+               "別名の投稿欄が足されたページが材料へ混ざる★）★",
+        "file": "scripts/user_area.py",
+        "before": "    got = readable_text(clean_html(html, url, ua))",
+        "after": "    got = visible_text(html, url, ua)",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "★作りの指紋から、入れ子の深さを外す"
+               "（★開き札の並びを保ったまま閉じ札だけ動かすと、"
+               "箱の持ち分が変わっても同じ指紋になる★）★",
+        "file": "scripts/user_area.py",
+        "before": "            self.rows.append(f\"{depth}|{tag}|{cls}|"
+                  "{d.get('id') or ''}\")",
+        "after": "            self.rows.append(f\"{tag}|{cls}|"
+                 "{d.get('id') or ''}\")",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "★閉じ札の来ないタグも深さに積む"
+               "（★画像が1つあるだけで、以後の深さが全部ずれる★）★",
+        "file": "scripts/user_area.py",
+        "before": "            if tag not in _VOID_TAGS:",
+        "after": "            if True:",
+        "run": ["scripts/user_area.py"],
+    },
+    # ─── 2026-09-21・検索に載った新台を、育成レーンが見続ける（台帳#702）───
+    {
+        "why": "★検索に載った瞬間に、育成レーンが見なくなる"
+               "（★記事直しは消す・言い換えるだけなので、"
+               "載ったあとは誰も空の欄を埋められない＝実測13機種・91件★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        if has_unconfirmed(str(m.get(\"slug\") or \"\")):",
+        "after": "        if False:",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★空の欄が残っているかを見ずに、いつも残っていることにする"
+               "（★育て終わった機種を毎日見に行き続ける★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    return _walk(detail)",
+        "after": "    return True",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★作り直すと検索から外れる機種を、そのまま書く"
+               "（★読者に見えていた記事が、黙って検索から消える★）★",
+        "file": "scripts/grow_machine.py",
+        "before": ("    if out[\"was\"] == \"AUTO_INDEXABLE\" "
+                   "and out[\"now\"] != \"AUTO_INDEXABLE\":"),
+        "after": "    if False:",
+        "run": ["scripts/grow_machine.py"],
+    },
     {
         "why": "★Pythonの版をコメントから読む"
                "（実際の設定ではなくコメントを読み、ずれが緑になる）★",
@@ -1337,14 +1393,10 @@ MUTATIONS = [
         "why": "★作りの指紋に、属性の値まで入れる"
                "（★csrf-token が毎回変わるので、2AIの答えが数秒で失効する★）★",
         "file": "scripts/user_area.py",
-        "before": ('            cls = " ".join(sorted(str(d.get("class") '
-                   'or "").split()))' + chr(10)
-                   + "            self.rows.append("
-                     "f\"{tag}|{cls}|{d.get('id') or ''}\")"),
-        "after": ('            cls = " ".join(sorted(str(d.get("class") '
-                  'or "").split()))' + chr(10)
-                  + "            self.rows.append("
-                    'f"{tag}|{cls}|{sorted(d.items())}")'),
+        "before": ("            self.rows.append("
+                   "f\"{depth}|{tag}|{cls}|{d.get('id') or ''}\"" + ")"),
+        "after": ("            self.rows.append("
+                  "f\"{depth}|{tag}|{cls}|{sorted(d.items())}\"" + ")"),
         "run": ["scripts/page_reading.py"],
     },
     {
@@ -4686,7 +4738,7 @@ MUTATIONS = [
         "why": "★判定書が壊れた機種を黙って外す"
                "（その機種だけ永久に育たない）★",
         "file": "scripts/grow_machine.py",
-        "before": "            if broken is not None:",
+        "before": "            if broken is not None and \"判定書が壊れています\" in prob:",
         "after": "            if False:",
         "run": ["scripts/grow_machine.py"],
     },
