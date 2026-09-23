@@ -12252,5 +12252,59 @@
    "identity_evidence_ref": "dmm:5100 型式=未掲載 メーカー=アクロス 導入=2026-12 確認日=2026-09-13",
    "market_release_date": "2026-12"
   }
+ },
+ {
+  "slug": "dmm_5095",
+  "name": "スマスロ モンスターハンターライズ：サンブレイク",
+  "seo": {
+   "title": "スマスロ モンスターハンターライズ：サンブレイク スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [
+    "payout_range"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-24",
+   "input_digest": "sha256:b57c69a79a963e0d796881fe7f4f06f23049ac94aeb77e09defbad93dcd76930"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-05",
+  "identity": {
+   "manufacturer_id": "adelion",
+   "official_product_url": "https://p-town.dmm.com/machines/5095",
+   "announced_name": "スマスロ モンスターハンターライズ：サンブレイク",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5095 型式=L MHRサンブレイクXA メーカー=アデリオン 導入=2026-10-05 確認日=2026-09-24",
+   "market_release_date": "2026-10-05",
+   "observed_model_code": "L MHRサンブレイクXA",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  }
  }
 ]
