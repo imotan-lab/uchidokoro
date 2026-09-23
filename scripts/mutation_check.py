@@ -797,6 +797,14 @@ MUTATIONS = [
         "after": "    if False:",
         "run": ["scripts/mark_reviewed.py"],
     },
+    # ─── 2026-09-23・スルー天井を判定書が知らなかった（台帳#706）───
+    {
+        "why": "★判定書の天井の種類から、スルー天井を外す（★採る側は採れるのに判定書が知らず、その機種の育成が毎朝例外で止まる★）★",
+        "file": "scripts/page_decision.py",
+        "before": "CEILING_KINDS = (\"GAME\", \"CYCLE\", \"POINT\", \"THROUGH\")",
+        "after": "CEILING_KINDS = (\"GAME\", \"CYCLE\", \"POINT\")",
+        "run": ["scripts/page_decision.py"],
+    },
     # ─── 2026-09-23・Codex182の指摘（点検済みの日付・控えの0件）───
     {
         "why": "★壊れた記録を、機種名で絞ったあとに見る"

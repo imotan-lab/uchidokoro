@@ -189,7 +189,15 @@ def _norm_name(s: str) -> str:
 #   接頭辞だけ見ていたので `at:`（モード空）や `ceiling:None:` が
 #   「固有ゲーム性1件」として数えられ、中身の無い機種が index できた）
 AT_MODES = ("MAIN_AT", "UPPER_AT")
-CEILING_KINDS = ("GAME", "CYCLE", "POINT")
+# ★★天井の種類★★＝採る側（`ceiling_lookup.KINDS`）と**必ず同じ顔ぶれ**にする。
+#   （2026-09-23・台帳#706）★直す前は THROUGH（スルー天井）が無かった★ので、
+#   採る側は2026-08-06からスルー天井を採れるのに、判定書の段で
+#   「天井の種類が不明です」と例外になり、★その機種の育成が毎朝止まっていた★
+#   （実例＝彼女、お借りします）。
+#   ★ここで読み込まない理由★＝`ceiling_lookup` は通信まわりの部品を読み込むので、
+#   判定書（公開ページ作り・GitHubの検査でも使う）が重くなる。
+#   ★代わりに自己試験が2つの顔ぶれを突き合わせる★（食い違えば赤くなる）。
+CEILING_KINDS = ("GAME", "CYCLE", "POINT", "THROUGH")
 _CZ_NAME_OK = re.compile(r"^[^\s]{1,60}$")
 
 
@@ -909,6 +917,28 @@ def selftest() -> int:
       d["confirmed_topics"] == ["gameplay", "spec"]
       and "ceiling" in d["pending_topics"]
       and "strategy" in d["pending_topics"])
+    # ★★スルー天井（THROUGH）も判定書まで通る★★（2026-09-23・台帳#706）
+    #   ★直す前は「天井の種類が不明です」で例外になり、その機種の育成が
+    #   毎朝止まっていた★（実例＝彼女、お借りします）。
+    #   ★材料は採る側の本物の形★（kind / amount / unit / counted / basis）。
+    MAT_TH = {"ceilings": {"adopted": [{**IM, "kind": "THROUGH", "amount": 5,
+                                        "unit": "スルー", "counted": "AT"}]},
+              "at_specs": {"adopted": [{**IM, "mode": "MAIN_AT",
+                                        "games": 30, "net": 2.8}]}}
+    t("★★スルー天井を持つ材料でも、判定書が例外にならない★★"
+      "（★直す前は育成が毎朝ここで止まった★）",
+      not _raises(lambda: index_claims_from_material(MAT_TH)))
+    t("　スルー天井は ceiling:THROUGH:<数え方> として数える",
+      "ceiling:THROUGH:AT" in index_claims_from_material(MAT_TH))
+    # ★★採る側と判定書の顔ぶれは必ず同じ★★
+    #   （判定書から読み込まない理由は名簿の横に書いた＝通信まわりが重い）
+    import ceiling_lookup as _cl_k
+    t("★★天井の種類は、採る側（ceiling_lookup）と判定書でまったく同じ★★"
+      "（★片方だけ増やすと、その種類の機種が毎朝例外で止まる★）",
+      set(CEILING_KINDS) == set(_cl_k.KINDS))
+    t("　知らない種類は、今までどおり例外で止める（fail-closed）",
+      _raises(lambda: index_claims_from_material(
+          {"ceilings": {"adopted": [{**IM, "kind": "WHAT", "amount": 5}]}})))
     # claimを1件削る → 不合格＋理由コード
     MAT_2 = {"adopted": {"payout_range": {**IM,
                                           "value": {"low": 97, "high": 110}}},
