@@ -1683,8 +1683,12 @@ def _independent_basis(rec: dict) -> str:
 def merge_into(material: dict, slug: str) -> list:
     """集めた材料に、2AIが確定した値を足す。★足したものの一覧を返す★
 
-    ★機械が採れたものを上書きしない★（機械が採れているなら、それは
-      すでに独立2出典で一致したもの。人の記録で塗り替えない）
+    ★機械が採れたものは、原則として上書きしない★（人の記録で塗り替えない）
+    ★例外は1つだけ★（2026-09-24）＝機械の値が1社だけ（SINGLE_NEAR_RELEASE）で、
+      確定値が独立2出典（INDEPENDENT_MULTI）のときは、確定値に置き換える。
+      ★「機械が採れているなら独立2出典」という前提は、2026-09-20 に
+      1社でも採る道を広げた日に崩れた★（1社の値が2社の確定値を押しのけていた）。
+      箱（天井・AT・CZの行）には当てていない＝どの行が同じ事実かは意味の判断。
     ★入れ先を間違えない★（2026-08-09・依頼130 P0-1）
       天井・AT・CZは基本スペックとは別の場所に入る。全部を adopted に
       入れていたので、記事に届かないうえ KeyError で落ちていた。
@@ -1726,7 +1730,15 @@ def merge_into(material: dict, slug: str) -> list:
                 stamped["basis"] = _b
         if where == "adopted":
             adopted = material.setdefault("adopted", {})
-            if field in adopted:
+            # ★★1社だけで採った機械の値は、2社で確定した値に道を譲る★★
+            #   （2026-09-24）＝「機械が採れているなら独立2出典」の前提は、
+            #   2026-09-20 に1社でも採る道（SINGLE_NEAR_RELEASE）を広げた日に
+            #   崩れた。★強さが上のときだけ置き換える★（同じ強さなら今までどおり）。
+            _mine = adopted.get(field)
+            _weaker = (isinstance(_mine, dict)
+                       and _mine.get("basis") == "SINGLE_NEAR_RELEASE"
+                       and stamped.get("basis") == "INDEPENDENT_MULTI")
+            if field in adopted and not _weaker:
                 continue
             adopted[field] = stamped
         else:
@@ -3427,6 +3439,43 @@ def selftest() -> int:
           == "INDEPENDENT_MULTI")
         t("　★型は claim として数えないので、検索の判定は変わらない★",
           "machine_profile" not in _pd_cv.index_claims_from_material(_mat_cv2))
+        # ★★機械が1社だけで採った値は、2AIが2社で確定した値に道を譲る★★
+        #   （2026-09-24・更新タスクの自己修正）
+        #   ★直す前★＝「機械が採れたものは独立2出典で一致したもの」という
+        #   前提で、同じ項目に機械の値があれば確定値を足さなかった。
+        #   2026-09-20 に1社だけでも採る道（SINGLE_NEAR_RELEASE）を広げたので、
+        #   ★1社の値が、2社で確定済みの値を押しのけて記事に出る★ようになった
+        #   （実測＝タコスロの機械割がDMM単独の 98.7〜108.5% になり、
+        #    2AIが技術介入の列を除いて決めた 98.7〜106.2% が消えた）。
+        _rng2 = {"value": {"low": 98.7, "high": 106.2, "unit": "%"},
+                 "sources": _rec2["sources"],
+                 "agreed_by": ["claude", "codex"]}
+        globals()["for_slug"] = lambda s: {"payout_range": _rng2}
+        _mat_single = {"adopted": {"payout_range": {
+            "value": {"low": 98.7, "high": 108.5, "unit": "%"},
+            "sources": ["vote:dmm-ptown"], "basis": "SINGLE_NEAR_RELEASE"}}}
+        _got_single = merge_into(_mat_single, "zzz_cv")
+        t("★★1社だけの機械の値は、2社で確定した値に置き換わる★★"
+          "／★置き換えないと、1社の値が確定値を押しのけて記事に出る★",
+          _mat_single["adopted"]["payout_range"].get("_from")
+          == "confirmed_values"
+          and _mat_single["adopted"]["payout_range"]["value"]["high"] == 106.2
+          and "payout_range" in _got_single)
+        _mat_multi = {"adopted": {"payout_range": {
+            "value": {"low": 98.7, "high": 108.5, "unit": "%"},
+            "sources": ["vote:dmm-ptown", "vote:nana-press"],
+            "basis": "INDEPENDENT_MULTI"}}}
+        merge_into(_mat_multi, "zzz_cv")
+        t("　（対照）機械が2社で採った値は、今までどおり上書きしない",
+          _mat_multi["adopted"]["payout_range"]["value"]["high"] == 108.5)
+        globals()["for_slug"] = lambda s: {"payout_range": {
+            **_rng2, "sources": _rec2["sources"][:1]}}
+        _mat_single1 = {"adopted": {"payout_range": {
+            "value": {"low": 98.7, "high": 108.5, "unit": "%"},
+            "sources": ["vote:dmm-ptown"], "basis": "SINGLE_NEAR_RELEASE"}}}
+        merge_into(_mat_single1, "zzz_cv")
+        t("　（対照）確定値も1系列なら置き換えない（強さが同じ）",
+          _mat_single1["adopted"]["payout_range"]["value"]["high"] == 108.5)
     finally:
         globals()["for_slug"] = _keep_for
 

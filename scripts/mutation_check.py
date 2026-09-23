@@ -6340,6 +6340,16 @@ MUTATIONS = [
     #   ファイルへ書く所は**もう try の外**にある。
     #   ＝型を広げても観測できる違いが出ない（＝どの試験も捕まえられない）。
     #   ★守っているのは範囲のほう★で、型は取り違え防止の名札。
+    # ─── 2026-09-24・更新タスクの自己修正 ───
+    {
+        "why": "★1社だけで採った機械の値が、2社で確定した値を押しのける"
+               "（★タコスロの機械割がDMM単独の98.7〜108.5%になり、"
+               "2AIが技術介入の列を除いて決めた98.7〜106.2%が消える★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if field in adopted and not _weaker:",
+        "after": "            if field in adopted:",
+        "run": ["scripts/confirmed_values.py"],
+    },
 ]
 
 
