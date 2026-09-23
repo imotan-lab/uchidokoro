@@ -775,8 +775,8 @@ MUTATIONS = [
                "（★その機種が直近10日ぶん順番から外れる＝"
                "拾おうとした台が忘れられる★）★",
         "file": "scripts/mark_reviewed.py",
-        "before": "        if str(r.get(\"state\") or \"\") in FINISHED:",
-        "after": "        if True:",
+        "before": "        if state in WAITING_2AI:",
+        "after": "        if False:",
         "run": ["scripts/mark_reviewed.py"],
     },
     {
@@ -796,6 +796,51 @@ MUTATIONS = [
         "before": "    if str(got.get(slug) or \"\") != day:",
         "after": "    if False:",
         "run": ["scripts/mark_reviewed.py"],
+    },
+    # ─── 2026-09-23・Codex182の指摘（点検済みの日付・控えの0件）───
+    {
+        "why": "★壊れた記録を、機種名で絞ったあとに見る"
+               "（★壊れた記録は機種名が空なので、一度も効かない★）★",
+        "file": "scripts/mark_reviewed.py",
+        "before": "        if state == \"BROKEN\":",
+        "after": "        if False:",
+        "run": ["scripts/mark_reviewed.py"],
+    },
+    {
+        "why": "★点検済みを止める日数に上限を置かない"
+               "（★終わらない記録が1件あるだけで、その機種が"
+               "毎朝の枠を永久に占領する＝罠⓸★）★",
+        "file": "scripts/mark_reviewed.py",
+        "before": "        if len(days) <= MAX_REFUSAL_DAYS:",
+        "after": "        if True:",
+        "run": ["scripts/mark_reviewed.py"],
+    },
+    {
+        "why": "★合意より後で詰まっている記録でも点検済みを止める"
+               "（★Codexが要らないので止めても戻らず、枠を占領し続ける★）★",
+        "file": "scripts/mark_reviewed.py",
+        "before": "WAITING_2AI = (\"DETECTED\", \"CLAUDE_SEALED\", "
+                  "\"CODEX_RECEIVED\")",
+        "after": "WAITING_2AI = (\"DETECTED\", \"CLAUDE_SEALED\", "
+                 "\"CODEX_RECEIVED\", \"AGREED\", \"APPLIED\", "
+                 "\"COMMIT_VERIFIED\", \"PUSH_CONFIRMED\", \"RECHECK_PASS\")",
+        "run": ["scripts/mark_reviewed.py"],
+    },
+    {
+        "why": "★確かめてある値の控えが消えても「0件」と読む"
+               "（★0件で控えた「線を引かない」が効いたまま質問が止まる★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        got = _cv_f.load(strict=False, require_exists=True)",
+        "after": "        got = _cv_f.load(strict=False)",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★その機種の記録だけ壊れていても「0件」と読む"
+               "（★壊れた記録が、0件で控えた判断と一致してしまう★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        return None\n    import hashlib as _hl_cf",
+        "after": "        per = {}\n    import hashlib as _hl_cf",
+        "run": ["scripts/checker_verdict.py"],
     },
     # ─── 2026-09-21・Codex179の指摘 ───
     {
@@ -828,7 +873,7 @@ MUTATIONS = [
                "（★控えが消えた日に、質問が止まったまま気づけない★）★",
         "file": "scripts/checker_verdict.py",
         "before": "        return None                        "
-                  "# ★読めない★＝免除を効かせない",
+                  "# ★読めない・消えた★＝免除を効かせない",
         "after": "        return (\"\", [])",
         "run": ["scripts/checker_verdict.py"],
     },

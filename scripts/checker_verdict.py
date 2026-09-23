@@ -84,16 +84,24 @@ def _confirmed_state(slug: str):
     """
     try:
         import confirmed_values as _cv_f
-        got = _cv_f.load(strict=False)
+        # ★★控えが消えたことを「0件」と読まない★★（2026-09-23・Codexの指摘）
+        #   ★直す前は `require_exists` を付けていなかった★ので、
+        #   控えのファイルが消えると空の控えが返り、
+        #   「0件で記録した免除」と一致して質問が止まったままになった。
+        got = _cv_f.load(strict=False, require_exists=True)
     except Exception:                                        # noqa: BLE001
-        return None                        # ★読めない★＝免除を効かせない
+        return None                        # ★読めない・消えた★＝免除を効かせない
     if not isinstance(got, dict):
         return None
     rows = got.get("machines")
     if not isinstance(rows, dict):
         return None                        # ★入れ物が壊れている★
     per = rows.get(slug)
-    per = per if isinstance(per, dict) else {}
+    if per is None:
+        per = {}                           # ★その機種の記録が無い＝本当の0件★
+    elif not isinstance(per, dict):
+        # ★★その機種の記録だけ壊れているときも「0件」と読まない★★（同）
+        return None
     import hashlib as _hl_cf
     blob = json.dumps(per, ensure_ascii=False, sort_keys=True)
     return (_hl_cf.sha256(blob.encode("utf-8")).hexdigest(),
@@ -1023,6 +1031,22 @@ def _no_line_tests(t) -> None:
             _st0 = _confirmed_state("zz_no_line")
             t("　0件のときは None ではなく（指紋, 空の一覧）",
               _st0 is not None and _st0[1] == [])
+            # ★★控えのファイルが消えた★★（2026-09-23・Codexの指摘）
+            #   ★本物の load に、存在しない置き場を読ませる★（罠①）
+            _cv_t.load = _bak_load
+            _bak_cv_store = _cv_t.STORE
+            try:
+                _cv_t.STORE = os.path.join(tempfile.mkdtemp(prefix="cvgone_"),
+                                           "confirmed_values.json")
+                t("★★控えのファイルが消えたら None★★"
+                  "（★直す前は空の控えが返り「0件」と一致して質問が止まった★）",
+                  _confirmed_state("zz_no_line") is None)
+            finally:
+                _cv_t.STORE = _bak_cv_store
+            _cv_t.load = lambda *a, **k: {"machines": {"zz_no_line": ["壊"]}}
+            t("★★その機種の記録だけ壊れていても None★★"
+              "（★直す前は空の辞書に置き換えて「0件」と読んでいた★）",
+              _confirmed_state("zz_no_line") is None)
         finally:
             _cv_t.load = _bak_load
     finally:
