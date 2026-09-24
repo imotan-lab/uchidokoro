@@ -6414,6 +6414,97 @@ MUTATIONS = [
         "after": "            if field in adopted:",
         "run": ["scripts/confirmed_values.py"],
     },
+    # ─── 2026-09-25・更新タスクの自己修正 ───
+    {
+        "why": "★天井の箱で、1社だけの機械の行が2社で確定した同じ天井と並んで残る"
+               "（★同じ CZ間600G が2行になり、見出しの区別 AT間／CZ間 が外れて"
+               "リコリス・リコイルの育成が毎朝止まる★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "                        return isinstance(r, dict) and _same_ceiling_box(r, _v)",
+        "after": "                        return isinstance(r, dict) and _core(r) == _core(_v)",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★箱の行を比べるとき、全角・空白・型をそろえない"
+               "（★控えの「ＣＺ間」「Ｇ」が機械の「CZ間」「G」と別物に見え、"
+               "画面では同じ見出しの天井が2行並んで育成が止まる★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": '    s = unicodedata.normalize("NFKC", str(x))\n    return " ".join(s.split())',
+        "after": "    return str(x)",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★同じ事実の行が既にあっても控えを足してしまう"
+               "（★機械が2社で採った天井と控えが2行並ぶ／同じ材料へ2回足すと行が増える★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "                    if _strong_here or stamped.get(\"basis\") != \"INDEPENDENT_MULTI\":\n                        continue",
+        "after": "                    if _strong_here or stamped.get(\"basis\") != \"INDEPENDENT_MULTI\":\n                        pass",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★注記（液晶G数など）を片方だけが書いている天井を別物とみなす"
+               "（★同じ CZ間600G が注記の有無だけで2行並び、見出しが外れて育成が止まる★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "        if na and nb and na != nb:",
+        "after": "        if na != nb:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★箱の行を比べるとき、空の値（games_disputed=False など）も比べる"
+               "（★CZの実物の行が控えと一致せず、同じCZが2行並ぶ★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "                    if nv:\n                        out[k] = nv",
+        "after": "                    if True:\n                        out[k] = nv",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★天井が同じかを見るとき恩恵を比べない"
+               "（★同じ600Gでも CZ当選 と AT当選 の天井を1行に潰し、別の事実が消える★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "    if _ceiling_benefit(a) != _ceiling_benefit(b):\n        return False",
+        "after": "    if False:\n        return False",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★曖昧の判定で、空の値（注記なし）も違う値として数える"
+               "（★注記なしと液晶G数の組を曖昧扱いし、同じ天井が3行に増える★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "                        if all(all(not x or _dc[k] == x for k, x in _det(h).items())",
+        "after": "                        if all(all(_dc[k] == x for k, x in _det(h).items())",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★行の確からしさ（濃厚・確定）を LIKELY・GUARANTEED にそろえない"
+               "（★同じ天井が表記の違いだけで2行になる★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "        cert = c2 if c2 != \"PLAIN\" else row_cert.upper()",
+        "after": "        cert = row_cert",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★控えより詳しい条件（区間・注記）を持つ行があっても置き換える"
+               "（★「CZ間」「液晶G数」の条件が記事から消える★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "                    if _richer:\n                        rows[:] = [r for r in rows",
+        "after": "                    if False:\n                        rows[:] = [r for r in rows",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★同じ控えがもう入っていても足してしまう"
+               "（★曖昧で寄せなかった天井が、呼ぶたびに1行ずつ増える★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "                     and r.get(\"_field\") == field for r in rows):",
+        "after": "                     and r.get(\"_field\") == field and False for r in rows):",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★注記なしの控えが2つの別の天井に当たっても寄せてしまう"
+               "（★液晶G数と内部G数の天井が1行に潰れる★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "                    if _cover is None:\n                        _hits = []",
+        "after": "                    if _cover is None:\n                        pass",
+        "run": ["scripts/confirmed_values.py"],
+    },
 ]
 
 

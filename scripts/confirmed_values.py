@@ -52,6 +52,7 @@ import datetime
 import json
 import os
 import sys
+import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -1680,6 +1681,65 @@ def _independent_basis(rec: dict) -> str:
     return "INDEPENDENT_MULTI" if n >= 2 else ""
 
 
+def _box_norm(x) -> str:
+    """★箱の行を比べるときの値のそろえ方★（2026-09-25）
+
+    表示側（`build_new_article._counted_norm`）は NFKC をかけ、空白の連なりを
+    1つに詰めてから見出しを作るので、比べる側も同じ形にそろえないと
+    「画面では同じ行なのに、比べると別物」になって重複が並ぶ。
+    ★空白は消さずに詰めるだけ★（"A B" と "AB" は表示でも別の文字）。
+    ★型もそろえる★（機械は 600、控えは "600" と持つ）。
+    """
+    if x is None or x is False:
+        return ""
+    s = unicodedata.normalize("NFKC", str(x))
+    return " ".join(s.split())
+
+
+# ★同じ天井かを決める鍵★（2026-09-25）＝`ceiling_lookup` の一致鍵のうち、
+#   控えの行も持ちうる項目。role / phase は機械の行だけが持つ
+#   （phase は counted と同じこと）。
+#   ★恩恵は `ceiling_lookup.split_benefit` でそろえてから比べる★＝
+#   「CZ」と「CZに当選」は同じ・「CZ」と「AT」、「当選」と「濃厚」は別。
+_CEILING_BOX_KEY = ("kind", "amount", "unit", "mode", "after_event")
+#   ★片方だけが書いていないなら同じ主張とみなす項目★
+#   （`ceiling_lookup._merge_unqualified` と同じ考え方）。
+_CEILING_BOX_DETAIL = ("counted", "count_note")
+
+
+def _ceiling_benefit(d: dict) -> tuple:
+    import ceiling_lookup as _cl      # noqa: E402（重い取り込みなので使う時だけ）
+    ben, cert = _cl.split_benefit(str((d or {}).get("benefit") or ""))
+    row_cert = _box_norm((d or {}).get("certainty"))
+    if cert == "PLAIN" and row_cert:
+        # ★行の確からしさも同じ物差しでそろえる★（「濃厚」＝LIKELY・「確定」＝GUARANTEED）
+        _, c2 = _cl.split_benefit(row_cert)
+        cert = c2 if c2 != "PLAIN" else row_cert.upper()
+    return _box_norm(ben), cert
+
+
+def _same_ceiling_box(a: dict, b: dict) -> bool:
+    """★同じ天井か★（2026-09-25）
+
+    鍵（`_CEILING_BOX_KEY`）と、そろえた恩恵・確からしさが同じで、
+    数える区間と数え方の注記（`_CEILING_BOX_DETAIL`）がそれぞれ
+    「同じ」か「片方だけが書いていない」とき。
+    ★両方に書いてあって違えば別の天井★（AT間とCZ間・液晶G数と内部G数）。
+    ★片方が書いていない場合の寄せ先が2つ以上あるときは寄せない★
+    （呼ぶ側 `merge_into` が見る＝一意なときだけ）。
+    """
+    a, b = a or {}, b or {}
+    if any(_box_norm(a.get(k)) != _box_norm(b.get(k)) for k in _CEILING_BOX_KEY):
+        return False
+    if _ceiling_benefit(a) != _ceiling_benefit(b):
+        return False
+    for k in _CEILING_BOX_DETAIL:
+        na, nb = _box_norm(a.get(k)), _box_norm(b.get(k))
+        if na and nb and na != nb:
+            return False
+    return True
+
+
 def merge_into(material: dict, slug: str) -> list:
     """集めた材料に、2AIが確定した値を足す。★足したものの一覧を返す★
 
@@ -1688,7 +1748,10 @@ def merge_into(material: dict, slug: str) -> list:
       確定値が独立2出典（INDEPENDENT_MULTI）のときは、確定値に置き換える。
       ★「機械が採れているなら独立2出典」という前提は、2026-09-20 に
       1社でも採る道を広げた日に崩れた★（1社の値が2社の確定値を押しのけていた）。
-      箱（天井・AT・CZの行）には当てていない＝どの行が同じ事実かは意味の判断。
+      ★箱（天井・AT・CZの行）にも同じ決まりを当てる★（2026-09-25）＝
+      天井は構造の鍵（`_same_ceiling_box`）、それ以外の箱（AT・CZ・リセット・
+      ゲーム性）は中身がそろえて同じとき。
+      同じ事実の行が既にあれば控えは足さない（何度呼んでも増えない）。
     ★入れ先を間違えない★（2026-08-09・依頼130 P0-1）
       天井・AT・CZは基本スペックとは別の場所に入る。全部を adopted に
       入れていたので、記事に届かないうえ KeyError で落ちていた。
@@ -1745,13 +1808,113 @@ def merge_into(material: dict, slug: str) -> list:
             box = material.setdefault(where, {})
             rows = box.setdefault("adopted", [])
             # ★同じ中身が既にあるなら足さない★（機械が採れていれば上書きしない）
+            #   出所・出典URL・根拠の名乗り（basis / *_basis）は比べない
+            #   （機械が採った行と形が違うだけで「別物」と見なして重複して
+            #    増えていた・依頼131 P1／2026-09-25に basis も外した）。
+            #   ★値は表示側と同じようにそろえてから比べる★（全角・空白・型）
+            #   ＝600 と "600"、"ＣＺ間" と "CZ間" は画面では同じ行になる。
+            #   ★空の値は無いものとして比べる★（CZ抽出器は games_disputed=False
+            #   などを必ず付けるが、控えは持たない＝有無の違いだけで別物に見えた）。
             def _core(d):
-                # 出所や出典URLは比べない（機械が採った行と形が違うだけで
-                # 「別物」と見なして重複して増えていた・依頼131 P1）
-                return {k: v for k, v in (d or {}).items()
-                        if not k.startswith("_") and k != "sources"}
-            if any(_core(r) == _core(rec["value"]) for r in rows):
+                out = {}
+                for k, v in (d or {}).items():
+                    if (k.startswith("_") or k in ("sources", "basis")
+                            or k.endswith("_basis")):
+                        continue
+                    nv = _box_norm(v)
+                    if nv:
+                        out[k] = nv
+                return out
+            _v = rec["value"]
+            if not isinstance(_v, dict):
+                if any(_core(r) == _core(_v) for r in rows):
+                    continue
+            elif any(isinstance(r, dict) and r.get("_from") == "confirmed_values"
+                     and r.get("_field") == field for r in rows):
+                # ★同じ控えがもう入っているなら足さない★（2026-09-25・Codexの5回目）
+                #   ＝曖昧で寄せなかった場合でも、2回目以降の呼び出しで増えない。
                 continue
+            else:
+                # ★★同じ事実の行が既にあるとき（2026-09-25・更新タスクの自己修正）★★
+                #   ★直す前★＝「中身が完全に同じ」ときだけ重ねずに済ませていた。
+                #   機械の天井の行は恩恵を「CZ」、確定値は「CZに当選」と書くので
+                #   別物に見え、★同じ CZ間600G が2行並んだ★。見出しの区別
+                #   （AT間／CZ間）が重複で外れ、前に載っていた文を再現できずに
+                #   育成が毎朝止まった（実例＝pw_10503）。
+                #   ★天井は `_same_ceiling_box` で見る★＝種類・G数・単位・モード・
+                #   発生条件と、`split_benefit` でそろえた恩恵・確からしさが同じ
+                #   （「CZ」と「CZに当選」は同じ・「CZ」と「AT」は別）。
+                #   数える区間・注記は片方だけ空なら同じ、両方にあって違えば別
+                #   （ceiling_lookup と同じ考え）。
+                #   ★AT・CZは中身がそろえて同じときだけ★＝名前の書き方の違いを
+                #   同じとみなすのは意味の判断なので当てない。
+                #   ★強さで決める★＝既にある行が全部「1社だけの機械の行」で、
+                #   控えが独立2出典なら置き換える。それ以外（機械が2社で採った・
+                #   既に控えの行がある・控えも1系列）なら控えを足さない
+                #   ＝何度呼んでも行は増えない。
+                #   ★機種ごとの恩恵の別名表（benefit_aliases）は通さない★＝
+                #   登録は1組だけで、片方の表記は取得を止めたP-WORLD由来。
+                #   外れたときは控えが足され、見出しが重なって育成の関所が止める
+                #   （誤った内容は出ない側に倒れる）。
+                if where == "ceilings":
+                    def _same(r):
+                        return isinstance(r, dict) and _same_ceiling_box(r, _v)
+                else:
+                    def _same(r, _c=_core(_v)):
+                        return isinstance(r, dict) and _core(r) == _c
+                _hits = [r for r in rows if _same(r)]
+                # ★寄せ先が一意でないなら寄せない★（2026-09-25・Codexの3回目）
+                #   注記なしの控えが「液晶G数」「内部G数」の2行に同時に当たると、
+                #   別々の天井を1行に潰してしまう。数える区間・注記の組が
+                #   2通り以上に分かれるときは、同じ事実とみなさない。
+                #   ★寄せてよいのは、ほかの全部の行の条件を含む「1行」があるときだけ★
+                #   （「注記なし」と「液晶G数」の組は一意に寄せられる／
+                #    「CZ間だけ」と「液晶G数だけ」の2行を合成して、どちらにも無い
+                #    「CZ間かつ液晶G数」を作らない＝Codexの6回目）。
+                _cover = None
+                if where == "ceilings" and _hits:
+                    def _det(r):
+                        return {k: _box_norm(r.get(k)) for k in _CEILING_BOX_DETAIL}
+                    for _c in _hits:
+                        _dc = _det(_c)
+                        if all(all(not x or _dc[k] == x for k, x in _det(h).items())
+                               for h in _hits):
+                            _cover = _c
+                            break
+                    if _cover is None:
+                        _hits = []
+                #   ★天井・AT・CZ・リセット・ゲーム性の箱すべてに当てる★
+                #   （同じ事実の行を2つ並べてよい箱は無い）。
+                #   ★既にある行に強いものが混ざっていれば、弱い重複だけ外して
+                #   控えは足さない★（★材料は毎回取り直して作り、merge_into は
+                #   1回しか呼ばれないので、過去の実行の重複が持ち越されることは無い★。
+                #   同じ控えが既に入っている場合は上の分岐で足さずに終わる）。
+                if _hits:
+                    _weak = [r for r in _hits
+                             if r.get("_from") != "confirmed_values"
+                             and r.get("basis") == "SINGLE_NEAR_RELEASE"]
+                    _strong_here = len(_weak) < len(_hits)
+                    # ★★控えより詳しい条件（区間・注記）を持つ行があるなら置き換えない★★
+                    #   （2026-09-25・Codexの5・6回目）＝置き換えると条件が消える。
+                    #   ★控えの行に条件を書き足すこともしない★＝公開の関所
+                    #   （build_new_article.require_basis）は「控えと完全に一致」を
+                    #   求めるので、書き足した行は根拠の無い値として止まる（実際に止まった）。
+                    #   ★その詳しい1行だけを残し、ほかの弱い重複を外して、控えは足さない★
+                    #   （詳しい側を残す＝ceiling_lookup._merge_unqualified と同じ）。
+                    #   ★+α は比べも引き継ぎもしない★＝判定書・記事・育成のどこも読まない。
+                    _richer = (where == "ceilings" and _cover is not None
+                               and any(_box_norm(_cover.get(k))
+                                       and not _box_norm(_v.get(k))
+                                       for k in _CEILING_BOX_DETAIL))
+                    if _richer:
+                        rows[:] = [r for r in rows
+                                   if r is _cover or not any(r is w for w in _weak)]
+                        continue
+                    if _strong_here or stamped.get("basis") == "INDEPENDENT_MULTI":
+                        rows[:] = [r for r in rows
+                                   if not any(r is w for w in _weak)]
+                    if _strong_here or stamped.get("basis") != "INDEPENDENT_MULTI":
+                        continue
             row = dict(rec["value"]) if isinstance(rec["value"], dict) else {
                 "value": rec["value"]}
             row["_from"] = "confirmed_values"
@@ -3476,6 +3639,214 @@ def selftest() -> int:
         merge_into(_mat_single1, "zzz_cv")
         t("　（対照）確定値も1系列なら置き換えない（強さが同じ）",
           _mat_single1["adopted"]["payout_range"]["value"]["high"] == 108.5)
+        # ★★天井の箱でも、1社だけの機械の行は2社で確定した行に道を譲る★★
+        #   （2026-09-25・更新タスクの自己修正）
+        #   ★直す前★＝箱（天井）は「中身が完全に同じ」ときだけ重ねずに済ませていた。
+        #   機械の行は恩恵を「CZ」、確定値は「CZに当選」と書くので別物に見え、
+        #   ★同じ CZ間600G が2行並んだ★。見出しの区別（AT間／CZ間）が
+        #   重複で外れ、前に載っていた「ゲーム数天井（CZ間）」の文が
+        #   再現できなくなって育成が毎朝止まった（実例＝pw_10503）。
+        #   ★同じ天井の目印は構造だけ★＝種類・G数・単位・数える区間。
+        _c_cz = {"kind": "GAME", "amount": "600", "unit": "G",
+                 "counted": "CZ間", "benefit": "CZに当選"}
+        globals()["for_slug"] = lambda s: {"ceiling#cz": {
+            "value": _c_cz, "sources": _rec2["sources"],
+            "agreed_by": ["claude", "codex"]}}
+        _mat_c1 = {"ceilings": {"adopted": [{
+            "kind": "GAME", "amount": 600, "unit": "G", "counted": "CZ間",
+            "benefit": "CZ", "sources": ["vote:chonborista"],
+            "basis": "SINGLE_NEAR_RELEASE"}]}}
+        merge_into(_mat_c1, "zzz_cv")
+        _rows_c1 = _mat_c1["ceilings"]["adopted"]
+        t("★★天井の箱でも、1社だけの機械の行は2社で確定した同じ天井に置き換わる★★"
+          "／★置き換えないと同じ CZ間600G が2行並び、見出しの区別が外れる★",
+          len(_rows_c1) == 1
+          and _rows_c1[0].get("_from") == "confirmed_values"
+          and _rows_c1[0].get("benefit") == "CZに当選")
+        _mat_c2 = {"ceilings": {"adopted": [{
+            "kind": "GAME", "amount": 800, "unit": "G", "counted": "CZ間",
+            "benefit": "CZ", "sources": ["vote:chonborista"],
+            "basis": "SINGLE_NEAR_RELEASE"}]}}
+        merge_into(_mat_c2, "zzz_cv")
+        t("　（対照）G数が違う天井は別の天井として残す（行は2つ）",
+          len(_mat_c2["ceilings"]["adopted"]) == 2)
+        _mat_c3 = {"ceilings": {"adopted": [{
+            "kind": "GAME", "amount": 600, "unit": "G", "counted": "CZ間",
+            "benefit": "CZ", "sources": ["vote:chonborista", "vote:nana-press"],
+            "basis": "INDEPENDENT_MULTI"}]}}
+        merge_into(_mat_c3, "zzz_cv")
+        t("　（対照）機械が2社で採った天井は消さず、同じ天井の控えも足さない（1行だけ）",
+          len(_mat_c3["ceilings"]["adopted"]) == 1
+          and _mat_c3["ceilings"]["adopted"][0].get("benefit") == "CZ")
+        # ★全角・空白・型の違いは、画面では同じ行＝同じ天井として扱う★
+        globals()["for_slug"] = lambda s: {"ceiling#cz": {
+            "value": dict(_c_cz, counted=" ＣＺ間 ", unit="Ｇ"),
+            "sources": _rec2["sources"], "agreed_by": ["claude", "codex"]}}
+        _mat_c4 = {"ceilings": {"adopted": [{
+            "kind": "GAME", "amount": 600, "unit": "G", "counted": "CZ間",
+            "benefit": "CZ", "sources": ["vote:chonborista"],
+            "basis": "SINGLE_NEAR_RELEASE"}]}}
+        merge_into(_mat_c4, "zzz_cv")
+        t("★全角・空白の違う控えでも、同じ天井なら1行に置き換わる★"
+          "（表示側はそろえてから見出しを作るので、比べる側もそろえる）",
+          len(_mat_c4["ceilings"]["adopted"]) == 1
+          and _mat_c4["ceilings"]["adopted"][0].get("_from") == "confirmed_values")
+        globals()["for_slug"] = lambda s: {"ceiling#cz": {
+            "value": _c_cz, "sources": _rec2["sources"],
+            "agreed_by": ["claude", "codex"]}}
+        _mat_c5 = {"ceilings": {"adopted": [{
+            "kind": "GAME", "amount": 600, "unit": "G", "counted": "CZ間",
+            "count_note": "液晶G数", "benefit": "CZ",
+            "sources": ["vote:chonborista"], "basis": "SINGLE_NEAR_RELEASE"}]}}
+        merge_into(_mat_c5, "zzz_cv")
+        t("★注記を片方だけが書いている天井は同じ天井＝1行だけ★"
+          "（ceiling_lookup と同じ考え・2行並ぶと見出しが外れて止まる）"
+          "／★注記（液晶G数）は置き換えても残る★",
+          len(_mat_c5["ceilings"]["adopted"]) == 1
+          and _mat_c5["ceilings"]["adopted"][0].get("count_note") == "液晶G数")
+        globals()["for_slug"] = lambda s: {"ceiling#cz": {
+            "value": dict(_c_cz, count_note="内部G数"), "sources": _rec2["sources"],
+            "agreed_by": ["claude", "codex"]}}
+        _mat_c6 = {"ceilings": {"adopted": [{
+            "kind": "GAME", "amount": 600, "unit": "G", "counted": "CZ間",
+            "count_note": "液晶G数", "benefit": "CZ",
+            "sources": ["vote:chonborista"], "basis": "SINGLE_NEAR_RELEASE"}]}}
+        merge_into(_mat_c6, "zzz_cv")
+        t("　（対照）注記が両方にあって違う天井（液晶G数と内部G数）は別の主張として残す",
+          len(_mat_c6["ceilings"]["adopted"]) == 2)
+        globals()["for_slug"] = lambda s: {"ceiling#cz": {
+            "value": _c_cz, "sources": _rec2["sources"],
+            "agreed_by": ["claude", "codex"]}}
+        _mat_c7 = {"ceilings": {"adopted": [
+            {"kind": "GAME", "amount": 600, "unit": "G", "counted": "CZ間",
+             "benefit": "CZ", "sources": ["vote:chonborista"],
+             "basis": "SINGLE_NEAR_RELEASE"},
+            {"kind": "GAME", "amount": "600", "unit": "G", "counted": "CZ間",
+             "benefit": "CZに当選", "_from": "confirmed_values",
+             "sources": ["x"], "basis": "INDEPENDENT_MULTI"}]}}
+        merge_into(_mat_c7, "zzz_cv")
+        t("★強い行が既にあれば、同じ天井の弱い行は外れる★（1行だけ）",
+          len(_mat_c7["ceilings"]["adopted"]) == 1
+          and _mat_c7["ceilings"]["adopted"][0].get("_from") == "confirmed_values")
+        def _weak_row(**kw):
+            r = {"kind": "GAME", "amount": 600, "unit": "G", "benefit": "CZ",
+                 "sources": ["vote:chonborista"], "basis": "SINGLE_NEAR_RELEASE"}
+            r.update(kw)
+            return r
+
+        def _cv_with(**kw):
+            v = {"kind": "GAME", "amount": "600", "unit": "G",
+                 "benefit": "CZに当選"}
+            v.update(kw)
+            v = {k: x for k, x in v.items() if x is not None}
+            globals()["for_slug"] = lambda s: {"ceiling#cz": {
+                "value": v, "sources": _rec2["sources"],
+                "agreed_by": ["claude", "codex"]}}
+        _cv_with(counted=None)
+        _mat_d1 = {"ceilings": {"adopted": [_weak_row(counted="CZ間")]}}
+        merge_into(_mat_d1, "zzz_cv")
+        t("★数える区間を控えだけが書いていない天井も同じ天井＝1行だけ★"
+          "／★「CZ間」の条件を持つ行を残す★（詳しい側を残す・控えは書き換えない）",
+          len(_mat_d1["ceilings"]["adopted"]) == 1
+          and _mat_d1["ceilings"]["adopted"][0].get("counted") == "CZ間")
+        _cv_with(counted="CZ間")
+        _mat_d2 = {"ceilings": {"adopted": [_weak_row()]}}
+        merge_into(_mat_d2, "zzz_cv")
+        t("　（逆向き）機械の行だけが数える区間を書いていなくても1行だけ",
+          len(_mat_d2["ceilings"]["adopted"]) == 1)
+        _cv_with(counted="CZ間")
+        _mat_d3 = {"ceilings": {"adopted": [_weak_row(counted="CZ間", benefit="AT")]}}
+        merge_into(_mat_d3, "zzz_cv")
+        t("★恩恵が本当に違う天井（CZ と AT）は同じとみなさない＝2行★",
+          len(_mat_d3["ceilings"]["adopted"]) == 2)
+        _mat_d4 = {"ceilings": {"adopted": [_weak_row(counted="CZ間",
+                                                      benefit="CZ当選濃厚")]}}
+        merge_into(_mat_d4, "zzz_cv")
+        t("　（確からしさ）「当選」と「濃厚」は別の主張＝2行",
+          len(_mat_d4["ceilings"]["adopted"]) == 2)
+        _cv_with(counted="CZ間")
+        _mat_d5 = {"ceilings": {"adopted": [
+            _weak_row(counted="CZ間", count_note="液晶G数"),
+            _weak_row(counted="CZ間", count_note="内部G数")]}}
+        merge_into(_mat_d5, "zzz_cv")
+        _cv_with(counted="CZ間")
+        _mat_d6 = {"ceilings": {"adopted": [
+            _weak_row(counted="CZ間"),
+            _weak_row(counted="CZ間", count_note="液晶G数")]}}
+        merge_into(_mat_d6, "zzz_cv")
+        t("★「注記なし」と「液晶G数」の組は一意なので寄せる★（3行に増やさず1行）",
+          len(_mat_d6["ceilings"]["adopted"]) == 1)
+        _cv_with(counted="CZ間", benefit="CZ", certainty="LIKELY")
+        _mat_d7 = {"ceilings": {"adopted": [
+            _weak_row(counted="CZ間", certainty="濃厚")]}}
+        merge_into(_mat_d7, "zzz_cv")
+        t("★確からしさの日本語表記（濃厚）と LIKELY は同じ＝1行★",
+          len(_mat_d7["ceilings"]["adopted"]) == 1)
+        t("★注記なしの控えが2つの別の天井に当たるときは寄せない★（液晶・内部の2行は残る）",
+          sum(1 for r in _mat_d5["ceilings"]["adopted"]
+              if r.get("count_note") in ("液晶G数", "内部G数")) == 2)
+        _cv_with(counted=None)
+        _mat_d8 = {"ceilings": {"adopted": [
+            _weak_row(counted="CZ間"), _weak_row(count_note="液晶G数")]}}
+        merge_into(_mat_d8, "zzz_cv")
+        t("★別々の行の条件を合成しない★（「CZ間だけ」と「液晶G数だけ」の2行は寄せずに残す）",
+          sum(1 for r in _mat_d8["ceilings"]["adopted"]
+              if r.get("_from") != "confirmed_values") == 2
+          and not any(r.get("counted") == "CZ間" and r.get("count_note") == "液晶G数"
+                      for r in _mat_d8["ceilings"]["adopted"]))
+        _cv_with(counted="CZ間")
+        _mat_d9 = {"ceilings": {"adopted": [_weak_row(counted="CZ間", plus_alpha=True)]}}
+        merge_into(_mat_d9, "zzz_cv")
+        t("★置き換えた行は控えと完全に同じ★（条件や +α を書き足さない＝公開の関所が断るため）",
+          len(_mat_d9["ceilings"]["adopted"]) == 1
+          and _mat_d9["ceilings"]["adopted"][0].get("_from") == "confirmed_values"
+          and "plus_alpha" not in _mat_d9["ceilings"]["adopted"][0])
+        _cv_with(counted="CZ間")
+        _n_d5 = len(_mat_d5["ceilings"]["adopted"])
+        merge_into(_mat_d5, "zzz_cv")
+        t("★曖昧で寄せなかった控えも、もう一度足して増えない★",
+          len(_mat_d5["ceilings"]["adopted"]) == _n_d5)
+        globals()["for_slug"] = lambda s: {"ceiling#cz": {
+            "value": _c_cz, "sources": _rec2["sources"],
+            "agreed_by": ["claude", "codex"]}}
+        merge_into(_mat_c1, "zzz_cv")
+        t("★同じ材料へもう一度足しても行は増えない★（何度呼んでも1行）",
+          len(_mat_c1["ceilings"]["adopted"]) == 1)
+        # ★AT・CZでも、中身がそろえて同じ行は重ねない★（根拠の名乗りと型は比べない）
+        globals()["for_slug"] = lambda s: {"at#main": {
+            "value": {"mode": "MAIN_AT", "net": "2.8"},
+            "sources": _rec2["sources"], "agreed_by": ["claude", "codex"]}}
+        _mat_a1 = {"at_specs": {"adopted": [{
+            "mode": "MAIN_AT", "net": 2.8, "sources": ["vote:dmm-ptown"],
+            "basis": "SINGLE_NEAR_RELEASE"}]}}
+        merge_into(_mat_a1, "zzz_cv")
+        t("★AT・CZでも、中身が同じ1社だけの行は2社の控えに置き換わる★（1行だけ）",
+          len(_mat_a1["at_specs"]["adopted"]) == 1
+          and _mat_a1["at_specs"]["adopted"][0].get("_from") == "confirmed_values")
+        # ★CZは抽出器の実物の形で試す★（games_disputed などを必ず付ける）
+        globals()["for_slug"] = lambda s: {"cz#x": {
+            "value": {"name": "○○チャレンジ", "games": "4G", "rate": "約40%"},
+            "sources": _rec2["sources"], "agreed_by": ["claude", "codex"]}}
+        _mat_z1 = {"czs": {"adopted": [{
+            "name": "○○チャレンジ", "games": "4G", "rate": "約40%",
+            "sources": ["vote:dmm-ptown"], "basis": "SINGLE_NEAR_RELEASE",
+            "games_basis": "SINGLE_NEAR_RELEASE", "rate_basis": "SINGLE_NEAR_RELEASE",
+            "games_disputed": False, "rate_disputed": False}]}}
+        merge_into(_mat_z1, "zzz_cv")
+        t("★CZ（抽出器の実物の形）でも、同じ1社だけの行は2社の控えに置き換わる★",
+          len(_mat_z1["czs"]["adopted"]) == 1
+          and _mat_z1["czs"]["adopted"][0].get("_from") == "confirmed_values")
+        # ★リセットの箱にも同じ決まりが当たる★
+        globals()["for_slug"] = lambda s: {"reset#at": {
+            "value": {"kind": "CEILING_SHORTENED", "games": "600", "counted": "AT間"},
+            "sources": _rec2["sources"], "agreed_by": ["claude", "codex"]}}
+        _mat_r1 = {"resets": {"adopted": [{
+            "kind": "CEILING_SHORTENED", "games": 600, "counted": "AT間",
+            "sources": ["vote:dmm-ptown"], "basis": "SINGLE_NEAR_RELEASE"}]}}
+        merge_into(_mat_r1, "zzz_cv")
+        t("★リセットの箱でも、同じ1社だけの行は2社の控えに置き換わる★",
+          len(_mat_r1["resets"]["adopted"]) == 1
+          and _mat_r1["resets"]["adopted"][0].get("_from") == "confirmed_values")
     finally:
         globals()["for_slug"] = _keep_for
 
