@@ -12357,5 +12357,66 @@
     "p-town.dmm.com"
    ]
   }
+ },
+ {
+  "slug": "dmm_5101",
+  "name": "スマスロ 快盗天使ツインエンジェル2",
+  "seo": {
+   "title": "スマスロ 快盗天使ツインエンジェル2 スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [
+    "games_per_50"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-24",
+   "input_digest": "sha256:51952650b85627aa9862946a49a2af0b02fb941b3d36c1a4109341333094e165"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-12-07",
+  "identity": {
+   "manufacturer_id": "sammy",
+   "official_product_url": "https://p-town.dmm.com/machines/5101",
+   "announced_name": "スマスロ 快盗天使ツインエンジェル2",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5101 型式=未掲載 メーカー=サミー 導入=2026-12-07 確認日=2026-09-24",
+   "market_release_date": "2026-12-07"
+  },
+  "checker": {
+   "coinRate": 35.0,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {}
+  }
  }
 ]
