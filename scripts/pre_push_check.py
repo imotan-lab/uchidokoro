@@ -730,6 +730,88 @@ def new_machine_lane(paths, lane_slugs) -> bool:
     return saw
 
 
+_ORDER_FILE = "assets/data/machines.json"
+
+
+def order_only(before_text, after_text) -> bool:
+    """★機種一覧の変更が「並べ替えだけ」か★（2026-09-25）
+
+    ★なぜ要るか★＝更新タスクは毎朝、担当を取る前に並べ替えをする
+    （手順書 STEP 0-W）。ところが夜の新台タスクが0時を過ぎてから公開すると、
+    その日は既に「無人が動いた日」になり、★機種一覧を触ったコミットは
+    全部、1機種ぶんの照合を求められる★。並べ替えはどの機種のものでもない
+    ので照合を通す道が無く、★2026-09-24の朝は押し出せずに取り消した★。
+
+    ★照合が守っているのは「記事の書き換え」★。並べ替えは中身を1文字も
+    変えないので、★中身がまったく同じで順番だけが違う★ことを機械が
+    確かめられれば、照合は要らない。
+
+    ★厳しく読む★＝同じキーの重複・NaN は読めないものとして扱う
+    （後勝ちで中身を差し替えられるため）。読めなければ False（照合を求める）。
+    ★比べ方は「重なりも数える」★（件数が同じでも、1件を2つに増やして
+    別の1件を消す形を通さない）。
+    """
+    import safe_json as _sj
+
+    def _load(text):
+        return json.loads(text, object_pairs_hook=_sj._no_duplicate_keys,
+                          parse_constant=_sj._reject_constant)
+    try:
+        a, b = _load(before_text), _load(after_text)
+    except Exception:                                        # noqa: BLE001
+        return False
+    if not (isinstance(a, list) and isinstance(b, list)):
+        return False
+
+    def _key(x):
+        return json.dumps(x, ensure_ascii=False, sort_keys=True)
+    return sorted(map(_key, a)) == sorted(map(_key, b))
+
+
+def order_only_commit(sha, paths, git=None) -> bool:
+    """★そのコミットが記事に触れているのは「機種一覧の並べ替え」だけか★
+    （2026-09-25）
+
+    ★見る順★＝①記事に触れるファイルが機種一覧1本だけ
+    ②親がちょうど1つ（合流や最初のコミットは見ない＝照合を求める）
+    ③親とそのコミットの機種一覧が `order_only`。
+    ★早見表・キャッシュの版・承認の記録は、もともと照合の対象ではない★
+    （`touches_articles` が見ていない）。早見表が機種一覧と合っているかは、
+    この関所のあとの `build_hub_pages.py --check` が見る。
+    ★git に聞けなければ False★（照合を求める側に倒す）。
+    """
+    git = git or _git
+    arts = sorted({str(p or "").replace("\\", "/") for p in paths
+                   if touches_articles([p])})
+    if arts != [_ORDER_FILE] or not sha:
+        return False
+    par = (git("rev-list", "--parents", "-n", "1", sha) or "").split()
+    if len(par) != 2:
+        return False
+    before = git("show", f"{par[1]}:{_ORDER_FILE}")
+    after = git("show", f"{sha}:{_ORDER_FILE}")
+    if before is None or after is None:
+        return False
+    return order_only(before, after)
+
+
+def needs_check(sha, paths, lane, git=None) -> bool:
+    """★そのコミットに照合を求めるか★（★判断はここの1か所★）
+
+    ①記事に触れていない → 求めない
+    ②その日の新台レーンだけ → 求めない（新台には別の関所がある）
+    ③機種一覧の並べ替えだけ → 求めない（2026-09-25）
+    それ以外は求める。
+    """
+    if not touches_articles(paths):
+        return False
+    if new_machine_lane(paths, lane):
+        return False
+    if order_only_commit(sha, paths, git=git):
+        return False
+    return True
+
+
 def gate_active(data: dict, today: str) -> tuple:
     """★今日、照合を求めるか★ → (求めるか, 照合済みコミットの集合)
 
@@ -843,19 +925,33 @@ def _verified_range() -> list:
         #   （実際に、夜の新台タスクを直すコミットが止められた）。
         #   照合は**記事の書き換え**を守る仕組みで、
         #   無人タスクの記事コミットは必ず記事データに触るので守りは弱まらない。
-        _f = subprocess.run(["git", "show", "--name-only", "--format=", sha],
-                            cwd=BASE, capture_output=True)
-        if _f.returncode == 0:
-            _paths = [x.strip() for x in
-                      _f.stdout.decode("utf-8", "replace").splitlines()
-                      if x.strip()]
-            if not touches_articles(_paths):
-                continue
-            # ★新台レーンは別の関所が見ている★（2026-08-28）
-            if new_machine_lane(_paths, lane):
+        _paths = commit_paths(sha)
+        if _paths is not None:
+            # ★判断は needs_check の1か所★（記事に触れない／新台レーン〈2026-08-28〉
+            #   ／機種一覧の並べ替えだけ〈2026-09-25〉）
+            if not needs_check(sha, _paths, lane):
                 continue
         out.append(f"{sha[:12]} {subject[:60]}")
     return out
+
+
+def commit_paths(sha, cwd=None):
+    """★そのコミットが触ったファイル★（読めなければ None＝照合を求める側）
+
+    ★★名前の変更は「消した元」と「足した先」の両方を出す★★
+    （2026-09-25・Codexの指摘・実物で確かめた）＝`--no-renames`。
+    ★直す前は付けていなかった★ので、git が名前の変更と判定すると
+    ★変更後の名前しか出なかった★（実物＝024184f3 は
+    `legacy/hokuto_checker.html` だけ）。記事（`machines/<slug>/`）を
+    見張りの外へ動かして中身も書き換え、機種一覧の並べ替えと一緒に
+    コミットすると、並べ替えだけに見えて★照合なしで通った★。
+    """
+    f = subprocess.run(["git", "-C", cwd or BASE, "show", "--no-renames",
+                        "--name-only", "--format=", sha], capture_output=True)
+    if f.returncode != 0:
+        return None
+    return [x.strip() for x in f.stdout.decode("utf-8", "replace").splitlines()
+            if x.strip()]
 
 
 _TODAY = datetime.now().strftime("%Y-%m-%d")
@@ -929,6 +1025,131 @@ def _selftest() -> int:
       new_machine_lane(_np, []) is False)
     t("　共通のファイルだけなら、新台とは言えない",
       new_machine_lane(["assets/data/machines.json"], ["dmm_5090"]) is False)
+
+    # ★★機種一覧の並べ替えだけのコミットは、照合を求めない★★（2026-09-25）
+    #   ★直す前は求めていた★ので、夜の公開が0時をまたいだ日の朝は
+    #   並べ替えを押し出せなかった（2026-09-24に実際に取り消した）。
+    _OA = json.dumps([{"slug": "a", "name": "甲"}, {"slug": "b", "name": "乙"}],
+                     ensure_ascii=False)
+    _OB = json.dumps([{"name": "乙", "slug": "b"}, {"slug": "a", "name": "甲"}],
+                     ensure_ascii=False)
+    t("★★中身が同じで順番だけ違えば「並べ替えだけ」★★",
+      order_only(_OA, _OB) is True)
+    t("★★1か所でも値が違えば、並べ替えではない★★",
+      order_only(_OA, _OB.replace("乙", "丙")) is False)
+    t("　件数が違えば、並べ替えではない",
+      order_only(_OA, json.dumps([{"slug": "a", "name": "甲"}],
+                                 ensure_ascii=False)) is False)
+    _Oa, _Ob = {"slug": "a"}, {"slug": "b"}
+    t("★★1件を2つに増やして別の1件を消す形は通さない★★（重なりも数える）",
+      order_only(json.dumps([_Oa, _Oa, _Ob]), json.dumps([_Oa, _Ob, _Ob]))
+      is False)
+    t("★★同じキーが2回ある形は読めないものとして扱う★★"
+      "（後勝ちで中身を差し替えられる）",
+      order_only(_OA, '[{"slug": "b", "name": "x", "name": "乙"},'
+                      ' {"slug": "a", "name": "甲"}]') is False)
+    t("　一覧の形でなければ、並べ替えとみなさない",
+      order_only('{"slug": "a"}', '{"slug": "a"}') is False)
+    t("　壊れたJSONは、並べ替えとみなさない", order_only(_OA, "[") is False)
+
+    def _fg(files, parents="c0ffee p4rent"):
+        """偽の git（親の一覧と、コミットごとの機種一覧だけを返す）"""
+        def _g(*a):
+            if a and a[0] == "rev-list":
+                return parents + "\n"
+            if a and a[0] == "show":
+                return files.get(a[1].split(":")[0])
+            return None
+        return _g
+    # ★実物の並べ替えコミット（2026-09-22 5166c434）と同じ4ファイル★
+    _reo = ["assets/data/machines.json", "assets/data/template-approval.json",
+            "guide-ichiran.html", "service-worker.js"]
+    _perm = {"p4rent": _OA, "c0ffee": _OB}
+    t("★★並べ替えのコミットは照合を求めない★★"
+      "（★求めていたので、2026-09-24の朝は並び順を反映できなかった★）",
+      needs_check("c0ffee", _reo, [], git=_fg(_perm)) is False)
+    t("★★並べ替えに見せて中身を1つ変えたら、今までどおり照合を求める★★",
+      needs_check("c0ffee", _reo, [],
+                  git=_fg({"p4rent": _OA, "c0ffee": _OB.replace("乙", "丙")}))
+      is True)
+    t("★★機種の記事が一緒に入っていたら、並べ替えだけとは言えない★★",
+      needs_check("c0ffee", _reo + ["assets/data/machine-details/hanabi.json"],
+                  [], git=_fg(_perm)) is True)
+    t("　親が2つ（合流）なら見ない＝照合を求める",
+      needs_check("c0ffee", _reo, [],
+                  git=_fg({**_perm, "p2": _OA}, "c0ffee p4rent p2")) is True)
+    t("　git に聞けなければ照合を求める",
+      needs_check("c0ffee", _reo, [], git=_fg({})) is True)
+    t("　記事に触れないコミットは、今までどおり照合を求めない",
+      needs_check("c0ffee", ["scripts/x.py"], [], git=_fg({})) is False)
+    t("　新台レーンのコミットは、今までどおり照合を求めない",
+      needs_check("c0ffee", _np, ["dmm_5090"], git=_fg({})) is False)
+    # ★★push前の照合が、実際にこの判断を通っている★★（罠③）
+    #   ★呼び出しを外すと、試験の判断だけが緑のまま並べ替えがまた止まる★。
+    #   文字ではなく構文の木で見る（コメントに残った名前を数えない）。
+    import ast as _ast
+    import inspect as _ins
+    _vr_calls = [n for n in _ast.walk(_ast.parse(_ins.getsource(_verified_range)))
+                 if isinstance(n, _ast.Call)
+                 and getattr(n.func, "id", "") == "needs_check"]
+    t("★★push前の照合は needs_check を呼んで決めている★★",
+      len(_vr_calls) == 1)
+    _vr_paths = [n for n in _ast.walk(_ast.parse(_ins.getsource(_verified_range)))
+                 if isinstance(n, _ast.Call)
+                 and getattr(n.func, "id", "") == "commit_paths"]
+    t("★★push前の照合は、触ったファイルを commit_paths で読んでいる★★"
+      "（★名前の変更で元の置き場が消える読み方に戻さない★）",
+      len(_vr_paths) == 1)
+
+    # ★★名前を変えたコミットでも、元の置き場が一覧に出る★★
+    #   （2026-09-25・Codexの指摘）★本物の git で、名前の変更と判定される
+    #   コミットを一時の場所に作って確かめる★（パスを手で渡す試験では、
+    #   読み方の穴は見えない）。
+    import io as _io
+    import shutil as _sh
+    _rt = tempfile.mkdtemp(prefix="ppc_rename_")
+    try:
+        def _rg(*a, text=False):
+            r = subprocess.run(
+                ["git", "-C", _rt, "-c", "user.name=t", "-c", "user.email=t@t",
+                 "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"]
+                + list(a), capture_output=True, text=text,
+                encoding="utf-8" if text else None,
+                errors="replace" if text else None)
+            return r.stdout if r.returncode == 0 else None
+
+        def _rw(rel, body):
+            p = os.path.join(_rt, *rel.split("/"))
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with _io.open(p, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(body)
+        _rg("init", "-q")
+        _art = "".join(f"記事の本文 {i} 行目です。\n" for i in range(60))
+        _rw("machines/foo/index.html", _art)
+        _rw(_ORDER_FILE, _OA)
+        _rg("add", "-A")
+        _rg("commit", "-q", "-m", "a")
+        # 記事を見張りの外へ動かして少し書き換え、機種一覧は並べ替えるだけ
+        os.remove(os.path.join(_rt, "machines", "foo", "index.html"))
+        _rw("legacy/foo.html", _art + "書き足した1行です。\n")
+        _rw(_ORDER_FILE, _OB)
+        _rg("add", "-A")
+        _rg("commit", "-q", "-m", "b")
+        _rsha = (_rg("rev-parse", "HEAD", text=True) or "").strip()
+        _plain = [x for x in (_rg("show", "--name-only", "--format=", _rsha,
+                                  text=True) or "").splitlines() if x.strip()]
+        t("　（前提）git はこれを名前の変更と見ている（ふつうに読むと元の置き場が出ない）",
+          bool(_rsha) and "machines/foo/index.html" not in _plain
+          and "legacy/foo.html" in _plain)
+        _cp = commit_paths(_rsha, cwd=_rt) if _rsha else None
+        t("★★名前を変えたコミットでも、元の置き場（machines/…）が一覧に出る★★",
+          _cp is not None and "machines/foo/index.html" in _cp)
+        t("★★記事を見張りの外へ動かして並べ替えと混ぜても、照合を求める★★"
+          "（★直す前は並べ替えだけに見えて、照合なしで通った★）",
+          needs_check(_rsha, _cp or [], [],
+                      git=lambda *a: _rg(*a, text=True)) is True)
+    finally:
+        _sh.rmtree(_rt, ignore_errors=True)
 
     # ★★gitに聞けなかったら、pushを止める★★（2026-08-28・Codexの13回目）
     #   ★私が今日入れた穴★＝失敗を「対象0件」と読んで、
