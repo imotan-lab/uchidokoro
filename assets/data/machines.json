@@ -12043,6 +12043,111 @@
   }
  },
  {
+  "slug": "dmm_5095",
+  "name": "スマスロ モンスターハンターライズ：サンブレイク",
+  "seo": {
+   "title": "スマスロ モンスターハンターライズ：サンブレイク スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [
+    "payout_range"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-24",
+   "input_digest": "sha256:b57c69a79a963e0d796881fe7f4f06f23049ac94aeb77e09defbad93dcd76930"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-05",
+  "identity": {
+   "manufacturer_id": "adelion",
+   "official_product_url": "https://p-town.dmm.com/machines/5095",
+   "announced_name": "スマスロ モンスターハンターライズ：サンブレイク",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5095 型式=L MHRサンブレイクXA メーカー=アデリオン 導入=2026-10-05 確認日=2026-09-24",
+   "market_release_date": "2026-10-05",
+   "observed_model_code": "L MHRサンブレイクXA",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  }
+ },
+ {
+  "slug": "dmm_5113",
+  "name": "L魔法少女にあこがれて",
+  "seo": {
+   "title": "L魔法少女にあこがれて スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "spec",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-24",
+   "input_digest": "sha256:97d326dfd018051e47b7021ff20604d76ab9cf261d6a4ed26c108b9844bf9b6b"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10",
+  "identity": {
+   "manufacturer_id": "newgin",
+   "official_product_url": "https://p-town.dmm.com/machines/5113",
+   "announced_name": "L魔法少女にあこがれて",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5113 型式=L魔法少女にあこがれてNP メーカー=ニューギン 導入=2026-10 確認日=2026-09-24",
+   "market_release_date": "2026-10",
+   "observed_model_code": "L魔法少女にあこがれてNP",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  }
+ },
+ {
   "slug": "dmm_5090",
   "name": "スマート沖スロ ハイハイシオサイRe",
   "seo": {
@@ -12158,6 +12263,67 @@
   }
  },
  {
+  "slug": "dmm_5101",
+  "name": "スマスロ 快盗天使ツインエンジェル2",
+  "seo": {
+   "title": "スマスロ 快盗天使ツインエンジェル2 スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [
+    "games_per_50"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-24",
+   "input_digest": "sha256:51952650b85627aa9862946a49a2af0b02fb941b3d36c1a4109341333094e165"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-12-07",
+  "identity": {
+   "manufacturer_id": "sammy",
+   "official_product_url": "https://p-town.dmm.com/machines/5101",
+   "announced_name": "スマスロ 快盗天使ツインエンジェル2",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5101 型式=未掲載 メーカー=サミー 導入=2026-12-07 確認日=2026-09-24",
+   "market_release_date": "2026-12-07"
+  },
+  "checker": {
+   "coinRate": 35.0,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {}
+  }
+ },
+ {
   "slug": "dmm_5109",
   "name": "スマスロゼーガペインETR",
   "seo": {
@@ -12251,172 +12417,6 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5100 型式=未掲載 メーカー=アクロス 導入=2026-12 確認日=2026-09-13",
    "market_release_date": "2026-12"
-  }
- },
- {
-  "slug": "dmm_5095",
-  "name": "スマスロ モンスターハンターライズ：サンブレイク",
-  "seo": {
-   "title": "スマスロ モンスターハンターライズ：サンブレイク スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [
-    "spec"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "cz",
-    "ceiling",
-    "setting",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
-   "claims": [
-    "payout_range"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-09-24",
-   "input_digest": "sha256:b57c69a79a963e0d796881fe7f4f06f23049ac94aeb77e09defbad93dcd76930"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10-05",
-  "identity": {
-   "manufacturer_id": "adelion",
-   "official_product_url": "https://p-town.dmm.com/machines/5095",
-   "announced_name": "スマスロ モンスターハンターライズ：サンブレイク",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5095 型式=L MHRサンブレイクXA メーカー=アデリオン 導入=2026-10-05 確認日=2026-09-24",
-   "market_release_date": "2026-10-05",
-   "observed_model_code": "L MHRサンブレイクXA",
-   "_observed_model_code_sources": [
-    "p-town.dmm.com"
-   ]
-  }
- },
- {
-  "slug": "dmm_5113",
-  "name": "L魔法少女にあこがれて",
-  "seo": {
-   "title": "L魔法少女にあこがれて スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [],
-   "pending_topics": [
-    "gameplay",
-    "cz",
-    "ceiling",
-    "spec",
-    "setting",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
-   "claims": [],
-   "policy_mode": "normal",
-   "decided_at": "2026-09-24",
-   "input_digest": "sha256:97d326dfd018051e47b7021ff20604d76ab9cf261d6a4ed26c108b9844bf9b6b"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10",
-  "identity": {
-   "manufacturer_id": "newgin",
-   "official_product_url": "https://p-town.dmm.com/machines/5113",
-   "announced_name": "L魔法少女にあこがれて",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5113 型式=L魔法少女にあこがれてNP メーカー=ニューギン 導入=2026-10 確認日=2026-09-24",
-   "market_release_date": "2026-10",
-   "observed_model_code": "L魔法少女にあこがれてNP",
-   "_observed_model_code_sources": [
-    "p-town.dmm.com"
-   ]
-  }
- },
- {
-  "slug": "dmm_5101",
-  "name": "スマスロ 快盗天使ツインエンジェル2",
-  "seo": {
-   "title": "スマスロ 快盗天使ツインエンジェル2 スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [
-    "spec"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "cz",
-    "ceiling",
-    "setting",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
-   "claims": [
-    "games_per_50"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-09-24",
-   "input_digest": "sha256:51952650b85627aa9862946a49a2af0b02fb941b3d36c1a4109341333094e165"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-12-07",
-  "identity": {
-   "manufacturer_id": "sammy",
-   "official_product_url": "https://p-town.dmm.com/machines/5101",
-   "announced_name": "スマスロ 快盗天使ツインエンジェル2",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5101 型式=未掲載 メーカー=サミー 導入=2026-12-07 確認日=2026-09-24",
-   "market_release_date": "2026-12-07"
-  },
-  "checker": {
-   "coinRate": 35.0,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {}
   }
  }
 ]
