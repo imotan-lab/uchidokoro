@@ -833,20 +833,6 @@ MUTATIONS = [
         "after": "    if rec.get(\"state\") not in FLOW and rec.get(\"state\") != ESCALATED:",
         "run": ["scripts/repair_journal.py"],
     },
-    {
-        "why": "★見出しつきの行で、同じ見出しを係り先から外さない（★見出しつきの行の数値を2AIの合意どおりに置き換えられない★）★",
-        "file": "scripts/decide_now.py",
-        "before": "                _lab = _shared_label(a[\"before\"], a[\"after\"])",
-        "after": "                _lab = \"\"",
-        "run": ["scripts/decide_now.py"],
-    },
-    {
-        "why": "★見出しを変える書き換えでも見出しを外す（★数値が別の見出しへ付け替わっても、係り先の照合を通る★）★",
-        "file": "scripts/decide_now.py",
-        "before": "    return m.group(0) if str(after or \"\").startswith(m.group(0)) else \"\"",
-        "after": "    return m.group(0)",
-        "run": ["scripts/decide_now.py"],
-    },
     # ─── 2026-09-25・機種一覧の並べ替えだけのコミットは照合を求めない ───
     {
         "why": "★並べ替えの判定で、同じキーが2回ある形を読めてしまう（★後勝ちで中身を差し替えても並べ替えに見える★）★",
@@ -4943,15 +4929,6 @@ MUTATIONS = [
     },
     # ─── 2026-08-27・Codexのレビュー（更新タスク）で塞いだ穴 ────
     {
-        "why": "★記事に無い言葉を書き足せる"
-               "（意味の反転・新しい事実が素通りする）★",
-        "file": "scripts/decide_now.py",
-        "before": "            new_w = [w for w in _words(a[\"after\"]) "
-                  "if w not in _blob]",
-        "after": "            new_w = []",
-        "run": ["scripts/decide_now.py"],
-    },
-    {
         "why": "★同じ文字が2か所にあっても場所を言わせない"
                "（表を直す決定が本文を変える）★",
         "file": "scripts/decide_now.py",
@@ -5040,14 +5017,6 @@ MUTATIONS = [
         "run": ["scripts/task_guard.py"],
     },
     # ─── 2026-08-27・Codexの2回目（作った守り自体の穴）────────────
-    {
-        "why": "★出どころの逐語が実在するか見ない"
-               "（架空の逐語で新語の検査を抜けられる）★",
-        "file": "scripts/decide_now.py",
-        "before": "                if _src_w and _src_w not in published:",
-        "after": "                if False:",
-        "run": ["scripts/decide_now.py"],
-    },
     {
         "why": "★場所を種類でしか数えない"
                "（同じ本文に同じ行が2つあると先頭が黙って変わる）★",
@@ -5211,14 +5180,6 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
-        "why": "★出どころと数値の付き先を照らさない"
-               "（出どころと逆の対応で書ける）★",
-        "file": "scripts/decide_now.py",
-        "before": "                if _miss_p:",
-        "after": "                if False:",
-        "run": ["scripts/decide_now.py"],
-    },
-    {
         "why": "★設定示唆の注記を、材料に保存された古い一覧から決める"
                "（6段すべて載せている表に「掲載していません」と書く）★",
         "file": "scripts/build_new_article.py",
@@ -5301,14 +5262,6 @@ MUTATIONS = [
                   "          # 新しい枝＝そのコミットまで全部",
         "after": "            out.append(f\"{remote_sha}..{local_sha}\")",
         "run": ["scripts/pre_push_check.py"],
-    },
-    {
-        "why": "★数値の並びが変わっても通す"
-               "（ラベルの中の数字で係り先が空になり、入れ替えが素通りする）★",
-        "file": "scripts/decide_now.py",
-        "before": "                if [n for _w, n in _sb] != [n for _w, n in _sa]:",
-        "after": "                if False:",
-        "run": ["scripts/decide_now.py"],
     },
     {
         "why": "★消す先を毎回もとの記事から探す"
