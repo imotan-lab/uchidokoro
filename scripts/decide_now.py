@@ -958,8 +958,7 @@ def _numbers(s: str) -> list:
     for end, tok in _num_spans(s):
         tail = s[end:end + 1]
         # ★区切りや文の終わりは単位ではない★（付けると別物になってしまう）
-        if tail in ("", " ", "\u3000", "、", "。", "／", "/", "・", "）", ")",
-                    "」", "\n", "\t", "，", ","):
+        if tail in _TAIL_DELIMS:
             out.append(tok)
         else:
             out.append(tok + tail)
@@ -975,6 +974,11 @@ def _numbers(s: str) -> list:
 NUM_PATTERN = (r"(?<![\d.])[-−▲△+＋][ \u3000\t]*\d+(?:\.\d+)?"
                r"|\d+(?:\.\d+)?")
 _SIGNS = "-−▲△+＋"
+# ★数値のすぐ後ろが「単位ではない」文字★（`_numbers` と `numbers_with_unit` で共通）
+_TAIL_DELIMS = ("", " ", "\u3000", "、", "。", "／", "/", "・", "）", ")",
+                "」", "\n", "\t", "，", ",")
+# ★範囲の「〜」は単位ではない★（単位つきで比べるときだけ外す）
+_NOT_UNIT = ("〜", "~", "～")
 
 
 def _num_spans(s: str) -> list:
@@ -990,7 +994,12 @@ def _num_spans(s: str) -> list:
         tok = m.group(0)
         if tok[0] in _SIGNS:
             prev = s[:m.start()].rstrip(" \u3000\t")
-            if prev and (prev[-1].isdigit() or prev[-1] == "."):
+            # ★範囲の区切りになりうるのは「-」「−」だけ★（▲△+＋は常に符号）。
+            # ★しかも符号のあとに空白があるときだけ★（「100 - 200G」）＝
+            #   「設定1 -500枚」のように符号の直後に数字が続くなら符号
+            #   （2026-09-25・Codexの3回目）。
+            if tok[0] in "-−" and tok[1:2] in (" ", "\u3000", "\t") \
+                    and prev and (prev[-1].isdigit() or prev[-1] == "."):
                 tok = tok.lstrip(_SIGNS + " \u3000\t")
         out.append((m.end(), "".join(tok.split())))
     return out
@@ -1004,11 +1013,13 @@ def signed_numbers(s: str) -> list:
 def numbers_with_unit(s: str) -> list:
     """★（符号つきの数値, 単位）の組★（2026-09-25・Codexの指摘）
 
-    単位は、すぐ後ろの1文字が文字（G・枚・周期…）のときだけ。
+    単位は、すぐ後ろの1文字が区切り（空白・句読点・括弧）でも「〜」でもないとき。
+    ★記号の単位（%・‰）も単位★（2026-09-25・Codexの3回目＝70% を 70‰ に変えても通った）。
     ★「700G」と「700枚」を別物として比べる★ためのもの。
     """
     s = str(s or "")
-    return [(tok, s[end:end + 1] if s[end:end + 1].isalpha() else "")
+    return [(tok, "" if s[end:end + 1] in _TAIL_DELIMS + _NOT_UNIT
+             else s[end:end + 1])
             for end, tok in _num_spans(s)]
 
 
@@ -2945,6 +2956,13 @@ def _selftest() -> int:
           "（★負の数と読むと、書き換えの前後で別の数値に見える★）",
           _numbers("100 - 200G") == ["100", "200G"])
         t("　空白が2つ以上でも符号として読む", _numbers("差枚-  500枚") == ["-500枚"])
+        t("★★▲・△・+ は、前に数字があっても符号として読む★★（範囲の区切りにはならない）",
+          _numbers("設定1 ▲ 500枚") == ["1", "▲500枚"])
+        t("★★符号の直後に数字が続くなら、前に数字があっても符号★★（「設定1 -500枚」）",
+          _numbers("設定1 -500枚") == ["1", "-500枚"])
+        t("★★記号の単位（%）も単位として残す／「〜」は単位ではない★★",
+          numbers_with_unit("BIG比率70%") == [("70", "%")]
+          and numbers_with_unit("700〜") == [("700", "")])
 
         # ── 2026-08-27・Codexの6回目 ───────────────────────────
         S6 = {"slug": "s6", "sections": [

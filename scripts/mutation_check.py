@@ -864,20 +864,6 @@ MUTATIONS = [
     },
     # ─── 2026-09-25・Codex186の指摘 ───
     {
-        "why": "★空白をはさんだ範囲の「-」を符号として読む（★「100 - 200G」が負の数に見える★）★",
-        "file": "scripts/decide_now.py",
-        "before": "            if prev and (prev[-1].isdigit() or prev[-1] == \".\"):",
-        "after": "            if False:",
-        "run": ["scripts/decide_now.py"],
-    },
-    {
-        "why": "★数値の単位を数えない（★線700に対して「700枚」と書いても通る★）★",
-        "file": "scripts/decide_now.py",
-        "before": "    return [(tok, s[end:end + 1] if s[end:end + 1].isalpha() else \"\")",
-        "after": "    return [(tok, \"\")",
-        "run": ["scripts/checker_verdict.py"],
-    },
-    {
         "why": "★直下の欄を丸ごと置き換える（★直下にだけある注記が消える★）★",
         "file": "scripts/checker_verdict.py",
         "before": "                _dir = dict(ck[key])",
@@ -897,6 +883,42 @@ MUTATIONS = [
         "before": "        if not _need_j <= _db:",
         "after": "        if False:",
         "run": ["scripts/repair_journal.py"],
+    },
+    # ─── 2026-09-25・Codex187の指摘（範囲の区切りと記号の単位）───
+    {
+        "why": "★2か所の欄のうち modeData だけ直下とそろえない（★公開の関所が「同名の欄の食い違い」で止まる★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "                _md[key] = dict(_dir)",
+        "after": "                pass",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": '★空白をはさんだ範囲の「-」を符号として読む（★「100 - 200G」が負の数に見える★）★',
+        "file": 'scripts/decide_now.py',
+        "before": '            if tok[0] in "-−" and tok[1:2] in (" ", "\\u3000", "\\t") \\',
+        "after": '            if False and tok[0] in "-−" and tok[1:2] in (" ", "\\u3000", "\\t") \\',
+        "run": ['scripts/decide_now.py'],
+    },
+    {
+        "why": '★▲・△・+ も範囲の区切りとして落とす（★「設定1 ▲ 500枚」の符号が消える★）★',
+        "file": 'scripts/decide_now.py',
+        "before": '            if tok[0] in "-−" and tok[1:2] in (" ", "\\u3000", "\\t") \\',
+        "after": '            if tok[0] in _SIGNS and tok[1:2] in (" ", "\\u3000", "\\t") \\',
+        "run": ['scripts/decide_now.py'],
+    },
+    {
+        "why": '★符号の直後に数字が続いても範囲として落とす（★「設定1 -500枚」の符号が消える★）★',
+        "file": 'scripts/decide_now.py',
+        "before": '            if tok[0] in "-−" and tok[1:2] in (" ", "\\u3000", "\\t") \\',
+        "after": '            if tok[0] in "-−" \\',
+        "run": ['scripts/decide_now.py'],
+    },
+    {
+        "why": '★数値の単位を数えない（★線700に対して「700枚」、70% を 70‰ に変えても通る★）★',
+        "file": 'scripts/decide_now.py',
+        "before": '    return [(tok, "" if s[end:end + 1] in _TAIL_DELIMS + _NOT_UNIT',
+        "after": '    return [(tok, "" if True',
+        "run": ['scripts/checker_verdict.py'],
     },
     # ─── 2026-09-25・既存の機種のカウンターの線も2AIの決定で書く ───
     {

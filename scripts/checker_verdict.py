@@ -572,13 +572,14 @@ def merged(m: dict, dec: dict) -> dict:
             #   読む側は場所によって modeData か直下のどちらかを先に見るので、
             #   片方だけ書くと公開の関所が「同じ欄の食い違い」で止まる。
             #   ★直下は丸ごと置き換えない★（2026-09-25・Codexの2回目）＝
-            #   直下にだけある欄（注記など）を消さないよう、線と天井と目安だけ合わせる。
+            #   直下にだけある欄（注記など）を消さない。
+            #   ★2か所は完全に同じ中身にする★（同・3回目）＝公開の関所は
+            #   直下と modeData の同名の欄が1文字でも違えば止める（gates.py）。
             if isinstance(ck.get(key), dict):
                 _dir = dict(ck[key])
-                for _k in LEVELS + ("ceiling", "target"):
-                    if _k in conf:
-                        _dir[_k] = conf[_k]
+                _dir.update(conf)
                 ck[key] = _dir
+                _md[key] = dict(_dir)
         else:
             ck[key] = conf
     ck["modes"] = modes
@@ -921,6 +922,15 @@ def selftest() -> int:
         t("★★直下にだけある欄（注記など）は消さない★★",
           _bg2["checker"]["normal"].get("note") == "直下にだけある注記"
           and _bg2["checker"]["normal"].get("good") == 450)
+        t("★★2か所の欄は完全に同じ中身になる★★（公開の関所は1文字でも違えば止める）",
+          _bg2["checker"]["normal"] == _bg2["checker"]["modeData"]["normal"])
+        # ★記号の単位も単位★（70% を 70‰ に変えたら作った事実）
+        _pct = [dict(base_ms[1], slug="zzz_pct", strategy="通常500G〜・BIG比率70%")]
+        t("★★記号の単位（%）も比べる★★（70% を 70‰ に変えたら通さない）",
+          any("数字を作らない" in x for x in decision_problems(
+              dec(slug="zzz_pct", strategy="通常700G〜・BIG比率70‰"), _pct))
+          and not decision_problems(
+              dec(slug="zzz_pct", strategy="通常700G〜・BIG比率70%"), _pct))
         t("★★線と同じ数字でも、単位が違えば別の数字★★（線700に対して「700枚」は作った事実）",
           any("数字を作らない" in x for x in decision_problems(
               dec(slug="zzz_legacy", strategy="通常700枚〜が狙い目"), base_ms)))
