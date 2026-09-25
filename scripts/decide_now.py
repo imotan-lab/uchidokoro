@@ -524,6 +524,20 @@ def check_claims(claims, published: str):
     return None
 
 
+def _shared_label(before: str, after: str) -> str:
+    """★変更前と変更後が同じ見出し（行頭の `**…**：`）で始まるなら、その見出し★
+    （2026-09-25）。無ければ空文字。
+
+    ★完全に同じ文字で始まるときだけ★＝見出しを変える書き換えは外さない
+    （見出しが数値の意味を決めるので、変えたなら係り先として見続ける）。
+    """
+    import re as _re5
+    m = _re5.match(r"\*\*[^*\n]{1,30}\*\*[：:]", str(before or ""))
+    if not m:
+        return ""
+    return m.group(0) if str(after or "").startswith(m.group(0)) else ""
+
+
 def _slot_ok(p, src_pairs) -> bool:
     """出どころの中に、★係り先が丸ごと同じで数値も同じ★ものがあるか。
 
@@ -1581,9 +1595,17 @@ def apply_decision(path: str, apply_it: bool = False, *,
                 #   普通の for は外へ漏れるので、書き込みのときに
                 #   `tmp = p + ".tmp"` が TypeError で落ちていた。
                 #   ★見るだけでは通る★ので、空打ちでは気づけなかった。
-                _cb = _Counter(_sb)
+                # ★★変更前と変更後が同じ見出しで始まるなら、見出しは係り先から外す★★
+                #   （2026-09-25・モンキーターンVで2AIの合意が9日書けなかった）
+                #   ★直す前★＝最初の数値の係り先は「行頭からその数値まで」なので、
+                #   「**狙い目**：5.6枚…」の 5.6 の係り先は「**狙い目**：」になり、
+                #   ★出どころの逐語（見出しの無い文）と一致することが無かった★。
+                #   見出しは変更前の記事にも同じ文字で在る＝この書き換えで
+                #   新しく付けた言葉ではない。見出しを変える書き換えは今までどおり。
+                _lab = _shared_label(a["before"], a["after"])
+                _cb = _Counter(_shape(a["before"][len(_lab):]) if _lab else _sb)
                 _added_pairs = []
-                for _pair in _sa:
+                for _pair in (_shape(a["after"][len(_lab):]) if _lab else _sa):
                     if _cb.get(_pair):
                         _cb[_pair] -= 1
                     else:
@@ -3118,6 +3140,48 @@ def _selftest() -> int:
              "meaning_why": "出どころの値にそろえただけで、対応は同じです"}))
         t("　（対照）出どころどおりの対応なら通る",
           not [p for p in rs2["problems"] if "付き先" in p])
+
+        # ★★変更前と変更後が同じ見出しで始まるなら、見出しは係り先から外す★★
+        #   （2026-09-25・モンキーターンVの合意が9日書けなかった）
+        S9 = {"slug": "s9lab", "sections": [
+            {"title": "当サイトの狙い目",
+             "body": ["**狙い目**：通常時410G〜",
+                      "5.6枚交換なら通常420Gから狙い目です。",
+                      "天井は999Gです。"]}]}
+        with io.open(os.path.join(td, "s9lab.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(S9, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def dec_s9(act):
+            r = os.path.join(td, "ds9.json")
+            io.open(r, "w", encoding="utf-8").write(json.dumps(
+                {"schema_version": SCHEMA, "slug": "s9lab",
+                 "source_sha256": _sha_of("s9lab"),
+                 "decided_by": ["Claude", "codex"], "actions": [act],
+                 "numbers_removed": [{"n": "410", "why": "交換率なしの基準値で、"
+                                      "読者が既定で見る5.6枚の値ではない"}]},
+                ensure_ascii=False))
+            return r
+        rs9 = apply_decision(dec_s9(
+            {"op": "replace", "before": "**狙い目**：通常時410G〜",
+             "after": "**狙い目**：5.6枚交換なら通常420Gから狙い目です。",
+             "why": "読者が既定で見る交換率の値にそろえる",
+             "numbers_from": "5.6枚交換なら通常420Gから狙い目です。",
+             "meaning_why": "見出しはそのままで、中身を出どころの逐語にそろえた"}))
+        t("★★見出しが同じなら、見出しつきの行の数値を出どころどおりに置き換えられる★★"
+          "（★直す前は見出しが係り先に入り、どの出どころとも一致しなかった★）",
+          not rs9["problems"] and bool(rs9.get("done")))
+        if rs9["problems"]:
+            print("   断られた理由:", [p[:120] for p in rs9["problems"][:2]])
+        t("★★見出しを変える書き換えは、見出しを外さない★★（数値の意味が変わりうる）",
+          _shared_label("**狙い目**：通常時410G〜", "**天井**：5.6枚交換なら")
+          == "")
+        t("　見出しが同じときだけ、その見出しを返す",
+          _shared_label("**狙い目**：通常時410G〜", "**狙い目**：5.6枚")
+          == "**狙い目**：")
+        t("　見出しの無い行では何も外さない",
+          _shared_label("通常時410G〜", "通常時420G〜") == "")
 
         # ★符号が違えば別の文★（消すときに「同じ文」と見なさない）
         rs3 = apply_decision(dec_s5(

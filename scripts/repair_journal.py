@@ -80,7 +80,15 @@ FLOW = (
     "DONE",
 )
 ESCALATED = "ESCALATED"
-STATES = FLOW + (ESCALATED,)
+# ★★取り下げ★★（2026-09-25）＝合意済みのまま書けない直しを、2AIの判断で終わらせる。
+#   ★なぜ要るか★＝その機種に AGREED が生きていると、記事を直す道具は
+#   その合意どおりの決定しか受け付けない（`decide_now._agreement_problem`）。
+#   ところが「仕組みの都合」（`infra_failure`）は回数に数えないので、
+#   ★書けない合意は永久に AGREED のまま残り、その機種の直しが全部止まる★
+#   （実測＝モンキーターンV・銀河英雄伝説・虚構推理・マギレコ・戦国乙女4）。
+WITHDRAWN = "WITHDRAWN"
+STATES = FLOW + (ESCALATED, WITHDRAWN)
+MIN_WITHDRAW_WHY = 15
 
 MAX_ATTEMPTS = 3          # ★その晩のうちに3回まで★（CLAUDE.md の決まり）
 
@@ -220,7 +228,9 @@ def detect(slug: str, check: str, quote: str, where: str = "",
         #   ★同じ誤りが再発しても、二度と直せなかった★
         #   （終わった記録は先へ進めないので、その機種だけ永久に止まる）。
         got = load(fid)
-        if got.get("state") in (ESCALATED, "DONE"):
+        # ★取り下げた件も同じ扱い★（記事が変わっていなければ返すだけ＝
+        #   同じ記事に同じ合意を作り直して、また居座らせない）
+        if got.get("state") in (ESCALATED, "DONE", WITHDRAWN):
             # ★記事が当時と同じなら、本当に同じ話なので触らない★
             if str(got.get("source_sha256") or "") == str(source_sha256):
                 return got
@@ -723,6 +733,46 @@ def infra_failure(fid: str, why: str) -> dict:
     return rec
 
 
+def _required_judges() -> tuple:
+    """★判断者の契約は1か所から読む★（`confirmed_values.REQUIRED_JUDGES`・罠③）"""
+    import confirmed_values as _cv
+    return tuple(str(x).lower() for x in _cv.REQUIRED_JUDGES)
+
+
+def withdraw(fid: str, why: str, by) -> dict:
+    """★合意済みのまま書けない直しを、2AIの判断で取り下げる★（2026-09-25）
+
+    ★取り下げられるのは AGREED だけ★＝記事を直す道具を止めるのは
+    「生きている合意」だけなので（それより前の段階は止めない）。
+    ★判断者は claude と codex の両方★（件数では数えない）／★理由15字以上★。
+    ★機械は理由の中身を判定しない★（2AIが決めたことは事実として受け取る）。
+    ★記録は消さない★＝何を合意して、なぜ取り下げたかが残る。
+    ★同じ記事のまま同じ指摘を見つけ直しても、立て直さない★（`detect`）＝
+    書けない合意を作り直して、また居座らせないため。記事が変われば立て直す。
+    """
+    rec = load(fid)
+    if rec.get("state") != "AGREED":
+        raise JournalError(
+            f"取り下げられるのは合意済み（AGREED）の記録だけです"
+            f"（いま {rec.get('state')}）")
+    who = {str(x).strip().lower() for x in (by or []) if str(x).strip()}
+    need = set(_required_judges())
+    if not need <= who:
+        raise JournalError(
+            "取り下げには %s の両方の判断が要ります（いま: %s）"
+            % ("・".join(sorted(need)), "・".join(sorted(who)) or "なし"))
+    why = str(why or "").strip()
+    if len(why) < MIN_WITHDRAW_WHY:
+        raise JournalError(f"取り下げの理由を {MIN_WITHDRAW_WHY} 字以上書いてください")
+    rec["state"] = WITHDRAWN
+    rec["withdrawn_by"] = sorted(who)
+    rec["withdrawn_why"] = why
+    rec.setdefault("history", []).append(
+        {"to": WITHDRAWN, "note": f"2AIで取り下げた: {why}"})
+    _save(rec)
+    return rec
+
+
 # --- 一覧 -----------------------------------------------------------------
 
 def _broken_why(rec):
@@ -737,8 +787,12 @@ def _broken_why(rec):
     for k in ("finding_id", "slug", "check", "quote", "state"):
         if not rec.get(k):
             return f"{k} がありません"
-    if rec.get("state") not in FLOW and rec.get("state") != ESCALATED:
+    if rec.get("state") not in STATES:
         return f"知らない段階です（{rec.get('state')!r}）"
+    # ★取り下げた記録は、誰が・なぜ取り下げたかが揃っていること★
+    if rec.get("state") == WITHDRAWN and not (rec.get("withdrawn_by")
+                                              and rec.get("withdrawn_why")):
+        return "取り下げたのに、判断者か理由がありません"
     if len(str(rec.get("source_sha256") or "")) != 64:
         return "記事の指紋がありません"
     # ★★段階ごとに、そこまでで揃っているはずの欄を見る★★
@@ -1527,6 +1581,52 @@ def _selftest() -> int:
           "／★消えると、途中まで進んでいた直しが誰にも見えなくなる★",
           any(x.get("finding_id") == "broken_one"
               and x.get("state") == "BROKEN" for x in _lst))
+        os.remove(os.path.join(td, "broken_one.json"))
+        os.remove(os.path.join(td, "empty_rec.json"))
+        os.remove(os.path.join(td, "oldver_rec.json"))
+
+        # ⑪★★合意済みのまま書けない直しを、2AIの判断で取り下げる★★（2026-09-25）
+        #   ★本番と同じ順で AGREED まで進めてから取り下げる★（罠5e）
+        r11 = detect("zzz11", "text_gone", "十一番の文です。",
+                     source_sha256="3" * 64)
+        f11 = r11["finding_id"]
+        io.open(vp, "w", encoding="utf-8").write(_orig)
+        seal_claude(f11, vp)
+        record_codex(f11, "b" * 64, "Codexの判定です。同じく消してよいと考えます。")
+        agree(f11, _decfile(f11, "zzz11",
+                            [{"op": "drop", "text": "十一番の文です。",
+                              "why": "前の段落と同じ内容"}], sha="3" * 64,
+                            name="dec11"),
+              "text_gone", ["Claude", "codex"])
+        _why11 = "狙った文が別の直しで既に消えていて、この決定は当たらない"
+        t("　（前提）合意済みは、その機種の生きている合意として一覧に出る",
+          any(x.get("finding_id") == f11 for x in listing("AGREED")))
+        t("★★判断者が片方だけなら取り下げない★★（1AIでは終わらせない）",
+          _try_fail(lambda: withdraw(f11, _why11, ["claude"])))
+        t("★★同じ名前を2回書いても、両方の判断にはならない★★",
+          _try_fail(lambda: withdraw(f11, _why11, ["claude", "claude"])))
+        t("★★理由が短ければ取り下げない★★",
+          _try_fail(lambda: withdraw(f11, "書けない", ["claude", "codex"])))
+        _w = withdraw(f11, _why11, ["Claude", "codex"])
+        t("★★2AIの判断と理由があれば取り下げられる★★"
+          "（★直す前は道が無く、書けない合意がその機種の直しを永久に止めた★）",
+          _w["state"] == WITHDRAWN and _w["withdrawn_why"] == _why11)
+        t("★★取り下げた合意は、生きている合意の一覧から外れる★★",
+          not any(x.get("finding_id") == f11 for x in listing("AGREED")))
+        t("　取り下げた記録は壊れた記録として扱わない（消えずに残る）",
+          any(x.get("finding_id") == f11 and x.get("state") == WITHDRAWN
+              for x in listing()))
+        t("　取り下げた記録から先へは進めない",
+          _try_fail(lambda: applied(f11, "c" * 64)))
+        t("　合意済みでない記録は取り下げない",
+          _try_fail(lambda: withdraw(fid, _why11, ["claude", "codex"])))
+        t("★★同じ記事のまま見つけ直しても、立て直さない★★"
+          "（★書けない合意を作り直して、また居座らせない★）",
+          detect("zzz11", "text_gone", "十一番の文です。",
+                 source_sha256="3" * 64)["state"] == WITHDRAWN)
+        t("★★記事が変わってから見つけ直したら、新しく立て直す★★",
+          detect("zzz11", "text_gone", "十一番の文です。",
+                 source_sha256="4" * 64)["state"] == "DETECTED")
     finally:
         globals()["STORE"] = keep
         shutil.rmtree(td, ignore_errors=True)
@@ -1555,11 +1655,33 @@ def main() -> int:
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--state", default=None)
     ap.add_argument("--show", default=None)
+    ap.add_argument("--withdraw", default=None, metavar="FINDING_ID",
+                    help="合意済みのまま書けない直しを、2AIの判断で取り下げる")
+    ap.add_argument("--why-file", default=None,
+                    help="取り下げの理由を書いたファイル（15字以上）")
+    ap.add_argument("--by", default="",
+                    help="判断者（claude,codex）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
 
     if a.selftest:
         return _selftest()
+    if a.withdraw:
+        # ★理由はファイルで受け取る★（鉄則1c＝自由文をシェルに書かない）
+        if not a.why_file:
+            print("--why-file が要ります（理由をファイルに書いて渡してください）")
+            return 1
+        with io.open(a.why_file, encoding="utf-8") as fh:
+            _why = fh.read()
+        try:
+            rec = withdraw(a.withdraw, _why,
+                           [x for x in a.by.split(",") if x.strip()])
+        except JournalError as e:
+            print(f"取り下げませんでした: {e}")
+            return 1
+        print(f"取り下げました: {rec['finding_id']} {rec['slug']}"
+              f"（判断者 {','.join(rec['withdrawn_by'])}）")
+        return 0
     if a.show:
         print(json.dumps(load(a.show), ensure_ascii=False, indent=1))
         return 0

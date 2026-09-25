@@ -797,6 +797,56 @@ MUTATIONS = [
         "after": "    if False:",
         "run": ["scripts/mark_reviewed.py"],
     },
+    # ─── 2026-09-25・居座った合意の取り下げ／見出しつきの行の置き換え ───
+    {
+        "why": "★合意の取り下げで、判断者が2AIそろっているかを見ない（★1AIだけで合意を終わらせられる★）★",
+        "file": "scripts/repair_journal.py",
+        "before": "    if not need <= who:",
+        "after": "    if not who:",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★合意の取り下げで、理由の長さを見ない★",
+        "file": "scripts/repair_journal.py",
+        "before": "    if len(why) < MIN_WITHDRAW_WHY:",
+        "after": "    if not why:",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★合意済みでない記録まで取り下げられる（★途中の直しを段階の外へ出せる★）★",
+        "file": "scripts/repair_journal.py",
+        "before": "    if rec.get(\"state\") != \"AGREED\":",
+        "after": "    if False:",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★取り下げた記録を、記事が変わっても立て直さない（★同じ誤りが再発しても二度と直せない★）★",
+        "file": "scripts/repair_journal.py",
+        "before": "        if got.get(\"state\") in (ESCALATED, \"DONE\", WITHDRAWN):",
+        "after": "        if got.get(\"state\") in (ESCALATED, \"DONE\"):",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★取り下げた記録を「壊れた記録」と読む（★壊れた記録が1件あると、全機種の記事の直しが止まる★）★",
+        "file": "scripts/repair_journal.py",
+        "before": "    if rec.get(\"state\") not in STATES:",
+        "after": "    if rec.get(\"state\") not in FLOW and rec.get(\"state\") != ESCALATED:",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★見出しつきの行で、同じ見出しを係り先から外さない（★見出しつきの行の数値を2AIの合意どおりに置き換えられない★）★",
+        "file": "scripts/decide_now.py",
+        "before": "                _lab = _shared_label(a[\"before\"], a[\"after\"])",
+        "after": "                _lab = \"\"",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★見出しを変える書き換えでも見出しを外す（★数値が別の見出しへ付け替わっても、係り先の照合を通る★）★",
+        "file": "scripts/decide_now.py",
+        "before": "    return m.group(0) if str(after or \"\").startswith(m.group(0)) else \"\"",
+        "after": "    return m.group(0)",
+        "run": ["scripts/decide_now.py"],
+    },
     # ─── 2026-09-25・機種一覧の並べ替えだけのコミットは照合を求めない ───
     {
         "why": "★並べ替えの判定で、同じキーが2回ある形を読めてしまう（★後勝ちで中身を差し替えても並べ替えに見える★）★",
