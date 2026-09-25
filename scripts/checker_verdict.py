@@ -366,6 +366,23 @@ def decision_problems(dec, ms=None) -> list:
         if key in seen:
             ng.append(f"{tag}: key「{key}」が2回出てきます")
         seen.add(key)
+        # ★★直下と modeData の同じ欄が、この決定で書かない所で既に食い違っていたら断る★★
+        #   （2026-09-25・Codexの4回目）＝どちらが正しいかは機械には決められない。
+        #   黙って片方を採ると、もう片方の値が消える。
+        _top = ck.get(key)
+        _alt = (ck.get("modeData") or {}).get(key) if isinstance(
+            ck.get("modeData"), dict) else None
+        if isinstance(_top, dict) and isinstance(_alt, dict):
+            _writes = {lv for lv in LEVELS if lv in md}
+            if "ceiling" in md:
+                _writes.add("ceiling")
+            if "good" in md:
+                _writes.add("target")
+            _clash = sorted(k for k in set(_top) & set(_alt)
+                            if k not in _writes and _top[k] != _alt[k])
+            if _clash:
+                ng.append(f"{tag}: 直下と modeData の「{key}」が食い違っています"
+                          f"（{'・'.join(_clash)}）。どちらが正しいか決めてから書いてください")
         # ★既にある欄なら、呼び名は今のままでよい★（既存の機種は欄がそろっている）
         _have = {str(x.get("key") or "") for x in (ck.get("modes") or [])
                  if isinstance(x, dict)}
@@ -924,6 +941,22 @@ def selftest() -> int:
           and _bg2["checker"]["normal"].get("good") == 450)
         t("★★2か所の欄は完全に同じ中身になる★★（公開の関所は1文字でも違えば止める）",
           _bg2["checker"]["normal"] == _bg2["checker"]["modeData"]["normal"])
+        _clash_ms = [{"slug": "zzz_clash", "name": "食い違い", "checker": {
+            "unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+            "modeData": {"normal": {"good": 500, "note": "modeDataの注記"}},
+            "normal": {"good": 500, "note": "直下の注記"}}}]
+        t("★★直下と modeData の同じ欄が既に食い違っていたら、書かずに断る★★"
+          "（黙って片方を採ると、もう片方の値が消える）",
+          any("食い違っています" in x for x in decision_problems(
+              dec(slug="zzz_clash", modes=[{"key": "normal", "good": 450}]),
+              _clash_ms)))
+        t("　この決定で書く欄（線）だけの食い違いなら、書き換えるので断らない",
+          not any("食い違っています" in x for x in decision_problems(
+              dec(slug="zzz_clash", modes=[{"key": "normal", "good": 450}]),
+              [{"slug": "zzz_clash", "name": "食い違い", "checker": {
+                  "unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                  "modeData": {"normal": {"good": 500}},
+                  "normal": {"good": 520}}}])))
         # ★記号の単位も単位★（70% を 70‰ に変えたら作った事実）
         _pct = [dict(base_ms[1], slug="zzz_pct", strategy="通常500G〜・BIG比率70%")]
         t("★★記号の単位（%）も比べる★★（70% を 70‰ に変えたら通さない）",

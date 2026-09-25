@@ -884,6 +884,21 @@ MUTATIONS = [
         "after": "        if False:",
         "run": ["scripts/repair_journal.py"],
     },
+    # ─── 2026-09-25・Codex188の指摘（2か所の欄が既に食い違っているとき）───
+    {
+        "why": "★直下と modeData の同じ欄が既に食い違っていても書く（★黙って片方を採り、もう片方の値が消える★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "            if _clash:",
+        "after": "            if False:",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★この決定で書く欄の食い違いまで断る（★線を直すだけで書けなくなる★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "                            if k not in _writes and _top[k] != _alt[k])",
+        "after": "                            if _top[k] != _alt[k])",
+        "run": ["scripts/checker_verdict.py"],
+    },
     # ─── 2026-09-25・Codex187の指摘（範囲の区切りと記号の単位）───
     {
         "why": "★2か所の欄のうち modeData だけ直下とそろえない（★公開の関所が「同名の欄の食い違い」で止まる★）★",
