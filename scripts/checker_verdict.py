@@ -575,9 +575,11 @@ def apply_decision(path: str, dry_run: bool = False) -> int:
         return 0
     ms[i] = new
     tmp = MACHINES + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(ms, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+    # ★字下げ1・LF★＝ほかの書き手（grow_machine / publish_new_machine 等）と同じ書式。
+    #   （2026-09-25）直す前は字下げ2・Windowsでは CRLF で、線を1本入れただけで
+    #   全行が変わる差分になり、本当の変更が埋もれた。
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(ms, ensure_ascii=False, indent=1) + "\n")
     os.replace(tmp, MACHINES)
     # ★書いたら読み直して確かめる★（書けたつもりで終わらない）
     back = _find(_machines(), slug)
@@ -632,6 +634,74 @@ def show(slug: str) -> int:
 ★caution ≦ good ≦ excellent ≦ ceiling★
 """ % slug)
     return 0
+
+
+def _format_tests(t) -> None:
+    """★書いた machines.json が、ほかの書き手と同じ書式か★（2026-09-25・更新タスクの自己修正）
+
+    ★直す前★＝字下げ2・Windowsでは改行が CRLF で全体を書き直していた。
+    ほかの書き手（grow_machine / publish_new_machine / reorder_machines）は
+    字下げ1・LF なので、線を1本入れただけで★全行が変わる差分★になった
+    （2026-09-25 に初めて本物の機種へ書いて気づいた）。
+    ★本物の machines.json には触らない★＝一時の場所へ向け直して通しで書く。
+    """
+    import tempfile
+    global MACHINES
+    keep = MACHINES
+    tmpd = tempfile.mkdtemp(prefix="ckfmt_")
+    try:
+        # ★2行目は触らない行★（キーをわざと五十音・ABC順でない並びにする＝
+        #   並べ替えや別の行の書き換えも捕まえる）
+        untouched = {"zeta": "後", "slug": "zzz_other", "alpha": "前"}
+        ms = [{"slug": "zzz_auto", "name": "試験機",
+               "publication_policy": "page-decision/v1",
+               "checker": {"unit": "G",
+                           "modes": [{"key": "normal", "label": "通常"}],
+                           "normal": {"ceiling": 1000}}},
+              dict(untouched)]
+        MACHINES = os.path.join(tmpd, "machines.json")
+        with open(MACHINES, "w", encoding="utf-8", newline="\n") as f:
+            f.write(json.dumps(ms, ensure_ascii=False, indent=1) + "\n")
+        dp = os.path.join(tmpd, "dec.json")
+        with open(dp, "w", encoding="utf-8") as f:
+            json.dump({"slug": "zzz_auto", "judges": ["claude", "codex"],
+                       "why": "天井1000Gで恩恵はAT確定のため",
+                       "modes": [{"key": "normal", "label": "通常",
+                                  "ceiling": 1000, "excellent": 900,
+                                  "good": 800, "caution": 700}]},
+                      f, ensure_ascii=False)
+        import contextlib
+        import io as _io
+        with contextlib.redirect_stdout(_io.StringIO()):
+            rc = apply_decision(dp)
+        with open(MACHINES, "rb") as f:
+            raw = f.read()
+        got = json.loads(raw.decode("utf-8"))
+        # ★期待値は書いた結果から作らない★（Codexの指摘＝両辺が一緒に動く）
+        #   2行目は元のまま（並び順も）、1行目は線の値が入っていること、
+        #   書式は「その中身を字下げ1で並べたもの＋LF」と完全一致。
+        n = ((got[0].get("checker") or {}).get("normal") or {}) if got else {}
+        _txt = raw.decode("utf-8")
+        t("★★線を書いた machines.json は、ほかの書き手と同じ書式（字下げ1・LF）★★"
+          "（★直す前は字下げ2・CRLFで全行が変わる差分になった★）",
+          rc == 0 and b"\r" not in raw
+          and _txt == json.dumps(got, ensure_ascii=False, indent=1) + "\n"
+          and len(got) == 2 and got[1] == untouched
+          and got[0] == {"slug": "zzz_auto", "name": "試験機",
+                         "publication_policy": "page-decision/v1",
+                         "checker": {"unit": "G",
+                                     "modes": [{"key": "normal", "label": "通常"}],
+                                     "normal": {"ceiling": 1000, "caution": 700,
+                                                "good": 800, "excellent": 900,
+                                                "target": 800}}}
+          and list(got[1].keys()) == list(untouched.keys())
+          and (n.get("good"), n.get("caution"), n.get("excellent"),
+               n.get("ceiling")) == (800, 700, 900, 1000)
+          and '\n  "zeta": "後",\n  "slug": "zzz_other",\n  "alpha": "前"\n' in _txt)
+    finally:
+        MACHINES = keep
+        import shutil
+        shutil.rmtree(tmpd, ignore_errors=True)
 
 
 def selftest() -> int:
@@ -923,6 +993,7 @@ def selftest() -> int:
     t("　チェッカーに入っている天井は読める（対照）", _wired == {888})
 
     _no_line_tests(t)
+    _format_tests(t)
     print(f"\n{ok[0]}/{ok[1]} 合格")
     return 0 if ok[0] == ok[1] else 1
 

@@ -6414,6 +6414,23 @@ MUTATIONS = [
         "after": "            if field in adopted:",
         "run": ["scripts/confirmed_values.py"],
     },
+    # ─── 2026-09-25・更新タスクの自己修正（checker_verdict の書式）───
+    {
+        "why": "★狙い目の線を書くとき machines.json を字下げ2で書き直す"
+               "（★線を1本入れただけで全行が変わる差分になり、本当の変更が埋もれる★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "newline=\"\\n\") as f:\n        f.write(json.dumps(ms, ensure_ascii=False, indent=1) + \"\\n\")",
+        "after": "newline=\"\\n\") as f:\n        f.write(json.dumps(ms, ensure_ascii=False, indent=2) + \"\\n\")",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★狙い目の線を書くとき machines.json を Windows の改行（CRLF）で書く"
+               "（★全行が変わる差分になる★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "    with open(tmp, \"w\", encoding=\"utf-8\", newline=\"\\n\") as f:\n        f.write(json.dumps(ms,",
+        "after": "    with open(tmp, \"w\", encoding=\"utf-8\", newline=\"\\r\\n\") as f:\n        f.write(json.dumps(ms,",
+        "run": ["scripts/checker_verdict.py"],
+    },
     # ─── 2026-09-25・更新タスクの自己修正 ───
     {
         "why": "★天井の箱で、1社だけの機械の行が2社で確定した同じ天井と並んで残る"
