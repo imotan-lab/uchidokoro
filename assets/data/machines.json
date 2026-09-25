@@ -450,10 +450,38 @@
    "modes": [
     {
      "key": "normal",
-     "label": "通常"
+     "label": "BIG後"
+    },
+    {
+     "key": "reg",
+     "label": "REG後"
+    },
+    {
+     "key": "reset",
+     "label": "設定変更後"
     }
    ],
-   "normal": {}
+   "normal": {
+    "caution": 700,
+    "good": 700,
+    "excellent": 770,
+    "ceiling": 1000,
+    "target": 700
+   },
+   "reg": {
+    "caution": 360,
+    "good": 360,
+    "excellent": 500,
+    "ceiling": 800,
+    "target": 360
+   },
+   "reset": {
+    "caution": 180,
+    "good": 180,
+    "excellent": 350,
+    "ceiling": 600,
+    "target": 180
+   }
   }
  },
  {
