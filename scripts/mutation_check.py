@@ -797,6 +797,28 @@ MUTATIONS = [
         "after": "    if False:",
         "run": ["scripts/mark_reviewed.py"],
     },
+    # ─── 2026-09-25・記事の直しで残した守り（言うだけでは通さない／数字を作らない）───
+    {
+        "why": "★出どころの逐語がサイトに在るかを見ない（★架空の出どころを書けば、どんな数値でも書ける★）★",
+        "file": "scripts/decide_now.py",
+        "before": "                if src not in published:",
+        "after": "                if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★足す数値が出どころの逐語に在るかを見ない（★数字を作れる★）★",
+        "file": "scripts/decide_now.py",
+        "before": "                missing = [n for n in added if n not in _numbers(src)]",
+        "after": "                missing = []",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★数値の符号を数えない（★+500枚 を -500枚 に書き換えても、出どころを問われない★）★",
+        "file": "scripts/decide_now.py",
+        "before": "    for m in re.finditer(r\"(?<![\\d.])[-−▲△+＋]?\\d+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?\",",
+        "after": "    for m in re.finditer(r\"\\d+(?:\\.\\d+)?\",",
+        "run": ["scripts/decide_now.py"],
+    },
     # ─── 2026-09-25・既存の機種のカウンターの線も2AIの決定で書く ───
     {
         "why": "★一覧の文に、決定の線にも今の文にも無い数字を書ける（★数字を作れる★）★",
