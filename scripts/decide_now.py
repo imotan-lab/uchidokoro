@@ -426,77 +426,6 @@ def _record_removed(slug: str, lines: list, dec: dict) -> str:
     return p
 
 
-def _slot_key(a: str) -> str:
-    """係り先（★空白を詰めただけ★＝そのままの文字で比べる）。
-
-    ★内容の文字だけにしてはいけない★（2026-08-28・Codexの8回目の指摘1）
-      `_words` は漢字・カタカナ・英字しか拾わないので、
-      ★ひらがなも数字も落ちる★。
-      そのため「設定変更あり」と「設定変更なし」が同じ鍵になり、
-      ★対応の入れ替えが meaning_why なしで通った★（自分で再現した）。
-
-    ★飾りを落とす必要はもう無い★＝
-      出どころ（numbers_from）は**書き換え後と同じ言い方の逐語**を
-      選ぶ取り決めにしたので、係り先はそのまま一致するはず。
-      一致しなければ★断る★（安全側）。
-    """
-    return "".join(str(a or "").split())
-
-
-_BOUNDARY = "、。，．・／：；｜|（）()「」『』【】〈〉[]{}＊*_＿ \t\n　-—〜~＋+"
-
-
-def _at_boundary(text: str, word: str) -> bool:
-    """★その言葉が「区切りの後ろ」から始まっているか★（2026-08-30・台帳#513）
-
-    ★なぜ要るか（Codexの指摘）★＝
-      ただの「含む」で見ると、★「非リセット時」の中の「リセット時」★を
-      条件が残っていると数えてしまう。意味は反転しているのに通る。
-    """
-    i = text.find(word)
-    while i >= 0:
-        if i == 0 or text[i - 1] in _BOUNDARY:
-            return True
-        i = text.find(word, i + 1)
-    return False
-
-
-def _claim_ok(pair, claims, after_text: str = "") -> bool:
-    """出どころ（主張の形）と、書き換え後の係り先が合っているか。
-
-    ★条件を落とさせない★＝出どころに条件があるなら、
-    書き換え後の係り先にもその条件が（区切りの後ろで）出ていること。
-
-    ★条件そのものに数値が入っている場合★（例「5.6枚持ちメダル」）＝
-    その数値は係り先を持たないことがあるので、
-    ★条件が書き換え後に丸ごと（区切りの後ろで）出ていること★で見る。
-    """
-    slot, val = pair
-    for c in claims:
-        cond = str(c.get("condition") or "")
-        if cond and val in cond and after_text:
-            # ★条件の中の数値★（5.6枚持ちメダル の 5.6枚 など）
-            if _at_boundary(after_text, cond):
-                return True
-            continue
-        if str(c.get("value") or "") != val:
-            continue
-        metric = str(c.get("metric") or "")
-        if metric and metric not in slot:
-            continue
-        if cond and not _at_boundary(slot, cond):
-            # ★条件が数値の区切りをまたぐことがある★（2026-08-30）
-            #   例「5.6枚持ちメダルでCZ間330G」では、330Gの係り先は
-            #   「持ちメダルでCZ間」で、条件の前半が前の数値の側に入る。
-            #   ★同じ一文の中に、条件が区切りの後ろで丸ごとあること★で見る。
-            #   （条件を落とす書き換えは、これでも止まる＝
-            #     「天井は500G」に「リセット時」はどこにも出てこない）
-            if not (after_text and _at_boundary(after_text, cond)):
-                continue
-        return True
-    return False
-
-
 def check_claims(claims, published: str):
     """出どころの形が正しいか（★2AIが勝手な条件を名乗れないように★）。"""
     if not isinstance(claims, list) or not claims:
@@ -522,24 +451,6 @@ def check_claims(claims, published: str):
             return (f"condition（{cond!r}）が出どころの中にありません: "
                     f"{src[:40]!r}")
     return None
-
-
-def _slot_ok(p, src_pairs) -> bool:
-    """出どころの中に、★係り先が丸ごと同じで数値も同じ★ものがあるか。
-
-    ★ゆるい照合はやめた★（2026-08-27・Codexの7回目の指摘1）＝
-    「1つに定まれば正しい」にしていたので、
-    ★唯一の候補が間違っていても通った★
-    （「通常時の天井は500G」← 出どころは「リセット時の天井は500G」）。
-    ★条件を落として一般化する形★（「天井は500G」← 「リセット時の天井は500G」）
-    も通っていた。
-
-    ★機械が決められるのは「丸ごと同じ」だけ★＝
-    それ以外は2AIが理由を書く（設計どおり）。
-    ★出どころは、書き換え後と同じ言い方の逐語を選ぶこと★
-    """
-    key = _slot_key(p[0])
-    return any(_slot_key(q[0]) == key and q[1] == p[1] for q in src_pairs)
 
 
 def drop_spot(d: dict, text: str, used=None):
@@ -1135,59 +1046,6 @@ HINT_MARKS = (
     "かつ", "または", "もしくは", "および", "ならびに")
 
 
-def _flips(s: str) -> list:
-    """その文に出てくる「意味をひっくり返す印」。"""
-    return [w for w in HINT_MARKS if w in str(s or "")]
-
-
-_SHAPE_RE = None
-
-
-def _shape(s: str) -> list:
-    """★文の骨組み★（2026-08-27・Codexの3回目）
-
-    「数値」と「意味をひっくり返す印」を**出てくる順に**並べ、
-    それぞれに**直前の内容語**を添えたもの。
-    ★丸ごと同じでなければ断る★＝増えた・減った・入れ替わった、を全部拾う。
-
-    ★符号も見る★＝「+500枚」と「-500枚」は別物
-      （数値だけ見ていると同じに見えてしまう）。
-    """
-    # ★★意味の語は入れない★★（2026-08-27・運営者から）
-    #   ★名簿で「意味が変わったか」を機械に決めさせない★＝
-    #   名簿は無限に増えるし、機械には意味が分からない。
-    #   ここで見るのは★機械に分かること＝数値がどの言葉に付いているか★だけ。
-    #   （「通常500G」→「リセット500G」は構造の変化なので分かる）
-    #   意味の判断は2AIがして、理由を記録に残す（下の `meaning_why`）。
-    global _SHAPE_RE
-    if _SHAPE_RE is None:
-        import re as _re3
-        _SHAPE_RE = _re3.compile(r"[-−▲△+＋]?\d+(?:\.\d+)?")
-    txt = str(s or "")
-    out = []
-    _prev = 0
-    for m in _SHAPE_RE.finditer(txt):
-        # ★★係り先は「前の数値からこの数値まで」★★
-        #   （2026-08-27・Codexの6回目の指摘1）
-        #   ★直す前は直前の1語だけ★だったので、
-        #   「通常時の天井は300G／リセット時の天井は400G」は
-        #   どちらも『天井』になり、逆の対応で書けた。
-        ws = [txt[_prev:m.start()].strip()]
-        tail = txt[m.end():m.end() + 1]
-        # ★数値には単位（すぐ後ろの1文字）も添える★
-        tok = m.group(0)
-        if tok[-1].isdigit() and tail and not tail.isspace() \
-                and tail not in ("、", "。", "／", "/", "・", "）", ")", "」",
-                                 "，", ","):
-            tok += tail
-        # ★次の係り先に、この数値の単位を持ち込まない★（2026-08-27）
-        #   ★直す前は「G／リセット」のように単位が頭に付いた★ので、
-        #   入れ替えの見分けが狂った。
-        _prev = m.end() + (len(tok) - len(m.group(0)))
-        out.append((ws[-1] if ws else "", tok))
-    return out
-
-
 def _wording(s: str) -> str:
     """★言い回し★＝数値を伏せた見た目（2026-08-27）。
 
@@ -1200,25 +1058,6 @@ def _wording(s: str) -> str:
     #   「差枚+500枚」→「差枚-600枚」が同じ見た目になり素通りした。
     import re as _re4
     return _re4.sub(r"\d+(?:\.\d+)?", "#", str(s or ""))
-
-
-def _num_pairs(s: str) -> list:
-    """★数値と、その直前の内容語の組★（2026-08-27・Codexの2回目の指摘1）
-
-    ★なぜ要るか★＝「通常500G／リセット600G」→「リセット500G／通常600G」は
-      **数値の並びが同じ**なので、並べ替えの検査にも当たらなかった。
-      ＝★どちらがどちらの値かを丸ごと取り違えさせられる★。
-    ★数値が2つ以上あるときだけ見る★＝1つしかない文で
-      「天井は500Gです」→「500Gが天井です」まで止めると、
-      正しい言い換えを妨げる。
-    """
-    import re as _re2
-    out = []
-    for m in _re2.finditer(r"\d+(?:\.\d+)?", str(s or "")):
-        head = str(s or "")[:m.start()]
-        ws = _words(head)
-        out.append((ws[-1] if ws else "", m.group(0)))
-    return out
 
 
 from collections import Counter as _Counter    # noqa: E402
@@ -1246,18 +1085,6 @@ def _words(s: str) -> list:
         _WORD_RE = _re.compile(
             r"[\u4e00-\u9fff々〆ヵヶ]+|[\u30a0-\u30ff]+|[A-Za-z]+")
     return _WORD_RE.findall(str(s or ""))
-
-
-def _content_blob(s: str) -> str:
-    """★助詞・送り仮名を抜いた並び★（2026-08-27）
-
-    ★なぜ必要か★＝語のかたまりで比べると、
-    「カウントがリセット」と「カウントリセット」が別物になり、
-    ★正しい言い換えを止めてしまう★（実際に踏んだ）。
-    助詞を抜いた並びの中に入っているかで見れば、
-    組み替えは通り、新しい語は止まる。
-    """
-    return "".join(_words(s))
 
 
 def _simulate(detail: dict, plan: list) -> str:

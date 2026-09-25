@@ -5368,14 +5368,6 @@ MUTATIONS = [
         "run": ["scripts/decide_now.py"],
     },
     {
-        "why": "★係り先を「内容の文字だけ」で比べる"
-               "（ひらがな・数字が落ちて、対応の入れ替えが黙って通る）★",
-        "file": "scripts/decide_now.py",
-        "before": '    return "".join(str(a or "").split())',
-        "after": '    return "".join(_words(a))',
-        "run": ["scripts/decide_now.py"],
-    },
-    {
         "why": "★消してよいかを、別の入れ物の重複で数える"
                "（別条件の事実を、よその節の重複を根拠に消せる）★",
         "file": "scripts/decide_now.py",
@@ -5425,14 +5417,6 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
-        "why": "★係り先を直前の1語で見る"
-               "（通常時とリセット時が同じ『天井』になり、逆に書ける）★",
-        "file": "scripts/decide_now.py",
-        "before": "        ws = [txt[_prev:m.start()].strip()]",
-        "after": "        ws = _words(txt[:m.start()])",
-        "run": ["scripts/decide_now.py"],
-    },
-    {
         "why": "★消すときに、数値を伏せた部分一致で見る"
                "（数値だけ違う行が残れば消せる）★",
         "file": "scripts/decide_now.py",
@@ -5440,23 +5424,6 @@ MUTATIONS = [
                   '>= 2 else nums',
         "after": '                lost = [] if _wording(a["text"]) '
                  'in _wording(raw) else nums',
-        "run": ["scripts/decide_now.py"],
-    },
-    {
-        "why": "★骨組みで符号を見ない（+500枚→-500枚が同じ値に見える）★",
-        "file": "scripts/decide_now.py",
-        "before": '        _SHAPE_RE = _re3.compile(r"[-−▲△+＋]?'
-                  '\\d+(?:\\.\\d+)?")',
-        "after": '        _SHAPE_RE = _re3.compile(r"\\d+(?:\\.\\d+)?")',
-        "run": ["scripts/decide_now.py"],
-    },
-    {
-        "why": "★出どころの係り先をゆるく照らす"
-               "（別条件の値を持ち込める・条件を落として一般化できる）★",
-        "file": "scripts/decide_now.py",
-        "before": "    return any(_slot_key(q[0]) == key and q[1] == p[1] "
-                  "for q in src_pairs)",
-        "after": "    return any(q[1] == p[1] for q in src_pairs)",
         "run": ["scripts/decide_now.py"],
     },
     {
