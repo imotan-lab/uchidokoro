@@ -66,7 +66,13 @@
      "label": "通常"
     }
    ],
-   "normal": {}
+   "normal": {
+    "caution": 300,
+    "good": 300,
+    "excellent": 400,
+    "ceiling": 850,
+    "target": 300
+   }
   }
  },
  {
@@ -12186,7 +12192,7 @@
    "input_digest": "sha256:9ee2f6822ede200f260d3f04c14bf327282f5c59502f989a9a632c8eee38dfdb"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-11",
+  "release_date": "2026-11-16",
   "identity": {
    "manufacturer_id": "pioneer",
    "official_product_url": "https://p-town.dmm.com/machines/5090",
@@ -12194,7 +12200,7 @@
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5090 型式=未掲載 メーカー=パイオニア 導入=2026-11 確認日=2026-08-28",
-   "market_release_date": "2026-11",
+   "market_release_date": "2026-11-16",
    "observed_model_code": "LハイハイシオサイReTC",
    "_observed_model_code_sources": [
     "p-town.dmm.com"
@@ -12240,7 +12246,7 @@
    "input_digest": "sha256:8ce5a1c75899864306733ecf4e51b4baca3d0e1413defacb5268aa5e833ff82a"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-11",
+  "release_date": "2026-11-02",
   "identity": {
    "manufacturer_id": "universal",
    "official_product_url": "https://p-town.dmm.com/machines/5079",
@@ -12248,7 +12254,7 @@
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5079 型式=未掲載 メーカー=ミズホ 導入=2026-11 確認日=2026-09-03",
-   "market_release_date": "2026-11"
+   "market_release_date": "2026-11-02"
   },
   "checker": {
    "coinRate": 31.0,
