@@ -339,14 +339,18 @@ def decision_problems(dec, ms=None) -> list:
             ng.append(f"{slug}: 交換率を持つ機種の一覧の文は target_display が作ります"
                       "（手で書きません）")
         else:
-            allowed = set(re.findall(r"\d+(?:\.\d+)?", str(m.get("strategy") or "")))
-            for md in (dec.get("modes") or []):
-                if isinstance(md, dict):
-                    for lv in LEVELS + ("ceiling",):
-                        if _int(md.get(lv)) is not None:
-                            allowed.add(str(md[lv]))
-            allowed |= {str(n) for n in nums}
-            made = [x for x in re.findall(r"\d+(?:\.\d+)?", st) if x not in allowed]
+            # ★数値の読み方は記事を直す道具と同じ1か所★（符号も数値の一部＝
+            #   線が 630 でも「-630G」は作った数字。2026-09-25・Codexの指摘）
+            #   ★単位ごと比べる★（2026-09-25・Codexの2回目）＝線 700 に対して
+            #   「700枚」は別の事実。決定の線と天井は G（または単位なし）で書く。
+            import decide_now as _dn_num
+            allowed = set(_dn_num.numbers_with_unit(str(m.get("strategy") or "")))
+            _vals = [md[lv] for md in (dec.get("modes") or []) if isinstance(md, dict)
+                     for lv in LEVELS + ("ceiling",) if _int(md.get(lv)) is not None]
+            for v in list(_vals) + list(nums):
+                allowed |= {(str(v), "G"), (str(v), "")}
+            made = [n + u for n, u in _dn_num.numbers_with_unit(st)
+                    if (n, u) not in allowed]
             if made:
                 ng.append("一覧の文に、決定の線にも今の文にも無い数字があります: "
                           + " / ".join(made[:4]) + "（数字を作らない）")
@@ -564,6 +568,17 @@ def merged(m: dict, dec: dict) -> dict:
             _md = dict(_md)
             _md[key] = conf
             ck["modeData"] = _md
+            # ★★直下にも同じ欄があれば、そちらも同じ値にする★★（2026-09-25・Codexの指摘）
+            #   読む側は場所によって modeData か直下のどちらかを先に見るので、
+            #   片方だけ書くと公開の関所が「同じ欄の食い違い」で止まる。
+            #   ★直下は丸ごと置き換えない★（2026-09-25・Codexの2回目）＝
+            #   直下にだけある欄（注記など）を消さないよう、線と天井と目安だけ合わせる。
+            if isinstance(ck.get(key), dict):
+                _dir = dict(ck[key])
+                for _k in LEVELS + ("ceiling", "target"):
+                    if _k in conf:
+                        _dir[_k] = conf[_k]
+                ck[key] = _dir
         else:
             ck[key] = conf
     ck["modes"] = modes
@@ -798,6 +813,9 @@ def selftest() -> int:
         t("★★一覧の文に、線にも今の文にも無い数字は書かせない★★（数字を作らない）",
           any("数字を作らない" in x for x in decision_problems(
               dec(slug="zzz_legacy", strategy="通常650G〜が狙い目"), base_ms)))
+        t("★★線と同じ数字でも、符号が付けば別の数字★★（-700G は作った数字）",
+          any("数字を作らない" in x for x in decision_problems(
+              dec(slug="zzz_legacy", strategy="通常 - 700G〜が狙い目"), base_ms)))
         t("　一覧の文が決まったら、その文になる",
           merged(base_ms[1], dec(slug="zzz_legacy",
                                  strategy="通常700G〜が狙い目")
@@ -885,6 +903,27 @@ def selftest() -> int:
         t("★★modeData に入っている欄は modeData を書き換える★★",
           ((_mdg["checker"].get("modeData") or {}).get("normal") or {})
           .get("good") == 450 and "normal" not in _mdg["checker"])
+        _both = {"slug": "zzz_both", "checker": {
+            "unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+            "modeData": {"normal": {"good": 500}}, "normal": {"good": 500}}}
+        _bg = merged(_both, dec(slug="zzz_both",
+                                modes=[{"key": "normal", "good": 450}]))
+        t("★★同じ欄が modeData と直下の両方にあれば、両方を同じ値にする★★"
+          "（片方だけだと公開の関所が食い違いで止まる）",
+          _bg["checker"]["modeData"]["normal"].get("good") == 450
+          and _bg["checker"]["normal"].get("good") == 450)
+        _both2 = {"slug": "zzz_both2", "checker": {
+            "unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+            "modeData": {"normal": {"good": 500}},
+            "normal": {"good": 500, "note": "直下にだけある注記"}}}
+        _bg2 = merged(_both2, dec(slug="zzz_both2",
+                                  modes=[{"key": "normal", "good": 450}]))
+        t("★★直下にだけある欄（注記など）は消さない★★",
+          _bg2["checker"]["normal"].get("note") == "直下にだけある注記"
+          and _bg2["checker"]["normal"].get("good") == 450)
+        t("★★線と同じ数字でも、単位が違えば別の数字★★（線700に対して「700枚」は作った事実）",
+          any("数字を作らない" in x for x in decision_problems(
+              dec(slug="zzz_legacy", strategy="通常700枚〜が狙い目"), base_ms)))
         t("★置き場の外を指す key は通らない★",
           any("key" in x for x in decision_problems(
               dec(modes=[{"key": "../etc", "label": "通常",

@@ -130,6 +130,32 @@ def _fatal(ng: list) -> bool:
                              "機種（slug）が要ります")) for x in ng)
 
 
+def _days_if_refused(st: dict, slug: str, day: str) -> list:
+    """★今日も断ったとしたら、断った日は何日になるか★（書かない）"""
+    days = [str(x) for x in (((st.get("quality_review") or {})
+                              .get("stamp_refused") or {}).get(slug) or [])
+            if str(x)]
+    if day not in days:
+        days.append(day)
+    return days
+
+
+def check(slug: str, today: str = "", rows=None, load_state=None) -> tuple:
+    """★押すかどうかだけ答える（書かない）★ → (押すか, 理由の一覧)
+
+    ★`mark()` と同じ答えを返す★（2026-09-25・Codexの指摘）＝
+    直す前の `--check` は日数の上限を見ず、3日目以降も「押さない」と答え続けた。
+    """
+    day = str(today or datetime.date.today().isoformat())
+    ng = problems(slug, rows, load_state)
+    if not ng:
+        return True, []
+    if _fatal(ng):
+        return False, ng
+    st = (load_state or _read_state)()
+    return len(_days_if_refused(st, slug, day)) > MAX_REFUSAL_DAYS, ng
+
+
 def mark(slug: str, today: str = "", rows=None,
          load_state=None, save_state=None) -> tuple:
     """★点検済みにする★ → (書いたか, 理由)
@@ -143,10 +169,8 @@ def mark(slug: str, today: str = "", rows=None,
     st = (load_state or _read_state)()
     qr = st.setdefault("quality_review", {})
     refused = qr.setdefault("stamp_refused", {})
-    days = [str(x) for x in (refused.get(slug) or []) if str(x)]
     if ng:
-        if day not in days:
-            days.append(day)
+        days = _days_if_refused(st, slug, day)
         if len(days) <= MAX_REFUSAL_DAYS:
             refused[slug] = days
             (save_state or _write_state)(st)
@@ -234,10 +258,16 @@ def selftest() -> int:
 
     # ★★止めるのは最大2日★★（罠⓸＝断るだけで出口が無いと永久に居座る）
     box["st"] = {}
+    c1 = check("zz", "2026-09-24", waiting_, _load)
     r1 = mark("zz", "2026-09-24", waiting_, _load, _save)
     r1b = mark("zz", "2026-09-24", waiting_, _load, _save)
+    c2 = check("zz", "2026-09-25", waiting_, _load)
     r2 = mark("zz", "2026-09-25", waiting_, _load, _save)
+    c3 = check("zz", "2026-09-26", waiting_, _load)
     r3 = mark("zz", "2026-09-26", waiting_, _load, _save)
+    t("★★「押すかだけ見る」も本体と同じ答え★★（1日目・2日目は押さない／3日目は押す）"
+      "（★直す前は上限を見ず、3日目以降も永久に「押さない」と答えた★）",
+      c1[0] is False and c2[0] is False and c3[0] is True)
     t("　1日目は押さない", r1[0] is False and "1日目" in r1[1])
     t("　同じ日に何度呼んでも1日と数える", r1b[0] is False and "1日目" in r1b[1])
     t("　2日目も押さない", r2[0] is False and "2日目" in r2[1])
@@ -297,13 +327,15 @@ def main() -> int:
         print("--slug が要ります")
         return 1
     if a.check:
-        ng = problems(a.slug)
-        if ng:
+        yes, ng = check(a.slug)
+        if not yes:
             print("★押しません★")
             for x in ng:
                 print("  ・" + x)
             return 1
-        print(f"{a.slug}: 押せます")
+        print(f"{a.slug}: 押せます"
+              + ("（★待ちの記録はありますが、上限の日数を過ぎたので押します★）"
+                 if ng else ""))
         return 0
     wrote, why = mark(a.slug)
     print(("" if wrote else "★押しません★ ") + why)

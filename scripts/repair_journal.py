@@ -755,6 +755,16 @@ def withdraw(fid: str, why: str, by) -> dict:
         raise JournalError(
             f"取り下げられるのは合意済み（AGREED）の記録だけです"
             f"（いま {rec.get('state')}）")
+    # ★★壊れた記録は取り下げで「健康」に見せない★★（2026-09-25・Codexの指摘）
+    #   AGREED に要る欄が欠けた記録を取り下げると、壊れた事実が消えてしまう。
+    _bw = _broken_why(rec)
+    if _bw:
+        raise JournalError(f"壊れた記録は取り下げられません: {_bw}")
+    # ★もとの合意が2AIの両方で決めたものであること★（2026-09-25・Codexの2回目）
+    #   （実測＝本物の記録131件はすべて claude と codex）
+    _db = {str(x).strip().lower() for x in (rec.get("decided_by") or [])}
+    if not set(_required_judges()) <= _db:
+        raise JournalError("もとの合意に2AIの両方の判断がありません（壊れた合意は取り下げません）")
     who = {str(x).strip().lower() for x in (by or []) if str(x).strip()}
     need = set(_required_judges())
     if not need <= who:
@@ -789,10 +799,26 @@ def _broken_why(rec):
             return f"{k} がありません"
     if rec.get("state") not in STATES:
         return f"知らない段階です（{rec.get('state')!r}）"
-    # ★取り下げた記録は、誰が・なぜ取り下げたかが揃っていること★
-    if rec.get("state") == WITHDRAWN and not (rec.get("withdrawn_by")
-                                              and rec.get("withdrawn_why")):
-        return "取り下げたのに、判断者か理由がありません"
+    # ★★取り下げた記録は、取り下げる前（AGREED）に要った欄と、
+    #   誰が・なぜ取り下げたかが揃っていること★★（2026-09-25・Codexの指摘）
+    if rec.get("state") == WITHDRAWN:
+        for _k in ("claude_verdict_sha256", "codex_verdict_sha256",
+                   "ops", "recheck", "decided_by"):
+            if not rec.get(_k):
+                return f"取り下げたのに {_k} がありません"
+        _wb = {str(x).strip().lower() for x in (rec.get("withdrawn_by") or [])}
+        _db = {str(x).strip().lower() for x in (rec.get("decided_by") or [])}
+        try:
+            _need_j = set(_required_judges())
+        except Exception:                                    # noqa: BLE001
+            return "判断者の決まりを読めません"
+        if not _need_j <= _wb:
+            return "取り下げたのに、2AIの両方の判断がありません"
+        # ★もとの合意も2AIの両方で決めていたこと★（2026-09-25・Codexの2回目）
+        if not _need_j <= _db:
+            return "取り下げた合意に、2AIの両方の判断がありません"
+        if len(str(rec.get("withdrawn_why") or "").strip()) < MIN_WITHDRAW_WHY:
+            return "取り下げたのに、理由がありません"
     if len(str(rec.get("source_sha256") or "")) != 64:
         return "記事の指紋がありません"
     # ★★段階ごとに、そこまでで揃っているはずの欄を見る★★
@@ -1627,6 +1653,58 @@ def _selftest() -> int:
         t("★★記事が変わってから見つけ直したら、新しく立て直す★★",
           detect("zzz11", "text_gone", "十一番の文です。",
                  source_sha256="4" * 64)["state"] == "DETECTED")
+
+        # ⑫★★壊れた記録は、取り下げで「健康」に見せない★★（2026-09-25・Codexの指摘）
+        r12 = detect("zzz12", "text_gone", "十二番の文です。",
+                     source_sha256="5" * 64)
+        f12 = r12["finding_id"]
+        seal_claude(f12, vp)
+        record_codex(f12, "b" * 64, "Codexの判定です。同じく消してよいと考えます。")
+        agree(f12, _decfile(f12, "zzz12",
+                            [{"op": "drop", "text": "十二番の文です。",
+                              "why": "前の段落と同じ内容"}], sha="5" * 64,
+                            name="dec12"),
+              "text_gone", ["Claude", "codex"])
+        _r12 = load(f12)
+        _r12.pop("ops", None)                  # ★合意に要る欄を欠かせる★
+        _save(_r12)
+        t("　（前提）欄の欠けた合意は、壊れた記録として一覧に出る",
+          any(x.get("finding_id") == f12 and x.get("state") == "BROKEN"
+              for x in listing()))
+        t("★★壊れた合意は取り下げられない★★（壊れた事実を消さない）",
+          _try_fail(lambda: withdraw(f12, _why11, ["claude", "codex"])))
+        # 取り下げた記録から理由を消すと、壊れた記録として出る
+        #   （★f11 はもう立て直されているので、取り下げた直後の姿 `_w` を使う★）
+        _wr = dict(_w or {})
+        _wr["withdrawn_why"] = "短い"
+        t("★★取り下げた記録は、理由が欠ければ壊れた記録として扱う★★",
+          bool(_broken_why(_wr)))
+        _wr2 = dict(_w or {})
+        _wr2["withdrawn_by"] = ["claude"]
+        t("★★取り下げた記録は、2AIの両方の判断が無ければ壊れた記録として扱う★★",
+          bool(_broken_why(_wr2)))
+        _wr3 = dict(_w or {})
+        _wr3["decided_by"] = ["claude"]
+        t("★★もとの合意の判断者が片方だけなら、取り下げた記録も壊れた記録として扱う★★",
+          bool(_broken_why(_wr3)))
+        # ★合意の判断者を片方だけに壊したら、取り下げを断る★
+        r13 = detect("zzz13", "text_gone", "十三番の文です。",
+                     source_sha256="6" * 64)
+        f13 = r13["finding_id"]
+        seal_claude(f13, vp)
+        record_codex(f13, "b" * 64, "Codexの判定です。同じく消してよいと考えます。")
+        agree(f13, _decfile(f13, "zzz13",
+                            [{"op": "drop", "text": "十三番の文です。",
+                              "why": "前の段落と同じ内容"}], sha="6" * 64,
+                            name="dec13"),
+              "text_gone", ["Claude", "codex"])
+        _r13 = load(f13)
+        _r13["decided_by"] = ["claude"]
+        _save(_r13)
+        t("★★もとの合意の判断者が片方だけなら、取り下げない★★",
+          _try_fail(lambda: withdraw(f13, _why11, ["claude", "codex"])))
+        os.remove(_path(f13))
+        os.remove(_path(f12))
     finally:
         globals()["STORE"] = keep
         shutil.rmtree(td, ignore_errors=True)
