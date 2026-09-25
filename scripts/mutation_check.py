@@ -797,6 +797,21 @@ MUTATIONS = [
         "after": "    if False:",
         "run": ["scripts/mark_reviewed.py"],
     },
+    # ─── 2026-09-25・既存の機種のカウンターの線も2AIの決定で書く ───
+    {
+        "why": "★一覧の文に、決定の線にも今の文にも無い数字を書ける（★数字を作れる★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "            made = [x for x in re.findall(r\"\\d+(?:\\.\\d+)?\", st) if x not in allowed]",
+        "after": "            made = []",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★modeData に入っている欄を、読まれない場所へ書く（★線を直したのに画面は古いまま★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        _in_md = _md is not None and isinstance(_md.get(key), dict)",
+        "after": "        _in_md = False",
+        "run": ["scripts/checker_verdict.py"],
+    },
     # ─── 2026-09-25・居座った合意の取り下げ／見出しつきの行の置き換え ───
     {
         "why": "★合意の取り下げで、判断者が2AIそろっているかを見ない（★1AIだけで合意を終わらせられる★）★",
@@ -1604,14 +1619,6 @@ MUTATIONS = [
         "run": ["scripts/checker_verdict.py"],
     },
     {
-        "why": "★旧形式の機種も書き換えられるようにする"
-               "（★すでに線がある120機種を、この道具で上書きできてしまう★）★",
-        "file": "scripts/checker_verdict.py",
-        "before": '    if "publication_policy" not in m:',
-        "after": "    if False:",
-        "run": ["scripts/checker_verdict.py"],
-    },
-    {
         "why": "★転載の疑いがある組を、票と材料から外さない"
                "（★同じ誤りを写した2ページが「独立した2出典」として通る★"
                "＝2026-09-18・Codexの指摘で塞いだ）★",
@@ -1864,18 +1871,6 @@ MUTATIONS = [
         "file": "scripts/checker_verdict.py",
         "before": "    cap = max(nums)",
         "after": "    cap = MAX_VALUE",
-        "run": ["scripts/checker_verdict.py"],
-    },
-    {
-        "why": "★天井が1つも確かめられていなくても、線を決めさせる"
-               "（★狙い目は天井から決まるので、裏付けなしの線が読者の道具に入る★）★",
-        # ★★`if not nums:` を False にするだけだと、あとの max() が
-        #   例外で落ちるだけになり「試験が❌」ではなく「ただ落ちた」になる（罠⑤）。
-        #   ★守りを外しても、そのまま動く形にして壊す★
-        "file": "scripts/checker_verdict.py",
-        "before": "    nums = known_ceilings(slug, m)\n    if not nums:",
-        "after": ("    nums = known_ceilings(slug, m) or {MAX_VALUE}\n"
-                  "    if not nums:"),
         "run": ["scripts/checker_verdict.py"],
     },
     {

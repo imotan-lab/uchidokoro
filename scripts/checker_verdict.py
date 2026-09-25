@@ -279,10 +279,9 @@ def _common_problems(dec, ms=None) -> tuple:
     m = _find(ms, slug)
     if m is None:
         return ng + [f"{slug}: machines.json にありません"], None
-    if "publication_policy" not in m:
-        # ★旧形式は触らない★＝すでに線があり、書き換える理由が無い。
-        #   ★誤爆を構造で止める★（「気をつける」にしない）。
-        ng.append(f"{slug}: 新台経路の機種ではありません（旧形式は触りません）")
+    # ★★既存の機種（旧形式）も受け取る★★（2026-09-25・鉄則0z＝既定は2AI）
+    #   ★直す前は「旧形式は触らない」で断っていた★ので、2AIがカウンターと
+    #   記事の食い違いを見つけても、カウンター側を直す道が無かった（炎炎ノ消防隊2）。
     want = set(_judges_required())
     who = {str(x).lower() for x in (dec.get("judges") or [])}
     if not want <= who:
@@ -320,12 +319,37 @@ def decision_problems(dec, ms=None) -> list:
     #   ★`ceiling` を書かずに `good: 20000` と書けば何の検査も走らなかった★。
     #   狙い目は「どこまで深ければ座ってよいか」なので、天井が分からない
     #   うちは決めようがない。★先に天井を確かめる★（同じ回に問いが出ている）。
+    # ★★天井が構造化されていなくても受け取る★★（2026-09-25・鉄則0z）
+    #   ★直す前は「天井が1つも確かめられていなければ断る」だった★＝
+    #   既存の機種は天井を構造化して持っていないことが多く、2AIが決めても書けなかった。
+    #   ★上限は、天井が分かっている欄でだけ見る★（線を何Gにするかは2AIの判断）。
     nums = known_ceilings(slug, m)
-    if not nums:
-        return ng + [f"{slug}: 天井が1つも確かめられていません"
-                     "（先に天井を確かめてください。天井なしの機種は"
-                     "設定狙い用のチェッカーを使います）"]
-    cap = max(nums)
+    cap = max(nums) if nums else None
+    # ★★一覧の文（strategy）も2AIが決めてよい★★（2026-09-25）
+    #   ★交換率の無い既存の機種は、一覧の文が手書き★（`target_display` は
+    #   交換率を持つ機種しか作らない）ので、線だけ変えると一覧が古いまま残る。
+    #   ★機械が見るのは「数字を作っていないか」だけ★＝文の中の数字が、
+    #   この決定の線・天井か、いまの一覧の文に在ること。
+    if "strategy" in dec:
+        st = dec.get("strategy")
+        if not isinstance(st, str) or not st.strip():
+            ng.append("strategy（一覧の文）が空です")
+        elif m.get("exchangeRates") or (m.get("checker") or {}).get(
+                "exchangeRates"):
+            ng.append(f"{slug}: 交換率を持つ機種の一覧の文は target_display が作ります"
+                      "（手で書きません）")
+        else:
+            allowed = set(re.findall(r"\d+(?:\.\d+)?", str(m.get("strategy") or "")))
+            for md in (dec.get("modes") or []):
+                if isinstance(md, dict):
+                    for lv in LEVELS + ("ceiling",):
+                        if _int(md.get(lv)) is not None:
+                            allowed.add(str(md[lv]))
+            allowed |= {str(n) for n in nums}
+            made = [x for x in re.findall(r"\d+(?:\.\d+)?", st) if x not in allowed]
+            if made:
+                ng.append("一覧の文に、決定の線にも今の文にも無い数字があります: "
+                          + " / ".join(made[:4]) + "（数字を作らない）")
     seen = set()
     for i, md in enumerate(modes):
         tag = f"modes[{i}]"
@@ -338,7 +362,10 @@ def decision_problems(dec, ms=None) -> list:
         if key in seen:
             ng.append(f"{tag}: key「{key}」が2回出てきます")
         seen.add(key)
-        if not str(md.get("label") or "").strip():
+        # ★既にある欄なら、呼び名は今のままでよい★（既存の機種は欄がそろっている）
+        _have = {str(x.get("key") or "") for x in (ck.get("modes") or [])
+                 if isinstance(x, dict)}
+        if not str(md.get("label") or "").strip() and key not in _have:
             ng.append(f"{tag}: label（読者に出る呼び名）が空です")
         vals = {}
         for lv in LEVELS:
@@ -386,7 +413,7 @@ def decision_problems(dec, ms=None) -> list:
         limit, why = (eff, "その欄の天井") if eff else (cap, "確かめてある天井の"
                                                          "いちばん深いところ")
         for lv in LEVELS:
-            if lv in vals and vals[lv] > limit:
+            if limit is not None and lv in vals and vals[lv] > limit:
                 ng.append(f"{tag}: {lv}（{vals[lv]}）が、{why}（{limit}）を"
                           "超えています")
     if ng:
@@ -519,7 +546,12 @@ def merged(m: dict, dec: dict) -> dict:
             for x in modes:
                 if isinstance(x, dict) and str(x.get("key") or "") == key:
                     x["label"] = str(md.get("label") or x.get("label") or "")
-        conf = dict(ck.get(key) or {})
+        # ★★欄の置き場は、読む側と同じ順で決める★★（2026-09-25）
+        #   読む側は `modeData[key]` を先に見るので、既存の機種で
+        #   そこに入っている欄を `checker[key]` へ書くと★読まれずに黙って無視される★。
+        _md = ck.get("modeData") if isinstance(ck.get("modeData"), dict) else None
+        _in_md = _md is not None and isinstance(_md.get(key), dict)
+        conf = dict((_md.get(key) if _in_md else ck.get(key)) or {})
         for lv in LEVELS:
             if lv in md:
                 conf[lv] = md[lv]
@@ -528,9 +560,17 @@ def merged(m: dict, dec: dict) -> dict:
         # ★target は good と同じ値★（読者の画面の「目安」表示に使う）
         if "good" in md:
             conf["target"] = md["good"]
-        ck[key] = conf
+        if _in_md:
+            _md = dict(_md)
+            _md[key] = conf
+            ck["modeData"] = _md
+        else:
+            ck[key] = conf
     ck["modes"] = modes
     out["checker"] = ck
+    # ★一覧の文も2AIが決めたとき★（交換率の無い機種だけ・検査は decision_problems）
+    if isinstance(dec.get("strategy"), str) and dec["strategy"].strip():
+        out["strategy"] = dec["strategy"].strip()
     return out
 
 
@@ -748,9 +788,20 @@ def selftest() -> int:
                                          base_ms)))
         t("★理由が短いと通らない★",
           any("理由" in x for x in decision_problems(dec(why="短い"), base_ms)))
-        t("★旧形式は触らない★",
-          any("旧形式" in x
-              for x in decision_problems(dec(slug="zzz_legacy"), base_ms)))
+        t("★★既存の機種（旧形式）の線も、2AIの決定なら受け取る★★"
+          "（★直す前は断っていたので、炎炎ノ消防隊2のカウンターを直す道が無かった★）",
+          not decision_problems(dec(slug="zzz_legacy"), base_ms))
+        # ★★一覧の文も2AIが決めてよい。機械は数字を作っていないかだけ見る★★
+        t("★★一覧の文を決定の線どおりに直せる★★",
+          not decision_problems(dec(slug="zzz_legacy",
+                                    strategy="通常700G〜が狙い目"), base_ms))
+        t("★★一覧の文に、線にも今の文にも無い数字は書かせない★★（数字を作らない）",
+          any("数字を作らない" in x for x in decision_problems(
+              dec(slug="zzz_legacy", strategy="通常650G〜が狙い目"), base_ms)))
+        t("　一覧の文が決まったら、その文になる",
+          merged(base_ms[1], dec(slug="zzz_legacy",
+                                 strategy="通常700G〜が狙い目")
+                 ).get("strategy") == "通常700G〜が狙い目")
         t("★順序が逆だと通らない★",
           any("順になっていません" in x for x in decision_problems(
               dec(modes=[{"key": "normal", "label": "通常",
@@ -817,10 +868,23 @@ def selftest() -> int:
           any("good" in x for x in decision_problems(
               dec(modes=[{"key": "normal", "label": "通常",
                           "caution": 600}]), base_ms)))
-        t("★呼び名が空だと通らない★",
+        t("★新しい欄で呼び名が空だと通らない★",
           any("label" in x for x in decision_problems(
-              dec(modes=[{"key": "normal", "label": "  ",
-                          "good": 700}]), base_ms)))
+              dec(modes=[{"key": "reset", "label": "  ",
+                          "good": 300}]), base_ms)))
+        t("　既にある欄なら、呼び名は今のままでよい",
+          not any("label" in x for x in decision_problems(
+              dec(modes=[{"key": "normal", "good": 700}]), base_ms)))
+        # ★★既存の機種で modeData に入っている欄は、そこへ書く★★
+        #   （読む側が modeData を先に見るので、ほかへ書くと黙って無視される）
+        _mdm = {"slug": "zzz_md", "checker": {
+            "unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+            "modeData": {"normal": {"good": 500}}}}
+        _mdg = merged(_mdm, dec(slug="zzz_md",
+                                modes=[{"key": "normal", "good": 450}]))
+        t("★★modeData に入っている欄は modeData を書き換える★★",
+          ((_mdg["checker"].get("modeData") or {}).get("normal") or {})
+          .get("good") == 450 and "normal" not in _mdg["checker"])
         t("★置き場の外を指す key は通らない★",
           any("key" in x for x in decision_problems(
               dec(modes=[{"key": "../etc", "label": "通常",
@@ -869,11 +933,11 @@ def selftest() -> int:
         # ★2回当てても同じ姿★（罠㉘）
         t("★2回当てても同じ姿になる★",
           merged(merged(base_ms[0], dec()), dec()) == merged(base_ms[0], dec()))
-        # ★天井が1つも確かめられていなければ、線を決めさせない★
+        # ★★天井が構造化されていなくても、2AIの線は受け取る★★（2026-09-25・鉄則0z）
         globals()["known_ceilings"] = lambda s, m=None: set()
-        t("★★天井が1つも確かめられていない機種では、線を決めない★★",
-          any("天井が1つも確かめられていません" in x
-              for x in decision_problems(dec(), base_ms)))
+        t("★★天井が構造化されていない機種でも、2AIが決めた線は受け取る★★"
+          "（★直す前は断っていたので、既存の機種の線を直せなかった★）",
+          not decision_problems(dec(), base_ms))
         # ★★天井が2つ以上あって、その欄の天井が分からないとき★★
         #   （2026-09-18・Codexの3回目。★実データ＝ssb1 は 899G と 560G★）
         globals()["known_ceilings"] = lambda s, m=None: {560, 899}
