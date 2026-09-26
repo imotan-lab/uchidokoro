@@ -934,10 +934,28 @@ def _same(a, b) -> bool:
     return a == b
 
 
+def _note_grew(old_u, n) -> bool:
+    """★表の注記に「確認1件のみ」の断りが後ろへ足されただけか★（台帳#718）
+
+    生成器（`_cz_note`）は単独確認の値が混ざったときだけ、注記の後ろに
+    SINGLE_SOURCE_NOTE を足す。★前の注記は一字も欠けない★のに
+    「前の注記が消えた」と判定され、喰霊-零-Re とモグモグ風林火山が
+    育たなくなっていた（2026-09-27・実測）。
+    ★足される向きだけ★＝断りが消える向きは今までどおり止める
+    （欄の「（確認1件のみ）」が残ったまま断りだけ消える生成不具合を通さない・
+    Codexの指摘）。★前の本文 ＋ 断り、の完全一致だけ★。
+    """
+    sn = getattr(_ba, "SINGLE_SOURCE_NOTE", "")
+    return bool(sn) and old_u[0] == "note" and len(n) == len(old_u) \
+        and n[0] == "note" and tuple(n[1:3]) == tuple(old_u[1:3]) \
+        and n[3] == old_u[3] + sn
+
+
 def _match(old_u, new_units) -> bool:
     """未確定の欄を除いて、同じ単位が新しい側にあるか。"""
-    return any(len(n) == len(old_u)
-               and all(_same(x, y) for x, y in zip(old_u, n))
+    return any((len(n) == len(old_u)
+                and all(_same(x, y) for x, y in zip(old_u, n)))
+               or _note_grew(old_u, n)
                for n in new_units)
 
 
@@ -2530,6 +2548,45 @@ def selftest() -> int:
     t("★★まとめ箱の書き換えは止める★★",
       text_kept(OLD, _mod(lambda d: d["summaryBoxes"][0].__setitem__(
           "value", "999G"))))
+    # ★★CZの注記に「確認1件のみ」の断りが付いただけなら、消えたと言わない★★
+    #   （2026-09-27・台帳#718）＝単独確認の値が1件混ざると、生成器は
+    #   注記の後ろに SINGLE_SOURCE_NOTE を足す。★元の断り書きは一字も欠けない★
+    #   のに「前に載っていた注記が消えた」と判定され、
+    #   喰霊-零-Re とモグモグ風林火山が育たなくなっていた（実測）。
+    #   ★注記は本物の生成器で作る★（手で書いた写しで採点しない）
+    _base_note = _ba._cz_note([])
+    _single_note = _ba._cz_note([{"basis": "SINGLE_NEAR_RELEASE"}])
+
+    def _with_note(note, rows=None):
+        def f(d):
+            tb = d["sections"][1]["tables"][0]
+            tb["note"] = note
+            if rows is not None:
+                tb["rows"] = rows
+        return _mod(f)
+    # ★実測の形★（pw_10523・2026-09-27）＝前は「確認中」の行だけ、
+    #   今夜は単独確認の行が1つ増え、注記の後ろに断りが付く。
+    _tag = _ba._basis_tag("SINGLE_NEAR_RELEASE")      # ★本物の生成器の名乗り★
+    _rows_old = [["喰霊チャンス", "10G", "レア役"], ["大戦", "確認中", "確認中"]]
+    _rows_new = [["喰霊チャンス", "10G", "レア役"],
+                 ["叩き" + _tag, "10G" + _tag, "レア役" + _tag],
+                 ["大戦", "確認中", "確認中"]]
+    t("★★CZに単独確認の行が増え、注記に断りが足されただけなら通る★★（#718・実測の形）",
+      _single_note != _base_note
+      and not text_kept(_with_note(_base_note, _rows_old),
+                        _with_note(_single_note, _rows_new)))
+    t("★★欄に（確認1件のみ）が残ったまま、断りだけ消えたら止める★★（#718・Codexの指摘）",
+      bool(text_kept(_with_note(_single_note, _rows_new),
+                     _with_note(_base_note, _rows_new))))
+    t("★★注記そのものを書き換えたら、いままでどおり止める★★（#718）",
+      bool(text_kept(_with_note(_base_note),
+                     _with_note("全種類を載せています。"))))
+    t("★★断りの前の注記が変わったら止める★★（#718）",
+      bool(text_kept(_with_note(_base_note),
+                     _with_note("全種類を載せています。" + _ba.SINGLE_SOURCE_NOTE))))
+    t("　断りが付いたままの注記は、そのままなら通る（#718）",
+      not text_kept(_with_note(_single_note, _rows_new),
+                    _with_note(_single_note, _rows_new)))
     # ★★導入文はここでは比べない★★（2026-08-23・台帳#461で変更）
     #   ★守りを外したのではなく、守る場所を1つにした★＝
     #   導入文は「機種名」と「登場時期」をはめ込んだ定型文で、

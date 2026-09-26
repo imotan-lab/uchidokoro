@@ -6708,6 +6708,16 @@ MUTATIONS = [
         "after": "                pass\n",
         "run": ["scripts/grow_machine.py"],
     },
+    # ─── 2026-09-27・更新タスクの自己修正（CZ注記の単独確認の断り）───
+    {
+        "why": "★CZの注記に「確認1件のみ」の断りが足されただけで「前の注記が消えた」と"
+               "判定する（★元の断り書きは一字も欠けないのに、その機種が育たなくなる★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "               or _note_grew(old_u, n)\n",
+        "after": "               or False\n",
+        "run": ["scripts/grow_machine.py"],
+        "issues": [718],
+    },
 ]
 
 
