@@ -418,7 +418,6 @@
     "at:MAIN_AT",
     "ceiling:GAME:BIG後",
     "ceiling:GAME:REG後",
-    "ceiling:THROUGH:1Gレンチャンス",
     "cz:レンカノチャレンジ",
     "games_per_50",
     "payout_range",
@@ -426,7 +425,7 @@
    ],
    "policy_mode": "normal",
    "decided_at": "2026-09-26",
-   "input_digest": "sha256:2f7d1bce4b1ccd902c988f9f856bbfb07dc45e8081bbb71286e3f29c57fc3ba3"
+   "input_digest": "sha256:d6b39fcb62b8652bf328319490213a02d1764175d1f71b8f32c525bee03e8277"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
