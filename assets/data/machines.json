@@ -401,29 +401,32 @@
    "schema_version": "page-decision/v2",
    "indexable": true,
    "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
+   "ceiling_state": "PRESENT",
    "confirmed_topics": [
+    "ceiling",
     "cz",
     "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "ceiling",
     "strategy",
     "reset"
    ],
    "reason_codes": [],
    "claims": [
     "at:MAIN_AT",
+    "ceiling:GAME:BIG後",
+    "ceiling:GAME:REG後",
+    "ceiling:THROUGH:1Gレンチャンス",
     "cz:レンカノチャレンジ",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-08",
-   "input_digest": "sha256:f047a5e4dc55710dbd62e1df185837f766da9262ce864821b860b39b8737b1f2"
+   "decided_at": "2026-09-26",
+   "input_digest": "sha256:2f7d1bce4b1ccd902c988f9f856bbfb07dc45e8081bbb71286e3f29c57fc3ba3"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -465,8 +468,8 @@
     "caution": 700,
     "good": 700,
     "excellent": 770,
-    "ceiling": 1000,
-    "target": 700
+    "target": 700,
+    "ceiling": 1000
    },
    "reg": {
     "caution": 360,

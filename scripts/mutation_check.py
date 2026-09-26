@@ -884,6 +884,64 @@ MUTATIONS = [
         "after": "        if False:",
         "run": ["scripts/repair_journal.py"],
     },
+    # ─── 2026-09-26・Codex190の指摘（天井は2AIが勝つ／目安も天井を見る）───
+    {
+        "why": "★持ち越すとき、材料の天井で2AIの天井を上書きする（★別の欄の天井が入り、線が浅いので検査も素通りする★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "            conf[\"ceiling\"] = whole[k][\"ceiling\"]",
+        "after": "            conf.setdefault(\"ceiling\", whole[k][\"ceiling\"])",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★天井が食い違っても2AIへ問いを出さない（★黙って片方を採り、誰も気づかない★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "            if conf.get(\"ceiling\") not in (None, whole[k][\"ceiling\"]):",
+        "after": "            if False:",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★完成形の検査で、読者に出る目安（target）を見ない（★目安が天井を超えても通る★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        for lv in LEVELS + (\"target\",):",
+        "after": "        for lv in LEVELS:",
+        "run": ["scripts/grow_machine.py", "scripts/checker_verdict.py"],
+    },
+    # ─── 2026-09-26・育てると2AIの狙い目の線が消える（台帳#716）───
+    {
+        "why": "★育てるとき、2AIが決めた狙い目の線を持ち越さない（★毎朝の育成で線が静かに消える★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    out[\"problems\"] += carry_checker(cur, machine, out[\"questions\"])",
+        "after": "    pass",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★持ち越しが、線のある欄を見つけても何もしない（★呼んでいるのに消える★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        if got:\n            lines[k], whole[k] = got, conf",
+        "after": "        if False:\n            lines[k], whole[k] = got, conf",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★材料から早見表を作れなかった晩に、2AIの線を捨てる★",
+        "file": "scripts/grow_machine.py",
+        "before": "        nck = {\"unit\": str(ock.get(\"unit\") or \"G\"), \"modes\": []}",
+        "after": "        return ng",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★2AIが足した欄を丸ごと持ち越さない（★天井ごと消える★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "            nck[k] = dict(whole[k])",
+        "after": "            nck[k] = {}",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★線が材料の天井より深くても、書かずに止めない（★天井より深い狙い目が読者の道具に入る★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    for p in _ckv_cc.merged_problems(new):",
+        "after": "    for p in []:",
+        "run": ["scripts/grow_machine.py"],
+    },
     # ─── 2026-09-25・Codex188の指摘（2か所の欄が既に食い違っているとき）───
     {
         "why": "★直下と modeData の同じ欄が既に食い違っていても書く（★黙って片方を採り、もう片方の値が消える★）★",
@@ -6624,6 +6682,23 @@ MUTATIONS = [
         "before": "                    if _cover is None:\n                        _hits = []",
         "after": "                    if _cover is None:\n                        pass",
         "run": ["scripts/confirmed_values.py"],
+    },
+    # ─── 2026-09-26・更新タスクの自己修正（育成の sitemap）───
+    {
+        "why": "★検索に載っている機種を育てると、既にある sitemap の行で例外になる"
+               "（★書き込みが全部取り消され、材料が増えても記事に入らない★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        if f\"{_pub.SITE_ORIGIN}/machines/{slug}/\" in _pub._sitemap_locs(sm):\n            return sm, False\n",
+        "after": "",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★載せたまま育てたとき、sitemap が変わっていないことを確かめない"
+               "（★行が消えたり増えたりしても書き込みが通る★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "                after += _pub.check_sitemap_kept(sm.replace(\"\\r\\n\", \"\\n\"))\n",
+        "after": "                pass\n",
+        "run": ["scripts/grow_machine.py"],
     },
 ]
 

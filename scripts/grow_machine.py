@@ -1946,6 +1946,8 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     #   identity は毎回作り直すので、明示的に引き継がないと落ちる。
     #   ★検定番号はDMMには無い★＝移行前の記録が唯一の記録になる。
     out["problems"] += _carry_identity(ident, machine.get("identity"))
+    # ★2AIが決めた狙い目の線も持ち越す★（2026-09-26・台帳#716）
+    out["problems"] += carry_checker(cur, machine, out["questions"])
     detail = _ba.build_detail(slug, vo.get("identity_name") or name, release, mat)
     # ③ 本人性が変わっていないか
     out["problems"] += identity_same(ident, machine.get("identity") or {})
@@ -2140,6 +2142,141 @@ def refine_release_date(slug: str, old: str, new: str,
     return True, f"導入日を細かくしました（{old} → {new}）"
 
 
+# ★2AIだけが決める欄★＝`checker_verdict` が書く（材料からは作れない）
+_VERDICT_LINES = ("caution", "good", "excellent", "target")
+
+
+def carry_checker(old: dict, new: dict, ask: list = None) -> list:
+    """★2AIが決めた狙い目の線を、育てたあとの機種行へ持ち越す★
+    （2026-09-26・台帳#716）
+
+    ★なぜ要るか★＝`build_machine` は機種行を**材料から作り直す**ので、
+    `checker_verdict` が書いた線（狙い目・手前帯・強め・目安）は材料に無く、
+    ★育てるたびに消えていた★（実測＝彼女、お借りします。
+    いまは sitemap の不具合で書き込みまで届いていなかったので隠れていた）。
+    ★線は2AIの判断★なので、機械の作り直しに道を譲らせない
+    （材料の値より2AIの控えが勝つ＝`confirmed_values.merge_into` と同じ考え方）。
+
+    ★持ち越すもの★
+      ・線（狙い目・手前帯・強め・目安）・★欄の呼び名★・★その欄の天井★
+        ＝いつも2AIの側を使う
+      ・2AIが足した欄 … ★丸ごと★（材料からは作れない）
+    ★50枚あたりG数は毎回材料から作り直す★（機械が読める事実）。
+
+    ★★天井も2AIが勝つ理由★★（2026-09-26・Codexの指摘・実データで確かめた）＝
+      材料の天井は「1つに絞れた天井」でしかなく、★どの欄の天井かを持っていない★
+      （`build_checker` は中身に関係なく `normal` へ入れる）。
+      2AIは欄ごとに決めている（BIG後1000／REG後800）ので、材料の値で上書きすると
+      ★別の欄の天井が、この欄の天井として入る★。
+      しかも線がその値より浅ければ（700 ≦ 800）、下の完成形の検査も通ってしまう。
+      ★食い違ったら2AIへ問いを出す★（`ask`）＝どちらが正しいかは機械には決められない。
+    ★線と天井が食い違ったら、書かずに2AIへ回す★＝どちらが正しいかは
+    機械には決められない。判定は `checker_verdict.merged_problems` の1か所。
+    """
+    ng: list = []
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return ng
+    ock = old.get("checker")
+    if not isinstance(ock, dict):
+        return ng
+    omd = ock.get("modeData") if isinstance(ock.get("modeData"), dict) else {}
+    olabel, lines, whole = {}, {}, {}
+    for m in (ock.get("modes") or []):
+        if not isinstance(m, dict) or not m.get("key"):
+            continue
+        k = str(m["key"])
+        olabel[k] = str(m.get("label") or "")
+        conf = omd.get(k) if isinstance(omd.get(k), dict) else ock.get(k)
+        if not isinstance(conf, dict):
+            continue
+        got = {x: conf[x] for x in _VERDICT_LINES if x in conf}
+        if got:
+            lines[k], whole[k] = got, conf
+    if not lines:
+        return ng                          # ★線がもとから無い＝何もしない★
+    nck = new.get("checker")
+    if not isinstance(nck, dict):
+        # ★材料から作れなかった晩でも、2AIの線は捨てない★
+        nck = {"unit": str(ock.get("unit") or "G"), "modes": []}
+        new["checker"] = nck
+    nmodes = list(nck.get("modes") or [])
+    have = {str(m.get("key") or "") for m in nmodes if isinstance(m, dict)}
+    for k in lines:
+        if k not in have:
+            # ★2AIが足した欄は丸ごと持ち越す★（材料からは作れない）
+            nmodes.append({"key": k, "label": olabel.get(k, "")})
+            have.add(k)
+            nck[k] = dict(whole[k])
+            continue
+        # ★欄の呼び名も2AIの側を使う★（材料の「通常」で上書きしない）
+        for m in nmodes:
+            if isinstance(m, dict) and str(m.get("key") or "") == k \
+                    and olabel.get(k):
+                m["label"] = olabel[k]
+        # ★★書き込み先は読む側と同じ順で決める★★（`modeData` が先）
+        nmd = nck.get("modeData") if isinstance(nck.get("modeData"), dict) else None
+        in_md = nmd is not None and isinstance(nmd.get(k), dict)
+        conf = dict((nmd.get(k) if in_md else nck.get(k)) or {})
+        conf.update(lines[k])
+        # ★その欄の天井も2AIの側を使う★（材料はどの欄の天井かを知らない）
+        if "ceiling" in whole[k]:
+            if conf.get("ceiling") not in (None, whole[k]["ceiling"]):
+                if ask is not None:
+                    ask.append({
+                        "text": "★狙い目チェッカーの天井が食い違っています★"
+                                f"／欄「{olabel.get(k) or k}」は2AIが "
+                                f"{whole[k]['ceiling']}G と決めましたが、"
+                                f"いまの材料からは {conf['ceiling']}G が出ています"
+                                "／★材料の天井は「どの欄のものか」を持っていません★"
+                                "＝別の欄の天井かもしれません。出典を読んで、"
+                                "この欄の天井がどちらか決めてください"
+                                "／★決めたら、材料の側もそろえてください★"
+                                "＝2AIの値が正しいなら confirmed_values.py --record "
+                                "--field checker_ceiling でその値を記録する"
+                                "（材料がその値になり、この問いは出なくなります）／"
+                                "材料の値が正しいなら checker_verdict.py --apply で"
+                                "欄の天井を書き直す"
+                                "／★どちらも直さないと、翌朝また同じことを聞きます★",
+                        "kind": "grow_checker", "slug": str(new.get("slug") or "")})
+                # ★決まるまでは2AIの値のまま★（黙って意味を入れ替えない）
+            conf["ceiling"] = whole[k]["ceiling"]
+        if in_md:
+            nmd = dict(nmd)
+            nmd[k] = conf
+            nck["modeData"] = nmd
+            # ★2か所にあるときは両方そろえる★（公開の関所が食い違いで止める）
+            if isinstance(nck.get(k), dict):
+                nck[k] = dict(conf)
+        else:
+            nck[k] = conf
+    nck["modes"] = nmodes
+    import checker_verdict as _ckv_cc
+    for p in _ckv_cc.merged_problems(new):
+        ng.append(f"2AIが決めた狙い目の線と、いまの材料が合いません: {p}"
+                  "／★2AIで決め直してください★")
+    return ng
+
+
+def sitemap_after(sm: str, slug: str, indexable: bool) -> tuple:
+    """★育てた結果に合わせて sitemap をそろえる★（2026-09-26・更新タスクの自己修正）
+
+    戻り値＝(書いたあとの sitemap, 「1件だけ増えた」を確かめるか)。
+
+    ★★すでに検索に載っている機種は、行をそのまま残す★★
+      2026-09-21（台帳#702）から検索に載った機種も育てるようにしたが、
+      書く段は「載せるなら1行足す」しか無く、既にある行で
+      `add_to_sitemap` が例外を投げて★書き込みが全部取り消されていた★
+      ＝検索に載った機種は、どれだけ材料が増えても記事に入らなかった
+      （実例＝2026-09-26 彼女、お借りします の天井）。
+    ★行があるかは <loc> で見る★（書き方の違う既存の行に2行目を足さない）。
+    """
+    if indexable:
+        if f"{_pub.SITE_ORIGIN}/machines/{slug}/" in _pub._sitemap_locs(sm):
+            return sm, False
+        return _pub.add_to_sitemap(sm, slug), True
+    return _pub.remove_from_sitemap(sm, slug), False
+
+
 def apply_one(got: dict) -> dict:
     """育てた結果を書き込む（★全部そろうか、何も残さないか★）。
 
@@ -2233,8 +2370,7 @@ def apply_one(got: dict) -> dict:
             _pub.write_atomic(MACHINES,
                               json.dumps(rows, ensure_ascii=False, indent=1) + "\n")
             sm = keep[SITEMAP].decode("utf-8")
-            sm2 = _pub.add_to_sitemap(sm, slug) if indexable \
-                else _pub.remove_from_sitemap(sm, slug)
+            sm2, _check_added = sitemap_after(sm, slug, indexable)
             if sm2 != sm:
                 _pub.write_atomic(SITEMAP, sm2)
             # ★早見表も実際に書き直す★（2026-08-05・Codex102回目の指摘5。
@@ -2252,8 +2388,12 @@ def apply_one(got: dict) -> dict:
             #   （目印はまさに今この処理が付けたもの。ここで拾うと必ず失敗する）
             after = (_pub.run_site_audit(ignore_in_progress=True)
                      + _pub.check_hubs_untouched())
-            if indexable:
+            if _check_added:
                 after += _pub.check_sitemap_added(sm, slug)
+            elif indexable:
+                # ★改行をそろえてから比べる★（比べる相手は文字で読むので
+                #   CRLF が LF になる。この機械は core.autocrlf=true）
+                after += _pub.check_sitemap_kept(sm.replace("\r\n", "\n"))
             if after:
                 raise GrowError(" / ".join(after)[:300])
             out["wrote"] = [dp, page, MACHINES] + \
@@ -3096,6 +3236,43 @@ def selftest() -> int:
           apply_one({"slug": "x", "machine": {}, "detail": {},
                      "was": "AUTO_PENDING", "now": "AUTO_PENDING",
                      "fingerprint": {}})["problems"]))
+    # ── ★★すでに検索に載っている機種を育てても、sitemap で止まらない★★
+    #   （2026-09-26・更新タスクの自己修正）
+    #   2026-09-21（台帳#702）から検索に載った機種も育てるようにしたが、
+    #   書く段が「載せるなら1行足す」しか無く、既にある行で例外になって
+    #   ★書き込みが全部取り消されていた★（彼女、お借りします の天井が入らなかった）。
+    #   ★本物の sitemap は触らない★（文字列だけで確かめる）。
+    _sm_has = ("<urlset>\n" + _pub.sitemap_line("zzz_grow") + "\n"
+               + _pub.sitemap_line("zzz_other") + "\n</urlset>\n")
+    _sm_not = "<urlset>\n" + _pub.sitemap_line("zzz_other") + "\n</urlset>\n"
+    try:
+        _sa_keep = sitemap_after(_sm_has, "zzz_grow", True)
+    except Exception as e:                           # noqa: BLE001
+        _sa_keep = ("例外", repr(e))
+    t("★★検索に載っている機種を載せたまま育てるとき、sitemap はそのまま・"
+      "『1件増えた』は確かめない★★",
+      _sa_keep == (_sm_has, False))
+    _sm_multi = ("<urlset>\n  <url>\n    <loc>" + _pub.SITE_ORIGIN
+                 + "/machines/zzz_grow/</loc>\n  </url>\n</urlset>\n")
+    t("★★書き方の違う既存の行（複数行の <url>）でも、2行目を足さない★★",
+      sitemap_after(_sm_multi, "zzz_grow", True) == (_sm_multi, False))
+    _sa_add = sitemap_after(_sm_not, "zzz_grow", True)
+    t("　まだ載っていない機種が載るときは、ちょうど1行足して『増えた』を確かめる",
+      _sa_add[1] is True
+      and _sa_add[0].count(_pub.sitemap_line("zzz_grow")) == 1
+      and _pub.sitemap_line("zzz_other") in _sa_add[0])
+    _sa_rm = sitemap_after(_sm_has, "zzz_grow", False)
+    t("　載せないときは、その行だけ外す",
+      _sa_rm[1] is False
+      and _pub.sitemap_line("zzz_grow") not in _sa_rm[0]
+      and _pub.sitemap_line("zzz_other") in _sa_rm[0])
+    import inspect as _insp_sa
+    _ap_src = _insp_sa.getsource(apply_one)
+    t("★★配線★★ 書く段は sitemap_after を通し、載せたままのときは"
+      "sitemap が変わっていないことを確かめる",
+      "sitemap_after(sm, slug, indexable)" in _ap_src
+      and 'check_sitemap_kept(sm.replace("\\r\\n", "\\n"))' in _ap_src
+      and "add_to_sitemap(" not in _ap_src)
     t("★★型式が変わったら育てない★★",
       any("型式" in x for x in identity_same(
           {"regulatory_model_code": "A/1"}, {"regulatory_model_code": "B/2"})))
@@ -3500,6 +3677,127 @@ def selftest() -> int:
       not _carry_identity(dict(_o), _n2)
       and _n2["regulatory_model_code"] == "L見える子ちゃんSC"
       and _n2["_model_code_sources"] == _o["_model_code_sources"])
+
+    # ★★2AIが決めた狙い目の線は、育てても消えない★★（2026-09-26・台帳#716）
+    #   ★直す前★＝`build_machine` は機種行を材料から作り直すので、
+    #   `checker_verdict` が書いた線は材料に無く、育てるたびに消えていた
+    #   （実測＝彼女、お借りします。いまは sitemap の不具合のせいで
+    #     書き込みまで届いていなかったので、表に出ていなかっただけ）。
+    _old_ck = {"slug": "zzz_ck", "checker": {
+        "unit": "G", "coinRate": 32.0,
+        "modes": [{"key": "normal", "label": "通常"},
+                  {"key": "big", "label": "BIG後"}],
+        "normal": {"ceiling": 1000, "good": 700, "caution": 700,
+                   "excellent": 770, "target": 700},
+        "big": {"ceiling": 800, "good": 360, "target": 360}}}
+    # 材料から作り直した姿＝線は1つも無い（機械には作れない）
+    _new_ck = {"slug": "zzz_ck", "checker": {
+        "unit": "G", "coinRate": 32.0,
+        "modes": [{"key": "normal", "label": "通常"}],
+        "normal": {"ceiling": 1000}}}
+    _ng_ck = carry_checker(_old_ck, _new_ck)
+    _n_conf = (_new_ck.get("checker") or {}).get("normal") or {}
+    _b_conf = (_new_ck.get("checker") or {}).get("big") or {}
+    t("★★育てても、2AIが決めた狙い目の線が残る★★"
+      "（★直す前は材料から作り直して消えていた★）",
+      not _ng_ck and _n_conf.get("good") == 700
+      and _n_conf.get("caution") == 700 and _n_conf.get("excellent") == 770
+      and _n_conf.get("target") == 700)
+    t("★★2AIが足した欄ごと持ち越す★★（材料からは作れない欄）",
+      _b_conf.get("good") == 360 and _b_conf.get("ceiling") == 800
+      and [m.get("key") for m in (_new_ck["checker"].get("modes") or [])]
+      == ["normal", "big"])
+    t("　材料が天井を作れたときは、その値のまま（50枚あたりG数も材料から）",
+      _n_conf.get("ceiling") == 1000
+      and (_new_ck.get("checker") or {}).get("coinRate") == 32.0)
+    # ★★天井が2つ以上ある機種では、材料は天井を決められない★★
+    #   （実測＝彼女、お借りします。空のまま残ると読者の道具に天井が出ない）
+    _noceil = {"slug": "zzz_ck", "checker": {
+        "unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+        "normal": {}}}
+    carry_checker(_old_ck, _noceil)
+    _nc = (_noceil.get("checker") or {}).get("normal") or {}
+    t("★★材料が天井を決められない機種では、2AIが決めた天井で埋める★★",
+      _nc.get("ceiling") == 1000 and _nc.get("good") == 700)
+    # ★★材料の天井が別の値でも、2AIが決めたその欄の天井を使う★★
+    #   （2026-09-26・Codexの指摘）＝材料の天井は「どの欄のものか」を持たない。
+    #   ★直す前★＝BIG後（2AI：1000）の欄に、材料の800（REG後の値）が入り、
+    #   線700は800以下なので完成形の検査も素通りした。
+    _other = {"slug": "zzz_ck", "checker": {
+        "unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+        "normal": {"ceiling": 800}}}
+    _ask = []
+    carry_checker(_old_ck, _other, _ask)
+    _oc = (_other.get("checker") or {}).get("normal") or {}
+    t("★★材料の天井が2AIの値と違っても、別の欄の天井を入れない★★"
+      "（★線700は800以下なので、完成形の検査では気づけない★）",
+      _oc.get("ceiling") == 1000)
+    t("★★食い違ったら2AIへ問いを出す★★（どちらが正しいかは機械に決められない）",
+      len(_ask) == 1 and _ask[0].get("kind") == "grow_checker"
+      and "1000" in _ask[0]["text"] and "800" in _ask[0]["text"])
+    # ★★問いには「出口」を書く★★（2026-09-26・Codexの2回目の指摘）＝
+    #   欄の天井だけ直しても材料は変わらないので、★翌朝また同じことを聞く★。
+    #   材料をそろえる道（checker_ceiling の記録）も必ず案内する。
+    t("★★問い文に、材料の側をそろえる道も書いてある★★"
+      "（★書かないと、答えても翌朝また同じ問いが出る★）",
+      "checker_ceiling" in _ask[0]["text"]
+      and "checker_verdict" in _ask[0]["text"])
+    _same_ask = []
+    carry_checker(_old_ck, {"slug": "zzz_ck", "checker": {
+        "unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+        "normal": {"ceiling": 1000}}}, _same_ask)
+    t("　同じ天井なら問いは出さない（毎朝おなじことを聞かない）", not _same_ask)
+    # ★読者に出る目安（target）も天井を超えていないか見る★
+    _bad_t = {"slug": "zzz_ck", "checker": {
+        "unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+        "normal": {"ceiling": 600}}}
+    t("★★目安（target）が天井を超えたら、書かずに2AIへ回す★★",
+      any("target" in x for x in carry_checker(
+          {"slug": "zzz_ck", "checker": {
+              "unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+              "normal": {"target": 900, "good": 500}}}, _bad_t)))
+    _lab = {"slug": "zzz_ck", "checker": {
+        "unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+        "normal": {"ceiling": 1000}}}
+    carry_checker({"slug": "zzz_ck", "checker": {
+        "unit": "G", "modes": [{"key": "normal", "label": "BIG後"}],
+        "normal": {"ceiling": 1000, "good": 700}}}, _lab)
+    t("　2AIが付けた欄の呼び名（BIG後）が、材料の「通常」で消えない",
+      [m.get("label") for m in (_lab["checker"].get("modes") or [])] == ["BIG後"])
+    # ★材料から checker を作れなかった晩でも、線を捨てない★
+    _new_none = {"slug": "zzz_ck"}
+    carry_checker(_old_ck, _new_none)
+    t("★★材料から早見表を作れなかった晩でも、線は捨てない★★",
+      (((_new_none.get("checker") or {}).get("normal") or {}).get("good")
+       == 700)
+      and ((_new_none.get("checker") or {}).get("big") or {}).get("ceiling")
+      == 800)
+    # ★2AIが天井を決めていない欄で、線が材料の天井より深ければ書かない★
+    #   （2AIが天井も決めている欄では、その天井が勝つので下の別の試験で見る）
+    _shallow = {"slug": "zzz_ck", "checker": {
+        "unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+        "normal": {"ceiling": 600}}}
+    t("★★材料の天井より深い線になったら、書かずに2AIへ回す★★"
+      "（どちらが正しいかは機械には決められない）",
+      any("2AI" in x for x in carry_checker(
+          {"slug": "zzz_ck", "checker": {
+              "unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+              "normal": {"good": 700}}}, _shallow)))
+    # ★旧形式（線がもとから無い機種）では何もしない★
+    _plain = {"slug": "zzz_ck", "checker": {"unit": "G", "modes": [], }}
+    t("　線がもとから無ければ何もしない",
+      not carry_checker({"slug": "zzz_ck", "checker": {
+          "unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+          "normal": {"ceiling": 900}}}, _plain)
+      and "normal" not in _plain["checker"])
+    # ★★育てる本体が、この持ち越しを通っている★★（罠③＝呼び忘れを止める綱）
+    import ast as _ast_ck
+    import inspect as _ins_ck
+    _calls_ck = [n for n in _ast_ck.walk(_ast_ck.parse(_ins_ck.getsource(plan_one)))
+                 if isinstance(n, _ast_ck.Call)
+                 and getattr(n.func, "id", "") == "carry_checker"]
+    t("★★育てる本体が carry_checker を呼んでいる★★"
+      "（呼び忘れると、2AIの線が毎朝静かに消える）", len(_calls_ck) == 1)
 
     # ★★回数の記録は、どの終わり方でもちょうど1回★★（2026-08-16・依頼223）
     #   包み（main）を消したり、finally を外したりする退行を捕まえる。

@@ -482,7 +482,11 @@ def merged_problems(m: dict) -> list:
         ce = _lead_int(conf.get("ceiling"))
         if ce is None:
             continue
-        for lv in LEVELS:
+        # ★`target`（読者に出る目安）も見る★（2026-09-26・Codexの指摘）＝
+        #   直す前は線3つだけで、★画面に出る目安が天井を超えても通った★。
+        #   ふつうは `target` は `good` と同じ値だが、古い記録や
+        #   持ち越しの途中では食い違いうる。
+        for lv in LEVELS + ("target",):
             v = _int(conf.get(lv))
             if v is not None and v > ce:
                 ng.append(f"当てたあと: {key} の {lv}（{v}）が"
