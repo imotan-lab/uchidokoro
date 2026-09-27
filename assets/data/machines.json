@@ -2385,23 +2385,26 @@
    "confirmed_topics": [
     "ceiling",
     "cz",
-    "gameplay"
+    "gameplay",
+    "setting",
+    "spec"
    ],
    "pending_topics": [
-    "spec",
-    "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [],
    "claims": [
     "at:MAIN_AT",
+    "at_prob",
     "ceiling:GAME:",
-    "cz:モグモグ大戦"
+    "cz:モグモグ大戦",
+    "payout_range",
+    "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-08",
-   "input_digest": "sha256:a2bd2d1804cea4caeaceee48606097c20665fb6a94a2c8d9e8278912fd1b63a0"
+   "decided_at": "2026-09-28",
+   "input_digest": "sha256:079391941f2d3ee0ef65c8ae96d38a3fb591fc058d9a4265d1b1bb164e6e471b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -2413,13 +2416,13 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5059 型式=Lモグモグ風林火山 大海戦の巻ZB メーカー=ネット 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
-   "_legacy_evidence_ref": "pworld:10523 型式=Lモグモグ風林火山 大海戦の巻ZB 検定=531225 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10523",
-   "regulatory_model_code": "Lモグモグ風林火山 大海戦の巻ZB",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_evidence_ref": "pworld:10523 型式=Lモグモグ風林火山 大海戦の巻ZB 検定=531225 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10523",
+   "regulatory_model_code": "Lモグモグ風林火山 大海戦の巻ZB"
   },
   "checker": {
    "unit": "G",
