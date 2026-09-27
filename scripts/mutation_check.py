@@ -891,6 +891,7 @@ MUTATIONS = [
         "before": "        if v[\"sample\"].get(\"benefit\"):\n            continue",
         "after": "        if True:\n            continue",
         "run": ["scripts/ceiling_lookup.py"],
+        "issues": [717],
     },
     {
         "why": "★落とした天井を黙って消す（★回数は読めているのに、その天井が永久に欠落する★）★",
@@ -983,6 +984,7 @@ MUTATIONS = [
         "before": "    r\"(?:は天井|(?:(?!\\d\\s*回目)[^。]){0,14}?(?:必ず|確定|濃厚))\")",
         "after": "    r\"(?:は天井|[^。]{0,14}?(?:必ず|確定|濃厚))\")",
         "run": ["scripts/ceiling_lookup.py"],
+        "issues": [717],
     },
     # ─── 2026-09-26・Codex190の指摘（天井は2AIが勝つ／目安も天井を見る）───
     {
