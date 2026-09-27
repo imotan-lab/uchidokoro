@@ -11940,11 +11940,12 @@
    "claims": [
     "at:MAIN_AT",
     "games_per_50",
+    "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-09",
-   "input_digest": "sha256:12d4f88dc47c17b1edd7eba91621953de43a7d63cb5e40b5ff3384a8fd557256"
+   "decided_at": "2026-09-28",
+   "input_digest": "sha256:4b9280e489d25dbc3570576f47836fb43ca0ea5a94efdf13c9ee3ade8a9acf5b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
