@@ -238,8 +238,15 @@ VALUE_SHAPES = {
     "ceilings_complete": {"required": ("complete",),
                           "enums": {"complete": ("YES",)},
                           "quoted": ()},
+    # ★★スルー天井も2AIで記録できる★★（2026-09-27・台帳#717・Codexの指摘2）
+    #   ★直す前は THROUGH を拒んでいた★ので、読み取りが恩恵を採れないスルー天井は
+    #   ★2AIが恩恵まで確かめても、記録する口がどこにも無かった★
+    #   （＝断る守りだけあって、直す道が無い状態＝罠⓸）。
+    #   ★`counted` は THROUGH では必須★＝スルーは「何をスルーしたか」が本体
+    #   （CZ／REG／ボーナス）。それが無いと別の対象と取り違える。
     "ceiling": {"required": ("kind", "amount", "unit", "benefit"),
-                "enums": {"kind": ("GAME", "CYCLE", "POINT")},
+                "required_by_kind": {"THROUGH": ("counted",)},
+                "enums": {"kind": ("GAME", "CYCLE", "POINT", "THROUGH")},
                 "quoted": ("amount", "unit")},
     # ★どれか1つでも確認できていればよい★（2026-08-09）
     #   継続率しか公表されていない機種が実在する（パリピ孔明）。
@@ -1707,6 +1714,19 @@ _CEILING_BOX_KEY = ("kind", "amount", "unit", "mode", "after_event")
 _CEILING_BOX_DETAIL = ("counted", "count_note")
 
 
+def ceiling_box_fields() -> tuple:
+    """★天井の行が同じかを決める項目の顔ぶれ★（`_same_ceiling_box` が見る分）
+
+    ★なぜ外へ出すか★（2026-09-27・Codexの指摘）＝
+      2AIへ「この項目を値に入れて記録してください」と案内する側が、
+      ★この顔ぶれを書き写していると静かにずれる★。
+      案内が `kind・amount・unit・benefit・counted` だけだったので、
+      モードだけ違う2件を案内どおり記録すると**値が同一**になり、
+      ★2件目が材料へ取り込むときに捨てられた★（実測で再現した）。
+    """
+    return tuple(_CEILING_BOX_KEY) + tuple(_CEILING_BOX_DETAIL)
+
+
 def _ceiling_benefit(d: dict) -> tuple:
     import ceiling_lookup as _cl      # noqa: E402（重い取り込みなので使う時だけ）
     ben, cert = _cl.split_benefit(str((d or {}).get("benefit") or ""))
@@ -2022,6 +2042,159 @@ def _fp_missing_review(slug, name, quote, src_ov) -> bool:
     return (same["invalid"] == [] and same["review"] == []
             and moved["invalid"] == []
             and [x for x in moved["review"] if "本文が変わって" in x] != [])
+
+
+def _selftest_through_ceiling(t) -> None:
+    """★★スルー天井を2AIで記録できること★★（2026-09-27・台帳#717）
+
+    ★なぜ要るか★＝読み取りはスルー天井の**恩恵を採れない**ので、
+    恩恵の分からない天井は採らない決まりにした。その出口が
+    「2AIが恩恵まで確かめて記録する」道なのに、★この口が THROUGH を拒んでいた★
+    （＝断る守りだけあって直す道が無い状態・罠⓸）。
+    ★本物の登録関数を通す★＝控えのJSONを手で書かない（罠①）。
+    ★置き場と機種の結び付けだけ一時のものへ向け、通信を差し替える★
+    （本番の控えを読むとCIで必ず落ちる）。
+    """
+    import tempfile as _tf
+    _NAME = "L試験機スルー"
+    # ★値と単位はどちらも引用の中に在ること★（この仕組みの決まり）＝
+    #   スルー天井なら「6スルー」のように、回数と『スルー』が原文に要る。
+    _Q = "CZスルー回数天井は6スルーで、到達時は次回のCZでATに当選する。"
+    _QG = "ゲーム数天井は999Gで、到達時はボーナスに当選する。"
+
+    def _ff(url):
+        return ("<title>" + _NAME + " スロット 新台 天井 | 解析</title>"
+                "<body><h1>" + _NAME + "</h1><p>" + _Q + _QG
+                + ("説明。" * 30) + "</p></body>")
+
+    def _raises(fn) -> bool:
+        """★断ったか★（ほかの失敗と混ぜない＝この仕組みの断り方だけを見る）"""
+        try:
+            fn()
+            return False
+        except ConfirmedError:
+            return True
+
+    _keep_store, _keep_bind = STORE, bind_machine
+    _g = globals()
+    try:
+        _g["STORE"] = os.path.join(_tf.mkdtemp(prefix="cv_through_"),
+                                   "confirmed_values.json")
+        _g["bind_machine"] = lambda u: ("zz_through", _NAME)
+        init_store()
+        _val = {"kind": "THROUGH", "amount": "6", "unit": "スルー",
+                "counted": "CZ", "benefit": "AT当選"}
+        # ★★断られたことを試験が受け取る★★（罠⑤＝例外で落ちるのは
+        #   「守りがある証拠」にならない。壊し方の道具が「ただ落ちただけ」と言う）
+        _why_th = ""
+        try:
+            record(slug="zz_through", field="ceiling#cz",
+                   official_url="https://m.example/products/slot/z/",
+                   value=dict(_val),
+                   sources=[parse_source("https://chonborista.com/zzth|" + _Q),
+                            parse_source("https://nana-press.com/zzth|" + _Q)],
+                   by=["claude", "codex"], name=_NAME, fetch=_ff,
+                   why="同じ原文を読んで一致しました")
+        except ConfirmedError as e:
+            _why_th = str(e)
+        _got = for_slug_checked("zz_through") or {}
+        t("★★スルー天井を2AIで記録できる★★"
+          "（★直す前は THROUGH を拒み、恩恵を確かめても記録する口が無かった★）"
+          + (f"／断られた: {_why_th[:70]}" if _why_th else ""),
+          not _why_th
+          and (_got.get("ceiling#cz") or {}).get("value", {}).get("kind")
+          == "THROUGH")
+        # ★何をスルーしたかは必須★（CZ／REG／ボーナスを取り違えないため）
+        _no_counted = {k: v for k, v in _val.items() if k != "counted"}
+        t("★★スルー天井では『何をスルーしたか』が無いと受け取らない★★",
+          _raises(lambda: record(
+              slug="zz_through", field="ceiling#cz2",
+              official_url="https://m.example/products/slot/z/",
+              value=_no_counted,
+              sources=[parse_source("https://chonborista.com/zzth|" + _Q),
+                       parse_source("https://nana-press.com/zzth|" + _Q)],
+              by=["claude", "codex"], name=_NAME, fetch=_ff,
+              why="同じ原文を読んで一致しました")))
+        t("　G数天井は今までどおり記録できる（何をスルーしたかは求めない）",
+          not _raises(lambda: record(
+              slug="zz_through", field="ceiling#game",
+              official_url="https://m.example/products/slot/z/",
+              value={"kind": "GAME", "amount": "999", "unit": "G",
+                     "benefit": "ボーナス当選"},
+              sources=[parse_source("https://chonborista.com/zzth|" + _QG),
+                       parse_source("https://nana-press.com/zzth|" + _QG)],
+              by=["claude", "codex"], name=_NAME, fetch=_ff,
+              why="同じ原文を読んで一致しました")))
+    finally:
+        _g["STORE"], _g["bind_machine"] = _keep_store, _keep_bind
+
+
+def _selftest_ceiling_ident_kept(t) -> None:
+    """★★案内どおり記録した2件が、材料へ取り込んでも2行残ること★★
+    （2026-09-27・台帳#717・Codexの指摘）
+
+    ★なぜ要るか★＝項目名を候補ごとに分けても、取り込みは**値**で
+      同じ天井かを見る（`_same_ceiling_box`）。案内が
+      `kind・amount・unit・benefit・counted` だけだったので、
+      ★モードだけ違う2件を案内どおり記録すると値が同一になり、
+      2件目が黙って捨てられた★＝失う場所が「保存時」から「取り込み時」へ
+      移っていただけだった（実測で再現した）。
+    ★本物の登録関数と本物の案内を通す★＝値を手で組まず、
+      `ceiling_lookup.ceiling_record_fields()`（案内が出す顔ぶれ）から作る。
+    """
+    import tempfile as _tf
+    import ceiling_lookup as _cl
+    _NAME = "L試験機モード"
+    _Q = "ゲーム数天井は999Gで、到達時はボーナスに当選する。"
+
+    def _ff(url):
+        return ("<title>" + _NAME + " スロット 新台 天井 | 解析</title>"
+                "<body><h1>" + _NAME + "</h1><p>" + _Q + ("説明。" * 30)
+                + "</p></body>")
+
+    # ★候補は本物の形で作る★（`_atom` ＝読み取りが返すのと同じ形）
+    _cands = [_cl._atom("GAME", 999, "G", counted="通常時", benefit=""),
+              _cl._atom("GAME", 999, "G", counted="通常時", benefit="",
+                        mode="特殊モード")]
+
+    def _rows(as_guided: bool) -> list:
+        _g2 = globals()
+        _g2["STORE"] = os.path.join(_tf.mkdtemp(prefix="cv_ident_"),
+                                    "confirmed_values.json")
+        init_store()
+        for i, s in enumerate(_cands):
+            val = (dict(_cl.ceiling_record_fields(s)) if as_guided
+                   # ★（対照）身元を省いた記録★＝2件目が捨てられる
+                   else {"kind": "GAME", "amount": "999", "unit": "G",
+                         "counted": "通常時"})
+            val["benefit"] = "ボーナス当選"
+            record(slug="zz_ident", field=_cl.ceiling_field(s) + f"-{i}",
+                   official_url="https://m.example/products/slot/z/",
+                   value=val,
+                   sources=[parse_source("https://chonborista.com/zzid|" + _Q),
+                            parse_source("https://nana-press.com/zzid|" + _Q)],
+                   by=["claude", "codex"], name=_NAME, fetch=_ff,
+                   why="同じ原文を読んで一致しました")
+        material = {"adopted": [], "ceilings": {"adopted": []},
+                    "at_specs": {"adopted": []}, "cz": {"adopted": []}}
+        merge_into(material, "zz_ident")
+        return material["ceilings"]["adopted"]
+
+    _keep_store, _keep_bind = STORE, bind_machine
+    _g = globals()
+    try:
+        _g["bind_machine"] = lambda u: ("zz_ident", _NAME)
+        _kept = _rows(True)
+        _lost = _rows(False)
+        t("★★案内どおり記録した2件は、材料へ取り込んでも2行残る★★"
+          "（★身元が値に入らないと、2件目が黙って捨てられる★）",
+          len(_kept) == 2
+          and sum(1 for r in _kept if r.get("mode") == "特殊モード") == 1)
+        t("　（対照）身元を省いて記録すると1行に潰れる"
+          "（＝案内が必ず身元を並べる理由）",
+          len(_lost) == 1)
+    finally:
+        _g["STORE"], _g["bind_machine"] = _keep_store, _keep_bind
 
 
 def selftest() -> int:
@@ -3919,6 +4092,11 @@ def selftest() -> int:
     finally:
         _pm485.STORE = _keep485
         _sh485.rmtree(_dir485, ignore_errors=True)
+
+    # ★★スルー天井を2AIで記録できること★★（2026-09-27・台帳#717）
+    #   ★関数に切り出して呼ぶ★＝この試験だけを単独で読み直せるように
+    _selftest_through_ceiling(t)
+    _selftest_ceiling_ident_kept(t)
 
     ng = sum(1 for _, o in results if not o)
     print()

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import hashlib
 import json
 import os
 import re
@@ -884,6 +885,73 @@ def apply_cz_aliases(items: list, cz_names, page_names=None) -> list:
     return out
 
 
+def ceiling_field(sample: dict) -> str:
+    """★その天井を記録するときの項目名★（2026-09-27・台帳#717・Codexの指摘）
+
+    ★なぜ要るか★＝案内を `--field ceiling` 固定にしていたので、
+    天井が2つある機種で2つ目を記録すると★1つ目を上書きし、
+    既にある `ceiling` の記録まで消える★（記録は項目名で入れ替わる）。
+    ★候補ごとに別の名前にする★＝`ceiling#through-cz-6` のように
+    種類・何を数えるか・値で決める（同じ候補なら毎回同じ名前になる）。
+    ★使える字だけにする★＝英小文字・数字・ハイフン
+    （日本語の「CZ間」などは記録の見出しに使わない）。
+    ★★指紋は `_key` と同じ身元から作る★★（2026-09-27・Codexの指摘）＝
+      ★直す前は kind・counted・amount の3つだけ★だったが、
+      `compare()` が別候補と見るのは**11項目**（モード・場面・数え方の但し書き・
+      役割・何のあと・単位・確からしさも見る）。
+      ＝★モードだけ違う2つの天井が同じ項目名になり、また上書きが起きる★。
+      ★同じ規則を2か所に書かない★＝身元の定義は `_key` の1か所。
+    ★頭は読める形にする★（`ceiling#through-cz-6-…`）＝人が記録を探せるように。
+    ★指紋は必ず付ける★＝頭は字を落とすので、
+      「ボーナス」と「強チェリー」のように英数字が残らない名前でも分かれる。
+    """
+    kind = str(sample.get("kind") or "").lower() or "x"
+    raw = str(sample.get("counted") or "")
+    counted = re.sub(r"[^0-9a-z]+", "-", raw.lower()).strip("-")
+    amount = re.sub(r"[^0-9]", "", str(sample.get("amount") or "")) or "x"
+    head = "-".join(x for x in (kind, counted, amount) if x)
+    sig = hashlib.sha1(_key(sample).encode("utf-8")).hexdigest()[:6]
+    return "ceiling#" + head + "-" + sig
+
+
+#   ★★問いにも身元を残す★★（2026-09-27・Codexの指摘）＝
+#     項目名だけ分けても、2AIが**どの天井の話か**を読み取れない
+#     （「モードだけ違う2件」が同じ文面で2つ並ぶ）。
+IDENT_LABELS = (("mode", "モード"), ("phase", "場面"),
+                ("after_event", "何のあと"), ("count_note", "数え方の但し書き"),
+                ("role", "出どころの役割"), ("certainty", "確からしさ"))
+
+
+def ceiling_ident(sample: dict) -> dict:
+    """★その天井を他と見分けるための添え書き★（空でないものだけ）"""
+    out = {}
+    for k, jp in IDENT_LABELS:
+        v = sample.get(k)
+        if v not in (None, "", False):
+            out[jp] = str(v)
+    return out
+
+
+def ceiling_record_fields(sample: dict) -> dict:
+    """★記録する値に必ず入れる項目★（機械が読めた分は値まで入れる）
+
+    ★★なぜ要るか★★（2026-09-27・Codexの指摘・実測で再現した）＝
+      案内が `kind・amount・unit・benefit・counted` だけだったので、
+      ★モードだけ違う2件を案内どおり記録すると値が同一になり、
+      材料へ取り込むときに2件目が捨てられた★
+      （項目名を分けても、取り込みは**値**で同じ天井かを見る）。
+      ＝上書きは止まったが、失う場所が「保存時」から「取り込み時」へ移っていた。
+    ★顔ぶれは `confirmed_values` の1か所から取る★（書き写すと静かにずれる）。
+    """
+    import confirmed_values as _cv  # noqa: E402（重い取り込みなので使う時だけ）
+    out = {}
+    for k in _cv.ceiling_box_fields():
+        v = sample.get(k)
+        if v not in (None, "", False):
+            out[k] = str(v)
+    return out
+
+
 def compare(pages: list, cz_names=None, ctx: dict | None = None) -> dict:
     """★値・種類・恩恵がすべて一致したものだけ採る★
 
@@ -903,8 +971,15 @@ def compare(pages: list, cz_names=None, ctx: dict | None = None) -> dict:
                                   page_names=p.get("cz_names")):
             k = _key(c)
             votes.setdefault(k, {"sample": c, "sources": set(),
+                                 # ★票の系列IDと、読んだページのURLは別に持つ★
+                                 #   （2026-09-27・Codexの指摘）＝`sources` は
+                                 #   `lin-chonborista` のような**系列ID**なので、
+                                 #   2AIへ「読んだ先」として見せてもページに行けない。
+                                 "urls": set(),
                                  "plus_alpha": False})
             votes[k]["sources"].add(lin)
+            if p.get("url"):
+                votes[k]["urls"].add(str(p["url"]))
             # ★+αは票を作る段でまとめる★（2026-08-07・台帳#248）
             #   同じ票にまとまるのに sample は**最初に来た1件だけ**なので、
             #   「999G」が先に来ると、あとから来た「999G+α」の+αが消えていた。
@@ -914,8 +989,37 @@ def compare(pages: list, cz_names=None, ctx: dict | None = None) -> dict:
     # ★恩恵が分からない天井は採らない★（2026-08-06。条件つき天井
     #   「設定変更後は650G+αに短縮」は恩恵が書かれていないことが多く、
     #   そのままだと**到達して何が起きるか分からない天井**を載せてしまう）
-    votes = {k: v for k, v in votes.items()
-             if v["sample"]["kind"] == "THROUGH" or v["sample"].get("benefit")}
+    # ★★スルー天井も同じ★★（2026-09-27・台帳#717）＝
+    #   ★直す前はスルーだけこの決まりから外していた★（恩恵が別の文にあることが
+    #   多いので、あとで埋まるだろうという前提）。埋まらないまま公開され、
+    #   ★「天井：3スルー ／ 恩恵：」という、到達して何が起きるか分からない行が
+    #   読者に出た★（彼女、お借りします・2026-09-26に40分後に取り消し）。
+    # ★★黙って消さない★★（Codexの指摘3）＝落とした票は `missing_benefit` で返し、
+    #   2AIへの問いにする。★読み取りは恩恵を採れない★（スルー天井の3つの形は
+    #   どれも `benefit=""` で作る）ので、消すだけだと
+    #   ★回数は読めているのに、その天井が永久に欠落する★。
+    missing_benefit = []
+    for k, v in list(votes.items()):
+        if v["sample"].get("benefit"):
+            continue
+        s = v["sample"]
+        missing_benefit.append({
+            "kind": s["kind"], "jp": KINDS[s["kind"]]["jp"],
+            "amount": s["amount"], "unit": s.get("unit", ""),
+            "counted": s.get("counted"), "sources": sorted(v["sources"]),
+            # ★2AIが実際に開けるURL★（`sources` は票の系列IDで、ページに行けない）
+            "urls": sorted(v.get("urls") or []),
+            # ★★候補ごとに別の項目名にする★★（2026-09-27・Codexの指摘）＝
+            #   案内が `--field ceiling` 固定だと、2つ目の答えが1つ目を上書きし、
+            #   既にある `ceiling` の記録まで消える（記録は項目名で入れ替わる）。
+            "field": ceiling_field(s),
+            # ★どの天井の話かを問いでも見分けられるように★（同じ指摘）
+            "ident": ceiling_ident(s),
+            # ★記録する値に必ず入れる項目★＝これを落とすと、項目名が別でも
+            #   値が同じに見えて、2件目が材料へ取り込むときに捨てられる
+            "record": ceiling_record_fields(s),
+            "why": "回数（値）は読めましたが、恩恵が読み取れていません"})
+        del votes[k]
     votes = _merge_unqualified(votes)
     adopted, need_third = [], []
     # 同じ種類で値が割れていないかも見る（1200Gと1500Gが両方2票、はありえない）
@@ -974,7 +1078,10 @@ def compare(pages: list, cz_names=None, ctx: dict | None = None) -> dict:
                                 "counted": v["sample"].get("counted"),
                                 "benefit": v["sample"]["benefit"],
                                 "sources": sorted(v["sources"])} for _, v in items]})
-    return {"adopted": adopted, "need_third": need_third}
+    return {"adopted": adopted, "need_third": need_third,
+            # ★値は読めたが恩恵が分からない天井★（2026-09-27・台帳#717）
+            #   ★採らないが、2AIへは必ず届ける★（`add_machine_run` が問いにする）
+            "missing_benefit": missing_benefit}
 
 
 # ---------------------------------------------------------------- selftest
@@ -1186,6 +1293,102 @@ def selftest() -> int:
     t("　（対照）同じ回目に保証が付いていれば、今までどおり採る",
       [g["amount"] for g in from_sentences("CZ4回目は当選濃厚")
        if g["kind"] == "THROUGH"] == [3])
+    # ★★恩恵の分からないスルー天井は採らない／黙って消さない★★
+    #   （2026-09-27・台帳#717・Codexの指摘1と3）
+    #   ★直す前はスルーだけこの決まりから外れており、
+    #     「恩恵：」が空の天井が読者に出た★（彼女、お借りします）。
+    #   ★★試験は本物の読み取りを通す★★＝前に書いた試験は
+    #   `benefit="AT当選"` の票を**手で作って**いたが、読み取りは
+    #   スルー天井の恩恵を採れないので、★実際には通らない道を採点していた★（罠①）。
+    _TH2 = "▼CZスルー回数天井 CZでAT非当選が最大6回続くと天井到達。"
+    _th_pages = [{"ok": True, "host": h, "ceilings": from_sentences(_TH2)}
+                 for h in ("chonborista.com", "nana-press.com")]
+    _th_got = compare(_th_pages)
+    t("★★恩恵が分からないスルー天井は採らない★★"
+      "（★到達して何が起きるか分からない天井が読者に出ていた★）",
+      not [c for c in (_th_got.get("adopted") or [])
+           if c.get("kind") == "THROUGH"])
+    t("★★黙って消さず、2AIへ渡す列に残す★★"
+      "（★消すだけだと、回数は読めているのにその天井が永久に欠落する★）",
+      [(m["kind"], m["amount"], m.get("counted"))
+       for m in (_th_got.get("missing_benefit") or [])] == [("THROUGH", 6, "CZ")]
+      and all("恩恵" in m["why"] for m in _th_got["missing_benefit"]))
+    t("　G数天井は今までどおり（恩恵が無ければ採らず、こちらの列に残る）",
+      not [c for c in (compare([
+          {"ok": True, "host": h,
+           "ceilings": [{"kind": "GAME", "amount": 1000, "unit": "G",
+                         "counted": "通常時", "benefit": "", "certainty": "",
+                         "plus_alpha": False}]}
+          for h in ("chonborista.com", "nana-press.com")]).get("adopted") or [])
+           if c.get("kind") == "GAME"])
+    # ★恩恵が読めた天井は、今までどおり採る★（落としすぎていないか）
+    _ok_pages = [{"ok": True, "host": h,
+                  "ceilings": [{"kind": "GAME", "amount": 1000, "unit": "G",
+                                "counted": "通常時", "benefit": "ボーナス当選",
+                                "certainty": "", "plus_alpha": False}]}
+                 for h in ("chonborista.com", "nana-press.com")]
+    t("　（対照）恩恵が読めていれば、今までどおり採る",
+      len(compare(_ok_pages).get("adopted") or []) == 1
+      and not (compare(_ok_pages).get("missing_benefit") or []))
+    # ★★候補ごとに別の項目名になる★★（2026-09-27・Codexの指摘）
+    #   ★同じ名前だと、2つ目を記録したときに1つ目と既存の記録を消す★。
+    t("★★天井が2つあれば、記録の項目名も2つに分かれる★★"
+      "（★同じ名前だと、あとの答えが前の答えを消す★）",
+      ceiling_field({"kind": "THROUGH", "counted": "CZ", "amount": 6}
+                    ).startswith("ceiling#through-cz-6-")
+      and len({ceiling_field({"kind": "THROUGH", "counted": c, "amount": 4})
+               for c in ("ボーナス", "REG", "BIG")}) == 3
+      # ★英数字が1字も残らない名前どうしでも分かれる★
+      #   （「ボーナス」も「強チェリー」も、落とすと同じ名前になる）
+      and len({ceiling_field({"kind": "THROUGH", "counted": c, "amount": 4})
+               for c in ("ボーナス", "強チェリー")}) == 2)
+    t("　同じ天井なら毎回同じ項目名（記録を探せなくならない）",
+      ceiling_field({"kind": "THROUGH", "counted": "ボーナス", "amount": 4})
+      == ceiling_field({"kind": "THROUGH", "counted": "ボーナス", "amount": 4}))
+    # ★★身元の11項目すべてで分かれる★★（2026-09-27・Codexの指摘）＝
+    #   ★直す前は kind・counted・amount の3つだけ★だったので、
+    #   `compare()` が別候補と見るのにモードだけ違う2件は同じ項目名になり、
+    #   2件目の記録が1件目を消していた。
+    _base_f = _atom("GAME", 999, "G", counted="通常時")
+    for _fld, _val in (("mode", "特殊モード"), ("phase", "AT中"),
+                       ("count_note", "液晶G数"), ("role", "CONDITIONAL"),
+                       ("after_event", "設定変更"), ("certainty", "LIKELY"),
+                       ("unit", "pt")):
+        t(f"　身元の『{_fld}』が違えば項目名も違う",
+          ceiling_field(_base_f)
+          != ceiling_field({**_base_f, _fld: _val}))
+    t("★★問いにも身元が残る★★（★項目名だけ分けても、どの天井の話か読めない★）",
+      ceiling_ident({**_base_f, "mode": "特殊モード", "count_note": "液晶G数"})
+      == {"モード": "特殊モード", "数え方の但し書き": "液晶G数",
+          "出どころの役割": "TABLE"}
+      and "モード" not in ceiling_ident(_base_f))
+    # ★★記録する値に入れる項目は、取り込みが見る顔ぶれを全部覆う★★
+    #   （2026-09-27・Codexの指摘）＝案内から漏れた項目は、
+    #   ★項目名が別でも値が同じに見えて、2件目が取り込みで捨てられる★。
+    import confirmed_values as _cv_f
+    _rich = _atom("GAME", 999, "G", counted="通常時", count_note="液晶G数",
+                  mode="特殊モード", after_event="設定変更")
+    t("★★案内が並べる項目は、取り込みが見る顔ぶれを漏らさない★★"
+      "（★漏れた項目は、2件目が黙って捨てられる原因になる★）",
+      {k for k in _cv_f.ceiling_box_fields()
+       if _rich.get(k) not in (None, "", False)}
+      <= set(ceiling_record_fields(_rich)))
+    t("　読めていない項目は並べない（空の項目を記録させない）",
+      "after_event" not in ceiling_record_fields(
+          _atom("GAME", 999, "G", counted="通常時")))
+    # ★モードだけ違う2件を、本物の読み取りと同じ形で通す★
+    _mb_two = compare([
+        {"ok": True, "host": h, "url": f"https://{h}/zz/3/", "ceilings": [
+            _atom("GAME", 999, "G", counted="通常時", benefit=""),
+            _atom("GAME", 999, "G", counted="通常時", benefit="",
+                  mode="特殊モード")]}
+        for h in ("chonborista.com", "nana-press.com")]).get(
+            "missing_benefit") or []
+    t("　モードだけ違う2件も、別の項目名で2AIへ届く",
+      len(_mb_two) == 2
+      and len({m["field"] for m in _mb_two}) == 2
+      and any(m.get("ident", {}).get("モード") == "特殊モード"
+              for m in _mb_two))
 
     # ★CZ名で突き合わせる★（2026-08-06・運営者の指摘から）
     t("★★『CZ＝〇〇』と書いてある名前だけを拾う★★",

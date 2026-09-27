@@ -846,6 +846,61 @@ def _collect_all_urls(urls, pages, log=None) -> tuple:
     return out, bad
 
 
+def missing_benefit_questions(rows) -> list:
+    """★恩恵が読み取れなかった天井を、2AIへの問いにする★
+    （2026-09-27・台帳#717）
+
+    ★1か所に切り出した理由★＝試験が同じ文の組み立てを**書き写して**いたので、
+    本番だけが壊れても試験は緑のままだった（2026-09-27・Codexの指摘）。
+    いまは本番も試験もこの関数を通る。
+
+    ★問いに必ず入れるもの★
+      ・読めた値（回数・単位）と、何を数えるか
+      ・★2AIが実際に開けるURL★（票の系列IDではない）
+      ・★候補ごとに別の項目名★（`--field ceiling` 固定だと、2つ目の答えが
+        1つ目と既存の記録を上書きする）
+      ・恩恵の分からない天井は記事に出さない、という決まり
+    """
+    out = []
+    for mb in (rows or []):
+        if not isinstance(mb, dict):
+            continue
+        c = f"（{mb['counted']}）" if mb.get("counted") else ""
+        urls = [u for u in (mb.get("urls") or []) if str(u).startswith("http")]
+        where = ("・".join(urls) if urls
+                 else "★読んだページのURLが控えられていません★")
+        # ★どの天井の話かを見分けられるように★（2026-09-27・Codexの指摘）＝
+        #   項目名だけ分けても、★モードだけ違う2件は同じ文面で2つ並ぶ★。
+        ident = mb.get("ident") or {}
+        ii = ("／".join(f"{k}＝{v}" for k, v in ident.items())
+              if isinstance(ident, dict) else "")
+        ipart = f"（{ii}）" if ii else ""
+        # ★★記録する値に入れる項目は、機械が読めた分をそのまま渡す★★
+        #   （2026-09-27・Codexの指摘・実測で再現）＝案内が
+        #   `kind・amount・unit・benefit・counted` だけだったので、
+        #   ★モードだけ違う2件を案内どおり記録すると値が同一になり、
+        #   材料へ取り込むときに2件目が黙って捨てられた★。
+        rec = mb.get("record") if isinstance(mb.get("record"), dict) else {}
+        rp = ("／".join(f"{k}={v}" for k, v in rec.items())
+              or "kind・amount・unit・counted")
+        out.append(
+            f"★{mb.get('jp') or '天井'}{c} は "
+            f"{mb.get('amount')}{mb.get('unit') or ''} と読めましたが、"
+            f"{ipart}"
+            "★到達したときの恩恵が読み取れていません★"
+            "／出典を読んで恩恵を確かめ、確かめられたら "
+            f"confirmed_values.py --record --field {mb.get('field') or 'ceiling'}"
+            f" で記録してください（値に入れる項目＝{rp} ＋ benefit）"
+            "／★この項目をひとつでも省かないでください★"
+            "（省くと、項目名が別でも値が同じに見えて、"
+            "2件目が材料へ取り込むときに捨てられます）"
+            "／★項目名はこの候補のためのものです★"
+            "（`ceiling` のままにすると、ほかの天井の記録を上書きします）"
+            "／★恩恵の分からない天井は記事に出しません★"
+            f"（読んだ先: {where}）")
+    return out
+
+
 def gather(*a, **k):
     """★何のために取りに行くかを名乗ってから中身を動かす★
 
@@ -1344,6 +1399,15 @@ def _gather(name: str, maker: str = "", slug: str = "",
         ctx=_adopt_ctx)
     for nt in got["material"]["ceilings"]["need_third"]:
         got["problems"].append(f"{nt['jp']}: {nt['why']}")
+    # ★★値は読めたが恩恵が分からない天井は、必ず2AIへ聞く★★
+    #   （2026-09-27・台帳#717・Codexの指摘3）
+    #   ★黙って落とすと、回数は読めているのにその天井が永久に欠落する★
+    #   （スルー天井は読み取りが恩恵を採れないので、必ずここへ来る）。
+    #   ★出口は既にある合流口を使う★（`read_questions` → `_deliver_read_questions`）
+    #   ＝`ask_2ai` は後段で丸ごと作り直されるので、そこへ直接足しても消える。
+    got.setdefault("read_questions", []).extend(
+        missing_benefit_questions(
+            got["material"]["ceilings"].get("missing_benefit") or []))
     # ★ATの仕様はモードごとに★（純増を混ぜたら誤情報）
     got["material"]["at_specs"] = _read(_at, "ATの仕様")
     # ★CZは名前ごとに★（どのCZの期待度か分からないと誤情報）
@@ -4085,6 +4149,109 @@ def _selftest_body() -> int:
           and "missing_boxes=list-machinesreviews" in _rqs[0])
         t("　（対照）型のついていない失敗は問いにしない",
           _rf.question_for(ValueError("ただの失敗")) == "")
+
+        # ★★恩恵の分からない天井が、必ず2AIへの問いになる★★
+        #   （2026-09-27・台帳#717・Codexの指摘3）
+        #   ★黙って落とすと、回数は読めているのにその天井が永久に欠落する★。
+        #   ★合流口まで通す★＝`ask_2ai` は後段で作り直されるので、
+        #   `read_questions` に入れて `_deliver_read_questions` を通ることを見る。
+        #   ★★材料は本物の読み取りから作る★★（2026-09-27・Codexの指摘）＝
+        #   前に書いた試験は `sources` にURLらしい文字を**手で入れ**、
+        #   問いの組み立ても**書き写して**いたので、本番だけが壊れても緑だった。
+        _TH_Q = "▼CZスルー回数天井 CZでAT非当選が最大6回続くと天井到達。"
+        _mb_pages = [{"ok": True, "host": h, "url": f"https://{h}/zz/1/",
+                      "ceilings": _cl.from_sentences(_TH_Q)}
+                     for h in ("chonborista.com", "nana-press.com")]
+        _mb_rows = _cl.compare(_mb_pages).get("missing_benefit") or []
+        _mb_got = {"material": {"ceilings": {
+            "adopted": [], "need_third": [], "missing_benefit": _mb_rows}},
+            "problems": []}
+        _mb_got.setdefault("read_questions", []).extend(
+            missing_benefit_questions(_mb_rows))
+        _mb_out = {"ask_2ai": []}
+        _deliver_read_questions(_mb_out, _mb_got)
+        t("★★恩恵の分からない天井は、必ず2AIへの問いになる★★"
+          "（★黙って落とすと、その天井が永久に欠落する★）",
+          len(_mb_out["ask_2ai"]) == 1
+          and "スルー天井（CZ）" in _mb_out["ask_2ai"][0]
+          and "恩恵が読み取れていません" in _mb_out["ask_2ai"][0])
+        t("★★問いには、2AIが実際に開けるURLが入る★★"
+          "（★票の系列ID（lin-…）では、そのページに行けない★）",
+          "https://chonborista.com/zz/1/" in _mb_out["ask_2ai"][0]
+          and "lin-" not in _mb_out["ask_2ai"][0])
+        t("★★問いの項目名は、その候補のためのもの★★"
+          "（★`--field ceiling` 固定だと、2つ目の答えが1つ目と既存の記録を上書きする★）",
+          "--field ceiling#through-cz-6" in _mb_out["ask_2ai"][0])
+        # ★候補が2つあれば、項目名も2つに分かれる★
+        _two = _cl.compare([
+            {"ok": True, "host": h, "url": f"https://{h}/zz/2/",
+             "ceilings": _cl.from_sentences(
+                 _TH_Q
+                 + "▼ボーナススルー回数天井"
+                   " ボーナスでAT非当選が最大4回続くと天井到達。")}
+            for h in ("chonborista.com", "nana-press.com")]).get(
+                "missing_benefit") or []
+        _qs2 = missing_benefit_questions(_two)
+        t("★★候補が2つなら、記録の項目名も2つに分かれる★★"
+          "（同じ名前だと、あとの答えが前の答えを消す）",
+          len(_qs2) == 2
+          and len({q.split("--field ", 1)[1].split(" ", 1)[0] for q in _qs2}) == 2)
+        # ★★モードだけ違う2件は、問いの文でも見分けられる★★
+        #   （2026-09-27・Codexの指摘）＝項目名だけ分けても、
+        #   ★2AIには同じ文面が2つ並ぶだけ★で、どちらの話か決められない。
+        _mb_mode = _cl.compare([
+            {"ok": True, "host": h, "url": f"https://{h}/zz/4/", "ceilings": [
+                _cl._atom("GAME", 999, "G", counted="通常時", benefit=""),
+                _cl._atom("GAME", 999, "G", counted="通常時", benefit="",
+                          mode="特殊モード")]}
+            for h in ("chonborista.com", "nana-press.com")]).get(
+                "missing_benefit") or []
+        _qs_mode = missing_benefit_questions(_mb_mode)
+        t("★★モードだけ違う2件は、問いの文でも見分けられる★★"
+          "（★同じ文面が2つ並ぶと、2AIはどちらの話か決められない★）",
+          len(_qs_mode) == 2
+          and len(set(_qs_mode)) == 2
+          and sum("モード＝特殊モード" in q for q in _qs_mode) == 1)
+        # ★★案内に「値へ入れる項目」が並ぶ★★（2026-09-27・Codexの指摘）＝
+        #   ★これが無いと、案内どおり記録した2件目が
+        #   材料へ取り込むときに黙って捨てられる★（値が同一に見えるため）。
+        t("★★案内が、記録する値に入れる項目を名指しする★★"
+          "（★省くと2件目が取り込みで捨てられる★）",
+          sum("mode=特殊モード" in q for q in _qs_mode) == 1
+          and all("counted=通常時" in q and "kind=GAME" in q
+                  for q in _qs_mode))
+        t("　URLが控えられていないときは、問いにそう書く（黙ってURL無しにしない）",
+          "控えられていません" in missing_benefit_questions(
+              [{"jp": "スルー天井", "amount": 6, "unit": "スルー",
+                "counted": "CZ", "urls": [], "field": "ceiling#x"}])[0])
+        # ★本番の入口が、この列を読んでいること★（罠③＝読み忘れを止める綱）
+        #   ★字の並びで見ない★＝どちらが先に書かれているかは書き方しだいなので、
+        #   ★同じ1文の中で `missing_benefit` を読み、問いを作り、
+        #     `read_questions` へ入れていること★を木で見る。
+        import ast as _ast_mb
+        import inspect as _ins_mb
+        def _mb_has(node):
+            return any(
+                isinstance(n, _ast_mb.Call)
+                and getattr(n.func, "id", "") == "missing_benefit_questions"
+                for n in _ast_mb.walk(node))
+
+        # ★★いちばん内側の1文だけを見る★★＝包み（def や try）も文なので、
+        #   そのまま数えると `gather` のどこかに `read_questions` があるだけで
+        #   通ってしまい、★問いの行き先を別の入れ物へ変えても緑になる★。
+        _mb_all = [s for s in _ast_mb.walk(
+            _ast_mb.parse(_ins_mb.getsource(gather)))
+            if isinstance(s, _ast_mb.stmt) and _mb_has(s)]
+        _mb_stmts = [s for s in _mb_all
+                     if not any(o is not s and _mb_has(o)
+                                for o in _ast_mb.walk(s)
+                                if isinstance(o, _ast_mb.stmt))]
+        _mb_wired = [s for s in _mb_stmts
+                     if "missing_benefit" in _ast_mb.dump(s)
+                     and "read_questions" in _ast_mb.dump(s)]
+        t("★★材料を集める側が missing_benefit を読んで問いにしている★★"
+          "（読まないと、落とした天井が誰にも届かない）",
+          bool(_mb_stmts) and bool(_mb_wired))
 
         # ★★3件見つかって1件取れないとき、通しで確かめる★★
         #   （2026-09-08・Codexの指摘）

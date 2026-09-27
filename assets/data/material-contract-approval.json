@@ -6,14 +6,14 @@
   "assets/data/directory-catalogs.json": "a368d3e2839d3944b2b8064e40c735268c34da52d8eec6b294e1e55bf91205eb",
   "assets/data/maker-catalogs.json": "c1bfaa9377e999f95bcefc5d1958a88e07356d2dbb40f2e1f6ef2a68e2952308",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
-  "scripts/add_machine_run.py": "105a1bc9db3a1a95ff3e255289fc3c79bd050d9774fd33dd7e8f161f0ab3eb7d",
+  "scripts/add_machine_run.py": "652c16c72784dcbb698dd0eeb68da6bd8c7baa5a7565d8e088d068085528878e",
   "scripts/adoption_basis.py": "e24f2f35aa8451b0466cceeff6035266b078e89f216482a9aa30348a42a3837e",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
-  "scripts/ceiling_lookup.py": "18992b3ac95faf07c494663bd410d8c74306a57c83968ca60630cb4523284d69",
+  "scripts/ceiling_lookup.py": "b3c056d9a3259b90bce5d754f059e9e16f7e9a2e4497d4a03d9402d3dc60dc76",
   "scripts/collect_evidence.py": "ae4e112289e2f6a16ea79506674e25b954b97ffb89471c625ac160944215d6e1",
-  "scripts/confirmed_values.py": "1907f811d3c05690d49665814903bfccd186d7075f8d94f6aab3c12b7a3fc591",
+  "scripts/confirmed_values.py": "4e56dee386ce35f50235089a32549cc1e9076a0d29bb8a7decaf5fa66205173d",
   "scripts/cz_lookup.py": "0af48b371f0800d956270a1b50a08a259520c53f24ca424cc2c719ae49a4fbaf",
   "scripts/directory_index.py": "a758913881d5b7b6105069e5f3dfcb3e5a64aa2054578094d517166240ad2e21",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
@@ -95,6 +95,7 @@
   "scripts/blocked_hosts.py": [],
   "scripts/ceiling_lookup.py": [
    "adoption_basis",
+   "confirmed_values",
    "fetched_page",
    "html_tables",
    "model_code_lookup",
@@ -274,5 +275,6 @@
    "page_reading",
    "read_failure"
   ]
- }
+ },
+ "_deps_changed_why": "# 材料の採否の契約：取り込む顔ぶれが変わった理由（2026-09-27）\n\n`scripts/ceiling_lookup.py` が `confirmed_values` を取り込むようになりました\n（使う時だけの遅い取り込み・`ceiling_record_fields()` の中）。\n\n## なぜ\n\n恩恵が読み取れない天井を2AIへ回すとき、案内が\n「値に入れる項目＝kind・amount・unit・benefit・counted」だけでした。\n★モードだけ違う2件を案内どおり記録すると値が同一になり、\n材料へ取り込むときに2件目が黙って捨てられます★（実測で再現）。\n\n取り込みの側（`confirmed_values._same_ceiling_box`）が同じ天井かを見る顔ぶれは\n`kind・amount・unit・mode・after_event ＋ counted・count_note` です。\n案内がこの顔ぶれを**書き写す**と静かにずれるので、\n`confirmed_values.ceiling_box_fields()` から取ることにしました\n（★同じ規則を2か所に書かない★）。\n\n## 契約の集合に入れるか\n\n★すでに入っています★＝`confirmed_values` は「2AIの確定値を材料へ」入れる側として\n材料の採否の契約に登録済みです（CLAUDE.md 5d）。\n今回は**参照の向きが増えただけ**で、新しく外から値を採る先は増えていません。"
 }
