@@ -12262,31 +12262,29 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
+   "indexable": true,
    "machine_profile": "AT_CZ",
    "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
+    "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "gameplay",
     "cz",
     "ceiling",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
+   "reason_codes": [],
    "claims": [
+    "at:MAIN_AT",
     "bonus_prob",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-19",
-   "input_digest": "sha256:9ee2f6822ede200f260d3f04c14bf327282f5c59502f989a9a632c8eee38dfdb"
+   "decided_at": "2026-09-29",
+   "input_digest": "sha256:4b5fa9ec7e467c8f195584fdb2eb9a9f3f3bfb3c6dd4ad054ec567064cc7f933"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-16",
@@ -12298,10 +12296,10 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5090 型式=未掲載 メーカー=パイオニア 導入=2026-11 確認日=2026-08-28",
    "market_release_date": "2026-11-16",
-   "observed_model_code": "LハイハイシオサイReTC",
    "_observed_model_code_sources": [
     "p-town.dmm.com"
-   ]
+   ],
+   "observed_model_code": "LハイハイシオサイReTC"
   }
  },
  {
