@@ -29,6 +29,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import subprocess
 import sys
 import urllib.request
 
@@ -46,8 +48,16 @@ for _s in (sys.stdout, sys.stderr):
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-API = ("https://api.github.com/repos/imotan-lab/uchidokoro"
-       "/actions/runs?per_page=20&branch=main")
+# ★★公開中のコミットを名指しして聞く★★（2026-09-28・実際に古い緑を出していた）
+#   ★直す前は「main の検査を新しい順に20件」（`?branch=main`）を読み、
+#     先頭から拾っていた★。ところがこの一覧は**古いまま返ることがある**
+#   （実測＝2026-09-28 20:30、先頭が9月8日の分で、その日の分が1件も入っていなかった。
+#     同じ時刻にコミットを名指しして聞くと、最新の結果がすぐ返った）。
+#   ＝★今日の検査が赤でも、20日前の緑を「いまの結果」として出していた★。
+#   2本の検査はどちらも main への push のたびに必ず動く（道筋の絞り込みなし）ので、
+#   名指しすれば必ず結果がある。
+API_SHA = ("https://api.github.com/repos/imotan-lab/uchidokoro"
+           "/actions/runs?per_page=20&head_sha={sha}")
 
 # ★重さの順★＝配信が赤いのは読者に届いていないということ
 WEIGHT = {"publish-pages": "🔴 読者にページが届いていない可能性",
@@ -87,18 +97,57 @@ def latest_per_workflow(runs: list) -> list:
     return out
 
 
-def check(fetch=None) -> dict:
-    """→ {"red": [...], "ok": [...], "why": ""}"""
+def published_sha() -> str:
+    """★いま main に載っているコミット★（このリポジトリの origin/main）
+
+    無人タスクも対話セッションもこのリポジトリから push するので、
+    origin/main は公開中のコミットを指している。
+    ★読めなければ空を返す★＝呼ぶ側が「分からない」と言う（緑にしない）。
+    """
     try:
-        data = (fetch or _fetch)(API)
+        r = subprocess.run(["git", "rev-parse", "origin/main"],
+                           cwd=BASE, capture_output=True, text=True,
+                           timeout=30)
+        s = (r.stdout or "").strip()
+        return s if r.returncode == 0 and re.fullmatch(r"[0-9a-f]{40}", s) \
+            else ""
+    except Exception:                                        # noqa: BLE001
+        return ""
+
+
+def check(fetch=None, sha=None) -> dict:
+    """→ {"red": [...], "ok": [...], "pending": [...], "why": ""}
+
+    ★見るのは公開中のコミット1つだけ★（`sha` を渡さなければ origin/main）。
+    """
+    sha = published_sha() if sha is None else str(sha or "")
+    if not sha:
+        return {"red": [], "ok": [], "pending": [],
+                "why": "公開中のコミットが分かりません（git が読めません）"}
+    try:
+        data = (fetch or _fetch)(API_SHA.format(sha=sha))
     except Exception as e:                                   # noqa: BLE001
-        return {"red": [], "ok": [],
+        return {"red": [], "ok": [], "pending": [],
                 "why": f"見に行けませんでした（{type(e).__name__}）"}
     runs = data.get("workflow_runs")
     if not isinstance(runs, list):
-        return {"red": [], "ok": [], "why": "返事の形が違います"}
+        return {"red": [], "ok": [], "pending": [],
+                "why": "返事の形が違います"}
+    # ★★名指ししたコミットの結果だけを見る★★＝返事に別のコミットが
+    #   混ざっていても拾わない（★古いコミットの緑を、いまの結果にしない★）
+    runs = [r for r in runs if isinstance(r, dict)
+            and str(r.get("head_sha") or "") == sha]
+    if not runs:
+        # ★緑にしない★＝結果が無いのは「分からない」（push直後はまだ出ていない）
+        return {"red": [], "ok": [], "pending": [],
+                "why": f"公開中のコミット {sha[:9]} の検査がまだ見つかりません"}
     red, ok = [], []
-    for r in latest_per_workflow(runs):
+    _latest = latest_per_workflow(runs)
+    _done = {str(r.get("name") or "") for r in _latest}
+    # ★動いている途中のものは赤でも緑でもない★（まだ結果が出ていないだけ）
+    pending = sorted({str(r.get("name") or "") for r in runs
+                      if r.get("name") and str(r.get("name")) not in _done})
+    for r in _latest:
         row = {"name": str(r.get("name") or ""),
                "sha": str(r.get("head_sha") or "")[:9],
                "at": str(r.get("updated_at") or ""),
@@ -111,7 +160,8 @@ def check(fetch=None) -> dict:
             row["conclusion"] = str(r.get("conclusion") or "")
             row["weight"] = WEIGHT.get(row["name"], "🟠 検査が赤い")
             red.append(row)
-    return {"red": red, "ok": ok, "why": ""}
+    return {"red": red, "ok": ok, "pending": pending, "why": "",
+            "sha": sha[:9]}
 
 
 def _cancel_tests(t) -> None:
@@ -164,6 +214,8 @@ def main() -> int:
     if not a.json:
         for r in got["ok"]:
             print(f"✅ {r['name']} ({r['sha']})")
+        for name in got.get("pending") or []:
+            print(f"⏳ {name} ({got.get('sha', '')}) 動いている途中")
         for r in got["red"]:
             print(f"{r['weight']}  {r['name']} = {r['conclusion']}"
                   f" ({r['sha']})")
@@ -174,7 +226,7 @@ def main() -> int:
 # ★試験のためだけの入口★（通信しない・記号を書いて終わるだけ）
 #   ★これがあるおかげで、子を cp932 で起こして本当に試せる★
 def _render_check() -> int:
-    print("✅ 🔴 🟠 ❌")
+    print("✅ 🔴 🟠 ❌ ⏳")
     return 0
 
 
@@ -215,30 +267,55 @@ def selftest() -> int:
       "（Windowsの既定のままだと合格の記号が書けず、"
       "緑でも赤でも毎回「見に行けなかった」になる）",
       _r.returncode == 0
-      and _r.stdout.replace(b"\r\n", b"\n") == "✅ 🔴 🟠 ❌\n".encode("utf-8"))
+      and _r.stdout.replace(b"\r\n", b"\n")
+      == "✅ 🔴 🟠 ❌ ⏳\n".encode("utf-8"))
+    A, B = "a" * 40, "b" * 40
     t("★全部成功なら緑★",
-      check(fake([run("publish-pages", "a" * 40, "completed", "success"),
-                  run("pages-rehearsal", "a" * 40, "completed",
-                      "success")]))["red"] == [])
-    got = check(fake([run("pages-rehearsal", "a" * 40, "completed",
-                          "failure")]))
+      check(fake([run("publish-pages", A, "completed", "success"),
+                  run("pages-rehearsal", A, "completed",
+                      "success")]), sha=A)["red"] == [])
+    got = check(fake([run("pages-rehearsal", A, "completed",
+                          "failure")]), sha=A)
     t("★赤いものは拾う★", len(got["red"]) == 1)
     t("　配信が赤いほうが重いと分かる",
-      "🔴" in check(fake([run("publish-pages", "a" * 40, "completed",
-                             "failure")]))["red"][0]["weight"])
+      "🔴" in check(fake([run("publish-pages", A, "completed",
+                             "failure")]), sha=A)["red"][0]["weight"])
+    _pend = check(fake([run("pages-rehearsal", A, "in_progress", None)]),
+                  sha=A)
     t("★★動いている途中は赤扱いにしない★★"
       "（まだ結果が出ていないだけ・毎回まちがって知らせない）",
-      check(fake([run("pages-rehearsal", "a" * 40, "in_progress",
-                      None)]))["red"] == [])
-    t("★★見るのは各ワークフローのいちばん新しい終わったものだけ★★"
-      "（前の赤を引きずらない）",
-      check(fake([run("pages-rehearsal", "b" * 40, "completed", "success"),
-                  run("pages-rehearsal", "a" * 40, "completed",
-                      "failure")]))["red"] == [])
+      _pend["red"] == [] and _pend["pending"] == ["pages-rehearsal"])
+    # ★★古いコミットの緑を、いまの結果にしない★★（2026-09-28・実際に起きた）
+    #   ★直す前★＝一覧が古いまま返り、20日前の緑を出していた。
+    #   ★返事に別のコミットしか無ければ「分からない」★（緑にしない）。
+    _stale = check(fake([run("publish-pages", B, "completed", "success"),
+                         run("pages-rehearsal", B, "completed",
+                             "success")]), sha=A)
+    t("★★古いコミットの緑を、いまの結果として出さない★★"
+      "（★一覧が古いまま返ると、今日の赤に気づけなかった★）",
+      _stale["ok"] == [] and _stale["why"] != "")
+    t("★★公開中のコミットの赤は、別のコミットの緑に埋もれない★★",
+      len(check(fake([run("pages-rehearsal", B, "completed", "success"),
+                      run("pages-rehearsal", A, "completed", "failure")]),
+                sha=A)["red"]) == 1)
+    t("★公開中のコミットが分からなければ、緑ではなく「分からない」★",
+      check(fake([run("publish-pages", A, "completed", "success")]),
+            sha="")["why"] != "")
+    # ★★本番の入口が origin/main を名指ししている★★（罠③＝配線の綱）
+    _keep_ps = globals()["published_sha"]
+    try:
+        globals()["published_sha"] = lambda: A
+        _wired = check(fake([run("pages-rehearsal", A, "completed",
+                                 "failure")]))
+        t("★★何も渡さなければ、公開中のコミット（origin/main）を見る★★",
+          len(_wired["red"]) == 1 and _wired.get("sha") == A[:9])
+    finally:
+        globals()["published_sha"] = _keep_ps
     t("★見に行けなければ、赤ではなく「分からない」と言う★",
-      check(lambda _u: (_ for _ in ()).throw(OSError("x")))["why"] != "")
+      check(lambda _u: (_ for _ in ()).throw(OSError("x")),
+            sha=A)["why"] != "")
     t("　返事の形が違っても落ちない",
-      check(lambda _u: {"x": 1})["why"] != "")
+      check(lambda _u: {"x": 1}, sha=A)["why"] != "")
 
     print(f"\n{ran[0] - len(ng)}/{ran[0]} " + ("合格" if not ng else "不合格"))
     if ng:

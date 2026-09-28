@@ -4446,6 +4446,28 @@ MUTATIONS = [
         "after": '        pass',
         "run": ["scripts/task_guard.py"],
     },
+    # ─── 2026-09-28・GitHubの検査の見張りが、古い一覧の緑を出していた ───
+    {
+        "why": "★返事の中から、名指ししたコミットの結果だけを選ばない（★古いコミットの緑を、いまの結果として出す★）★",
+        "file": "scripts/ci_status.py",
+        "before": "            and str(r.get(\"head_sha\") or \"\") == sha]",
+        "after": "            ]",
+        "run": ["scripts/ci_status.py"],
+    },
+    {
+        "why": "★公開中のコミットの結果が無いときに「分からない」と言わない（★結果が無いのに緑扱いで終わる★）★",
+        "file": "scripts/ci_status.py",
+        "before": "    if not runs:\n        # ★緑にしない★",
+        "after": "    if False:\n        # ★緑にしない★",
+        "run": ["scripts/ci_status.py"],
+    },
+    {
+        "why": "★何も渡されないとき、公開中のコミット（origin/main）を見ない（★番人が毎朝どのコミットも見ていない★）★",
+        "file": "scripts/ci_status.py",
+        "before": "    sha = published_sha() if sha is None else str(sha or \"\")",
+        "after": "    sha = \"\" if sha is None else str(sha or \"\")",
+        "run": ["scripts/ci_status.py"],
+    },
     # ─── 2026-09-28・git が読めないときは担当しない（運営者の判断）───
     {
         "why": "★git が読めなくても担当を取る（★未コミットのコードが無いか確かめられないまま、公開処理が走る★）★",
