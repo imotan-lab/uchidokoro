@@ -12095,31 +12095,32 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
+   "indexable": true,
    "machine_profile": "AT_CZ",
    "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
+    "cz",
+    "gameplay",
+    "setting",
     "spec"
    ],
    "pending_topics": [
-    "gameplay",
-    "cz",
     "ceiling",
-    "setting",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
+   "reason_codes": [],
    "claims": [
-    "payout_range"
+    "at:MAIN_AT",
+    "at_prob",
+    "cz:アイルー福引",
+    "cz:ブレイクゾーン",
+    "payout_range",
+    "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-24",
-   "input_digest": "sha256:b57c69a79a963e0d796881fe7f4f06f23049ac94aeb77e09defbad93dcd76930"
+   "decided_at": "2026-09-29",
+   "input_digest": "sha256:2fbc6b6a1738c8fcdb677218716d28b5158e21156a514177fc85c1271e0dc94e"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
