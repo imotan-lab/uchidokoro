@@ -675,7 +675,18 @@ def halt(reason: str, path: str = STATE_PATH) -> dict:
 
 
 def day_status(path: str = STATE_PATH) -> dict:
-    return _day(_load(path))
+    """その日の記録（番人が毎朝 `task_guard.py day` で読む）。
+
+    ★★git が読めなかった記録は「一晩」の箱からも拾う★★（2026-09-28・Codexの指摘）＝
+      暦日の箱は日付が変わると空になるので、23:30の新台タスクで起きたものは
+      翌朝8:03には残っていない。★暦日の箱に無ければ一晩の箱を見る★。
+    """
+    data = _load(path)
+    d = dict(_day(data))
+    _gn = _night(data).get("git_unreadable")
+    if _gn and not d.get("git_unreadable"):
+        d["git_unreadable"] = dict(_gn)
+    return d
 
 
 def _issue_ids(rows) -> set:
@@ -730,14 +741,33 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
                 "コミットされていないスクリプトがあります: "
                 + " / ".join(_dirty0[:3])
                 + "（レビューされていないコードで公開処理は走らせません）")
-        # ★★git が読めなかったときは、止めないが必ず残す★★
-        #   （2026-08-30・運営者の判断）
-        #   ★直す前は「問題なし」と同じ扱いで、何も残らなかった★＝
-        #   レビューしていないコードで公開処理が走った可能性に誰も気づけない。
+        # ★★git が読めなかったときは、記録を残して担当しない★★
+        #   （2026-09-28・運営者の判断で「止めない」から変えた）
+        #   ＞ Aでも今のところ問題ないんだよね？ ならAで。
+        #   ★なぜ止めるか★＝読めないと「未コミットのコードが無いか」を
+        #   確かめられず、★レビューしていないコードで公開処理が走りうる★。
+        #   ★しかも進んでも得るものが無い★＝git が読めない状態では、
+        #   タスクは作業を保存（コミット）することもできない
+        #   （`before_commit` は同じ状態で既に断っている）。
+        #   ★一時的な失敗は、ここへ来る前に聞き直して吸収している★
+        #   （`GIT_RETRY_WAITS`・3回まで）。実測で直前の2週間は0回。
+        #   ★記録は保存してから断る★＝番人が `day.git_unreadable` を読んで🟠に載せる
+        #   （断る前に保存しないと、止まった理由が番人に届かない）。
         if _gw:
-            _day(data)["git_unreadable"] = {
-                "task": task, "why": _gw[:200],
-                "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+            _rec_gw = {"task": task, "why": _gw[:200],
+                       "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+            _day(data)["git_unreadable"] = dict(_rec_gw)
+            # ★★一晩の箱にも入れる★★（2026-09-28・Codexの指摘・実害）
+            #   ★暦日の箱は日付が変わると空になる★ので、23:30の新台タスクで
+            #   起きた記録は、翌朝8:03の番人が読む前に消えていた。
+            #   一晩（12:00〜翌11:59）なら、夜の新台・朝の更新・朝の番人が
+            #   同じ箱に入る。読む側は `day_status()` が両方を見る。
+            _night(data)["git_unreadable"] = dict(_rec_gw)
+            _save(path, data)
+            raise GuardError(
+                f"git に問い合わせできませんでした（{_gw[:120]}）。"
+                "★未コミットのコードが無いかを確かめられないので担当しません★"
+                "（聞き直しても答えが返りませんでした）。枠は使っていません")
         # ★★その日に一度でも無人で担当したら、もう戻さない★★
         #   （2026-08-30・Codexの指摘1。★自分で再現した★）
         #   直す前はタスクごとに1つだけ持って上書きしていたので、
@@ -1404,13 +1434,14 @@ def unattended_code_state(task: str) -> tuple:
         return [], ""
     names, why = _changed_files()
     if why:
-        _log_git_unreadable(task, str(why))
+        _log_git_unreadable(task, str(why), then="★担当しません★")
         return [], str(why)
     return sorted(n for n in names
                   if n.startswith("scripts/") and n.endswith(".py")), ""
 
 
-def _log_git_unreadable(task: str, why: str) -> None:
+def _log_git_unreadable(task: str, why: str,
+                        then: str = "★止めずに進みます★") -> None:
     """★記録に残す★（メールは呼ぶ側＝手順書の担当）
 
     ★試験は本番のログに書かない★（2026-09-09）＝
@@ -1432,8 +1463,10 @@ def _log_git_unreadable(task: str, why: str) -> None:
         stamp = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
         with open(os.path.join(d, "task_guard_git.log"), "a",
                   encoding="utf-8") as fh:
+            # ★何をしたかは呼ぶ側が言う★（2026-09-28）＝聞き直して答えが
+            #   返った場合は進み、最後まで返らなかった担当は断る。
             fh.write(f"[{stamp}] {task}: git に問い合わせできませんでした"
-                     f"（{why[:200]}）→ ★止めずに進みます★\n")
+                     f"（{why[:200]}）→ {then}\n")
     except Exception:                                        # noqa: BLE001
         pass                                   # 記録に失敗しても本処理は止めない
 
@@ -2592,11 +2625,12 @@ def _selftest_body() -> int:
         finally:
             globals()["lock_is_live"] = _keep_lock
 
-        # ★★git が読めなかったときは、止めないが必ず残す★★
-        #   （2026-08-30・運営者の判断。Codexが2回指摘していた件の折衷）
-        #   ★止めない★＝未pushで残すと夜の公開が止まる
-        #   ★けれど残す★＝直す前は何も残らず、
-        #     レビューしていないコードで公開処理が走った可能性に気づけない。
+        # ★★git が読めなかったときは、記録を残して担当しない★★
+        #   （2026-09-28・運営者の判断で「止めない」から変えた）
+        #   ★止める★＝未コミットのコードが無いかを確かめられないので、
+        #     レビューしていないコードで公開処理が走りうる。
+        #   ★残す★＝番人が `day.git_unreadable` を読んで🟠に載せる
+        #     （★断る前に保存しないと届かない★ので、それも確かめる）。
         fpg = os.path.join(tmpdir, "gitread.json")
         _keep_changed = globals()["_changed_files"]
         _keep_lock2 = globals()["lock_is_live"]
@@ -2608,21 +2642,55 @@ def _selftest_body() -> int:
             globals()["unattended_code_state"] = _keep_state
             # ★例外を受け止めて❌にする★＝そのまま投げさせると
             #   「ただ落ちただけ」になり、守りの証拠にならない。
-            _took = False
+            _took, _refused = False, ""
             try:
                 claim("update-machine", "hokuto", path=fpg)
                 _took = (_load(fpg)["tasks"]["update-machine"]
                          .get("guard_slug") == "hokuto")
+            except GuardError as _e:
+                _refused = str(_e)
             except Exception as _e:                          # noqa: BLE001
-                _took = False
+                _refused = f"想定外の失敗: {type(_e).__name__}: {_e}"
             _g = (_load(fpg).get("day", {}).get("git_unreadable") or {}) \
                 if os.path.exists(fpg) else {}
-            t("★★git が読めなくても担当は取れる★★"
-              "（＝止めると夜の公開が丸ごと飛ぶ）", _took)
+            # ★断った理由の文まで見る★（罠㉚＝隣の守りが先に断っていても緑になる）
+            t("★★git が読めないときは担当を取らない★★"
+              "（★確かめられないまま、レビューしていないコードで公開処理を走らせない★）",
+              not _took and "確かめられない" in _refused
+              and "git が動きません" in _refused)
             t("★★読めなかったことが記録に残る★★"
               "（＝直す前は何も残らず、誰も気づけなかった）",
               _g.get("task") == "update-machine"
               and "git が動きません" in str(_g.get("why")))
+
+            # ★★夜に起きた記録が、翌朝の番人まで残る★★（2026-09-28・Codexの指摘）
+            #   ★暦日の箱だけだと、23:30の記録は日付が変わった時点で消え、
+            #     8:03の番人（`task_guard.py day` ＝ day_status）に届かなかった★。
+            #   ★本番と同じ順で通す★＝担当を断る → 日付が変わる → 番人が読む。
+            _keep_today = globals()["_today"]
+            _keep_nid = globals()["_night_id"]
+            try:
+                globals()["_today"] = lambda: "2026-09-28"
+                globals()["_night_id"] = lambda now=None: "2026-09-28"
+                fpn = os.path.join(tmpdir, "gitnight.json")
+                try:
+                    claim("add-machine", "hokuto", path=fpn)
+                except GuardError:
+                    pass
+                # 日付が変わった翌朝（一晩はまだ同じ＝12:00前）
+                globals()["_today"] = lambda: "2026-09-29"
+                _morning = day_status(path=fpn).get("git_unreadable") or {}
+                t("★★夜の新台タスクで起きた記録が、翌朝の番人まで残る★★"
+                  "（★暦日の箱だけだと日付が変わった時点で消えていた★）",
+                  _morning.get("task") == "add-machine"
+                  and "git が動きません" in str(_morning.get("why")))
+                # （対照）一晩が終わった翌日の昼には残らない＝古い印で鳴り続けない
+                globals()["_night_id"] = lambda now=None: "2026-09-29"
+                t("　（対照）一晩が終わったあとは、古い記録で鳴り続けない",
+                  not day_status(path=fpn).get("git_unreadable"))
+            finally:
+                globals()["_today"] = _keep_today
+                globals()["_night_id"] = _keep_nid
 
             # ★★gitが答えなかったら、まず聞き直す★★
             #   （2026-09-08・運営者の指摘「再トライは無理なの？」）

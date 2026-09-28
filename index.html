@@ -319,17 +319,19 @@ function formatReleaseDate(dateStr){
         const row = document.createElement("article");
         row.className = "list-row";
         // ★★一覧では「解析待ち」を出さない★★（2026-09-08・運営者の指示）
-        //   新台かどうかだけを見せる。狙い目が無い機種は空欄にする
-        //   （「解析待ち」と書いても読者にできることは無いため）。
+        //   新台かどうかだけを見せる。
+        // ★★一覧に狙い目の一行を出さない★★（2026-09-28・運営者の指示）
+        //   ＞ 機種名の下に小さい文字で書いてるのってあるのとないのがあるんだけど、
+        //   ＞ なんで？ なしの統一でいいよ
+        //   ★出る機種と出ない機種があった★（2AIがまだ狙い目を決めていない新台は空）
+        //   うえ、交換率の切り替えが無い機種は書き方もそろっていなかった。
+        //   ★狙い目は機種ページで見せる★（ここは機種名とバッジだけ）。
         const isNew = isNewMachine(machine);
         const nameBadge = isNew
           ? ' <span class="badge badge--new">🆕 新台</span>' : '';
-        const stretegyCell =
-          `<span class="machine-strategy">${machine.strategy || ''}</span>`;
         row.innerHTML = `
           <a class="list-row-main" href="${["", "machines", machine.slug, ""].join("/")}">
             <span class="machine-name">${machine.name}${nameBadge}</span>
-            ${stretegyCell}
           </a>
         `;
         list.appendChild(row);

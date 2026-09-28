@@ -1699,19 +1699,11 @@ MUTATIONS = [
     },
     # ─── 2026-08-30・git が読めなかったことを残す ────────────────
     {
-        "why": "★git が読めなかったことを記録しない"
-               "（レビュー前のコードで公開処理が走っても誰も気づけない）★",
+        "why": "★git が読めなかったことを、その日の箱に記録しない"
+               "（担当を断った理由が、その日のうちに誰にも見えない）★",
         "file": "scripts/task_guard.py",
-        "before": "        if _gw:\n            _day(data)[\"git_unreadable\"] = {",
-        "after": "        if False:\n            _day(data)[\"git_unreadable\"] = {",
-        "run": ["scripts/task_guard.py"],
-    },
-    {
-        "why": "★git が読めないときに担当を断る"
-               "（運営者の決定に反して、夜の公開が丸ごと飛ぶ）★",
-        "file": "scripts/task_guard.py",
-        "before": "        if _gw:",
-        "after": "        if _gw:\n            raise GuardError(\"git\")\n        if _gw:",
+        "before": "            _day(data)[\"git_unreadable\"] = dict(_rec_gw)",
+        "after": "            pass",
         "run": ["scripts/task_guard.py"],
     },
     # ─── 2026-08-30・一覧とチェッカーの食い違いを全機種で見る ────────
@@ -4448,10 +4440,39 @@ MUTATIONS = [
     },
     {
         "why": "★本物のgit失敗を、どこにも記録しない★"
-               "（★止めない設計なので、記録が無いと誰にも届かない★）",
+               "（★なぜ担当を断ったのかが、ログから追えなくなる★）",
         "file": "scripts/task_guard.py",
-        "before": '        _log_git_unreadable(task, str(why))',
+        "before": '        _log_git_unreadable(task, str(why), then="★担当しません★")',
         "after": '        pass',
+        "run": ["scripts/task_guard.py"],
+    },
+    # ─── 2026-09-28・git が読めないときは担当しない（運営者の判断）───
+    {
+        "why": "★git が読めなくても担当を取る（★未コミットのコードが無いか確かめられないまま、公開処理が走る★）★",
+        "file": "scripts/task_guard.py",
+        "before": "            _save(path, data)\n            raise GuardError(\n                f\"git に問い合わせできませんでした（{_gw[:120]}）。\"",
+        "after": "            _save(path, data)\n            if False: raise GuardError(\n                f\"git に問い合わせできませんでした（{_gw[:120]}）。\"",
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★git が読めなかった記録を一晩の箱に入れない（★23:30の新台タスクで起きた記録が、日付が変わって翌朝の番人に届かない★）★",
+        "file": "scripts/task_guard.py",
+        "before": "            _night(data)[\"git_unreadable\"] = dict(_rec_gw)",
+        "after": "            pass",
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★番人が読む出力で、一晩の箱を見ない（★夜に起きた記録が朝の🟠に載らない★）★",
+        "file": "scripts/task_guard.py",
+        "before": "    if _gn and not d.get(\"git_unreadable\"):",
+        "after": "    if False:",
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★断る前に記録を保存しない（★止まった理由が番人に届かず、🟠に載らない★）★",
+        "file": "scripts/task_guard.py",
+        "before": "            _save(path, data)\n            raise GuardError(\n                f\"git に問い合わせできませんでした",
+        "after": "            pass\n            raise GuardError(\n                f\"git に問い合わせできませんでした",
         "run": ["scripts/task_guard.py"],
     },
     {
