@@ -12224,7 +12224,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-09",
+   "decided_at": "2026-09-30",
    "input_digest": "sha256:8ce5a1c75899864306733ecf4e51b4baca3d0e1413defacb5268aa5e833ff82a"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -12236,7 +12236,11 @@
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5079 型式=未掲載 メーカー=ミズホ 導入=2026-11 確認日=2026-09-03",
-   "market_release_date": "2026-11-02"
+   "market_release_date": "2026-11-02",
+   "observed_model_code": "LラグナドールZI",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
   },
   "checker": {
    "coinRate": 31.0,
