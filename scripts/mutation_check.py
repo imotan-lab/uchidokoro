@@ -1690,6 +1690,50 @@ MUTATIONS = [
         "run": ["scripts/audit_site.py"],
     },
     {
+        "why": "★引用符の中の道筋を空白で切り直す"
+               "（フォルダ名の全角スペースで道筋が切れ、実在するのに"
+               "「無い」と言って朝の書き込みを全部止める＝2026-09-30）★",
+        "file": "scripts/audit_site.py",
+        "before": "                rest = _QUOTED.sub(\" \", s)",
+        "after": "                rest = s",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★コマンド文字列の引用の中身を読まずに捨てる"
+               "（bash -lc 'python 無いもの.py' を見逃す＝Codexの指摘）★",
+        "file": "scripts/audit_site.py",
+        "before": "                        work.append(inner)",
+        "after": "                        pass",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★引用の中身を、道筋の形かどうか見ずに1つの道筋として読む"
+               "（bash -lc 'python x.py' をまるごと道筋と読み、"
+               "実在するのに「無い」と言う）★",
+        "file": "scripts/audit_site.py",
+        "before": "                    if _QUOTED_PATH.match(inner):",
+        "after": "                    if inner.endswith((\".py\", \".sh\")):",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★二重引用符の中の \\\" を区切りとして読む"
+               "（エスケープした道筋が全角スペースで切れ、実在するのに"
+               "「無い」と言う＝Codexの4回目）★",
+        "file": "scripts/audit_site.py",
+        "before": "_QUOTED = re.compile(r'\"((?:[^\"\\\\]|\\\\.)*)\"|\\'([^\\']*)\\'')",
+        "after": "_QUOTED = re.compile(r'\"([^\"]*)\"|\\'([^\\']*)\\'')",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★\\\" 以外の円記号まで外して戻す"
+               "（C:\\\\Program Files\\\\… が壊れて実在するスクリプトを見逃す"
+               "＝Codexの5回目）★",
+        "file": "scripts/audit_site.py",
+        "before": "                    inner = m.group(1).replace('\\\\\"', '\"') \\",
+        "after": "                    inner = re.sub(r\"\\\\(.)\", r\"\\1\", m.group(1)) \\",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
         "why": "★見せた日の控えを共有の state.json に戻す"
                "（別の処理の更新を、古い内容で上書きする）★",
         "file": "scripts/ledger_sweep.py",

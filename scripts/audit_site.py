@@ -2046,6 +2046,14 @@ def _skill_contract(base: str):
 _CMD_HEADS = ("python", "python3", "py", "bash", "sh")
 
 
+# ★引用符の中身が「道筋の形」か★（2026-09-30）＝ドライブ文字・/ ・. ・~ で始まるか、
+#   半角空白を挟まずに / や \ に至るもの。コマンド文字列（python x.py 等）は当たらない。
+_QUOTED_PATH = re.compile(
+    r"^(?:[A-Za-z]:[/\\]|[/.~]|[^ \t\"']*[/\\])[^\"']*\.(?:py|sh)$")
+# ★引用の切り出し★＝二重引用符は \" を中身として飛ばす（シェルと同じ）／一重引用符は飛ばさない
+_QUOTED = re.compile(r'"((?:[^"\\]|\\.)*)"|\'([^\']*)\'')
+
+
 def _doc_paths(text: str) -> list:
     """★手順書が実際に叩いているファイル★を返す（2026-09-01）。
 
@@ -2070,7 +2078,33 @@ def _doc_paths(text: str) -> list:
             head = bare.split(" ", 1)[0] if bare else ""
             if head not in _CMD_HEADS:
                 continue
-            for tok in _re.findall(r'[^\s"\']+\.(?:py|sh)', bare):
+            # ★引用符で囲んだ道筋は、囲みの中をまるごと1つとして読む★
+            #   （2026-09-30・実際に誤検知した）＝空白で区切ると、
+            #   フォルダ名の全角スペース（「TOA請求書　メール転送ソフト」）で
+            #   道筋が途中で切れ、実在するのに「無い」と言っていた。
+            #   ★囲みの中が「道筋の形」のときだけ★＝`bash -lc 'python x.py'`
+            #   のような引用はコマンド文字列なので、消さずに従来どおり切る
+            #   （Codexの指摘＝消すと無いスクリプトを見逃し、まるごと読むと
+            #     実在するものを誤検知する）。
+            #   ★コマンド文字列の引用は、中身をもう一度同じ手順で読む★
+            #   （入れ子＝bash -lc 'python "D:/a　b/x.py"' ・Codexの3回目）
+            toks = []
+            work = [bare]
+            while work:
+                s = work.pop()
+                for m in _QUOTED.finditer(s):
+                    # ★二重引用符の中の \" は区切りではない★（Codexの4回目）
+                    #   ★戻すのは \" だけ★＝C:\Program Files\… の円記号まで
+                    #   外すと道筋が壊れて見逃す（Codexの5回目）
+                    inner = m.group(1).replace('\\"', '"') \
+                        if m.group(1) is not None else m.group(2)
+                    if _QUOTED_PATH.match(inner):
+                        toks.append(inner)
+                    else:
+                        work.append(inner)
+                rest = _QUOTED.sub(" ", s)
+                toks += _re.findall(r'[^\s"\']+\.(?:py|sh)', rest)
+            for tok in toks:
                 tok = tok.strip('"\'')
                 if "/" in tok or "\\" in tok:
                     out.append(tok)
@@ -2131,6 +2165,15 @@ _SKILL_MUST_CATCH = {
         "実行は `python scripts/no_such_tool_xyz.py --selftest` です。\n",
     "先頭が $ のコマンド":
         "$ python scripts/no_such_tool_xyz.py\n",
+    # ★引用符の中の道筋に全角スペースがあっても、無いものは捕まえる★
+    "引用符の中に全角スペースがある実在しない道筋":
+        'python "D:/無い\u3000フォルダ_xyz/no_such_xyz.py"\n',
+    # ★引用がコマンド文字列のときは、中の道筋を従来どおり見る★（Codexの指摘）
+    "引用の中のコマンドが実在しない道筋を叩く":
+        "bash -lc 'python D:/no_such_dir_xyz/no_such.py --selftest'\n",
+    # ★円記号区切りの実在しない道筋（引用つき・半角空白入り）★（Codexの5回目）
+    "円記号区切りの実在しない道筋":
+        'python "C:\\No Such Dir_xyz\\no_such_xyz.py"\n',
 }
 # ★止めてはいけない形★
 _SKILL_MUST_PASS = {
@@ -2146,6 +2189,24 @@ _SKILL_MUST_PASS = {
         "# uchidokoro-fact-check を実行すること（昔の書き方）\n",
     "★Codexを素で呼ぶのは対話セッションでは正しい★":
         "bash codex_review.sh ask.md out.txt 900 3 high\n",
+    # ★2026-09-30・実際に誤検知した★＝番人の手順書の
+    #   python "C:/.../TOA請求書　メール転送ソフト/check_health.py"
+    #   を全角スペースで切り、「メール転送ソフト/check_health.py」を探して
+    #   実在するのに「無い」と言い、その朝の書き込みを全部止めた。
+    "引用符の中に全角スペースがある実在する道筋":
+        'python "D:/実在する\u3000フォルダ/check_health.py"\n',
+    # ★引用がコマンド文字列なら、まるごと1つの道筋として読まない★（Codexの指摘）
+    "引用の中のコマンドが実在する道筋を叩く":
+        "bash -lc 'python D:/実在する/tool.py'\n",
+    # ★入れ子の引用＝コマンド文字列の中の、全角スペース入りの道筋★（Codexの3回目）
+    "入れ子の引用の中の全角スペース入りの実在する道筋":
+        "bash -lc 'python \"D:/実在する\u3000フォルダ/check_health.py\"'\n",
+    # ★二重引用符の中のエスケープされた引用符★（Codexの4回目）
+    "エスケープした引用符の中の全角スペース入りの実在する道筋":
+        'bash -lc "python \\"D:/実在する\u3000フォルダ/check_health.py\\""\n',
+    # ★Windowsの円記号区切りの道筋（引用つき・半角空白入り）★（Codexの5回目）
+    "円記号区切りの実在する道筋":
+        'python "C:\\Program Files\\TOA\\check_health.py"\n',
 }
 
 
@@ -2258,7 +2319,10 @@ def _check_37_selftest() -> list:
     stopped = ("uchidokoro-fact-check",)
 
     def exists(rel):
-        return rel == "scripts/audit_site.py"
+        return rel in ("scripts/audit_site.py",
+                       "D:/実在する\u3000フォルダ/check_health.py",
+                       "D:/実在する/tool.py",
+                       "C:\\Program Files\\TOA\\check_health.py")
 
     bad = []
     for name, text in _SKILL_MUST_CATCH.items():
