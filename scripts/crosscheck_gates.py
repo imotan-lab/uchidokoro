@@ -60,7 +60,6 @@ EXPECTED_NEEDS_EDIT = {
     "galfy",
     "gineiden_dnt",
     "godeater",
-    "gundam_seed",
     "hanabi",
     "hanma_baki",
     "isekai_quattro_bt",
@@ -112,7 +111,8 @@ EXPECTED_PUBLIC = EXPECTED_LEGACY_TOTAL - len(EXPECTED_NEEDS_EDIT) - len(EXPECTE
 #   2026-09-27: sf5 の記事を2AIで直して公開できるようになり 72 → 73
 #   2026-09-28: sengoku_otome5 の記事を2AIで直して公開できるようになり 73 → 74
 #   2026-09-30: code_geass の記事を2AIで直して公開できるようになり 74 → 75
-EXPECTED_CHECKER_MACHINES = 75
+#   2026-10-01: gundam_seed の記事を2AIで直して公開できるようになり 75 → 76
+EXPECTED_CHECKER_MACHINES = 76
 #   2026-07-27（25巡目）: 表示整合の要修正を止めたため 71機種131mode → 67機種123mode
 #     （当初10機種→UIが交換率別の狙い目をチェッカーから組み立てるようにして5機種解消）
 #   2026-07-27（24巡目）: 原稿に「公開できない表現」が残る41機種を編集待ちとして
@@ -125,7 +125,8 @@ EXPECTED_CHECKER_MACHINES = 75
 #   2026-09-27: sf5 が公開できるようになり 134 → 135（normal の1mode）
 #   2026-09-28: sengoku_otome5 が公開できるようになり 135 → 137（normal / reset の2mode。cycle は軸契約で止めたまま）
 #   2026-09-30: code_geass が公開できるようになり 137 → 139（normal / reset の2mode）
-EXPECTED_CHECKER_MODES = 139
+#   2026-10-01: gundam_seed が公開できるようになり 139 → 142（normal / suru / reset の3mode）
+EXPECTED_CHECKER_MODES = 142
 
 # ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
 #   集合そのものを持つ。機種を増減したら意図した変更として更新すること。
