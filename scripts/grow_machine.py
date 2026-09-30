@@ -1772,7 +1772,10 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
             f"登録済みの登場年月が食い違っています（一覧 {old_release!r} / "
             f"identity {ident.get('market_release_date')!r}）")
         return out
-    vo = verify(name, url, maker, old_release)
+    # ★★新台の範囲（導入月）は当てない★★（2026-10-01・更新タスクの自己修正）
+    #   ここは公開済みの機種の本人性を確かめ直すだけ。★当てていた★ので、
+    #   導入2か月目から毎朝「新台の範囲外」で止まり、何も育てられなかった。
+    vo = verify(name, url, maker, old_release, require_recent=False)
     if vo.get("problems"):
         out["problems"] += [f"本人性を確かめ直せません: {p}" for p in vo["problems"]]
         # ★★型のついた失敗は、必ず問いにして返す★★（2026-09-10・CodexのP0）
@@ -3060,6 +3063,23 @@ def selftest() -> int:
       and any("IDENTITY_FACTS" in str(q.get("text") or "") for q in _iqs))
     t("　問いは辞書で足す（表示側が辞書として読む）",
       all(isinstance(q, dict) for q in _iqs))
+    # ★★育成は新台の範囲（導入月）を当てずに本人性を確かめ直す★★
+    #   （2026-10-01・更新タスクの自己修正）★直す前は新台を見つけるときと
+    #   同じ確認を通していた★ので、導入2か月目の機種が毎朝
+    #   「新台の範囲外」で止まり、何も育てられなかった
+    #   （実例＝garei_zero_re / dmm_5089）。★本番と同じ呼び出し口を通す★
+    _vkw = {}
+
+    def _rec_verify(*a, **k):
+        _vkw.update(k)
+        return {"problems": [], "release": ""}
+    with _st_env():
+        plan_one(_ST_SLUG,
+                 gather=lambda *a, **k: {"material": None, "problems": []},
+                 verify=_rec_verify, find=lambda *a, **k: [])
+    t("★★育成は本人性の確認に新台の範囲を当てない（require_recent=False）★★"
+      "（★導入2か月目から育成が毎朝止まっていた★）",
+      _vkw.get("require_recent") is False)
 
     # ★★止める判断のほうが先にあると、問いが1つも作られない★★
     #   （2026-09-08・Codexの指摘）★新台側は直したが育成側が残っていた★

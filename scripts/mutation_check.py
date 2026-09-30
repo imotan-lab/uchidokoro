@@ -6963,6 +6963,32 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
         "issues": [718],
     },
+    # ─── 2026-10-01・更新タスクの自己修正（育成に新台の範囲を当てない）───
+    {
+        "why": "★育成が本人性の確認に新台の範囲（導入月）を当てる"
+               "（★導入2か月目の公開済み機種が毎朝『新台の範囲外』で止まり、何も育たない★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    vo = verify(name, url, maker, old_release, require_recent=False)\n",
+        "after": "    vo = verify(name, url, maker, old_release)\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★DMMの本人性確認が require_recent を無視して常に新台の範囲を見る"
+               "（★呼ぶ側が外しても、育成が導入2か月目から止まる★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "    if require_recent and out[\"release\"] \\\n",
+        "after": "    if out[\"release\"] \\\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★入口（verify_official）が require_recent をDMMの確認へ渡さない"
+               "（★育成が外したつもりでも、下で新台の範囲が当たる★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": ("                           release_is_cache=release_is_cache,\n"
+                   "                           require_recent=require_recent)\n"),
+        "after": "                           release_is_cache=release_is_cache)\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
 ]
 
 

@@ -6,7 +6,7 @@
   "assets/data/directory-catalogs.json": "a368d3e2839d3944b2b8064e40c735268c34da52d8eec6b294e1e55bf91205eb",
   "assets/data/maker-catalogs.json": "c1bfaa9377e999f95bcefc5d1958a88e07356d2dbb40f2e1f6ef2a68e2952308",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
-  "scripts/add_machine_run.py": "0e4befee8231cad44618a4a7a720e151d51f5cb98a522cc02f180334d394e1aa",
+  "scripts/add_machine_run.py": "73ced58523ccb12fc84d3e103d1c76bd055ad6bbf3df9cedb604ab332302278c",
   "scripts/adoption_basis.py": "e24f2f35aa8451b0466cceeff6035266b078e89f216482a9aa30348a42a3837e",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
@@ -278,6 +278,5 @@
    "page_reading",
    "read_failure"
   ]
- },
- "_deps_changed_why": "判断者の決まり（claude と codex、Codexが利用制限のときは claude-agent-a と claude-agent-b）を confirmed_values.JUDGE_PAIRS の1か所から読むようにしたため、machine_sources / maker_identity_cache / mode_verdict が confirmed_values を取り込むようになった。confirmed_values は既に材料の採否の契約に入っている（2AIの確定値を材料へ入れる側）ので、集合は増やさない。取り込みは関数の中だけで、判定するのは判断者の組の照合だけ。"
+ }
 }

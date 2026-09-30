@@ -1946,7 +1946,8 @@ def _blocker_code(res: dict) -> str:
 
 def _verify_dmm(name: str, official_url: str, maker: str,
                 release: str, expect_maker: str = "",
-                release_is_cache: bool = False) -> dict:
+                release_is_cache: bool = False,
+                require_recent: bool = True) -> dict:
     """★DMMの機種ページで身元を確かめる★（2026-08-16・台帳#376）
 
     返す形は verify_official と同じ（呼ぶ側を変えないため）。
@@ -2005,7 +2006,11 @@ def _verify_dmm(name: str, official_url: str, maker: str,
         if str(release)[:7] != out["release"][:7]:
             return _ng(f"登場年月が機種ページと違います"
                        f"（機種ページ={out['release']} / 渡された値={release}）")
-    if out["release"] and not _nw.is_recent(out["release"][:7]):
+    # ★★新台の範囲を見るのは、新台を見つける経路だけ★★（2026-10-01）
+    #   育成（公開済みの機種の確かめ直し）は require_recent=False で呼ぶ。
+    #   ★ここで常に止めていた★ので、導入2か月目から育成が毎朝止まっていた。
+    if require_recent and out["release"] \
+            and not _nw.is_recent(out["release"][:7]):
         return _ng(f"登場年月が新台の範囲外です（{out['release']}）")
     # ★機種名は渡された値（＝カレンダー側）を正とする★
     out["identity_name"] = name
@@ -2063,7 +2068,8 @@ def identity_url_problem(official_url: str) -> str:
 def verify_official(name: str, official_url: str,
                     maker: str = "", release: str = "",
                     release_is_cache: bool = False,
-                    expect_maker: str = "") -> dict:
+                    expect_maker: str = "",
+                    require_recent: bool = True) -> dict:
     """★公式ページが本当にその機種か確かめる★（Codex指摘1・実際に再現した穴）
 
     以前は名前とURLを別々に受け取り、照合していなかった。
@@ -2097,7 +2103,8 @@ def verify_official(name: str, official_url: str,
         # ★最初に確かめた表示名があれば、そちらと完全一致させる★（台帳#335の項目5）
         return _verify_dmm(name, official_url, maker, release,
                            expect_maker=expect_maker,
-                           release_is_cache=release_is_cache)
+                           release_is_cache=release_is_cache,
+                           require_recent=require_recent)
     if _pw_machine_url(official_url):
         # ★入口で断る★（2026-08-16・依頼213）
         #   「通信で止まる」に頼ると、規約違反の一歩手前まで進んでしまう。
@@ -5514,6 +5521,41 @@ def _selftest_body() -> int:
               "（公開まで止まる）",
               bool(_blocking(_r["problems"]))
               and any("メーカーを読めませんでした" in x for x in _r["problems"]))
+            # ★★新台の範囲（導入月）を見るかは、呼ぶ側が決める★★
+            #   （2026-10-01・更新タスクの自己修正）★直す前は常に見ていた★ので、
+            #   公開済みの機種の本人性を確かめ直す育成レーンが、
+            #   ★導入2か月目から毎朝「新台の範囲外」で止まっていた★
+            #   （実例＝garei_zero_re 2026-08-17 / dmm_5089 2026-08-03）。
+            #   ★新台を見つける経路（既定）は今までどおり止める★。
+            _dm_mod.fetch = lambda mid, **k: {
+                "id": str(mid), "url": "https://p-town.dmm.com/machines/5049",
+                "heading": "スマスロ タコスロ （新台スマスロ）パチスロ｜天井",
+                "model_code": "LB/タコスロBD", "has_model_code": True,
+                "maker": "ユニバーサル",
+                "release_date": "2025-01-06", "release_precision": "day",
+                "release_raw": "2025年01月06日（月）", "planned": False}
+            try:
+                _old_def = _verify_dmm(
+                    "スマスロ タコスロ",
+                    "https://p-town.dmm.com/machines/5049",
+                    "universal", "2025-01")
+                _old_grow = _verify_dmm(
+                    "スマスロ タコスロ",
+                    "https://p-town.dmm.com/machines/5049",
+                    "universal", "2025-01", require_recent=False)
+                _old_top = verify_official(
+                    "スマスロ タコスロ",
+                    "https://p-town.dmm.com/machines/5049",
+                    "universal", "2025-01", require_recent=False)
+            finally:
+                _dm_mod.fetch = _keep_fetch2
+            t("　新台を見つける経路（既定）は、古い機種を「新台の範囲外」で止める",
+              any("新台の範囲外" in x for x in _old_def["problems"]))
+            t("★★育成（require_recent=False）は、導入から時間がたった"
+              "公開済みの機種を「新台の範囲外」で止めない★★",
+              not _old_grow["problems"] and _old_grow["release"] == "2025-01-06")
+            t("　入口（verify_official）も引数をDMMの確認まで渡す",
+              not _old_top["problems"])
             # ★名前の読み直しはDMMの読み方で★（2026-08-16・台帳#376）
             #   DMMの見出しはSEOの飾りつきなので、**見出しから機種名を作らない**。
             #   ここは「待ち行列が覚えている名前が、まだそのページの機種を
