@@ -3353,8 +3353,9 @@ def ask_ledger_body(question: str, code: str = "ASK_2AI") -> str:
             "★人が判断する案件ではありません★＝新台タスクが同じ晩のうちに、"
             "材料を変えながらやり直します。\n"
             + howto
-            + "やり直しの上限に達したときだけ、人の出番になります"
-              "（上限は open_issues.py の ASK_MAX_ATTEMPTS）。")
+            + "やり直しの上限（open_issues.py の ASK_MAX_ATTEMPTS）で2AIが割れたときだけ、"
+              "両者の言い分と根拠URLを並べて運営者に判断してもらいます"
+              "（reason_code OWNER_DECISION）。それ以外は人へ回しません。")
 
 
 def _ask_ledger(slug: str, name: str, question: str, key: str = "",

@@ -26,7 +26,8 @@
   PUSH_CONFIRMED  push できた
   RECHECK_PASS    ★機械が直ったことを確かめ直した★
   DONE            終わり
-  ESCALATED       3回やっても決まらなかった → 台帳＋メール（人の出番）
+  ESCALATED       3回やっても2AIが割れた → 両者の言い分と根拠URLを並べて運営者へ
+                  （台帳は OWNER_DECISION・2026-09-30）。記事のその箇所は触らない
 
 ★守っていること★
   1. ★Claudeの判定は、Codexを呼ぶ前にファイルへ書いて指紋を取る★

@@ -4505,6 +4505,21 @@ MUTATIONS = [
         "after": "    sha = \"\" if sha is None else str(sha or \"\")",
         "run": ["scripts/ci_status.py"],
     },
+    # ─── 2026-09-30・人へ回すのは運営者の判断が要る案件だけ（運営者の指示）───
+    {
+        "why": "★3回数えたら中身に関係なく知らせる印を付ける（★技術的な直しまで人へ回り、知らせ済みで自動の輪から外れる★）★",
+        "file": "scripts/open_issues.py",
+        "before": "    n = hit[\"attempts\"]\n    # ★★3回数えても、ここでは知らせる印を付けない★★",
+        "after": "    n = hit[\"attempts\"]\n    hit[\"needs_notify\"] = n >= ASK_MAX_ATTEMPTS\n    # ★★3回数えても、ここでは知らせる印を付けない★★",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★運営者の判断が要る案件に知らせる印を付けない（★送れなかったら誰も拾い直さず、運営者に届かない★）★",
+        "file": "scripts/open_issues.py",
+        "before": "    if str(reason_code or \"\") == OWNER_DECISION:",
+        "after": "    if False:",
+        "run": ["scripts/open_issues.py"],
+    },
     # ─── 2026-09-30・同上（Codexのレビュー）───
     {
         "why": "★見張る2本の片方が返事に無くても判定する（★残る1本が緑なら、欠けたまま緑と出す★）★",

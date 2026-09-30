@@ -640,6 +640,24 @@ def selftest() -> int:
                              outcome="unresolved"))
         t("　★別の回はちゃんと数える★（数えないほうへ倒れていない）",
           int(_st().get("attempts") or 0) == 2)
+        # ★★3回数えても、それだけで人へ回る印は付かない★★（2026-09-30）
+        #   ★直す前は中身に関係なく付けていた★＝技術的な直しまで人へ回り、
+        #   知らせ済みで自動の輪から外れて、直っても閉じられなかった（8件）。
+        cmd_attempt(_led, _A(id=1, note="", round_id="r4",
+                             outcome="unresolved"))
+        t("★★3回数えても、知らせる印は付かない★★"
+          "（人へ回すかは中身で決める＝運営者の判断が要るものだけ）",
+          int(_st().get("attempts") or 0) == 3
+          and not _st().get("needs_notify"))
+        add_issue(_led, source="update-machine", slug="zz_test",
+                  kind="quality", title="運営者に判断してほしい試験",
+                  detail="Claude=1 / Codex=2", severity="MATERIAL",
+                  reason_code=OWNER_DECISION)
+        _own = [i for i in json.loads(_led.read_text(encoding="utf-8"))
+                ["issues"] if i.get("reason_code") == OWNER_DECISION]
+        t("★★運営者の判断が要る案件には、知らせる印が付く★★"
+          "（送れるまで残る＝番人が毎朝拾い直す）",
+          len(_own) == 1 and _own[0].get("needs_notify") is True)
     finally:
         globals()["LOCK_PATH"] = _keep_lock2
         globals()["TEXT_ROOTS"] = _keep_roots2
@@ -767,6 +785,12 @@ def add_issue(path, *, source, slug, kind, title, severity, detail="",
         "resolution": None,
         "resolved_date": None,
     }
+    # ★★運営者に知らせる印は「運営者の判断が要る案件」にだけ付ける★★
+    #   （2026-09-30・運営者「私の判断が必要な重要なことだけ」）
+    #   ★直す前は「3回数えたら」中身に関係なく付けていた★＝技術的な直しまで
+    #   人へ回り、知らせ済みにすると自動の輪から外れて、直っても閉じられなかった。
+    if str(reason_code or "") == OWNER_DECISION:
+        issue["needs_notify"] = True        # ★送れるまで残す印★
     data["issues"].append(issue)
     data["next_id"] += 1
     _save(path, data)
@@ -813,8 +837,10 @@ def open_questions(path) -> list:
         key=lambda i: (str(i.get("first_seen") or ""), i.get("id") or 0))
 
 
-# ★何回やり直したら人に知らせるか★（2026-08-12・運営者決定）
+# ★何回やり直したら2AIをやめるか★（2026-08-12・運営者決定）
 ASK_MAX_ATTEMPTS = 3
+# ★運営者の判断が要る案件の符丁★（2026-09-30）＝知らせる印はこれにだけ付く
+OWNER_DECISION = "OWNER_DECISION"
 
 
 def cmd_attempt(path, args):
@@ -871,14 +897,19 @@ def cmd_attempt(path, args):
         notes.append(f"{_today()}: {args.note}")
         del notes[:-ASK_MAX_ATTEMPTS]      # 直近ぶんだけ残す
     n = hit["attempts"]
-    if n >= ASK_MAX_ATTEMPTS:
-        hit["needs_notify"] = True        # ★送るまで残す印★
+    # ★★3回数えても、ここでは知らせる印を付けない★★（2026-09-30）
+    #   ★直す前は中身に関係なく付けていた★＝技術的な直しも人へ回り、
+    #   知らせ済みにすると自動の輪から外れて、直っても閉じられなかった（8件）。
+    #   ★人へ回すかは中身で決まる★＝タスクが手順書の「人へ回す線」で分け、
+    #   運営者の判断が要るものだけ `add --reason-code OWNER_DECISION` で出し直す。
     _save(path, data)
     print(f"#{args.id} やり直し {n} 回目 / 上限 {ASK_MAX_ATTEMPTS}")
     if n >= ASK_MAX_ATTEMPTS:
-        # ★ここではメールを送らない★（送るのはタスク側。台帳は台帳の仕事だけ）
-        print(f"★NOTIFY_HUMAN★ {ASK_MAX_ATTEMPTS}回やって決まりませんでした。"
-              "人に知らせて、送れたら notified --id で印を付けてください")
+        print(f"★{ASK_MAX_ATTEMPTS}回やって決まりませんでした★ 中身で分けてください："
+              "記事の値が2AIで割れた→両者の言い分と根拠URLを並べて "
+              f"add --reason-code {OWNER_DECISION} ／ "
+              "手順やスクリプトのせい→自己修正（鉄則1b-0）／ "
+              "それ以外→台帳に残す（人へは回さない）")
         return 0
     print("まだ自分でやり直します（材料を変えて次の回へ）")
     return 0
