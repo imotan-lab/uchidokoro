@@ -690,6 +690,34 @@ def selftest() -> int:
           _rce == 0 and _e1.get("reason_code") == OWNER_DECISION
           and _e1.get("needs_notify") is True
           and "999G" in str(_e1.get("detail")))
+
+        # ★★通しで：3回目の案内に従うと、運営者への通知一覧に載る★★（2026-09-30・Codexの3回目）
+        #   ★直す前は3回目の案内が旧入口（add）を指していた★＝従うと重複扱いで印が付かず、
+        #   その直後に質問の列からも外れて、どこからも運営者に届かなかった。
+        import contextlib as _cl
+        import io as _io
+        _led.write_text(json.dumps({"next_id": 6, "issues": [
+            {"id": 5, "slug": "zz_test", "kind": "quality", "source": "add-machine",
+             "status": "open", "title": "割れた質問", "detail": "z",
+             "severity": "MATERIAL", "reason_code": "ASK_2AI",
+             "first_seen": "2026-09-03", "last_seen": "2026-09-03"}]},
+            ensure_ascii=False), encoding="utf-8")
+        _out = _io.StringIO()
+        with _cl.redirect_stdout(_out):
+            for _r in ("a1", "a2", "a3"):
+                cmd_attempt(_led, _A(id=5, note="", round_id=_r,
+                                     outcome="unresolved"))
+        _say = _out.getvalue()
+        t("★★3回目の案内は、既存案件を切り替える入口を指す★★"
+          "（add を指すと重複扱いで運営者に届かない）",
+          "escalate --id 5 --detail-file" in _say
+          and "add --reason-code" not in _say)
+        cmd_escalate(_led, _A(id=5, detail_file=str(_esc)))
+        _out2 = _io.StringIO()
+        with _cl.redirect_stdout(_out2):
+            cmd_notifications(_led, _A())
+        t("　★案内どおりにすると、運営者への通知一覧に載る★",
+          "#5" in _out2.getvalue() and open_questions(_led) == [])
     finally:
         globals()["LOCK_PATH"] = _keep_lock2
         globals()["TEXT_ROOTS"] = _keep_roots2
@@ -926,7 +954,8 @@ def cmd_attempt(path, args):
     #   ★失敗にはしない（終了コード0）★＝タスクを止めないため。
     if int(hit.get("attempts") or 0) >= ASK_MAX_ATTEMPTS:
         print(f"#{args.id} はもう{ASK_MAX_ATTEMPTS}回終わっています（数えません）。"
-              f"運営者の判断が要るなら escalate --id {args.id} を使ってください")
+              f"運営者の判断が要るなら escalate --id {args.id} "
+              "--detail-file <両者の言い分と根拠URLを書いたファイル> を使ってください")
         return 0
     done = hit.setdefault("attempt_rounds", [])
     if rid in done:
@@ -951,8 +980,8 @@ def cmd_attempt(path, args):
     print(f"#{args.id} やり直し {n} 回目 / 上限 {ASK_MAX_ATTEMPTS}")
     if n >= ASK_MAX_ATTEMPTS:
         print(f"★{ASK_MAX_ATTEMPTS}回やって決まりませんでした★ 中身で分けてください："
-              "記事の値が2AIで割れた→両者の言い分と根拠URLを並べて "
-              f"add --reason-code {OWNER_DECISION} ／ "
+              "記事の値が2AIで割れた→両者の言い分と根拠URLをファイルに書いて "
+              f"escalate --id {args.id} --detail-file <そのファイル> ／ "
               "手順やスクリプトのせい→自己修正（鉄則1b-0）／ "
               "それ以外→台帳に残す（人へは回さない）")
         return 0

@@ -4541,6 +4541,13 @@ MUTATIONS = [
         "after": "    hit[\"reason_code\"] = OWNER_DECISION\n    pass",
         "run": ["scripts/open_issues.py"],
     },
+    {
+        "why": "★3回目の案内を旧入口（add）に戻す（★従うと重複扱いで印が付かず、運営者に届かない★）★",
+        "file": "scripts/open_issues.py",
+        "before": "              f\"escalate --id {args.id} --detail-file <そのファイル> ／ \"",
+        "after": "              f\"add --reason-code {OWNER_DECISION} ／ \"",
+        "run": ["scripts/open_issues.py"],
+    },
     # ─── 2026-09-30・同上（Codexのレビュー）───
     {
         "why": "★見張る2本の片方が返事に無くても判定する（★残る1本が緑なら、欠けたまま緑と出す★）★",
