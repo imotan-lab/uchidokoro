@@ -76,8 +76,7 @@ MUTATIONS = [
                "（★1つだけの実行が「2AIで決めた」ことになる＝"
                "実行漏れ・配線切れに気づけない★＝Codexの指摘1）★",
         "file": "scripts/maker_identity_cache.py",
-        "before": "    if {str(k).strip().casefold() for k in _dec} "
-                  "!= set(ALLOWED_AGREERS):",
+        "before": "    if not _cv.judges_exact(list(_dec)):",
         "after": "    if False:",
         "run": ["scripts/maker_identity_cache.py"],
         "issues": [694, 696],
@@ -844,7 +843,7 @@ MUTATIONS = [
     {
         "why": "★取り下げた記録に2AIの両方の判断が無くても、壊れた記録として扱わない★",
         "file": "scripts/repair_journal.py",
-        "before": "        if not _need_j <= _wb:",
+        "before": "        if _pair(sorted(_wb)) is None:",
         "after": "        if False:",
         "run": ["scripts/repair_journal.py"],
     },
@@ -873,14 +872,14 @@ MUTATIONS = [
     {
         "why": "★もとの合意の判断者が片方だけでも取り下げる★",
         "file": "scripts/repair_journal.py",
-        "before": "    if not set(_required_judges()) <= _db:",
+        "before": "    if _cv.judges_pair(rec.get(\"decided_by\") or []) is None:",
         "after": "    if False:",
         "run": ["scripts/repair_journal.py"],
     },
     {
         "why": "★取り下げた記録で、もとの合意の判断者を見ない★",
         "file": "scripts/repair_journal.py",
-        "before": "        if not _need_j <= _db:",
+        "before": "        if _pair(sorted(_db)) is None:",
         "after": "        if False:",
         "run": ["scripts/repair_journal.py"],
     },
@@ -1114,8 +1113,8 @@ MUTATIONS = [
     {
         "why": "★合意の取り下げで、判断者が2AIそろっているかを見ない（★1AIだけで合意を終わらせられる★）★",
         "file": "scripts/repair_journal.py",
-        "before": "    if not need <= who:",
-        "after": "    if not who:",
+        "before": "    if _cv.judges_pair(sorted(who)) is None:\n        raise JournalError(\n            \"取り下げには",
+        "after": "    if not who:\n        raise JournalError(\n            \"取り下げには",
         "run": ["scripts/repair_journal.py"],
     },
     {
@@ -2232,8 +2231,8 @@ MUTATIONS = [
         "why": "★判断者の契約を、この場で決め打ちにする"
                "（★片方のAIだけで狙い目を決められる★）★",
         "file": "scripts/checker_verdict.py",
-        "before": "    want = set(_judges_required())",
-        "after": '    want = {"claude"}',
+        "before": "    if _cv.judges_pair(sorted(who)) is None:\n        ng.append(\"判断者に",
+        "after": "    if \"claude\" not in who:\n        ng.append(\"判断者に",
         "run": ["scripts/checker_verdict.py"],
     },
     {
@@ -3527,8 +3526,7 @@ MUTATIONS = [
     {
         "why": "読み直しの判断者を「2つあればよい」に緩める（Codex9回目）",
         "file": "scripts/confirmed_values.py",
-        "before": "    if not isinstance(who, list) or not (\n"
-                  "            set(REQUIRED_JUDGES) <= {str(x).lower() for x in who}):",
+        "before": "    if not isinstance(who, list) or judges_pair(who) is None:",
         "after": "    if not isinstance(who, list) or len(\n"
                  "            {str(x).lower() for x in who}) < 2:",
         "run": ["scripts/confirmed_values.py"],
@@ -4547,6 +4545,21 @@ MUTATIONS = [
         "before": "              f\"escalate --id {args.id} --detail-file <そのファイル> ／ \"",
         "after": "              f\"add --reason-code {OWNER_DECISION} ／ \"",
         "run": ["scripts/open_issues.py"],
+    },
+    # ─── 2026-09-30・Codexが利用制限のときの代役（エージェント2つ・運営者の指示）───
+    {
+        "why": "★代役の組を認めない（★Codexが上限で止まった日は、2AIの判断を1件も記録できない★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "JUDGE_PAIRS = (frozenset(REQUIRED_JUDGES), frozenset(STANDIN_JUDGES))",
+        "after": "JUDGE_PAIRS = (frozenset(REQUIRED_JUDGES),)",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★組を混ぜても認める（★claude と代役1人で「2AIが決めた」ことになる★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "    for pair in JUDGE_PAIRS:\n        if pair <= got:\n            return pair\n    return None",
+        "after": "    if len(got) >= 2:\n        return frozenset(got)\n    return None",
+        "run": ["scripts/confirmed_values.py"],
     },
     # ─── 2026-09-30・同上（Codexのレビュー）───
     {
@@ -6525,15 +6538,15 @@ MUTATIONS = [
     {
         "why": "★判断者を件数で数える（--by claude,claude が通り、1AIだけで「2AIが決めた」ことにできる）★",
         "file": "scripts/open_issues.py",
-        "before": "    if got != need:",
-        "after": "    if len(got) < 2:",
+        "before": "        ok = _cv.judges_exact(by)",
+        "after": "        ok = len({str(x).strip() for x in (by or []) if str(x).strip()}) >= 2",
         "run": ["scripts/open_issues.py"],
     },
     {
         "why": "★判断者を大文字小文字のまま見る（同じ名前が別人に見える）★",
-        "file": "scripts/open_issues.py",
-        "before": "    got = {str(x).strip().casefold() for x in (by or []) if str(x).strip()}",
-        "after": "    got = {str(x).strip() for x in (by or []) if str(x).strip()}",
+        "file": "scripts/confirmed_values.py",
+        "before": "    return {str(x).strip().casefold() for x in (who or []) if str(x).strip()}",
+        "after": "    return {str(x).strip() for x in (who or []) if str(x).strip()}",
         "run": ["scripts/open_issues.py"],
     },
     {

@@ -334,10 +334,13 @@ def _check_record(slug: str, rec, reg=None, require_final: bool = True) -> None:
         raise CacheError(
             f"控えにAIごとの判断（decisions）がありません（{slug}）"
             "／★名前が2つ並んでいるだけでは、2つ動いた証拠になりません★")
-    if {str(k).strip().casefold() for k in _dec} != set(ALLOWED_AGREERS):
+    # ★判断者の組は確定値の控えと同じ決まりを読む★（2026-09-30＝
+    #   Codexが利用制限のときの代役 claude-agent-a / claude-agent-b も1つの組として認める）
+    import confirmed_values as _cv
+    if not _cv.judges_exact(list(_dec)):
         raise CacheError(
             f"控えの判断がそろっていません（{slug}）: {sorted(_dec)}"
-            f"／★{sorted(ALLOWED_AGREERS)} の両方が要ります★")
+            f"／★{_cv.JUDGES_LABEL} の両方が要ります★")
     for _k, _d in _dec.items():
         if not isinstance(_d, dict) or _d.get("verdict") not in VERDICTS:
             raise CacheError(f"{_k} の判断が不正です（{slug}）")

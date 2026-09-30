@@ -181,12 +181,6 @@ def record_no_line(dec: dict) -> int:
     return 0
 
 
-def _judges_required() -> tuple:
-    """★判断者の契約は `confirmed_values` から読む★（罠③＝同じ規則を2か所に書かない）"""
-    import confirmed_values as _cv
-    return tuple(str(x).lower() for x in _cv.REQUIRED_JUDGES)
-
-
 def _machines() -> list:
     return _sj.read_json(MACHINES, expect=list)
 
@@ -282,11 +276,11 @@ def _common_problems(dec, ms=None) -> tuple:
     # ★★既存の機種（旧形式）も受け取る★★（2026-09-25・鉄則0z＝既定は2AI）
     #   ★直す前は「旧形式は触らない」で断っていた★ので、2AIがカウンターと
     #   記事の食い違いを見つけても、カウンター側を直す道が無かった（炎炎ノ消防隊2）。
-    want = set(_judges_required())
+    import confirmed_values as _cv
     who = {str(x).lower() for x in (dec.get("judges") or [])}
-    if not want <= who:
+    if _cv.judges_pair(sorted(who)) is None:
         ng.append("判断者に %s が要ります（いま: %s）"
-                  % ("・".join(sorted(want)), "・".join(sorted(who)) or "なし"))
+                  % (_cv.JUDGES_LABEL, "・".join(sorted(who)) or "なし"))
     if len(str(dec.get("why") or "").strip()) < MIN_WHY:
         ng.append(f"理由（why）が {MIN_WHY} 字以上ありません")
     return ng, m

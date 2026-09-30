@@ -1177,12 +1177,12 @@ def judges_problem(by) -> str:
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import confirmed_values as _cv
-        need = set(_cv.REQUIRED_JUDGES)
+        ok = _cv.judges_exact(by)
     except Exception:                                        # noqa: BLE001
         return "判断者の契約を読めません"
-    got = {str(x).strip().casefold() for x in (by or []) if str(x).strip()}
-    if got != need:
-        return (f"判断者は {'/'.join(sorted(need))} の2つが要ります"
+    if not ok:
+        got = {str(x).strip().casefold() for x in (by or []) if str(x).strip()}
+        return (f"判断者は {_cv.JUDGES_LABEL} の2つが要ります"
                 f"（いまは {','.join(sorted(got)) or 'なし'}）")
     return ""
 

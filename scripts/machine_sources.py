@@ -548,9 +548,11 @@ def record(slug: str, url: str, why: str, by: list,
         #   （2026-08-11・運営者のルール「2AIの一致でいいじゃん」・依頼153の①）
         #   片方だけの判断で通せると、**最初の誤登録は誰も検出できない**
         #   （以後の確認は「登録時と同じページか」しか見ないため）。
-        if not ({"claude", "codex"} <= set(who)):
+        # ★判断者の組は確定値の控えと同じ決まりを読む★（Codexが利用制限のときの代役を含む）
+        import confirmed_values as _cv
+        if _cv.judges_pair(who) is None:
             raise SourceError(
-                "題で分からない出典は、claude と codex の両方が一致したときだけ"
+                "題で分からない出典は、" + _cv.JUDGES_LABEL + " の両方が一致したときだけ"
                 "登録できます（--by claude,codex）。いまの判断者: "
                 + ",".join(who))
 

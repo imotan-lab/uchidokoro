@@ -734,12 +734,6 @@ def infra_failure(fid: str, why: str) -> dict:
     return rec
 
 
-def _required_judges() -> tuple:
-    """★判断者の契約は1か所から読む★（`confirmed_values.REQUIRED_JUDGES`・罠③）"""
-    import confirmed_values as _cv
-    return tuple(str(x).lower() for x in _cv.REQUIRED_JUDGES)
-
-
 def withdraw(fid: str, why: str, by) -> dict:
     """★合意済みのまま書けない直しを、2AIの判断で取り下げる★（2026-09-25）
 
@@ -763,15 +757,14 @@ def withdraw(fid: str, why: str, by) -> dict:
         raise JournalError(f"壊れた記録は取り下げられません: {_bw}")
     # ★もとの合意が2AIの両方で決めたものであること★（2026-09-25・Codexの2回目）
     #   （実測＝本物の記録131件はすべて claude と codex）
-    _db = {str(x).strip().lower() for x in (rec.get("decided_by") or [])}
-    if not set(_required_judges()) <= _db:
+    import confirmed_values as _cv
+    if _cv.judges_pair(rec.get("decided_by") or []) is None:
         raise JournalError("もとの合意に2AIの両方の判断がありません（壊れた合意は取り下げません）")
     who = {str(x).strip().lower() for x in (by or []) if str(x).strip()}
-    need = set(_required_judges())
-    if not need <= who:
+    if _cv.judges_pair(sorted(who)) is None:
         raise JournalError(
             "取り下げには %s の両方の判断が要ります（いま: %s）"
-            % ("・".join(sorted(need)), "・".join(sorted(who)) or "なし"))
+            % (_cv.JUDGES_LABEL, "・".join(sorted(who)) or "なし"))
     why = str(why or "").strip()
     if len(why) < MIN_WITHDRAW_WHY:
         raise JournalError(f"取り下げの理由を {MIN_WITHDRAW_WHY} 字以上書いてください")
@@ -810,13 +803,14 @@ def _broken_why(rec):
         _wb = {str(x).strip().lower() for x in (rec.get("withdrawn_by") or [])}
         _db = {str(x).strip().lower() for x in (rec.get("decided_by") or [])}
         try:
-            _need_j = set(_required_judges())
+            import confirmed_values as _cv
+            _pair = _cv.judges_pair
         except Exception:                                    # noqa: BLE001
             return "判断者の決まりを読めません"
-        if not _need_j <= _wb:
+        if _pair(sorted(_wb)) is None:
             return "取り下げたのに、2AIの両方の判断がありません"
         # ★もとの合意も2AIの両方で決めていたこと★（2026-09-25・Codexの2回目）
-        if not _need_j <= _db:
+        if _pair(sorted(_db)) is None:
             return "取り下げた合意に、2AIの両方の判断がありません"
         if len(str(rec.get("withdrawn_why") or "").strip()) < MIN_WITHDRAW_WHY:
             return "取り下げたのに、理由がありません"

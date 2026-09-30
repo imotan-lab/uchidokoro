@@ -13,7 +13,7 @@
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
   "scripts/ceiling_lookup.py": "b3c056d9a3259b90bce5d754f059e9e16f7e9a2e4497d4a03d9402d3dc60dc76",
   "scripts/collect_evidence.py": "ae4e112289e2f6a16ea79506674e25b954b97ffb89471c625ac160944215d6e1",
-  "scripts/confirmed_values.py": "4e56dee386ce35f50235089a32549cc1e9076a0d29bb8a7decaf5fa66205173d",
+  "scripts/confirmed_values.py": "0d0d28517fbf95cd1784dd3e1f1eff4c593671edb52b37077fe336056dae65ca",
   "scripts/cz_lookup.py": "0af48b371f0800d956270a1b50a08a259520c53f24ca424cc2c719ae49a4fbaf",
   "scripts/directory_index.py": "a758913881d5b7b6105069e5f3dfcb3e5a64aa2054578094d517166240ad2e21",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
@@ -23,11 +23,11 @@
   "scripts/html_check.py": "2d58882be96adbeb8710638ccb47d3f784ab3d1b091f5eff74894ca7bba1d112",
   "scripts/html_tables.py": "5d0f32d7e988ce0696e07b4ac118d119ea4c4e2280b57acee89e0c6ebaa78c3e",
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
-  "scripts/machine_sources.py": "41b3bdfdfdb4faa85c9fe0bae6630a50bcd5db6ac860699c3c5aa3ffb8c07003",
-  "scripts/maker_identity_cache.py": "a98f3405f0a6564ea8ec13100d5a7f046784ecf6efdd142d45dc0bec60f753c2",
+  "scripts/machine_sources.py": "09b391a8ca36778dedc76469eb8479ccfef0a5b54f066def07b7a68a5528da7f",
+  "scripts/maker_identity_cache.py": "a72cdc2b1534ef3fc8e4487b55bf4db1661976b3fe4404524404f32ecbcb1a45",
   "scripts/mode_apply.py": "f79e96d71cb31c552c532ba90f2256a857e65eb6972e0c6ac31f265e1f7abbca",
   "scripts/mode_ask.py": "ec2db5bdfeb0aac1b23551e548832d93efc599987ea1c1067f091e925b3451cd",
-  "scripts/mode_verdict.py": "f81bfb62ce0ab2465589a623d77eb9103bfd5e9e65880d856401ee88d991fab7",
+  "scripts/mode_verdict.py": "bd43e4e05603428591dd525a4b2a85a2089665cd7abfb22bfde1439669e0a6b0",
   "scripts/model_code_lookup.py": "9ba7bdd83f8027d59784f19c680a5ac8e1adb63245eb3b12e3195fadeaf4fcdd",
   "scripts/new_machine_watch.py": "b354fe5344243db9a6f14afa5920025b0fd93a52768062caaad4e8643967d0b4",
   "scripts/page_corpus.py": "7fada297f9c552f337ef4736481f46fbb019865c0f59416914f363cf61607072",
@@ -180,6 +180,7 @@
   "scripts/machine_sources.py": [
    "build_new_article",
    "claim_identity",
+   "confirmed_values",
    "directory_index",
    "model_code_lookup",
    "new_machine_watch",
@@ -189,6 +190,7 @@
   ],
   "scripts/maker_identity_cache.py": [
    "claim_identity",
+   "confirmed_values",
    "directory_index",
    "fetched_page",
    "new_machine_watch",
@@ -214,6 +216,7 @@
    "source_lineage"
   ],
   "scripts/mode_verdict.py": [
+   "confirmed_values",
    "mode_ask",
    "page_corpus",
    "source_lineage"
@@ -275,5 +278,6 @@
    "page_reading",
    "read_failure"
   ]
- }
+ },
+ "_deps_changed_why": "判断者の決まり（claude と codex、Codexが利用制限のときは claude-agent-a と claude-agent-b）を confirmed_values.JUDGE_PAIRS の1か所から読むようにしたため、machine_sources / maker_identity_cache / mode_verdict が confirmed_values を取り込むようになった。confirmed_values は既に材料の採否の契約に入っている（2AIの確定値を材料へ入れる側）ので、集合は増やさない。取り込みは関数の中だけで、判定するのは判断者の組の照合だけ。"
 }

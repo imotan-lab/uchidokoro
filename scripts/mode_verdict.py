@@ -51,10 +51,9 @@ import source_lineage as _sl                                  # noqa: E402
 STORE = _lp.doc("mode_verdicts.json")
 KINDS = ("mode", "zone")
 STATES = ("HAS", "NONE_CONFIRMED")
-# ★★この2人がそろっていること★★（2026-09-02・Codexのレビュー35）
+# ★★判断者の組は confirmed_values.JUDGE_PAIRS★★（2026-09-02・Codexのレビュー35／2026-09-30に1か所へ）
 #   ★直す前は「違う文字列が2つ」だけ★だったので、
 #   `judges="claude"` を渡すと**1文字ずつ6人**として通った（実際に再現）。
-REQUIRED_JUDGES = ("claude", "codex")
 # ★★「無い」と書くには独立2出典★★（2026-09-02・運営者の判断「2サイトだね」）
 #   ★「ある」は引用できるので1つでよい★／
 #   ★「無い」は引用できないので、1サイトの書き落としを見抜けない★。
@@ -123,9 +122,11 @@ def agreed_state(decisions):
         if j in seen and seen[j] != st:
             return "", f"{j} が2つの違う答えを出しています"
         seen[j] = st
-    missing = [x for x in REQUIRED_JUDGES if x not in seen]
-    if missing:
-        return "", f"判断者が足りません（要る: {'/'.join(missing)}）"
+    # ★判断者の組は確定値の控えと同じ決まりを読む★（2026-09-30＝
+    #   Codexが利用制限のときの代役も1つの組として認める・同じ規則を2か所に書かない）
+    import confirmed_values as _cv
+    if _cv.judges_pair(sorted(seen)) is None:
+        return "", f"判断者が足りません（要る: {_cv.JUDGES_LABEL}）"
     states = set(seen.values())
     if len(states) != 1:
         # ★一致しなければ結論にしない★（UNKNOWN のまま聞き直す）

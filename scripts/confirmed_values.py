@@ -69,6 +69,37 @@ SCHEMA = "confirmed-values/v1"
 
 # ★2人そろって初めて記録できる★（片方だけの読みは採らない）
 REQUIRED_JUDGES = ("claude", "codex")
+# ★★Codexが利用制限で止まっているときの代役★★（2026-09-30・運営者の指示）
+#   ＞ もしもコーデックスが容量オーバーで止まってた場合は
+#   ＞ Claudeでエージェントを2つたててそれで2AIの代わりにやろうか
+#   ★独立した Claude のエージェント2つ★（互いの答えも、本体の判定も見せない）。
+#   ★記録には代役だと分かる名前で残す★＝「codex が見た」と偽らない。
+#   ★混ぜない★＝claude と claude-agent-b のような組は認めない（どちらの組かが曖昧になる）。
+#   ★判断者の決まりは全部ここを読む★（同じ規則を2か所に書かない・罠③）
+STANDIN_JUDGES = ("claude-agent-a", "claude-agent-b")
+JUDGE_PAIRS = (frozenset(REQUIRED_JUDGES), frozenset(STANDIN_JUDGES))
+JUDGES_LABEL = ("claude と codex（Codexが利用制限のときだけ "
+                "claude-agent-a と claude-agent-b）")
+
+
+def _judge_names(who) -> set:
+    if isinstance(who, str):
+        who = who.split(",")
+    return {str(x).strip().casefold() for x in (who or []) if str(x).strip()}
+
+
+def judges_pair(who):
+    """★認める組のどれかを含んでいれば、その組を返す★（無ければ None）"""
+    got = _judge_names(who)
+    for pair in JUDGE_PAIRS:
+        if pair <= got:
+            return pair
+    return None
+
+
+def judges_exact(who) -> bool:
+    """★認める組のどれかと、過不足なく同じか★（余計な名前も認めない）"""
+    return frozenset(_judge_names(who)) in JUDGE_PAIRS
 MIN_QUOTE = 6            # 逐語の引用がこれより短いものは根拠にしない
 MIN_WHY = 8              # 「なぜ同じ機種か」は文になる長さを求める（控えと同じ）
 
@@ -620,9 +651,8 @@ def _validate_record(field: str, rec) -> list:
     # ★★書き込みと同じ顔ぶれを求める★★（2026-08-24・Codexの9回目）
     #   ★直す前は「違う文字列が2つ」で通した★ので、
     #   手書きの `["a", "b"]` が読み直しを素通りした。
-    if not isinstance(who, list) or not (
-            set(REQUIRED_JUDGES) <= {str(x).lower() for x in who}):
-        ng.append(f"{field}: 判断者に {'/'.join(REQUIRED_JUDGES)} が"
+    if not isinstance(who, list) or judges_pair(who) is None:
+        ng.append(f"{field}: 判断者に {JUDGES_LABEL} が"
                   f"そろっていません（{who!r}）")
     if not str(rec.get("why") or "").strip():
         ng.append(f"{field}: なぜその値かの記録がありません")
@@ -1287,11 +1317,10 @@ def record(slug: str, field: str, value, sources: list, by: list,
             "正式名称を決められません。--official-url を使ってください"
             "（slugと名前を正本から引きます＝機種の取り違えを防ぐため）")
     who = sorted({x.strip() for x in (by or []) if x.strip()})
-    for need in REQUIRED_JUDGES:
-        if need not in who:
-            raise ConfirmedError(
-                "2人（%s）がそろって初めて記録できます: いまは %s"
-                % ("/".join(REQUIRED_JUDGES), ",".join(who) or "なし"))
+    if judges_pair(who) is None:
+        raise ConfirmedError(
+            "2人（%s）がそろって初めて記録できます: いまは %s"
+            % (JUDGES_LABEL, ",".join(who) or "なし"))
     if len(str(why or "").strip()) < 8:
         raise ConfirmedError("--why（どう突き合わせたか）は8文字以上で書きます")
     lineages = check_sources(sources, field)
@@ -2212,6 +2241,23 @@ def selftest() -> int:
             t(name, False)
         except ConfirmedError:
             t(name, True)
+
+    # ★★判断者の組★★（2026-09-30・Codexが利用制限のときの代役）
+    t("★★Codexが利用制限のときの代役（エージェント2つ）の組を認める★★",
+      judges_pair(["claude-agent-a", "claude-agent-b"]) is not None
+      and judges_exact("claude-agent-a,claude-agent-b"))
+    t("　★いつもの組（claude と codex）も今までどおり認める★",
+      judges_pair(["Claude", "codex"]) is not None
+      and judges_exact(["claude", "codex"]))
+    t("★★組を混ぜたら認めない★★（claude と claude-agent-b＝どちらの組か曖昧）",
+      judges_pair(["claude", "claude-agent-b"]) is None
+      and judges_pair(["codex", "claude-agent-a"]) is None)
+    t("　★1人だけ・同じ名前2つは認めない★",
+      judges_pair(["claude"]) is None
+      and judges_pair(["claude-agent-a", "claude-agent-a"]) is None)
+    t("　★過不足なく同じか（exact）は、余計な名前を認めない★",
+      not judges_exact(["claude", "codex", "claude-agent-a"])
+      and judges_pair(["claude", "codex", "owner"]) is not None)
 
     NAME = "L試験機"
     Q1 = "天井は1000G+α"
