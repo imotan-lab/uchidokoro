@@ -4520,6 +4520,27 @@ MUTATIONS = [
         "after": "    if False:",
         "run": ["scripts/open_issues.py"],
     },
+    {
+        "why": "★3回終わった質問を質問の列に残す（★古い順に拾うので居座り、後ろの質問が永久に回らない★）★",
+        "file": "scripts/open_issues.py",
+        "before": "         and int(i.get(\"attempts\") or 0) < ASK_MAX_ATTEMPTS),",
+        "after": "         ),",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★3回終わったものを4回目以降も数える（★終わった質問が輪に残り続ける★）★",
+        "file": "scripts/open_issues.py",
+        "before": "    if int(hit.get(\"attempts\") or 0) >= ASK_MAX_ATTEMPTS:\n        print(f\"#{args.id} はもう",
+        "after": "    if False:\n        print(f\"#{args.id} はもう",
+        "run": ["scripts/open_issues.py"],
+    },
+    {
+        "why": "★既にある案件を運営者の判断待ちにしても知らせる印を立てない（★同じ件名の質問が運営者に届かない★）★",
+        "file": "scripts/open_issues.py",
+        "before": "    hit[\"reason_code\"] = OWNER_DECISION\n    hit[\"needs_notify\"] = True",
+        "after": "    hit[\"reason_code\"] = OWNER_DECISION\n    pass",
+        "run": ["scripts/open_issues.py"],
+    },
     # ─── 2026-09-30・同上（Codexのレビュー）───
     {
         "why": "★見張る2本の片方が返事に無くても判定する（★残る1本が緑なら、欠けたまま緑と出す★）★",

@@ -658,6 +658,38 @@ def selftest() -> int:
         t("★★運営者の判断が要る案件には、知らせる印が付く★★"
           "（送れるまで残る＝番人が毎朝拾い直す）",
           len(_own) == 1 and _own[0].get("needs_notify") is True)
+        cmd_attempt(_led, _A(id=1, note="", round_id="r5",
+                             outcome="unresolved"))
+        t("★★3回終わったものは、4回目を数えない★★"
+          "（数え続けると終わった質問が輪に残り続ける）",
+          int(_st().get("attempts") or 0) == 3)
+
+        # ★★終わった質問は質問の列から外れ、後ろの質問が回ってくる★★（2026-09-30・Codexの指摘）
+        _led.write_text(json.dumps({"next_id": 3, "issues": [
+            {"id": 1, "slug": "zz_test", "kind": "quality", "source": "add-machine",
+             "status": "open", "title": "古い質問", "detail": "x",
+             "severity": "MATERIAL", "reason_code": "ASK_2AI", "attempts": 3,
+             "first_seen": "2026-09-01", "last_seen": "2026-09-01"},
+            {"id": 2, "slug": "zz_test", "kind": "quality", "source": "add-machine",
+             "status": "open", "title": "新しい質問", "detail": "y",
+             "severity": "MATERIAL", "reason_code": "ASK_2AI", "attempts": 0,
+             "first_seen": "2026-09-02", "last_seen": "2026-09-02"}]},
+            ensure_ascii=False), encoding="utf-8")
+        t("★★3回終わった質問は、質問の列から外れる★★"
+          "（古い順に1件ずつ拾うので、居座ると後ろが永久に回らない）",
+          [i["id"] for i in open_questions(_led)] == [2])
+        # ★★既にある質問を、運営者の判断待ちへ切り替えられる★★（同）
+        #   ★同じ件名で add し直すと重複扱いで印が付かなかった★
+        _esc = Path(_d2) / "esc.txt"
+        _esc.write_text("Claude=999G（A）／Codex=777G（B）", encoding="utf-8")
+        _rce = cmd_escalate(_led, _A(id=1, detail_file=str(_esc)))
+        _e1 = next(i for i in json.loads(_led.read_text(encoding="utf-8"))
+                   ["issues"] if i["id"] == 1)
+        t("★★既にある案件を運営者の判断待ちにすると、符丁と知らせる印が変わる★★"
+          "（同じ件名で add し直すと、重複扱いで運営者に届かなかった）",
+          _rce == 0 and _e1.get("reason_code") == OWNER_DECISION
+          and _e1.get("needs_notify") is True
+          and "999G" in str(_e1.get("detail")))
     finally:
         globals()["LOCK_PATH"] = _keep_lock2
         globals()["TEXT_ROOTS"] = _keep_roots2
@@ -833,7 +865,13 @@ def open_questions(path) -> list:
          #   回数だけで外すと、メールに失敗した質問が
          #   **自動の輪からも通知からも同時に消える**。
          #   知らせ終えた（notified_at がある）ものだけを外す。
-         and not i.get("notified_at")),
+         and not i.get("notified_at")
+         # ★★3回終わった質問は外す★★（2026-09-30・Codexの指摘）
+         #   ★外さないと★、古い順に1件ずつ拾うので終わった質問が先頭に居座り、
+         #   後ろの質問が永久に回ってこない。
+         #   ★消えはしない★＝運営者の判断が要るものは escalate で知らせる印が付き
+         #   （番人が届くまで載せ直す）、それ以外は台帳を閉じる回で回り続ける。
+         and int(i.get("attempts") or 0) < ASK_MAX_ATTEMPTS),
         key=lambda i: (str(i.get("first_seen") or ""), i.get("id") or 0))
 
 
@@ -883,6 +921,13 @@ def cmd_attempt(path, args):
     if not rid:
         raise SystemExit("★--round（この回の名前）が要ります★"
                          "＝同じ回を二度数えないため")
+    # ★★3回終わったものは、もう数えない★★（2026-09-30・Codexの指摘）
+    #   ★直す前は4回目以降も数え続けた★＝終わった質問が輪に残り続ける。
+    #   ★失敗にはしない（終了コード0）★＝タスクを止めないため。
+    if int(hit.get("attempts") or 0) >= ASK_MAX_ATTEMPTS:
+        print(f"#{args.id} はもう{ASK_MAX_ATTEMPTS}回終わっています（数えません）。"
+              f"運営者の判断が要るなら escalate --id {args.id} を使ってください")
+        return 0
     done = hit.setdefault("attempt_rounds", [])
     if rid in done:
         print(f"#{args.id} この回（{rid}）はもう数えてあります"
@@ -930,6 +975,36 @@ def cmd_notified(path, args):
     hit.pop("needs_notify", None)
     _save(path, data)
     print(f"#{args.id} 人へ知らせ済みにしました（自動では拾いません）")
+    return 0
+
+
+def cmd_escalate(path, args):
+    """★既にある案件を「運営者の判断待ち」に切り替える唯一の入口★（2026-09-30）
+
+    ★なぜ要るか（Codexの指摘）★＝同じ件名で `add --reason-code OWNER_DECISION`
+    し直すと、重複の判定で既存案件の日付だけが更新され、
+    ★符丁も知らせる印も変わらない★＝運営者に届かなかった。
+    ここでは符丁を変え、知らせる印を立て、本文（両者の言い分）を足す。
+    """
+    data = _load(path)
+    hit = next((i for i in data["issues"] if i.get("id") == args.id), None)
+    if hit is None:
+        print(f"★#{args.id} は台帳にありません★")
+        return 1
+    if hit.get("status") != "open":
+        print(f"#{args.id} はすでに解決済みです")
+        return 1
+    detail = _read_text_arg(None, args.detail_file, "detail")
+    if not str(detail or "").strip():
+        raise SystemExit("★--detail-file（運営者に見せる本文）が要ります★")
+    hit["reason_code"] = OWNER_DECISION
+    hit["needs_notify"] = True
+    hit.pop("notified_at", None)            # ★新しい問いとして届け直す★
+    hit["last_seen"] = _today()
+    hit["detail"] = (hit.get("detail") or "") + \
+        f"\n[{_today()}・運営者の判断待ち]\n{detail}"
+    _save(path, data)
+    print(f"#{args.id} を運営者の判断待ちにしました（知らせる印を付けました）")
     return 0
 
 
@@ -1221,7 +1296,13 @@ def main():
     p = sub.add_parser("questions", help="まだ答えが出ていない2AIへの質問")
     p.add_argument("--limit", type=int, default=1)
 
-    # ★やり直した回数を数える★（3回目で人に知らせる）
+    # ★既にある案件を運営者の判断待ちへ切り替える★（2026-09-30）
+    p = sub.add_parser("escalate", help="既存の案件を運営者の判断待ち（OWNER_DECISION）にする")
+    p.add_argument("--id", type=int, required=True)
+    p.add_argument("--detail-file", dest="detail_file", required=True,
+                   help="運営者に見せる本文（両者の言い分と根拠URL）を書いたファイル")
+
+    # ★やり直した回数を数える★（3回で2AIをやめ、中身で分ける）
     p = sub.add_parser("attempt", help="決まらなかった質問のやり直し回数を+1する")
     p.add_argument("--id", type=int, required=True)
     p.add_argument("--note", default="", help="何を試したか（短く）")
@@ -1254,6 +1335,7 @@ def main():
     fn = {"add": cmd_add, "list": cmd_list, "digest": cmd_digest, "close": cmd_close,
           "severity": cmd_severity, "blocking": cmd_blocking,
           "questions": cmd_questions, "attempt": cmd_attempt,
+          "escalate": cmd_escalate,
           "notified": cmd_notified,
           "notifications": cmd_notifications}[args.cmd]
     sys.exit(fn(path, args))
