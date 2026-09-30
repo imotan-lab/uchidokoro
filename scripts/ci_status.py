@@ -59,6 +59,9 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 API_SHA = ("https://api.github.com/repos/imotan-lab/uchidokoro"
            "/actions/runs?per_page=20&head_sha={sha}")
 
+# ★見張る検査★（どちらも main への push のたびに必ず動く）
+EXPECTED = ("publish-pages", "pages-rehearsal")
+
 # ★重さの順★＝配信が赤いのは読者に届いていないということ
 WEIGHT = {"publish-pages": "🔴 読者にページが届いていない可能性",
           "pages-rehearsal": "🟠 守りの検査が赤い（公開物は別）"}
@@ -137,10 +140,17 @@ def check(fetch=None, sha=None) -> dict:
     #   混ざっていても拾わない（★古いコミットの緑を、いまの結果にしない★）
     runs = [r for r in runs if isinstance(r, dict)
             and str(r.get("head_sha") or "") == sha]
-    if not runs:
-        # ★緑にしない★＝結果が無いのは「分からない」（push直後はまだ出ていない）
+    # ★★見張る2本が両方そろって初めて判定する★★（2026-09-30・Codexの指摘）
+    #   ★結果が1件も無い場合もここで「分からない」になる★（push直後はまだ出ていない）
+    #   ★直す前は「返事に出てきた名前」だけを見ていた★ので、片方が丸ごと
+    #   欠けても（起動されなかった・一覧から漏れた）残る1本が緑なら緑だった。
+    #   2本ともどのpushでも必ず動く（道筋の絞り込みなし）ので、欠けは「分からない」。
+    _seen = {str(r.get("name") or "") for r in runs}
+    _missing = [n for n in EXPECTED if n not in _seen]
+    if _missing:
         return {"red": [], "ok": [], "pending": [],
-                "why": f"公開中のコミット {sha[:9]} の検査がまだ見つかりません"}
+                "why": f"公開中のコミット {sha[:9]} の検査が見つかりません: "
+                       + "・".join(_missing)}
     red, ok = [], []
     _latest = latest_per_workflow(runs)
     _done = {str(r.get("name") or "") for r in _latest}
@@ -270,17 +280,39 @@ def selftest() -> int:
       and _r.stdout.replace(b"\r\n", b"\n")
       == "✅ 🔴 🟠 ❌ ⏳\n".encode("utf-8"))
     A, B = "a" * 40, "b" * 40
+    # ★見張る2本のうち、試験で触らないほうを緑でそろえる★（両方そろわないと判定しない）
+    PUB_OK = run("publish-pages", A, "completed", "success")
+    REH_OK = run("pages-rehearsal", A, "completed", "success")
+    _all_ok = check(fake([PUB_OK, REH_OK]), sha=A)
     t("★全部成功なら緑★",
-      check(fake([run("publish-pages", A, "completed", "success"),
-                  run("pages-rehearsal", A, "completed",
-                      "success")]), sha=A)["red"] == [])
-    got = check(fake([run("pages-rehearsal", A, "completed",
-                          "failure")]), sha=A)
+      _all_ok["red"] == [] and _all_ok["why"] == ""
+      and len(_all_ok["ok"]) == 2)
+    got = check(fake([PUB_OK, run("pages-rehearsal", A, "completed",
+                                  "failure")]), sha=A)
     t("★赤いものは拾う★", len(got["red"]) == 1)
     t("　配信が赤いほうが重いと分かる",
-      "🔴" in check(fake([run("publish-pages", A, "completed",
-                             "failure")]), sha=A)["red"][0]["weight"])
-    _pend = check(fake([run("pages-rehearsal", A, "in_progress", None)]),
+      "🔴" in check(fake([run("publish-pages", A, "completed", "failure"),
+                         REH_OK]), sha=A)["red"][0]["weight"])
+    # ★★見張る2本の片方が丸ごと欠けたら、緑ではなく「分からない」★★
+    #   （2026-09-30・Codexの指摘＝直す前は残る1本が緑なら緑だった）
+    for _only, _gone in ((PUB_OK, "pages-rehearsal"),
+                         (REH_OK, "publish-pages")):
+        _half = check(fake([_only]), sha=A)
+        t(f"★★{_gone} が返事に無ければ、緑にせず「分からない」★★",
+          _half["ok"] == [] and _gone in _half["why"])
+    # ★★問い合わせは公開中のコミットを名指しする★★（2026-09-30・Codexの指摘）
+    #   ★偽物がURLを捨てていたので、`branch=main` に戻しても緑だった★
+    _urls = []
+
+    def _rec(u):
+        _urls.append(u)
+        return {"workflow_runs": [PUB_OK, REH_OK]}
+    check(_rec, sha=A)
+    t("★★問い合わせのURLが、公開中のコミットを名指ししている★★",
+      len(_urls) == 1 and ("head_sha=" + A) in _urls[0]
+      and "branch=" not in _urls[0])
+    _pend = check(fake([PUB_OK,
+                        run("pages-rehearsal", A, "in_progress", None)]),
                   sha=A)
     t("★★動いている途中は赤扱いにしない★★"
       "（まだ結果が出ていないだけ・毎回まちがって知らせない）",
@@ -296,6 +328,7 @@ def selftest() -> int:
       _stale["ok"] == [] and _stale["why"] != "")
     t("★★公開中のコミットの赤は、別のコミットの緑に埋もれない★★",
       len(check(fake([run("pages-rehearsal", B, "completed", "success"),
+                      PUB_OK,
                       run("pages-rehearsal", A, "completed", "failure")]),
                 sha=A)["red"]) == 1)
     t("★公開中のコミットが分からなければ、緑ではなく「分からない」★",
@@ -305,8 +338,8 @@ def selftest() -> int:
     _keep_ps = globals()["published_sha"]
     try:
         globals()["published_sha"] = lambda: A
-        _wired = check(fake([run("pages-rehearsal", A, "completed",
-                                 "failure")]))
+        _wired = check(fake([PUB_OK, run("pages-rehearsal", A, "completed",
+                                         "failure")]))
         t("★★何も渡さなければ、公開中のコミット（origin/main）を見る★★",
           len(_wired["red"]) == 1 and _wired.get("sha") == A[:9])
     finally:

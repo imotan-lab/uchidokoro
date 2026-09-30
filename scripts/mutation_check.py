@@ -4499,17 +4499,25 @@ MUTATIONS = [
         "run": ["scripts/ci_status.py"],
     },
     {
-        "why": "★公開中のコミットの結果が無いときに「分からない」と言わない（★結果が無いのに緑扱いで終わる★）★",
-        "file": "scripts/ci_status.py",
-        "before": "    if not runs:\n        # ★緑にしない★",
-        "after": "    if False:\n        # ★緑にしない★",
-        "run": ["scripts/ci_status.py"],
-    },
-    {
         "why": "★何も渡されないとき、公開中のコミット（origin/main）を見ない（★番人が毎朝どのコミットも見ていない★）★",
         "file": "scripts/ci_status.py",
         "before": "    sha = published_sha() if sha is None else str(sha or \"\")",
         "after": "    sha = \"\" if sha is None else str(sha or \"\")",
+        "run": ["scripts/ci_status.py"],
+    },
+    # ─── 2026-09-30・同上（Codexのレビュー）───
+    {
+        "why": "★見張る2本の片方が返事に無くても判定する（★残る1本が緑なら、欠けたまま緑と出す★）★",
+        "file": "scripts/ci_status.py",
+        "before": "    if _missing:",
+        "after": "    if False:",
+        "run": ["scripts/ci_status.py"],
+    },
+    {
+        "why": "★問い合わせをコミットの名指しから main の一覧へ戻す（★古いまま返る一覧を読みに行く★）★",
+        "file": "scripts/ci_status.py",
+        "before": "           \"/actions/runs?per_page=20&head_sha={sha}\")",
+        "after": "           \"/actions/runs?per_page=20&branch=main&x={sha}\")",
         "run": ["scripts/ci_status.py"],
     },
     # ─── 2026-09-28・git が読めないときは担当しない（運営者の判断）───
