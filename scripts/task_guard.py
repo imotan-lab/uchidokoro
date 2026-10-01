@@ -72,26 +72,14 @@ CODEX_ASK_ROUND_LIMIT = 0      # ★同上・いったん上限なし★
 #     **機種ごとに独立して**効く。3機種＝守られた作業が3回であって、
 #     守りの緩い作業が1回になるわけではない。
 #   ★戻すならここだけ★（手順書の文言も一緒に直すこと）
-#   ★2026-08-21に 3 → 1 へ戻した★（Codex依頼248の判断）
-#     機種の切り替えは直したが、**修理モードの迂回**（before-write を
-#     --repairing なしで呼び直すと検査が飛ぶ）と、**通常経路で別機種の
-#     ファイルを混ぜられる**穴が残っていたため。
-#   ★3へ戻す条件（依頼248）★
-#     ①修理モードが claim のあと変更できない
-#     ②合格した差分とコミットが同じだと確かめられる
-#     ③writes_fix と3機種運用を一致させた通しの試験が通る
-#
-# ★★同日中に 1 → 3 へ戻した（条件3つとも満たしたため）★★（2026-08-21）
-#   ①claim() が repairing を確定し、before_write が食い違いを断る
-#     （_e1["repairing"] を claim で書き、before_write が照合する）
-#   ②verify_commit() が approved_files の指紋と HEAD を突き合わせる
+#   ★1日の機種数を増やすときに直したこと★（2026-08-21）
+#   ①verify_commit() が approved_files の指紋と HEAD を突き合わせる
 #     ＝関所が見た差分と、実際のコミットが同じだと確かめられる
-#   ③_machines_per_day_tests を新設した。
+#   ②_machines_per_day_tests を新設した。
 #     ★この試験を書いたら、その場で本物の穴が出た★＝
 #       reserve() は target_slug（1つだけ）で数えていたので、
 #       ★MACHINES_PER_DAY を3にしても2機種目は予約の段階で必ず断られた★。
 #       ＝設定値だけ変えても動かない形だった（文言だけ「1日3機種」になる）。
-#       これが依頼248の言う「writes_fix と3機種運用の不一致」の正体。
 #       reserve() を claim() と同じ slugs_today で数えるように直した。
 #
 #   ★数の根拠★ 3機種 = 修正2 + 育成1（assets/data/task-budget.json）。
@@ -122,7 +110,7 @@ UNLIMITED_MACHINE_TASKS = frozenset({"add-machine"})
 WRITABLE_STAGES = ("SELF_CONFLICT", "IDENTITY_PENDING", "NEEDS_EVIDENCE",
                    "NEEDS_TYPE", "NEEDS_CHECKER")
 # ★触ってはいけない段階★
-FROZEN_STAGES = ("BLOCKED_BY_LEDGER", "HOLD", "NO_MACHINE")
+FROZEN_STAGES = ("HOLD", "NO_MACHINE")
 
 
 class GuardError(RuntimeError):
@@ -689,30 +677,9 @@ def day_status(path: str = STATE_PATH) -> dict:
     return d
 
 
-def _issue_ids(rows) -> set:
-    """台帳の「#123 題名」から番号だけを取り出す。
-
-    ★題名で比べない★（2026-08-21・Codex依頼246の防御1）
-      `blocking_slugs()` は「#ID 題名」を返すので、題を書き換えただけで
-      「新しい案件が増えた」と誤判定し、逆に題が同じまま中身が変わっても気づけない。
-    """
-    out = set()
-    for r in rows or []:
-        m = re.match(r"\s*#(\d+)", str(r))
-        if m:
-            out.add(int(m.group(1)))
-    return out
-
-
 def claim(task: str, slug: str, path: str = STATE_PATH,
-          repairing: bool = False, issues=None, finding=None,
-          scheduled=None) -> dict:
+          finding=None, scheduled=None) -> dict:
     """今日この機種を担当してよいか。★同じ日の2機種目は拒否★
-
-    repairing=True ＝「台帳の案件を直すために担当する」（2026-08-21・台帳#211）。
-    ★ここを直さないと、直す経路そのものが動かない★＝
-      担当を確保する時点で `BLOCKED_BY_LEDGER` を見て弾いていたので、
-      before_write まで到達できなかった（2026-08-21に実装直後に発見）。
 
     ★新台の追加だけは1日の機種数を数えない★（2026-08-07・運営者決定）
       新台は導入日が決まっていて待てない。分かり次第そのまま記事にする。
@@ -829,44 +796,6 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
             e["target_slug"] = slug
             _save(path, data)
             return e
-        # ★★修理モードは担当を取った時に固定する★★（依頼248の指摘1）
-        #
-        # ★2026-08-21に本当に固定した★（Codexの再指摘）
-        #   ★直す前は、あとから無条件に上書きしていた★＝
-        #   同じ機種をもう一度 claim すれば、モードを好きに変えられた。
-        #   実際に両方向とも通ることを確かめた（対照実験）：
-        #     直す経路（#318）で担当 → repairing=False で取り直す
-        #       → repairing が False になり、**案件番号だけが残った**
-        #     ふつうに担当 → repairing=True で取り直す
-        #       → ★ふつうの担当が、あとから直す担当に化けた★
-        #   ＝台帳の関門を後から外せる（＝「直す」の名目で何でも書ける）。
-        #
-        # ★★どの検査よりも先に置く★★＝
-        #   後ろに置くと「触ってはいけない段階です」など**別の理由**で
-        #   断られてしまい、この関門が効いているのか分からない
-        #   （実際、段階の検査の後ろに置いたら試験が別の文言で落ちた）。
-        #
-        # ★★記録は「日ごと・機種ごと」に持つ★★（2026-08-21・Codexの再指摘）
-        #   ★直す前の穴＝A→B→A★
-        #     ①Aを直す経路で担当 ②Bを担当（このときAの記録は捨てられる）
-        #     ③Aをふつうの経路で担当 → ★通ってしまった★
-        #   タスク単位の記録（guard_slug）は機種を替えると捨てるので、
-        #   戻ってきたときに「前は何だったか」が残っていなかった。
-        #   ★タスク名を変える迂回も同じ★（記録がタスクごとだったため）。
-        #
-        #   → day（日ごと・タスク名をまたいで1つ）に機種ごとのモードを残す。
-        #     日が変われば _day() が丸ごと作り直すので、翌日は自由に選べる。
-        _modes = _day(data).setdefault("claim_modes_by_slug", {})
-        _prev_mode = _modes.get(slug)
-        if _prev_mode is not None and bool(_prev_mode) != bool(repairing):
-            raise GuardError(
-                f"{slug} は今日"
-                + ("直す経路" if _prev_mode else "ふつうの経路")
-                + "で担当しました。同じ日に"
-                + ("ふつうの経路" if _prev_mode else "直す経路")
-                + "へ変えられません（日を改めるか、別の機種にしてください）"
-                "。枠は使っていません")
-
         # ★★無人タスクは、記録されていないコードでは動かない★★
         #   （2026-08-21・台帳#237/#270）
         _dirty = unattended_dirty_code(task)
@@ -879,14 +808,13 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
                 "（対話セッションでコミットしてください）。枠は使っていません")
 
         # ★書けない機種を担当にして枠を捨てない★（2026-08-08・台帳#272）
-        #   台帳に未解決のCRITICAL案件がある機種は before_write が拒否する。
+        #   触ってはいけない段階の機種は before_write が拒否する。
         #   ところが claim は段階を見ていなかったので、担当に確保した時点で
-        #   その日の枠が消え、拒否されても戻らなかった。
-        #   ＝毎日 blocking の機種を選んでは空振りする、という動きになっていた
+        #   その日の枠が消え、拒否されても戻らなかった
         #   （2026-08-08に実際に発生。galfy で1機種も直せずに終了）。
         #   ★ここで拒否すれば枠は減らない★＝呼び出し側は次の候補へ進める。
         try:
-            stage = cp.assess(slug, repairing=repairing).get("stage")
+            stage = cp.assess(slug).get("stage")
         except Exception as e:            # noqa: BLE001
             # ★判定できないときも枠を使わせない★（2026-08-09・依頼127）
             #   以前は「従来どおり通す」だったので、assess が例外になる機種を
@@ -907,15 +835,13 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         # ★★別の機種に移ったら、前の機種の関所の記録を必ず捨てる★★
         #   （2026-08-21・Codex依頼247の指摘1。1日3機種にした瞬間に生きた穴）
         #   記録はタスク単位で1つしかないので、機種を変えても
-        #   mutation_started / stage_before / ledger_before / repairing が残り、
+        #   mutation_started / stage_before が残り、
         #   ★2機種目は before-write を呼ばなくてもコミットの関所を通れた★
-        #   （実際に再現した）。さらに ledger_before は最初の1回しか書かないので、
-        #   1機種目の案件番号と2機種目を比べてしまう。
+        #   （実際に再現した）。
         #   ★捨てるのは、下で新しい記録を書く前★（順番を逆にすると消してしまう）
         _e0 = _entry(data, task)
         if _e0.get("guard_slug") and _e0.get("guard_slug") != slug:
-            for _k in ("mutation_started", "stage_before", "ledger_before",
-                       "repairing", "repair_issues", "final_stage",
+            for _k in ("mutation_started", "stage_before", "final_stage",
                        # ★照合の記録も捨てる★（2026-08-21・Codex依頼249）
                        #   これが残ると、1機種目の「見た内容」で
                        #   2機種目の verify-commit が通ってしまう。
@@ -935,12 +861,8 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         #   設定値を増やしても文言が変わるだけで挙動は1機種のままだった。
         #   ★設定値を変えたら、実装が本当に追随しているか動かして確かめる★
         if finding:
-            # ★★台帳番号ではなく「見つけたもの」で担当する経路★★
-            #   （2026-08-21・Codexの設計レビュー）
-            #   ★なぜ要るか★＝直す経路は台帳番号を必須にしているので、
-            #   「その場で2AIが決めて直す」流れをそのままでは通せなかった。
-            #   台帳は人が付けた札で、しかも人しか閉じない。
-            #   ★札の代わりに、いまのHEADで見つけ直した内容そのもの★を鍵にする。
+            # ★★「見つけたもの」で担当する経路★★（2026-08-21・Codexの設計レビュー）
+            #   ★いまのHEADで見つけ直した内容そのもの★を鍵にする。
             import repair_journal as _rj
             try:
                 _rec = _rj.load(str(finding))
@@ -968,44 +890,6 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
             #   変わっていないか」を全部見る。ここで消すのは
             #   **その担当のために取った札**だけ。
             _entry(data, task)["decision_finding"] = None
-
-        if repairing:
-            # ★休み中の機種は担当させない★（2026-08-21・依頼246の防御4）
-            #   記録するだけでは守れないので、ここで実際に断る。
-            #   ★枠は使わない★＝呼び出し側は次の候補へ進める。
-            # ★いま止めている案件を渡す★＝新しい案件が来ていれば休みが解ける
-            _now_ids = _issue_ids(cp.assess(slug, repairing=True).get("ledger_blocking"))
-            resting, why_rest = repair_cooldown(slug, path, issues=_now_ids)
-            if resting:
-                raise GuardError(why_rest + "。枠は使っていないので、次の候補を選んでください")
-            # ★どの案件を直すのかを言わせる★（2026-08-21・Codex依頼246の指摘3）
-            #   言わせないと「CRITICALが1件でもある機種なら何を書き換えてもよい」
-            #   という許可証になってしまう。
-            want = {int(x) for x in (issues or []) if str(x).strip().isdigit()}
-            if not want:
-                raise GuardError(
-                    f"{slug} を直す経路で担当するには、直す案件の番号が要ります"
-                    "（--issue 318 のように渡してください）")
-            have = _issue_ids(cp.assess(slug, repairing=True).get("ledger_blocking"))
-            unknown = want - have
-            if unknown:
-                raise GuardError(
-                    f"{slug} を止めている案件に含まれない番号です: "
-                    + " / ".join(f"#{n}" for n in sorted(unknown))
-                    + f"（止めているのは {' / '.join('#%d' % n for n in sorted(have))}）")
-            e0 = _entry(data, task)
-            # ★担当中は案件も変えられない★（依頼248の指摘1）
-            if e0.get("repair_issues") and sorted(want) != e0["repair_issues"]:
-                raise GuardError(
-                    f"{slug} は #{' #'.join(str(n) for n in e0['repair_issues'])} を"
-                    "直す担当です。途中で案件を変えられません")
-            e0["repair_issues"] = sorted(want)
-
-        # ★修理モードの記録★（固定の検査は上へ移した）
-        _e1 = _entry(data, task)
-        _e1["repairing"] = bool(repairing)
-        # ★日ごと・機種ごとにも残す★＝機種を替えて戻ってきても変えられない
-        _day(data).setdefault("claim_modes_by_slug", {})[slug] = bool(repairing)
 
         done_today = d.setdefault("slugs_today", [])
         # 途中まで進めた機種を続ける場合は、新しく数えない
@@ -1047,20 +931,11 @@ def codex_round(task: str, path: str = STATE_PATH, lane: str = "main",
         if limit and used >= limit:
             raise GuardError(
                 f"Codexとの相談が上限（{limit}往復・{lane}）に達しました。"
-                f"結論づかず扱いで台帳に登録して終わってください")
+                f"結論づかず扱いで終わってください")
         e[key] = used + 1
         _save(path, data)
         return e[key]
 
-# ★同じ機種で空振りが続いたら、しばらく選ばない★（2026-08-21・依頼246の防御4）
-#   手順書にだけ書いてあって実装が無かったので、無人実行が守る保証が無かった。
-REPAIR_FAIL_LIMIT = 2          # 続けてこの「日数」だけ直せなかったら休ませる
-REPAIR_COOLDOWN_DAYS = 7       # 休ませる日数
-# ★数え方をはっきりさせる★（2026-08-21・依頼247の防御3）
-#   `cooldown_until` = 休みに入った日 + 7日。`until > today` の間だけ断る。
-#   ＝**休みに入った日を1日目として7日間**休み、8日目から選べる。
-#   （「翌日から7日」ではない。曖昧なままにしない）
-#
 # ★1日の機種数と、書き換えの予算は別物★（2026-08-21・依頼247の防御4）
 #   MACHINES_PER_DAY … 1日に「担当してよい機種の数」
 #   assets/data/task-budget.json … 1日に「書き換えてよい数」を種類別に決める
@@ -1071,102 +946,6 @@ REPAIR_COOLDOWN_DAYS = 7       # 休ませる日数
 #   ここを勝手に上げない。
 
 
-def _repair_book(data: dict) -> dict:
-    return data.setdefault("repair", {})
-
-
-def repair_cooldown(slug: str, path: str = STATE_PATH, issues=None) -> tuple[bool, str]:
-    """その機種はいま休み中か。戻り値 (休み中か, 理由)。
-
-    ★数えるのは「材料が揃っても直せなかった」回数だけ★（依頼246の防御4）
-      通信の失敗・ロック待ち・Codexの利用制限は数えない（呼び出し側が渡さない）。
-
-    ★新しい案件が出たら休みは解ける★（2026-08-21・依頼247の指摘4）
-      休みは slug 単位なので、#100 の空振りで休んでいる間に
-      新しい誤情報の案件 #200 が同じ機種へ来ても、最大7日直せなかった。
-      **公開済みの記事を直すための経路でそれは実害**なので、
-      休みに入った時点の案件より新しいものが来たら解く。
-    """
-    data = _load(path)
-    rec = _repair_book(data).get(slug) or {}
-    until = rec.get("cooldown_until")
-    if not until:
-        return False, ""
-    today = _today()
-    if str(until) <= today:
-        return False, ""
-    known = set(rec.get("issues") or [])
-    now_ids = set(issues or [])
-    # ★何を見て休みに入ったか分からないときは解かない★
-    #   （控えが空だと「いまある案件は全部新しい」に見えて、休みが無意味になる）
-    fresh = (now_ids - known) if known else set()
-    if fresh:
-        return False, (f"新しい案件（{' / '.join('#%d' % n for n in sorted(fresh))}）"
-                       "が来たので休みを解きます")
-    return True, (f"{slug} は {until} まで休みです"
-                  f"（続けて {rec.get('fails', 0)} 回直せませんでした）")
-
-
-def record_repair(slug: str, fixed: bool, path: str = STATE_PATH,
-                  why: str = "", issues=None) -> dict:
-    """直せたか直せなかったかを記録する。★直せたら回数は0に戻す★
-
-    fixed=True  … 何かしら前へ進んだ（回数を0に戻し、休みも解除）
-    fixed=False … 材料が揃っても直せなかった（回数+1。上限に達したら休みへ）
-    """
-    with _Exclusive(path):
-        data = _load(path)
-        # ★「直せた」は自己申告では通さない★（2026-08-21・依頼247の防御2）
-        #   直す前は `--fixed yes` と言うだけで回数が0に戻り、休みも解けた。
-        #   ★機械が確かめられる根拠＝コミットの関所を通ったこと★
-        #   （before_commit が通ると final_stage が入る）。
-        #   ★通っていなければ「直せた」とは認めない★
-        if fixed:
-            passed = any(
-                isinstance(v, dict) and v.get("guard_slug") == slug
-                and v.get("final_stage") and v.get("run_date") == _today()
-                for v in (data.get("tasks") or {}).values())
-            if not passed:
-                raise GuardError(
-                    f"{slug} は今日コミットの関所を通っていません"
-                    "（before-commit を通ってから --fixed yes を記録してください）")
-        book = _repair_book(data)
-        rec = book.setdefault(slug, {"fails": 0, "cooldown_until": None, "why": ""})
-        if fixed:
-            rec.update({"fails": 0, "cooldown_until": None, "why": "", "issues": []})
-        elif rec.get("last_fail_date") == _today():
-            # ★同じ日に何度呼んでも1回★（2026-08-21・依頼247の防御1）
-            #   仕様は「2**日**続けて直せなかったら」。呼んだ回数ではない。
-            #   直す前は、同じ晩に2回記録するだけで休みに入れた。
-            rec["why"] = why[:200]
-        else:
-            # ★★「続けて」＝日が飛んだら数え直す★★（2026-08-21・依頼248の指摘4）
-            #   直す前は「今日と同じか」しか見ていなかったので、
-            #   8月1日と8月20日の失敗でも2回と数えて休みに入れた。
-            prev = str(rec.get("last_fail_date") or "")
-            if prev:
-                try:
-                    gap = (datetime.strptime(_today(), "%Y-%m-%d")
-                           - datetime.strptime(prev, "%Y-%m-%d")).days
-                except ValueError:
-                    gap = 99
-                if gap > 1:
-                    rec["fails"] = 0        # 間が空いた＝続いていない
-            rec["fails"] = int(rec.get("fails") or 0) + 1
-            rec["why"] = why[:200]
-            rec["last_fail_date"] = _today()
-            if rec["fails"] >= REPAIR_FAIL_LIMIT:
-                until = datetime.now() + timedelta(days=REPAIR_COOLDOWN_DAYS)
-                rec["cooldown_until"] = until.strftime("%Y-%m-%d")
-                # ★休みに入った時点で見ていた案件を控える★
-                #   これより新しい案件が来たら休みを解く（依頼247の指摘4）
-                rec["issues"] = sorted({int(x) for x in (issues or [])
-                                        if str(x).strip().isdigit()})
-        rec["last_seen"] = _today()
-        _save(path, data)
-        return dict(rec)
-
-
 SHARED_FILES = ("assets/data/machines.json", "service-worker.js", "sitemap.xml")
 
 
@@ -1175,7 +954,7 @@ def _shared_file_touches_others(rel: str, slug: str) -> bool:
 
     ★なぜ要るのか★（2026-08-21・台帳#429）
       狙い目チェッカーの値は `assets/data/machines.json`（全機種共通）にある。
-      直す経路が「その機種のファイルだけ」しか許していなかったので、
+      「その機種のファイルだけ」しか許していなかったので、
       **チェッカーの値を直す道が完全に塞がっていた**
       （2026-08-21の更新タスクが実際に行き止まりに当たった）。
     ★かといって丸ごと許すと、他の機種の値も一緒に変えられる★
@@ -1255,7 +1034,7 @@ def _shared_file_touches_others(rel: str, slug: str) -> bool:
 def _unrelated_changes(slug: str) -> list:
     """★その機種と関係のない変更が混ざっていないか★（2026-08-21・依頼246の指摘3）
 
-    直す経路で触ってよいのは、
+    その機種のものとして扱うのは、
       ①その機種の記事データ ②その機種のページ
       ③全機種共通のファイル（machines.json / service-worker.js / sitemap.xml）
         ただし **machines.json はその機種の項目だけが変わっている場合に限る**
@@ -1714,7 +1493,7 @@ def manual_commit(commit: str, why: str, path: str = STATE_PATH) -> dict:
 def holder_of(slug: str, path: str = STATE_PATH):
     """★この機種の担当を取っているタスクを返す★（2026-09-11・台帳#514/#640）
 
-    返すもの: {"task": タスク名, "repairing": bool} ／ 取っていなければ None
+    返すもの: {"task": タスク名, "decision_finding": 番号} ／ 取っていなければ None
 
     ★呼ぶ側にタスク名を名乗らせない★＝名乗らせる形にすると、
     間違った名前（あるいは担当を取っている別のタスクの名前）を書くだけで
@@ -1742,20 +1521,13 @@ def holder_of(slug: str, path: str = STATE_PATH):
             continue                      # ★前日までの記録は担当ではない★
         if e.get("guard_slug") == slug and e.get("target_slug") == slug:
             got.append({"task": name,
-                        "repairing": bool(e.get("repairing")),
                         "decision_finding": e.get("decision_finding") or ""})
     return got[0] if len(got) == 1 else None
 
 
 def before_write(task: str, slug: str, path: str = STATE_PATH,
-                 repairing: bool = False, finding=None) -> dict:
-    """記事を書き換える前の確認。★触ってよい段階か毎回聞き直す★
-
-    repairing=True ＝「台帳の案件を直すために触る」（2026-08-21・台帳#211）。
-    ★台帳による停止だけを飛ばす★（公開済みの記事に限る＝claim_pipeline.repairable）。
-    ★飛ばしても、そのとき台帳に何件あったかを記録する★＝
-      あとで「直した結果、案件が増えていないか」を比べるため。
-    """
+                 finding=None) -> dict:
+    """記事を書き換える前の確認。★触ってよい段階か毎回聞き直す★"""
     with _Exclusive(path):
         data = _load(path)
         e = _entry(data, task)
@@ -1801,30 +1573,7 @@ def before_write(task: str, slug: str, path: str = STATE_PATH,
                         f"#{_fid} を見つけたときから記事が変わっています"
                         f"（{_want[:12]}… → {_now[:12]}…）。見つけ直してください")
 
-        a = cp.assess(slug, repairing=repairing)
-        # ★★修理モードは担当を取った時に決まる。あとから変えられない★★
-        #   （2026-08-21・Codex依頼248の指摘1）
-        #   直す前は呼ぶたびに上書きしていたので、
-        #     ①--repairing で claim ②--repairing で before-write
-        #     ③台帳から案件が消える ④--repairing **なし**で before-write を呼び直す
-        #   とすると repairing=False になり、
-        #   「案件が消えたら止める」も「その機種以外のファイルを載せない」も
-        #   **まるごと飛んだ**。
-        claimed = bool(e.get("repairing"))
-        if bool(repairing) != claimed:
-            raise GuardError(
-                f"{slug} は "
-                + ("直す経路で担当しています" if claimed else "ふつうに担当しています")
-                + "。担当を取ったときと違う呼び方はできません"
-                + ("（--repairing を付けてください）" if claimed
-                   else "（--repairing は付けられません）"))
-        # ★基準は最初の1回だけ★（2026-08-21・Codex依頼246の指摘2）
-        #   呼ぶたびに上書きしていたので、
-        #     ①書き始める ②新しい重大案件を見つけて台帳へ登録する
-        #     ③もう一度 before-write を呼ぶ → その案件が「元からあった」ことになる
-        #   という順で、増えた案件が比較の基準に取り込まれ、素通りできた。
-        if "ledger_before" not in e or not e.get("mutation_started"):
-            e["ledger_before"] = list(a.get("ledger_blocking") or [])
+        a = cp.assess(slug)
         if a["stage"] in FROZEN_STAGES:
             raise GuardError(
                 f"{slug} は触ってはいけない段階です: {a['stage']} / "
@@ -1842,10 +1591,8 @@ def before_write(task: str, slug: str, path: str = STATE_PATH,
 def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
     """コミットの前の確認。★直したあと必ず判定し直す★（Codex指摘1）
 
-    ここが無いと、
-      「記事内の矛盾を確認中に書き換える」→「同時に重大案件を台帳へ登録する」
-      →本来は BLOCKED_BY_LEDGER なのに、再判定せずページを作って公開へ進む
-    という経路が通ってしまう。
+    ★書く前の段階を信用しない★＝書き換えの結果、触ってはいけない段階に
+    なっていても、再判定しなければそのままページを作って公開へ進んでしまう。
     """
     with _Exclusive(path):
         data = _load(path)
@@ -1865,65 +1612,22 @@ def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
             raise GuardError(
                 f"{slug} は書き換えを始めた記録がありません"
                 "（before-write を通っていない＝コミットさせません）")
-        repairing = bool(e.get("repairing"))
-        a = cp.assess(slug, repairing=repairing)
-        if repairing:
-            # ★直す経路では「案件が増えていないこと」を見る★（2026-08-21・台帳#211）
-            #   段階だけ見ると、元から BLOCKED_BY_LEDGER なので何も比べられない。
-            #   ★比べるのは番号★（題名で比べると、題を書き換えただけで誤判定する）
-            before_ids = _issue_ids(e.get("ledger_before"))
-            after_ids = _issue_ids(a.get("ledger_blocking"))
-            grew = after_ids - before_ids
-            if grew:
-                raise GuardError(
-                    f"直した結果、台帳の止める案件が増えました（{len(grew)}件）: "
-                    + " / ".join(f"#{n}" for n in sorted(grew)[:3])
-                    + " → コミットせず、変更を戻すか台帳で扱ってください")
-            # ★直すと言った案件が、いまも「直す対象」であること★（依頼247の指摘2）
-            #   番号を控えるだけで一度も見ていなかったので、
-            #   指定した案件と無関係な変更でも通り得た。
-            #   ★機械が言えるのはここまで★＝
-            #     「その案件がまだ生きている（＝直したと称して消えていない）」
-            #     「案件が増えていない」「その機種のファイルしか触っていない」。
-            #   ★中身がその案件の修理かどうかは2AIの領分★（機械では決めない）。
-            said = set(e.get("repair_issues") or [])
-            if not said:
-                raise GuardError(
-                    f"{slug} は直す案件が控えられていません"
-                    "（--repairing で claim し直してください）")
-            gone = said - after_ids
-            if gone:
-                # ★無人タスクは台帳を閉じない★＝消えていたら、想定外のことが起きている
-                raise GuardError(
-                    "直すと言った案件が台帳から消えています: "
-                    + " / ".join(f"#{n}" for n in sorted(gone))
-                    + "（無人タスクは台帳を閉じません。コミットせずに終わってください）")
-            # ★直すと言った案件と関係ないファイルを載せない★（依頼246の指摘3）
-            #   これが無いと「CRITICALが1件でもある機種なら何を書き換えてもよい」
-            #   という許可証になる。触ってよいのはその機種のものだけ。
-            bad = _unrelated_changes(slug)
-            if bad:
-                raise GuardError(
-                    f"直す経路では {slug} 以外のファイルを一緒にコミットできません: "
-                    + " / ".join(bad[:3])
-                    + (f" ほか{len(bad) - 3}件" if len(bad) > 3 else ""))
-        else:
-            # ★ふつうの更新でも、別の機種のデータは混ぜない★
-            #   （2026-08-21・Codex依頼248の指摘2。直す経路にだけ付けていたので、
-            #     機種Aの関所を通しながら機種Bのデータを同じコミットへ入れられた。
-            #     Bの中身は誰も検査していない）
-            #   ★ふつうの更新は、その機種の外にも正当に触るものがある★
-            #     （machines.json・sitemap・service-worker・ハブページ）ので、
-            #     ★別の機種のデータだけを見る★（機種をまたぐ混入だけを止める）。
-            other = [x for x in _unrelated_changes(slug)
-                     if x.startswith("assets/data/machine-details/")
-                     or x.startswith("machines/")]
-            if other:
-                raise GuardError(
-                    f"{slug} の担当なのに、別の機種のファイルが混ざっています: "
-                    + " / ".join(other[:3])
-                    + (f" ほか{len(other) - 3}件" if len(other) > 3 else "")
-                    + " → 分けてコミットしてください")
+        a = cp.assess(slug)
+        # ★別の機種のデータは混ぜない★（2026-08-21・Codex依頼248の指摘2）
+        #   機種Aの関所を通しながら機種Bのデータを同じコミットへ入れられると、
+        #   Bの中身は誰も検査していない。
+        #   ★更新は、その機種の外にも正当に触るものがある★
+        #     （machines.json・sitemap・service-worker・ハブページ）ので、
+        #     ★別の機種のデータだけを見る★（機種をまたぐ混入だけを止める）。
+        other = [x for x in _unrelated_changes(slug)
+                 if x.startswith("assets/data/machine-details/")
+                 or x.startswith("machines/")]
+        if other:
+            raise GuardError(
+                f"{slug} の担当なのに、別の機種のファイルが混ざっています: "
+                + " / ".join(other[:3])
+                + (f" ほか{len(other) - 3}件" if len(other) > 3 else "")
+                + " → 分けてコミットしてください")
         # ★知らない段階なら止める★（fail-closed）
         if a["stage"] not in set(WRITABLE_STAGES) | set(FROZEN_STAGES) | {"READY"}:
             raise GuardError(f"直したあとの段階が想定外です: {a['stage']}")
@@ -1935,11 +1639,6 @@ def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
         if a["stage"] in ("HOLD", "NO_MACHINE"):
             raise GuardError(
                 f"直したあとの判定ができません: {a['stage']} → コミットしないでください")
-        # ★悪化していないこと★（更新タスクは「今より悪くしない」が最優先）
-        if before and before != "BLOCKED_BY_LEDGER" and a["stage"] == "BLOCKED_BY_LEDGER":
-            raise GuardError(
-                f"直した結果、公開を止めるべき状態になりました（{before} → {a['stage']}）。"
-                f"コミットせず、変更を戻すか台帳で扱ってください")
         # ★★見た内容の指紋を残す★★（2026-08-21・Codex依頼248の指摘3）
         #   ここが無いと、「OK」と言ったあとに別のファイルを足してコミットできた。
         #   push の前に `verify-commit` でこの指紋と突き合わせる。
@@ -1956,23 +1655,10 @@ def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
         return a
 
 def done(task: str, slug: str, stage: str, path: str = STATE_PATH) -> dict:
-    """その機種の作業を終える。
-
-    ★直す経路で担当した機種は、結果を記録しないと終われない★
-      （2026-08-21・依頼247の防御2。`repaired` を呼ばずに終われたので、
-        空振りが数えられず、いつまでも同じ機種を選び続けられた）
-    """
+    """その機種の作業を終える。"""
     with _Exclusive(path):
         data = _load(path)
         e = _entry(data, task)
-        if e.get("repairing") and e.get("guard_slug") == slug:
-            rec = _repair_book(data).get(slug) or {}
-            marked = (rec.get("last_seen") == _today())
-            if not marked:
-                raise GuardError(
-                    f"{slug} は直す経路で担当したので、終える前に結果の記録が要ります: "
-                    f"python scripts/task_guard.py repaired --slug {slug} "
-                    "--fixed yes|no --why …")
         # ★★何もしていない完了を、記録の上で見えるようにする★★
         #   （2026-08-27・Codexの指摘17）
         #   ★断らない★＝段階名の言い回しは手順書ごとに違うので、
@@ -2159,10 +1845,6 @@ def _alive_posix_tests(t) -> None:
 def _finding_tests(t, tmpdir) -> None:
     """★見つけたもの（finding）で担当する経路の試験★
 
-    ★なぜ要るか★＝直す経路は台帳番号を必須にしていたので、
-    「その場で2AIが決めて直す」流れをそのまま通せなかった。
-    台帳番号は人が付けた札で、しかも人しか閉じない。
-
     ★守っているもの★
       ・合意する前は書けない（AI合意が書き換え許可証にならないように）
       ・別の機種の記録では担当できない
@@ -2177,7 +1859,7 @@ def _finding_tests(t, tmpdir) -> None:
     fp = os.path.join(tmpdir, "finding_state.json")
     try:
         # ★実データから「いま書ける機種」を選ぶ★
-        #   （固定名にすると、その機種が台帳で止まった日に試験が落ちる）
+        #   （固定名にすると、その機種が書けない段階の日に試験が落ちる）
         slug = None
         for _m in _sj.read_rows(os.path.join(BASE, "assets", "data", "machines.json")):
             try:
@@ -2199,7 +1881,7 @@ def _finding_tests(t, tmpdir) -> None:
                         source_sha256=sha)["finding_id"]
 
         claim("t_find", slug, fp, finding=fid)
-        t("　見つけたもので担当できる（台帳番号は要らない）",
+        t("　見つけたもので担当できる",
           day_status(fp).get("target_slug") == slug)
 
         t("★★合意する前は書けない★★（AI合意を書き換え許可証にしない）",
@@ -2757,27 +2439,24 @@ def _selftest_body() -> int:
         #   時点でその日の枠が消え、before_write に拒否されても戻らなかった。
         fp0 = os.path.join(tmpdir, "guard0.json")
         _keep_assess = cp.assess
-        cp.assess = lambda s, *a, **k: {"stage": "BLOCKED_BY_LEDGER"}
+        cp.assess = lambda s: {"stage": "HOLD"}
         try:
             blocked = raises(lambda: claim("t", "galfy", fp0), "触れません")
         finally:
             cp.assess = _keep_assess
-        t("★★台帳で止まっている機種は担当にできない★★（台帳#272）", blocked)
-        # ★ここから先は本番の台帳を見ない★（2026-08-12）
-        #   以前は素の claim を呼んでいたので、本番の台帳で hokuto が
-        #   止まっている日は**自己テストがそこで落ちた**（実際に発生）。
+        t("★★触ってはいけない段階の機種は担当にできない★★（台帳#272）", blocked)
+        # ★ここから先は本番のデータを見ない★（2026-08-12）
         #   道具の振る舞いを見る試験が、その日のデータで変わってはいけない。
         #   既に一覧にある機種は READY、まだ無い機種は NO_MACHINE（実際と同じ形）
         # ★1日の上限を数える試験ぶんも、ここに入れておく★（2026-08-21）
         #   上限を増やしたら「担当できる機種」も増やす必要がある。
-        #   本番データを見に行かせない（その日の台帳で試験の結果が変わらないように）。
         _spares = ["sp_a", "sp_b", "sp_c", "sp_d", "sp_e", "sp_f"]
         # ★上限なしの試験で使う機種も、ここで既知にしておく★
         #   （2026-08-25。架空のslugのままだと NO_MACHINE で断られ、
         #     「上限で止まった」と読み違える）
         _many_slugs = ["u%d" % i for i in range(12)]
         _known = {"hokuto", "enen", "galfy"} | set(_spares) | set(_many_slugs)
-        cp.assess = lambda sl, *a, **k: {
+        cp.assess = lambda sl: {
             "stage": "READY" if sl in _known else "NO_MACHINE"}
         t("　断られた日でも枠は残る（次の候補を選べる）",
           claim("t", "hokuto", fp0)["target_slug"] == "hokuto")
@@ -2801,7 +2480,7 @@ def _selftest_body() -> int:
             _fp478 = os.path.join(tmpdir, "guard478.json")
             _keep_as = cp.assess
             try:
-                cp.assess = lambda sl, *a, **k: {"stage": "NO_MACHINE"}
+                cp.assess = lambda sl: {"stage": "NO_MACHINE"}
                 t("★★新台タスクでも、未コミットなら担当できない★★"
                   "／★ここが破れると、レビュー前のコードで公開してpushする★",
                   raises(lambda: claim("add-machine", "dmm_7777", _fp478),
@@ -3002,32 +2681,19 @@ def _selftest_body() -> int:
         #   以前は `or True` が付いていて、何が起きても合格していた）
         _real_assess = cp.assess
         try:
-            # ★偽物は本番と同じ形で受け取る★（2026-08-21）
-            #   `repairing=` を足したとき、`lambda slug:` のままだと
-            #   TypeError で落ち、関所の判定を試験できていなかった。
-            cp.assess = lambda slug, **k: {"stage": FROZEN_STAGES[0],
-                                           "reasons": ["試験"]}
+            cp.assess = lambda slug: {"stage": FROZEN_STAGES[0],
+                                      "reasons": ["試験"]}
             t("★★止めるべき機種は触らせない★★",
               raises(lambda: before_write("t2", "hokuto", fp), "触ってはいけない"))
-            cp.assess = lambda slug, **k: {"stage": "READY", "reasons": []}
+            cp.assess = lambda slug: {"stage": "READY", "reasons": []}
             t("★すでに公開してよい機種は書き換えない★",
               raises(lambda: before_write("t2", "hokuto", fp), "理由がありません"))
-            cp.assess = lambda slug, **k: {"stage": "でたらめ", "reasons": []}
+            cp.assess = lambda slug: {"stage": "でたらめ", "reasons": []}
             t("★知らない段階なら書かない★",
               raises(lambda: before_write("t2", "hokuto", fp), "想定外"))
 
-            # --- ★直す経路（台帳#211・2026-08-21）★
-            #   台帳で止まっている機種でも、公開済みの記事なら直せる。
-            #   ただし「案件が増えたらコミットさせない」は必ず効くこと。
-            calls = {}
-
-            def _fake_assess(slug, repairing=False):
-                calls["repairing"] = repairing
-                if repairing:
-                    return {"stage": "IDENTITY_PENDING", "reasons": [],
-                            "ledger_blocking": ["#1 もとからある案件"]}
-                return {"stage": "BLOCKED_BY_LEDGER", "reasons": ["#1 もとからある案件"],
-                        "ledger_blocking": ["#1 もとからある案件"]}
+            def _fake_assess(slug):
+                return {"stage": "IDENTITY_PENDING", "reasons": []}
 
             cp.assess = _fake_assess
             # ★ファイルの範囲の見張りは、この試験では差し替える★
@@ -3046,166 +2712,6 @@ def _selftest_body() -> int:
             globals()["_changed_files"] = lambda: (
                 ["assets/data/machine-details/kabaneri.json"], "")
             globals()["_file_digest"] = lambda rel: "TESTDIGEST"
-            t("★ふつうに入ると、いままでどおり止まる★",
-              raises(lambda: before_write("t2", "hokuto", fp), "触ってはいけない"))
-            # ★★別の記録で試す★★（2026-08-21）
-            #   同じ機種で「ふつう→直す」へ変えるのは、
-            #   モードの固定を入れた時点で**断られるのが正しい**
-            #   （この試験は「直す経路なら進める」ことを見たいので分ける）。
-            fp = os.path.join(tmpdir, "guard_repair_lane.json")
-            # ★直す経路は「どの案件を直すか」を控えてから★（依頼247の指摘2）
-            claim("t2", "hokuto", fp, repairing=True, issues=["1"])
-            got = before_write("t2", "hokuto", fp, repairing=True)
-            t("★直す経路なら書き込みへ進める★", got["stage"] == "IDENTITY_PENDING")
-            t("★飛ばしたことが判定側にも伝わっている★", calls.get("repairing") is True)
-
-            # 案件が増えていなければコミットできる
-            ok = before_commit("t2", "hokuto", fp)
-            t("★案件が増えていなければコミットできる★",
-              ok["stage"] == "IDENTITY_PENDING")
-
-            # ★案件が増えたらコミットさせない★（対照実験）
-            def _grew(slug, repairing=False):
-                return {"stage": "IDENTITY_PENDING", "reasons": [],
-                        "ledger_blocking": ["#1 もとからある案件", "#2 直した拍子に増えた案件"]}
-
-            cp.assess = _grew
-            t("★★直した結果、案件が増えたらコミットさせない★★",
-              raises(lambda: before_commit("t2", "hokuto", fp), "増えました"))
-
-            # --- ★担当の確保も直す経路を通す★（実装直後に見つけた穴）
-            #   ここが古い判定のままだと、before_write まで到達できず
-            #   直す経路が丸ごと動かない。
-            cp.assess = _fake_assess
-            fp3 = os.path.join(tmpdir, "guard_repair.json")
-            t("★ふつうに担当しようとすると弾かれる（枠は減らない）★",
-              raises(lambda: claim("t3", "kabaneri", fp3), "いま触れません"))
-            t("★★どの案件を直すか言わないと担当できない★★（依頼246の指摘3）",
-              raises(lambda: claim("t3", "kabaneri", fp3, repairing=True), "案件の番号"))
-            t("★止めていない案件の番号は受け付けない★",
-              raises(lambda: claim("t3", "kabaneri", fp3, repairing=True,
-                                   issues=["999"]), "含まれない番号"))
-            got2 = claim("t3", "kabaneri", fp3, repairing=True, issues=["1"])
-            t("★直す経路なら担当できる★", got2["target_slug"] == "kabaneri")
-            t("　直す案件が控えに残る",
-              _load(fp3)["tasks"]["t3"].get("repair_issues") == [1])
-
-            # --- ★★担当を取ったあと、経路を変えられない★★
-            #   （2026-08-21・Codexの再指摘。★両方向を試す★）
-            #   ★直す前は、同じ機種をもう一度 claim すれば
-            #     モードを好きに変えられた（対照実験で両方向とも通った）★
-            #     ＝台帳の関門を後から外せる。
-            t("★★直す担当を、あとからふつうの担当に変えられない★★",
-              raises(lambda: claim("t3", "kabaneri", fp3), "変えられません"))
-            fp3b = os.path.join(tmpdir, "guard_repair_rev.json")
-            cp.assess = lambda sl, repairing=False: {
-                "stage": "IDENTITY_PENDING", "reasons": [],
-                "ledger_blocking": ["#1 テストの案件"]}
-            claim("t3b", "kabaneri", fp3b)
-            t("★★ふつうの担当を、あとから直す担当に変えられない★★",
-              raises(lambda: claim("t3b", "kabaneri", fp3b, repairing=True,
-                                   issues=["1"]), "変えられません"))
-            t("　同じ経路で取り直すのは通る（やり直しを塞がない）",
-              claim("t3b", "kabaneri", fp3b)["target_slug"] == "kabaneri")
-            # --- ★★機種を替えて戻ってきてもモードは変えられない★★
-            #   （2026-08-21・Codexの再指摘。★A→B→A で通っていた★）
-            #   記録がタスク単位（guard_slug）だったので、機種を替えた時点で
-            #   捨てられ、戻ってきたときに「前は何だったか」が残らなかった。
-            #   タスク名を変える迂回も同じ理由で通っていた。
-            fp3c = os.path.join(tmpdir, "guard_aba.json")
-            claim("tA", "kabaneri", fp3c, repairing=True, issues=["1"])
-            claim("tA", "hokuto", fp3c, repairing=True, issues=["1"])
-            t("★★A→B→A でモードを変えられない★★",
-              raises(lambda: claim("tA", "kabaneri", fp3c), "変えられません"))
-            t("★★タスク名を変えても変えられない★★",
-              raises(lambda: claim("tZ", "kabaneri", fp3c), "変えられません"))
-            t("　同じ経路なら戻ってこられる",
-              claim("tA", "kabaneri", fp3c, repairing=True,
-                    issues=["1"])["target_slug"] == "kabaneri")
-            cp.assess = _fake_assess
-
-            # --- ★比較の基準は最初の1回だけ★（依頼246の指摘2の対照実験）
-            fp4 = os.path.join(tmpdir, "guard_base.json")
-            claim("t4", "kabaneri", fp4, repairing=True, issues=["1"])
-            before_write("t4", "kabaneri", fp4, repairing=True)
-            base1 = list(_load(fp4)["tasks"]["t4"]["ledger_before"])
-
-            def _more(slug, repairing=False):
-                return {"stage": "IDENTITY_PENDING", "reasons": [],
-                        "ledger_blocking": ["#1 もとからある案件", "#2 途中で増えた案件"]}
-
-            cp.assess = _more
-            before_write("t4", "kabaneri", fp4, repairing=True)   # ★2回目★
-            t("★★2回目の before-write で基準が上書きされない★★",
-              _load(fp4)["tasks"]["t4"]["ledger_before"] == base1)
-            t("★増えた案件はコミット前に見つかる★",
-              raises(lambda: before_commit("t4", "kabaneri", fp4), "増えました"))
-            cp.assess = _fake_assess
-
-            # --- ★番号で比べる（題を書き換えただけでは増えたことにしない）★
-            t("番号だけを取り出せる",
-              _issue_ids(["#12 あ", " #7 い", "番号なし"]) == {12, 7})
-
-            def _renamed(slug, repairing=False):
-                return {"stage": "IDENTITY_PENDING", "reasons": [],
-                        "ledger_blocking": ["#1 題名を書き換えただけ"]}
-
-            fp5 = os.path.join(tmpdir, "guard_rename.json")
-            claim("t5", "kabaneri", fp5, repairing=True, issues=["1"])
-            before_write("t5", "kabaneri", fp5, repairing=True)
-            cp.assess = _renamed
-            t("★題名が変わっただけなら増えた扱いにしない★",
-              before_commit("t5", "kabaneri", fp5)["stage"] == "IDENTITY_PENDING")
-            cp.assess = _fake_assess
-
-            # --- ★関係ないファイルを一緒にコミットさせない★（依頼246の指摘3）
-            fp6 = os.path.join(tmpdir, "guard_scope.json")
-            claim("t6", "kabaneri", fp6, repairing=True, issues=["1"])
-            before_write("t6", "kabaneri", fp6, repairing=True)
-            globals()["_unrelated_changes"] = lambda s: ["scripts/nazono.py"]
-            t("★★直す経路で関係ないファイルがあれば止める★★",
-              raises(lambda: before_commit("t6", "kabaneri", fp6), "以外のファイル"))
-            globals()["_unrelated_changes"] = lambda s: []
-            t("　その機種のものだけなら通る",
-              before_commit("t6", "kabaneri", fp6)["stage"] == "IDENTITY_PENDING")
-
-            # --- ★空振りが続いたら休ませる（依頼246の防御4）★
-            fp7 = os.path.join(tmpdir, "guard_cool.json")
-            t("　はじめは休みではない", repair_cooldown("kabaneri", fp7)[0] is False)
-            # ★数えるのは「日」なので、日をまたがせて試す★（依頼247の防御1）
-            #   ★理由の文も仕様どおりに★＝記録するのは
-            #   「材料が揃っても直せなかった」ときだけ（材料不足は記録しない）
-            for i in range(REPAIR_FAIL_LIMIT):
-                record_repair("kabaneri", False, fp7,
-                              why="材料は揃ったが、どちらが正しいか決められなかった")
-                if i == 0:
-                    t(f"　{REPAIR_FAIL_LIMIT - 1}日目ではまだ休まない",
-                      repair_cooldown("kabaneri", fp7)[0] is False)
-                # ★「昨日」にする★（同じ日に何度呼んでも1回、が効いているため）
-                #   ★日が飛ぶと数え直される★ので、必ず前日にする（依頼248の指摘4）
-                _d = _load(fp7)
-                _yesterday = (datetime.strptime(_today(), "%Y-%m-%d")
-                              - timedelta(days=1)).strftime("%Y-%m-%d")
-                _repair_book(_d)["kabaneri"]["last_fail_date"] = _yesterday
-                _save(fp7, _d)
-            t("★★続けて直せなければ休みに入る★★", repair_cooldown("kabaneri", fp7)[0])
-            t("★★休み中は担当できない（枠は使わない）★★",
-              raises(lambda: claim("t7", "kabaneri", fp7, repairing=True,
-                                   issues=["1"]), "休みです"))
-            # ★「直せた」は自己申告では通らない★（依頼247の防御2・対照実験）
-            t("★★コミットの関所を通っていなければ直せた扱いにできない★★",
-              raises(lambda: record_repair("kabaneri", True, fp7), "通っていません"))
-            # 関所を通った記録を作ってから、もう一度
-            _d7 = _load(fp7)
-            _d7.setdefault("tasks", {})["tX"] = {
-                "run_date": _today(), "guard_slug": "kabaneri",
-                "final_stage": "IDENTITY_PENDING"}
-            _save(fp7, _d7)
-            record_repair("kabaneri", True, fp7)
-            t("★直せたら休みは解ける★", repair_cooldown("kabaneri", fp7)[0] is False)
-            t("　直せたら回数も0に戻る",
-              (_load(fp7)["repair"]["kabaneri"]["fails"]) == 0)
-
             # --- ★名前の変更は移動元も見る★（依頼247の指摘3）
             #   ★`or True` を付けた書き方をやめた★＝何が起きても合格していた。
             #   実際のパーサーに、gitの出力の形をそのまま食わせる。
@@ -3235,47 +2741,31 @@ def _selftest_body() -> int:
                 subprocess.run = _keep_run
             globals()["_unrelated_changes"] = lambda s: []
 
-            # --- ★同じ日に何度呼んでも1回★（依頼247の防御1）
-            fp8 = os.path.join(tmpdir, "guard_day.json")
-            for _ in range(5):
-                record_repair("zzz_same_day", False, fp8, why="材料が揃っても決められない")
-            t("★★同じ日に何回記録しても休みには入らない★★",
-              repair_cooldown("zzz_same_day", fp8)[0] is False)
-            t("　数えているのは日数（呼んだ回数ではない）",
-              _load(fp8)["repair"]["zzz_same_day"]["fails"] == 1)
-
-            # --- ★新しい案件が来たら休みは解ける★（依頼247の指摘4）
-            fp9 = os.path.join(tmpdir, "guard_fresh.json")
-            data9 = _load(fp9)
-            _repair_book(data9)["zzz_rest"] = {
-                "fails": 2, "cooldown_until": "2099-12-31", "issues": [100]}
-            _save(fp9, data9)
-            t("　同じ案件のままなら休み",
-              repair_cooldown("zzz_rest", fp9, issues={100})[0])
-            t("★★新しい案件が来たら休みが解ける★★",
-              repair_cooldown("zzz_rest", fp9, issues={100, 200})[0] is False)
-
             # --- ★別の機種に移ったら前の記録を捨てる★（依頼247の指摘1・対照実験）
             fpA = os.path.join(tmpdir, "guard_two.json")
-            claim("t8", "aaa", fpA, repairing=True, issues=["1"])
-            before_write("t8", "aaa", fpA, repairing=True)
+            claim("t8", "aaa", fpA)
+            before_write("t8", "aaa", fpA)
             # ★1日の上限に関係なく、機種を切り替えたときの守りを見る試験★
             #   （上限が1でも3でも、この守りは同じように効かなければならない）
             _dA = _load(fpA)
             _day(_dA)["slugs_today"] = []
             _save(fpA, _dA)
-            claim("t8", "bbb", fpA, repairing=True, issues=["1"])
+            claim("t8", "bbb", fpA)
             t("★★2機種目は before-write を呼ばないとコミットできない★★",
               raises(lambda: before_commit("t8", "bbb", fpA), "記録がありません"))
-            before_write("t8", "bbb", fpA, repairing=True)
+            before_write("t8", "bbb", fpA)
             t("　2機種目も before-write を通せばコミットできる",
               before_commit("t8", "bbb", fpA)["stage"] == "IDENTITY_PENDING")
+            cp.assess = lambda slug: {"stage": "HOLD", "reasons": ["試験"]}
+            t("★★直した結果、触ってはいけない段階になったらコミットさせない★★",
+              raises(lambda: before_commit("t8", "bbb", fpA), "触ってはいけない段階"))
+            cp.assess = _fake_assess
 
             # --- ★関所が見た内容とコミットを結び付ける★（依頼248の指摘3）
             #   本物のgitを呼ぶので、gitの出力だけ差し替えて筋を確かめる。
             fpG = os.path.join(tmpdir, "guard_bind.json")
-            claim("tE", "kabaneri", fpG, repairing=True, issues=["1"])
-            before_write("tE", "kabaneri", fpG, repairing=True)
+            claim("tE", "kabaneri", fpG)
+            before_write("tE", "kabaneri", fpG)
 
             _keep_changed = globals()["_changed_files"]
             _keep_fd = globals()["_file_digest"]
@@ -3458,51 +2948,13 @@ def _selftest_body() -> int:
 
             # ★関所を通っていなければ verify も通らない★
             fpH = os.path.join(tmpdir, "guard_nobind.json")
-            claim("tF", "kabaneri", fpH, repairing=True, issues=["1"])
+            claim("tF", "kabaneri", fpH)
             t("★★before-commit を通っていなければ push させない★★",
               raises(lambda: verify_commit("tF", "kabaneri", "abc1234", fpH),
                      "見た内容"))
 
-            # --- ★修理モードは担当のあと変えられない★（依頼248の指摘1・対照実験）
-            fpD = os.path.join(tmpdir, "guard_mode.json")
-
-            def _two(slug, repairing=False):
-                return {"stage": "IDENTITY_PENDING", "reasons": [],
-                        "ledger_blocking": ["#1 ひとつめ", "#2 ふたつめ"]}
-
-            cp.assess = _two
-            claim("tB", "kabaneri", fpD, repairing=True, issues=["1"])
-            before_write("tB", "kabaneri", fpD, repairing=True)
-            t("★★--repairing なしで呼び直して通常モードへ落とせない★★",
-              raises(lambda: before_write("tB", "kabaneri", fpD), "違う呼び方"))
-            t("★担当中に案件を差し替えられない★",
-              raises(lambda: claim("tB", "kabaneri", fpD, repairing=True,
-                                   issues=["2"]), "案件を変えられません"))
-            # ふつうに担当した機種へ、あとから --repairing は付けられない
-            _dD = _load(fpD)
-            _day(_dD)["slugs_today"] = []
-            _save(fpD, _dD)
-            claim("tC", "hokuto", fpD)
-            t("　ふつうに担当した機種に --repairing は付けられない",
-              raises(lambda: before_write("tC", "hokuto", fpD, repairing=True),
-                     "違う呼び方"))
-            cp.assess = _fake_assess
-
-            # --- ★日が飛んだら「続けて」ではない★（依頼248の指摘4）
-            fpE = os.path.join(tmpdir, "guard_gap.json")
-            record_repair("zzz_gap", False, fpE, why="決められなかった")
-            _dE = _load(fpE)
-            _repair_book(_dE)["zzz_gap"]["last_fail_date"] = "2026-08-01"
-            _save(fpE, _dE)
-            record_repair("zzz_gap", False, fpE, why="ずっとあとの日にまた失敗")
-            t("★★日が飛んでいたら数え直す（休みに入らない）★★",
-              repair_cooldown("zzz_gap", fpE)[0] is False)
-            t("　数え直されている", _load(fpE)["repair"]["zzz_gap"]["fails"] == 1)
-
-            # --- ★ふつうの経路でも別機種のデータは混ぜられない★（依頼248の指摘2）
+            # --- ★別機種のデータは混ぜられない★（依頼248の指摘2）
             fpF = os.path.join(tmpdir, "guard_mix.json")
-            cp.assess = lambda s, **k: {"stage": "IDENTITY_PENDING", "reasons": [],
-                                        "ledger_blocking": []}
             claim("tD", "kabaneri", fpF)
             before_write("tD", "kabaneri", fpF)
             globals()["_unrelated_changes"] = lambda s: [
@@ -3514,33 +2966,6 @@ def _selftest_body() -> int:
             t("　その機種の外でも、機種データでなければ通る（sitemap等）",
               before_commit("tD", "kabaneri", fpF)["stage"] == "IDENTITY_PENDING")
             globals()["_unrelated_changes"] = lambda s: []
-            cp.assess = _fake_assess
-
-            # --- ★直す経路は、結果を記録しないと終われない★（依頼247の防御2）
-            fpC = os.path.join(tmpdir, "guard_done.json")
-            claim("tA", "kabaneri", fpC, repairing=True, issues=["1"])
-            before_write("tA", "kabaneri", fpC, repairing=True)
-            t("★★結果を記録せずに終えようとすると断られる★★",
-              raises(lambda: done("tA", "kabaneri", "IDENTITY_PENDING", fpC),
-                     "結果の記録が要ります"))
-            record_repair("kabaneri", False, fpC, why="材料は揃ったが決められなかった")
-            t("　記録してあれば終えられる",
-              done("tA", "kabaneri", "IDENTITY_PENDING", fpC)["final_stage"]
-              == "IDENTITY_PENDING")
-
-            # --- ★直すと言った案件が消えていたら止める★（依頼247の指摘2）
-            fpB = os.path.join(tmpdir, "guard_said.json")
-            claim("t9", "kabaneri", fpB, repairing=True, issues=["1"])
-            before_write("t9", "kabaneri", fpB, repairing=True)
-
-            def _closed(slug, repairing=False):
-                return {"stage": "IDENTITY_PENDING", "reasons": [],
-                        "ledger_blocking": []}       # ★#1 が消えた★
-
-            cp.assess = _closed
-            t("★★直すと言った案件が台帳から消えていたら止める★★",
-              raises(lambda: before_commit("t9", "kabaneri", fpB), "消えています"))
-            cp.assess = _fake_assess
         finally:
             cp.assess = _real_assess
             # ★差し替えた見張りを必ず戻す★（試験のあとに本番の関所が緩まないように）
@@ -3576,8 +3001,7 @@ def _selftest_body() -> int:
         _machines_per_day_tests(t, _d)
         _no_work_tests(t, _d)
         _budget_tests(t, _d)
-        # ★★台帳番号ではなく「見つけたもの」で担当する経路★★
-        #   （2026-08-21・Codexの設計レビュー）
+        # ★★「見つけたもの」で担当する経路★★（2026-08-21・Codexの設計レビュー）
         _finding_tests(t, _d)
         # ★★Linux（CI）側の生き死にの見方も、手元で動かして確かめる★★
         #   （2026-08-21・これを怠ってCIが赤くなった）
@@ -3673,17 +3097,7 @@ def main() -> int:
                            action="store_false",
                            help="人が手で動かしている（試しているとき）")
         if name in ("claim", "before-write"):
-            # ★台帳の案件を直すために触る★（2026-08-21・台帳#211／Codex依頼246の指摘1）
-            #   ここが無いと、関数には経路があるのに**コマンドから使えず**、
-            #   無人実行では修理対象を確保できなかった。
-            p.add_argument("--repairing", action="store_true",
-                           help="台帳で止まっている公開済み機種を、直すために担当する")
-            p.add_argument("--issue", action="append", default=[],
-                           help="直す対象の案件番号（例 --issue 318）。"
-                                "--repairing のときは1つ以上必須")
-            # ★★台帳番号ではなく「見つけたもの」で担当する★★
-            #   （2026-08-21・Codexの設計レビュー）
-            #   台帳番号は人が付けた札で、しかも人しか閉じない。
+            # ★★「見つけたもの」で担当する★★（2026-08-21・Codexの設計レビュー）
             #   その場で2AIが決めて直す流れは、いまのHEADで見つけ直した
             #   内容そのもの（repair_journal の finding_id）を鍵にする。
             p.add_argument("--decision", default=None, metavar="FINDING_ID",
@@ -3712,15 +3126,6 @@ def main() -> int:
     p.add_argument("--lane", default="main", choices=["main", "ask"])
     p = sub.add_parser("status")
     p.add_argument("--task", required=True)
-    # ★直せたか直せなかったかを記録する★（2026-08-21・依頼246の防御4）
-    p = sub.add_parser("repaired")
-    p.add_argument("--slug", required=True)
-    p.add_argument("--fixed", choices=["yes", "no"], required=True,
-                   help="yes=前へ進んだ / no=材料が揃っても直せなかった"
-                        "（通信の失敗やロック待ちは記録しない）")
-    p.add_argument("--why", default="", help="no のときの理由（短く）")
-    p = sub.add_parser("cooldown")
-    p.add_argument("--slug", required=True)
     # ★関所が見た内容と、実際のコミットが同じか確かめる★（依頼248の指摘3）
     p = sub.add_parser("verify-commit")
     p.add_argument("--task", required=True)
@@ -3739,8 +3144,6 @@ def main() -> int:
         return selftest()
     if args.cmd == "claim":
         print(json.dumps(claim(args.task, args.slug,
-                               repairing=bool(getattr(args, "repairing", False)),
-                               issues=getattr(args, "issue", []) or [],
                                finding=getattr(args, "decision", None),
                                scheduled=getattr(args, "sched_flag", None)),
                          ensure_ascii=False, indent=1))
@@ -3763,7 +3166,6 @@ def main() -> int:
               + ("" if _lane == "main" else f"（{_lane}の枠）"))
     elif args.cmd == "before-write":
         print(json.dumps(before_write(args.task, args.slug,
-                                      repairing=bool(getattr(args, "repairing", False)),
                                       finding=getattr(args, "decision", None)),
                          ensure_ascii=False, indent=1))
     elif args.cmd == "before-commit":
@@ -3778,25 +3180,6 @@ def main() -> int:
     elif args.cmd == "verify-commit":
         print(json.dumps(verify_commit(args.task, args.slug, args.commit),
                          ensure_ascii=False, indent=1))
-    elif args.cmd == "repaired":
-        # ★休みに入るときは「何を見ていたか」を控える★（依頼247の指摘4）
-        #   手で渡させると忘れるので、そのとき止めている案件をここで引く。
-        try:
-            _ids = _issue_ids(cp.assess(args.slug, repairing=True).get("ledger_blocking"))
-        except Exception as _e:                              # noqa: BLE001
-            # ★控えが取れないまま休みに入れない★（2026-08-21・依頼248の指摘4）
-            #   空集合で控えると、あとで新しい重大案件が来ても休みが解けない
-            #   （＝公開済みの誤情報の修正が最大7日遅れる）。
-            print(f"★案件の控えを取れませんでした（{type(_e).__name__}）★")
-            print("  この状態では記録しません。原因を直してから、もう一度実行してください")
-            return 3
-        print(json.dumps(record_repair(args.slug, args.fixed == "yes",
-                                       why=args.why, issues=_ids),
-                         ensure_ascii=False, indent=1))
-    elif args.cmd == "cooldown":
-        resting, why = repair_cooldown(args.slug)
-        print(json.dumps({"slug": args.slug, "resting": resting, "why": why},
-                         ensure_ascii=False))
     elif args.cmd == "status":
         print(json.dumps(_load(STATE_PATH)["tasks"].get(args.task, {}),
                          ensure_ascii=False, indent=1))

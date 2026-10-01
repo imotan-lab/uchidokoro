@@ -6,7 +6,7 @@
   "assets/data/directory-catalogs.json": "a368d3e2839d3944b2b8064e40c735268c34da52d8eec6b294e1e55bf91205eb",
   "assets/data/maker-catalogs.json": "c1bfaa9377e999f95bcefc5d1958a88e07356d2dbb40f2e1f6ef2a68e2952308",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
-  "scripts/add_machine_run.py": "73ced58523ccb12fc84d3e103d1c76bd055ad6bbf3df9cedb604ab332302278c",
+  "scripts/add_machine_run.py": "42b65956a2df481df8cd174ce089065300a80a032cc8f42829a9abe53d9bf0e4",
   "scripts/adoption_basis.py": "e24f2f35aa8451b0466cceeff6035266b078e89f216482a9aa30348a42a3837e",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
@@ -23,8 +23,8 @@
   "scripts/html_check.py": "2d58882be96adbeb8710638ccb47d3f784ab3d1b091f5eff74894ca7bba1d112",
   "scripts/html_tables.py": "5d0f32d7e988ce0696e07b4ac118d119ea4c4e2280b57acee89e0c6ebaa78c3e",
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
-  "scripts/machine_sources.py": "09b391a8ca36778dedc76469eb8479ccfef0a5b54f066def07b7a68a5528da7f",
-  "scripts/maker_identity_cache.py": "a72cdc2b1534ef3fc8e4487b55bf4db1661976b3fe4404524404f32ecbcb1a45",
+  "scripts/machine_sources.py": "8ad9bb744ccb198702a39c3d016dd515af00b56862d15d28ce984450da922ec3",
+  "scripts/maker_identity_cache.py": "f349ed376124d7a22c3c989ff0e93ec24df085c420f44293c3ca1d2a32b5d31c",
   "scripts/mode_apply.py": "f79e96d71cb31c552c532ba90f2256a857e65eb6972e0c6ac31f265e1f7abbca",
   "scripts/mode_ask.py": "ec2db5bdfeb0aac1b23551e548832d93efc599987ea1c1067f091e925b3451cd",
   "scripts/mode_verdict.py": "bd43e4e05603428591dd525a4b2a85a2089665cd7abfb22bfde1439669e0a6b0",
@@ -278,5 +278,6 @@
    "page_reading",
    "read_failure"
   ]
- }
+ },
+ "_deps_changed_why": "運営者の判断（2026-10-01）で台帳（open_issues）を廃止した。自由文を安全に受け取る部品は open_issues.py から text_args.py へ中身を変えずに移し、machine_sources / maker_identity_cache / popular_machines / material_contract はそれを読むようにした。grow_machine は台帳の代わりに、運営者への質問を届くまで控える owner_questions.py を読む。どちらも材料の採否には関わらない土台の部品なので、契約の集合は増やさない（text_args は土台の一覧に入れた）。"
 }

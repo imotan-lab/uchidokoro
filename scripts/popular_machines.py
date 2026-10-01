@@ -1198,7 +1198,7 @@ def main() -> int:
             return 1
         # ★自由文はシェルに書かせない★（プロジェクトの決まり）
         #   置き場の検査つきの共通の口を使う（認証情報の巻き込み防止）
-        import open_issues as _oi
+        import text_args as _oi
         why = _oi._read_text_arg("", a.why_file, "why")
         try:
             record_decision(mid, slug, a.by, why)

@@ -18,8 +18,6 @@
    「何も言わなかった」であって「案件が直った」ではない（2026-08-20に実測）:
      - `validate_machine_data.py --slug 存在しない機種` → exit 0
      - `risky_atoms.py --slug X`（下見）→ 危ない表現が残っていても exit 0
-     - `claim_pipeline.py --slug X` → 台帳で止まっている間は BLOCKED_BY_LEDGER で exit 0
-       （★案件があるせいで、その案件を確かめる検査に到達しない＝堂々巡り★）
    だから4値を返す: **PASS / FAIL / ERROR / NOT_APPLICABLE**
 
 2. **★PASS だけでは閉じない★**（依頼243の指摘3）。`closeable()` は

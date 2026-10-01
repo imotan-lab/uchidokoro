@@ -1311,7 +1311,7 @@ def main() -> int:
         return selftest()
     # ★ファイル渡しは台帳と同じ受け取り方を使う★（置き場の制限つき）
     try:
-        import open_issues as _oi
+        import text_args as _oi
         a.why = _oi._read_text_arg(a.why or "", a.why_file, "why")
     except SystemExit as e:
         print(str(e))

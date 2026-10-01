@@ -182,42 +182,29 @@ def is_transient(problems: list) -> bool:
 
 
 def _to_ledger(slug: str, problems: list, transient: bool) -> None:
-    """★黙って同じ所で止まり続けない★（無人運転のときだけ呼ぶ）。
+    """★黙って同じ所で止まり続けない★＝その日のログへ書く（無人運転のときだけ呼ぶ）。
 
-    ★無人タスクは close しない★＝人が判断する。
-    同じ (slug + kind + title) なら重複登録されず last_seen だけ伸びる。
-
-    ★危険度は必ず決まった語で渡す★（2026-08-06・自分で確認して見つけた）
-      `open_issues.severity_of()` は**知らない語を CRITICAL に倒す**（fail-closed）。
-      当初 "normal" を渡していたが、これは有効な語ではないので CRITICAL になり、
-      **一時的な取得失敗だけでその機種が公開停止扱い**になるところだった。
-      人の判断が要る＝MATERIAL ／ 時間が解決するかも＝QUALITY。
+    （2026-10-01・台帳の廃止で、台帳ではなく日付つきのログへ）
     ★失敗したら例外★＝呼び出し側で失敗として扱う（Codex132回目）。
     """
-    import open_issues as _oi
+    import datetime as _dt
+    import local_paths as _lpx
     if transient:
         title = (f"{slug}: 旧方式の先行記事の材料を"
                  f"{_TRANSIENT_LIMIT}回続けて集められません")
-        kind, sev, code = "external_value", "QUALITY", "GROW_LEGACY_TRANSIENT"
     else:
-        title = f"{slug}: 旧方式の先行記事を育てられません（人の判断が要ります）"
-        kind, sev, code = "structural", "MATERIAL", "GROW_LEGACY_HALT"
-    # ★CLIの引数の形に依存しない入口を使う★（2026-08-10・台帳#300）
-    _oi.add_issue(_oi.DEFAULT_FILE,
-                  source="update-machine", slug=slug, kind=kind, title=title,
-                  detail="grow_legacy.py --next が止まりました: "
-                         + " / ".join(str(x) for x in problems),
-                  severity=sev, reason_code=code)
+        title = f"{slug}: 旧方式の先行記事を育てられません"
+    os.makedirs(_lpx.LOGS, exist_ok=True)
+    p = os.path.join(_lpx.LOGS, "grow_legacy_%s.log" % _dt.date.today().isoformat())
+    with open(p, "a", encoding="utf-8") as f:
+        f.write("[%s] %s／grow_legacy.py --next が止まりました: %s\n" % (
+            _dt.datetime.now().strftime("%Y/%m/%d %H:%M:%S"), title,
+            " / ".join(str(x) for x in problems)))
 
 
 def _blocked(slug: str) -> list:
-    """台帳に「止めるべき」案件があるか（★読めない時は進めない★）。"""
-    try:
-        import open_issues as _oi
-        why = _oi.blocking_slugs().get(slug)
-    except Exception as e:                # noqa: BLE001
-        return [f"台帳を読めません: {e}"]
-    return [f"台帳に止めるべき案件があります: {' / '.join(why)}"] if why else []
+    """★止める理由は無い★（2026-10-01・台帳の廃止で、台帳による停止をやめた）"""
+    return []
 
 
 RUN_WEEKDAY = 0                           # 0=月曜（1周したあとは週1回だけ）

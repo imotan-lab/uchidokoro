@@ -1732,14 +1732,6 @@ MUTATIONS = [
         "after": "                    inner = re.sub(r\"\\\\(.)\", r\"\\1\", m.group(1)) \\",
         "run": ["scripts/audit_site.py"],
     },
-    {
-        "why": "★見せた日の控えを共有の state.json に戻す"
-               "（別の処理の更新を、古い内容で上書きする）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": 'SITE_STATE_NAME = "ledger_site_state.json"',
-        "after": 'SITE_STATE_NAME = "state.json"',
-        "run": ["scripts/ledger_sweep.py"],
-    },
     # ─── 2026-08-30・git が読めなかったことを残す ────────────────
     {
         "why": "★git が読めなかったことを、その日の箱に記録しない"
@@ -4436,14 +4428,6 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
-        "why": "★台帳と守りの結び付けで、案件番号を見ない★"
-               "（★どの案件でも、合格する壊し方1つで閉じられる★）",
-        "file": "scripts/ledger_sweep.py",
-        "before": "    ids = hit[0].get(\"issues\") or []",
-        "after": "    ids = [n]",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
         "why": "★壊れた控えを、取り除く道具でも直せなくする★"
                "（★1件の壊れで控え全体が読めなくなり、"
                "人が手で直すまで夜の新台追加が丸ごと止まる★）",
@@ -4504,48 +4488,6 @@ MUTATIONS = [
         "run": ["scripts/ci_status.py"],
     },
     # ─── 2026-09-30・人へ回すのは運営者の判断が要る案件だけ（運営者の指示）───
-    {
-        "why": "★3回数えたら中身に関係なく知らせる印を付ける（★技術的な直しまで人へ回り、知らせ済みで自動の輪から外れる★）★",
-        "file": "scripts/open_issues.py",
-        "before": "    n = hit[\"attempts\"]\n    # ★★3回数えても、ここでは知らせる印を付けない★★",
-        "after": "    n = hit[\"attempts\"]\n    hit[\"needs_notify\"] = n >= ASK_MAX_ATTEMPTS\n    # ★★3回数えても、ここでは知らせる印を付けない★★",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★運営者の判断が要る案件に知らせる印を付けない（★送れなかったら誰も拾い直さず、運営者に届かない★）★",
-        "file": "scripts/open_issues.py",
-        "before": "    if str(reason_code or \"\") == OWNER_DECISION:",
-        "after": "    if False:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★3回終わった質問を質問の列に残す（★古い順に拾うので居座り、後ろの質問が永久に回らない★）★",
-        "file": "scripts/open_issues.py",
-        "before": "         and int(i.get(\"attempts\") or 0) < ASK_MAX_ATTEMPTS),",
-        "after": "         ),",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★3回終わったものを4回目以降も数える（★終わった質問が輪に残り続ける★）★",
-        "file": "scripts/open_issues.py",
-        "before": "    if int(hit.get(\"attempts\") or 0) >= ASK_MAX_ATTEMPTS:\n        print(f\"#{args.id} はもう",
-        "after": "    if False:\n        print(f\"#{args.id} はもう",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★既にある案件を運営者の判断待ちにしても知らせる印を立てない（★同じ件名の質問が運営者に届かない★）★",
-        "file": "scripts/open_issues.py",
-        "before": "    hit[\"reason_code\"] = OWNER_DECISION\n    hit[\"needs_notify\"] = True",
-        "after": "    hit[\"reason_code\"] = OWNER_DECISION\n    pass",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★3回目の案内を旧入口（add）に戻す（★従うと重複扱いで印が付かず、運営者に届かない★）★",
-        "file": "scripts/open_issues.py",
-        "before": "              f\"escalate --id {args.id} --detail-file <そのファイル> ／ \"",
-        "after": "              f\"add --reason-code {OWNER_DECISION} ／ \"",
-        "run": ["scripts/open_issues.py"],
-    },
     # ─── 2026-10-01・実在しないコミットで直しの記録が袋小路になる（#618）───
     {
         "why": "★実在しないコミットでも直しの記録を進める（★push の確認で永久に止まり、出口も無い★）★",
@@ -4571,13 +4513,6 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     # ─── 2026-10-01・台帳の自己試験が無人タスクの実行中だけ赤くなる（#708）───
-    {
-        "why": "★台帳の自己試験の後半で本物のロックを見る（★無人タスクの実行中だけ赤くなり、タスクの自己修正が止まる★）★",
-        "file": "scripts/open_issues.py",
-        "before": "        globals()[\"LOCK_PATH\"] = Path(_d2) / \"task.lock\"",
-        "after": "        pass",
-        "run": ["scripts/open_issues.py"],
-    },
     # ─── 2026-09-30・Codexが利用制限のときの代役（エージェント2つ・運営者の指示）───
     {
         "why": "★代役の組を認めない（★Codexが上限で止まった日は、2AIの判断を1件も記録できない★）★",
@@ -5010,26 +4945,6 @@ MUTATIONS = [
         "run": ["scripts/build_new_article.py"],
     },
     {
-        "why": "★壊し方の名前を、案件の本文と突き合わせない★"
-               "（★合格する壊し方の名前を1つ渡すだけで、機械の中身と"
-               "無関係な案件まで閉じられる・Codexの指摘★）",
-        "file": "scripts/ledger_sweep.py",
-        "before": ("    bad = [g for g in guards\n"
-                   "           if not (g in body\n"
-                   "                   or _guard_declares_issue(g, (row or {}).get(\"id\")))]"),
-        "after": "    bad = []",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★裏取り待ちの案件を、機械の中身の壊し方だけで閉じられる★"
-               "（★機械が直ったことは、その値の裏取りが済んだ証明にならない★）",
-        "file": "scripts/ledger_sweep.py",
-        "before": ("    if kind in TEXT_GONE_NOT_ENOUGH and guards "
-                   "and not checks:"),
-        "after": "    if False and guards:",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
         "why": "★ラベルの括弧を、末尾のものしか落とさない★"
                "（★実データで本物のラベル7件が違反になり、"
                "基準値が書き直せなくなる＝台帳#586そのものに戻る★）",
@@ -5045,7 +4960,7 @@ MUTATIONS = [
         "file": "scripts/grow_machine.py",
         "before": "    _n = _stuck_count(slug)",
         "after": "    _n = STUCK_ASK_LIMIT",
-        "run": ["scripts/grow_machine.py", "scripts/open_issues.py"],
+        "run": ["scripts/grow_machine.py"],
     },
     {
         "why": "★名前から壊し方を探すときの数え方を1つずらす★"
@@ -5818,87 +5733,6 @@ MUTATIONS = [
         "run": ["scripts/decide_now.py"],
     },
 
-    # ─── 2026-08-30・台帳を毎朝のタスクへ戻す（ledger_sweep）────────
-    #   ★Codexの指摘で作り直した★＝語の名簿で自動的に閉じるのをやめ、
-    #     2AIが名指しした検査を機械が全部やり直す形にした。
-    {
-        "why": "★検査を1つも渡されなくても通す（空で閉じられる）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": ('    if not checks and not texts and not guards:\n'
-                   '        return False, ["確かめる検査が1件もありません"]'),
-        "after": ('    if not checks and not texts and not guards:\n'
-                  '        return True, []'),
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★1件でも通らなければ閉じない、をやめる"
-               "（片方だけ確かめて閉じる＝#284の型）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "        if not _one({\"check\": \"text_gone\", "
-                  "\"version\": meta[\"version\"],\n"
-                  "                     \"args\": {\"slug\": slug, "
-                  "\"text\": t},\n"
-                  "                     \"expected_commit\": head}, "
-                  "f\"text_gone[{t[:30]}]\"):\n"
-                  "            return False, whys, done",
-        "after": "        if not _one({\"check\": \"text_gone\", "
-                 "\"version\": meta[\"version\"],\n"
-                 "                     \"args\": {\"slug\": slug, "
-                 "\"text\": t},\n"
-                 "                     \"expected_commit\": head}, "
-                 "f\"text_gone[{t[:30]}]\"):\n"
-                 "            pass",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★案件の機種を見ない"
-               "（別機種の存在しない文で、どの案件でも閉じられる）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "    if str(row.get(\"slug\") or \"\") != slug:",
-        "after": "    if False:",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★閉じている案件をもう一度閉じられる／"
-               "存在しない番号でも進む★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "    if row is None:\n"
-                  "        return False, f\"#{issue_id} という案件がありません\"",
-        "after": "    if row is None:\n        return True, \"\"",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★文体の検査だけで閉じる"
-               "（19通りの文末しか見ていないのに「直った」にする）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "NEED_COMPANION = (\"plain_style_gone\",)",
-        "after": "NEED_COMPANION = ()",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★観測どまりの検査でも閉じる★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "        if not meta.get(\"closeable\"):",
-        "after": "        if False:",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★案件に書かれていない逐語でも閉じる"
-               "（でたらめな文字列でどの案件でも閉じられる）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "    bad = [t for t in texts if t not in body]",
-        "after": "    bad = []",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★裏取り待ちの案件を、文が消えただけで閉じる"
-               "（載せるのをやめただけかもしれないのに）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": 'TEXT_GONE_NOT_ENOUGH = ("external_value",)',
-        "after": "TEXT_GONE_NOT_ENOUGH = ()",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-
     # ─── 2026-08-30・一覧の狙い目を既定表示にそろえる（align_strategy）───
     {
         "why": "★一覧が交換率を名乗っていても数値を替える"
@@ -6488,63 +6322,6 @@ MUTATIONS = [
     },
     # ─── 2026-09-17・台帳を人の手なしで閉じる（閉じる入口を1本にする）────
     {
-        "why": "★受領証の形を見る関門を、呼ばずに素通りする"
-               "（関数だけを試す試験は緑のまま＝罠③）★",
-        "file": "scripts/open_issues.py",
-        "before": "    ng = _receipt_problems(rec, args.id, row)",
-        "after": "    ng = \"\"",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★受領証の版を見ない（形を変えたのに、古い受領証で閉じられる）★",
-        "file": "scripts/open_issues.py",
-        "before": "    if str(rec.get(\"schema\") or \"\") != RECEIPT_SCHEMA:",
-        "after": "    if False:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★受領証がどの案件のものかを見ない（1件ぶん確かめて、別の案件を閉じられる）★",
-        "file": "scripts/open_issues.py",
-        "before": "    if rec.get(\"issue_id\") != issue_id:",
-        "after": "    if False:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★受領証の機種を見ない（別の機種の控えで通してしまう）★",
-        "file": "scripts/open_issues.py",
-        "before": "    if str(rec.get(\"slug\") or \"\") != str(row.get(\"slug\") or \"\"):",
-        "after": "    if False:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★確かめた時の指紋が無い受領証で閉じる（台帳の外にある控えは、コミットの照合では覆えない）★",
-        "file": "scripts/open_issues.py",
-        "before": "        if not str(c.get(\"observation_digest\") or \"\"):",
-        "after": "        if False:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★同じ回を何度でも数える（タスクが落ちてやり直しただけで3回に達し、人へ回る）★",
-        "file": "scripts/open_issues.py",
-        "before": "    if rid in done:",
-        "after": "    if False:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★仕組みの都合で動かせなかった回も数える（利用制限や時間切れだけで人へ回る）★",
-        "file": "scripts/open_issues.py",
-        "before": "    if outcome == \"error\":",
-        "after": "    if False:",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★機種の区分を決める側が台帳を読む（案件を閉じるだけで、中身の薄い新台が検索に載る）★",
-        "file": "scripts/page_decision.py",
-        "before": "import safe_json as _sj",
-        "after": "import safe_json as _sj\nimport open_issues as _oi_break",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
         "why": "★控えを甘い読み方で読む"
                "（契約を満たさない記録・出典が1社だけの値でも、"
                "裏取り待ちの案件が閉じる）★",
@@ -6568,46 +6345,11 @@ MUTATIONS = [
         "run": ["scripts/recheck.py"],
     },
     {
-        "why": "★判断者を件数で数える（--by claude,claude が通り、1AIだけで「2AIが決めた」ことにできる）★",
-        "file": "scripts/open_issues.py",
-        "before": "        ok = _cv.judges_exact(by)",
-        "after": "        ok = len({str(x).strip() for x in (by or []) if str(x).strip()}) >= 2",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
         "why": "★判断者を大文字小文字のまま見る（同じ名前が別人に見える）★",
         "file": "scripts/confirmed_values.py",
         "before": "    return {str(x).strip().casefold() for x in (who or []) if str(x).strip()}",
         "after": "    return {str(x).strip() for x in (who or []) if str(x).strip()}",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★受領証の2AI合意を見ない（Claudeひとりで閉じられる）★",
-        "file": "scripts/open_issues.py",
-        "before": "    ng = judges_problem(rec.get(\"by\"))\n    if ng:\n        return \"受領証の\" + ng",
-        "after": "    ng = \"\"\n    if ng:\n        return \"受領証の\" + ng",
-        "run": ["scripts/open_issues.py"],
-    },
-    {
-        "why": "★閉じるときに2AIの合意を見ない（Claudeひとりで閉じられる）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "    ng = _oi_mod.judges_problem(by)",
-        "after": "    ng = \"\"",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★理由を書かずに閉じられる（なぜ直ったかが残らない）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "    if len(str(why_extra or \"\").strip()) < 15:",
-        "after": "    if False:",
-        "run": ["scripts/ledger_sweep.py"],
-    },
-    {
-        "why": "★検査を挙げたのに、木が汚れたまま確かめる（いまの記事で確かめたと言えない）★",
-        "file": "scripts/ledger_sweep.py",
-        "before": "        if _dirty():\n            print(\"★閉じません★ 未コミットの変更があります\"",
-        "after": "        if False:\n            print(\"★閉じません★ 未コミットの変更があります\"",
-        "run": ["scripts/ledger_sweep.py"],
+        "run": ["scripts/confirmed_values.py"],
     },
     # ─── 2026-09-18・ページの指紋（台帳#696） ─────────────────────
     {

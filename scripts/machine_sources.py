@@ -833,12 +833,7 @@ def quarantined(rec: dict) -> bool:
 
 
 def issue_texts(slug: str, rec: dict, got: dict):
-    """隔離を台帳へ登録するときの題と本文（★文章だけ・実行はしない★）。
-
-    ★2026-08-21に引数列を返すのをやめた★（Codexの再指摘）＝
-      オプション名を並べるのも、別プロセスを起こすのも
-      `open_issues.run_add()` に閉じ込めた。ここは文章だけを作る。
-    """
+    """隔離をその日のログへ書くときの題と本文（★文章だけ・実行はしない★）。"""
     title = ("控えの出典が別のページに変わった疑い: %s（%s）"
              % (slug, rec.get("publisher") or "?"))
     detail = "\n".join([
@@ -874,21 +869,22 @@ def report_changed(slug: str, rec: dict, got: dict) -> bool:
     """
     if got.get("state") != CHECK_CHANGED:
         return True
-    # ★★実行まで1か所に閉じ込める★★（2026-08-21・Codexの再指摘）
-    #   ★オプション名を並べる場所も、別プロセスを起動する場所も1つ★
+    # ★★台帳ではなく、日付つきのログへ書く★★（2026-10-01・台帳の廃止）
+    #   隔離された出典は使われない（控えに残る）。どちらの機種のページかは、
+    #   その機種を担当した回に2AIが決める（--accept-current / --forget）。
     try:
-        import open_issues as _oi
+        import local_paths as _lpx
         title, detail = issue_texts(slug, rec, got)
-        ok, out = _oi.run_add(source="machine-sources", slug=slug,
-                              kind="external_value", severity="CRITICAL",
-                              reason_code="SOURCE_PAGE_CHANGED",
-                              title=title, detail=detail)
-        if ok:
-            return True
-        why = out[:200]
+        os.makedirs(_lpx.LOGS, exist_ok=True)
+        p = os.path.join(_lpx.LOGS, "machine_sources_%s.log"
+                         % datetime.date.today().isoformat())
+        with open(p, "a", encoding="utf-8") as f:
+            f.write("[%s] %s\n%s\n\n" % (
+                datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S"), title, detail))
+        return True
     except Exception as e:                  # noqa: BLE001
         why = str(e)[:200]
-    print("★台帳へ登録できませんでした（%s / %s）★: %s"
+    print("★隔離した出典をログへ書けませんでした（%s / %s）★: %s"
           % (slug, rec.get("url"), why), file=sys.stderr)
     return False
 
@@ -1565,25 +1561,20 @@ def selftest() -> int:
           R(marked, "<title>" + title_now + "</title><body>短い</body>"
             )["state"] == CHECK_UNUSABLE)
 
-        # ★隔離を台帳へ届ける道を、本物の台帳スクリプトで通す★
-        #   握りつぶす作りなので、引数が1つ違うだけで**誰にも届かなくなる**。
-        led = os.path.join(tmpdir, "issues.json")
-        import subprocess
-        import open_issues as _oi_t
-        _ttl, _dtl = issue_texts(slug, marked, R(marked, other))
-        rr = subprocess.run(
-            [sys.executable, os.path.join(BASE, "scripts", "open_issues.py"),
-             "--file", led]
-            + _oi_t.add_argv(source="machine-sources", slug=slug,
-                             kind="external_value", severity="CRITICAL",
-                             reason_code="SOURCE_PAGE_CHANGED",
-                             title=_ttl, detail=_dtl)[2:],
-            env=dict(os.environ, UCHIDOKORO_ARGV_CALL="1"),
-            capture_output=True, timeout=60, check=False)
-        t("★★隔離は台帳が実際に受け取れる形で送る★★（届かなければ誰も気づけない）",
-          rr.returncode == 0
-          and "別のページに変わった疑い" in _sj.read_json(
-              led, expect=dict)["issues"][0]["title"])
+        # ★隔離はその日のログへ書く★（2026-10-01・台帳の廃止）
+        #   握りつぶす作りなので、書けなければ誰も気づけない＝実際に書かれたことを見る。
+        import local_paths as _lpt
+        _keep_logs = _lpt.LOGS
+        try:
+            _lpt.LOGS = os.path.join(tmpdir, "logs")
+            _ok = report_changed(slug, marked, R(marked, other))
+            _lf = os.path.join(_lpt.LOGS, "machine_sources_%s.log"
+                               % datetime.date.today().isoformat())
+            _txt = open(_lf, encoding="utf-8").read() if os.path.isfile(_lf) else ""
+        finally:
+            _lpt.LOGS = _keep_logs
+        t("★★隔離はその日のログへ実際に書かれる★★（届かなければ誰も気づけない）",
+          _ok and "別のページに変わった疑い" in _txt)
 
         t("　確認の結果は控えに書き戻せる（手がかりの取り直し）",
           (_save({"schema_version": SCHEMA,
@@ -1794,7 +1785,7 @@ def main() -> int:
     # ★ファイル渡しは台帳と同じ受け取り方を使う★（置き場も同じ制限）
     #   ＝ops / _design の下だけ・大きさとUTF-8を確かめる・制御文字を弾く。
     try:
-        import open_issues as _oi
+        import text_args as _oi
         a.why = _oi._read_text_arg(a.why, a.why_file, "why")
         a.override_identity = _oi._read_text_arg(
             a.override_identity, a.override_identity_file, "override-identity")

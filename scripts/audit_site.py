@@ -3430,61 +3430,6 @@ def check_49_equivalence_label(machines: list) -> list[str]:
     return ng
 
 
-def check_48_ledger_argv(machines: list) -> list[str]:
-    """台帳CLIのオプション名を、あちこちで並べていないか
-
-    ★なぜ見張るか（2026-08-21・台帳#312）★
-      コード側が「--source」「--slug」…と**自分で並べて**台帳CLIを
-      別プロセスで起動している箇所が3つあった。
-      ★CLIの引数を増減させると、3つとも黙って失敗しうる★
-      （台帳#300とまったく同じ型＝オプション名への依存が各所に散る）。
-
-    ★並べてよいのは2か所だけ★
-      ・open_issues.add_argv … 引数列を作る唯一の場所
-      ・open_issues の argparse 定義 … CLIそのもの
-
-    ★★これは主防御ではない（補助の見張り）★★（2026-08-21・Codexの再指摘）
-      字面で探しているので、次のような書き方は拾えない:
-        ・'add' や '--source' のように単引用符で書く
-        ・cmd = ["add"] のあとから extend() する
-        ・オプション名を定数や変数に入れる
-        ・400字より離れたところで組み立てる
-      ★本当の守りは「書きようがない形にする」こと★＝
-        ・同じプロセスでよければ `open_issues.add_issue()`
-        ・別プロセスが要るなら `open_issues.run_add()`
-          （引数列を作るのも起動するのも、その中だけ）
-      3系統（add_machine_run / codex_audit / machine_sources）は
-      2026-08-21に run_add() へ寄せた。
-      ここは「うっかり戻した」を早めに見つけるための網。
-    """
-    import glob
-    ng = []
-    for path in sorted(glob.glob(os.path.join(BASE, "scripts", "*.py"))):
-        rel = "scripts/" + os.path.basename(path)
-        try:
-            with open(path, encoding="utf-8") as f:
-                src = f.read()
-        except OSError:
-            continue
-        if rel == "scripts/open_issues.py":
-            continue          # ★ここが唯一の置き場（add_argv と argparse 定義）★
-        if rel == "scripts/audit_site.py":
-            continue          # この検査自身
-        # ★★「台帳CLIを起動している並び」だけを見る★★
-        #   ★自分のCLIを定義しているだけの add_argument("--source"…) は別物★
-        #   （confirmed_values を誤って挙げたので絞った）。
-        #   台帳へ登録する呼び出しは、必ず "add" のあとに
-        #   --source と --slug と --kind が並ぶ。
-        for m in re.finditer(r'"add"\s*,', src):
-            seg = src[m.start():m.start() + 400]
-            if '"--source"' in seg and '"--slug"' in seg and '"--kind"' in seg:
-                ng.append(
-                    f"{rel}: 台帳CLIのオプション名を自分で並べています"
-                    "（open_issues.add_argv を使ってください・台帳#312）")
-                break
-    return ng
-
-
 def check_47_model_code_in_html(machines: list) -> list[str]:
     """公開ページに型式名が焼き込まれたまま残っていないか
 
@@ -4234,7 +4179,6 @@ CHECKS = [
     ("45_中身なしの噂の箱", check_45_rumor_declared_empty),
     ("46_ポチポチくんの案内と飛び先", check_46_pochipochi_reachable),
     ("47_公開ページに残った型式名", check_47_model_code_in_html),
-    ("48_台帳CLIの引数の並べ場所", check_48_ledger_argv),
     ("49_等価の呼び方", check_49_equivalence_label),
     ("50_契約が依存まで閉じているか", check_50_contract_closure),
     ("51_試験の数え方が早すぎないか", check_51_selftest_tally),

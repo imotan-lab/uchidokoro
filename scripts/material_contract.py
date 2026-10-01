@@ -184,7 +184,7 @@ CONTRACT_INPUTS = frozenset({
 #   ここに載っているものは、顔ぶれの記録から外します（毎回変わって邪魔なので）。
 #   ★土台そのものを変える話は、この仕組みの外です★
 BASELINE_MODULES = frozenset({
-    "safe_json", "local_paths", "ci_safe", "open_issues", "task_lock",
+    "safe_json", "local_paths", "ci_safe", "text_args", "task_lock",
     "backup_guard", "log", "send_notify",
 })
 
@@ -482,7 +482,7 @@ def main() -> int:
         why = ""
         if a.deps_why_file:
             try:
-                import open_issues as _oi
+                import text_args as _oi
                 why = _oi._read_text_arg("", a.deps_why_file, "deps-why")
             except SystemExit as e:
                 print(str(e))

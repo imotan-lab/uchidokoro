@@ -1230,7 +1230,7 @@ def _guard_problem(slug: str) -> str:
                 "2AIの合意（AGREED）を通らずには書けません）")
     try:
         _tg.before_write(who["task"], slug, _sp,
-                         repairing=who["repairing"], finding=_fid)
+                         finding=_fid)
     except Exception as e:                                   # noqa: BLE001
         return f"まだ書いてよい状態ではありません: {e}"
     return ""
@@ -3473,7 +3473,7 @@ def _selftest() -> int:
                  "tasks": {"update-machine": {
                      "run_date": _tg9._today(),
                      "target_slug": _ok_slug, "guard_slug": _ok_slug,
-                     "repairing": False, "mutation_started": False,
+                     "mutation_started": False,
                      "decision_finding": _fid9,
                      "codex_rounds": 0, "final_stage": None}},
                  "day": {}, "reservations": {}, "repair": {},
@@ -3487,7 +3487,7 @@ def _selftest() -> int:
                      "tasks": {"update-machine": {
                          "run_date": _tg9._today(),
                          "target_slug": _ok_slug, "guard_slug": _ok_slug,
-                         "repairing": False, "mutation_started": False,
+                         "mutation_started": False,
                          "codex_rounds": 0, "final_stage": None}},
                      "day": {}, "reservations": {}, "repair": {},
                      "night": {}, "manual_commits": []}, ensure_ascii=False))
@@ -3498,7 +3498,7 @@ def _selftest() -> int:
                      "tasks": {"update-machine": {
                          "run_date": "2000-01-01",
                          "target_slug": _ok_slug, "guard_slug": _ok_slug,
-                         "repairing": False, "decision_finding": _fid9}},
+                         "decision_finding": _fid9}},
                      "day": {}, "reservations": {}, "repair": {},
                      "night": {}, "manual_commits": []}, ensure_ascii=False))
                 _gp9c = _guard_problem(_ok_slug)

@@ -17,7 +17,6 @@
   1. 育てる対象である（`grow_scope_problem` が唯一の判定箇所）
      ＝`AUTO_PENDING`、または `AUTO_INDEXABLE` で**空の欄が残っている**
   2. 検索方針が `normal`（緊急スイッチが入っていない）
-  3. 台帳に「止めるべき」案件が無い
   4. 公式（または同じ公式の一覧カード）で**本人性を確かめ直せる**
      ＝名前・メーカー・型式・登場年月が登録済みのものと**変わっていない**
   5. 材料は**増えるだけ**（既に確認済みの事実が消えたり変わったら中止）
@@ -45,7 +44,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import build_new_article as _ba          # noqa: E402
 import confirmed_values as _cv           # noqa: E402
-import open_issues as _oi                # noqa: E402
+import owner_questions as _oq             # noqa: E402
 import page_decision as _pdz
 import page_probe as _pp             # noqa: E402
 import publish_new_machine as _pub       # noqa: E402
@@ -1547,59 +1546,29 @@ def grow_result(slug: str, ok: bool, why: str = "",
 
 def ledger_once(slug: str, title: str, detail: str,
                 severity: str = "MATERIAL", round_=None) -> None:
-    """★黙って止まり続けない★（2026-08-05・Codex102回目）
+    """★2AIで3回決まらなかったときだけ、運営者への質問として届ける★
 
+    （2026-10-01・台帳の廃止で、台帳ではなく `owner_questions` へ）
     確認済みだった内容が再現できなくなった時、毎日同じ理由で止まるだけだと
     **誰も気づかないまま古い内容が公開され続ける**。
-    台帳へ1件だけ上げる（同じ題なら重複せず last_seen が更新される）。
-    ★無人タスクは close しない★＝人が判断する。
-
-    ★★何回目かを必ず渡す★★（2026-09-08・運営者の承認）
-      運営者の指示（2026-08-27）＝
-        ＞ 2AIで結論出して。人に頼らないで。
-        ＞ 本当にどうしてもの場合だけメールで報告
-      判断は `grow_result()` が持っていて、1〜2回目は2AIへの質問、
-      3回目でだけ台帳（＝メール）。
-      ★ところがこの関数は誰からでも呼べた★ので、
-      あとから足した道が3回の判断を飛ばせた。
-      ＝指示が守られるかどうかが「書いた人の注意力しだい」だった。
-      ★いまは機械が断る★＝3回に届いていなければ積まない。
+    ★機械が回数を数える★＝`grow_result()` が積み上げた控えで3回に届いていなければ届けない
+    （呼ぶ側が「3回目です」と言うだけでは通らない）。
     """
-    # ★★控えを読み直して数える★★（2026-09-08・Codexの指摘3）
-    #   ★直す前は呼ぶ側が渡した回数をそのまま信じていた★＝
-    #   `round_=3` と書くだけで積めたので、
-    #   ★「3回の判断を通した」の証明になっていなかった★。
-    #   数えるのは `grow_result()` が実際に積み上げた控え。
     _n = _stuck_count(slug)
     if _n < STUCK_ASK_LIMIT:
-        # ★積まない★＝2AIがまだ決められる段階なので、人へ回さない。
-        #   ★黙って捨てない★＝呼んだ側の間違いなので記録に残す。
         try:
-            _log(f"  ★台帳へは積みません★（{slug}／控えでは{_n}回目・"
+            _log(f"  ★運営者へは回しません★（{slug}／控えでは{_n}回目・"
                  f"{STUCK_ASK_LIMIT}回で報告します）")
         except Exception:                                    # noqa: BLE001
             pass
         return
     try:
-        # ★CLIの引数の形に依存しない入口を使う★（2026-08-10・台帳#300）
-        #   Namespace を手で組んでいたので、CLIに引数が増えるたびに
-        #   ここが黙って壊れていた（安全網が黙って死んでいた）。
-        _oi.add_issue(_oi.DEFAULT_FILE,
-                      source="grow-machine", slug=slug, kind="external_value",
-                      title=title, detail=detail, severity=severity,
-                      reason_code="GROW_VALUE_LOST")
-    except Exception as e:                # noqa: BLE001
-        _log(f"  台帳に登録できませんでした: {type(e).__name__}: {e}")
+        _oq.add(_oq.STORE, f"{slug}: {title}", detail)
+    except BaseException as e:            # noqa: BLE001
+        _log(f"  運営者への質問を控えられませんでした: {type(e).__name__}: {e}")
 
 
-def blocked_by_ledger(slug: str) -> list:
-    """台帳に「止めるべき」案件があるか。"""
-    try:
-        got = _oi.blocking_slugs()
-    except Exception as e:                # noqa: BLE001
-        return [f"台帳を読めません: {e}"]   # ★読めない時は進めない★
-    why = got.get(slug)
-    return [f"台帳に止めるべき案件があります: {' / '.join(why)}"] if why else []
+
 
 
 
@@ -1691,7 +1660,6 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     if mode != "normal":
         out["problems"].append(f"検索方針が通常ではありません（{mode}）")
         return out
-    out["problems"] += blocked_by_ledger(slug)
     left = _pub.unfinished()
     if left:
         out["problems"].append(
@@ -2021,7 +1989,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
             _not_yet = True
         if _not_yet:
             out.setdefault("notes", []).append(
-                f"まだ導入されていないので台帳へは積みません（登場 {_rel}）")
+                f"まだ導入されていないので運営者へは回しません（登場 {_rel}）")
         else:
             # ★★人ではなく2AIへ回す★★（2026-08-27・運営者の指示）
             #   ★直す前は、その場で台帳へ積んでいた★＝人が来るまで止まったまま。
@@ -2034,7 +2002,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
                     "text": _act["text"], "kind": "grow_stuck",
                     "slug": slug, "round": _act["round"]})
                 out.setdefault("notes", []).append(
-                    f"2AIに聞きます（{_act['round']}回目・台帳へは積みません）")
+                    f"2AIに聞きます（{_act['round']}回目・運営者へは回しません）")
             else:
                 ledger_once(
                     slug,
@@ -2071,7 +2039,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
                          + " ／ 作り直すと: " + str(out["now"])),
                 "kind": "grow_demote", "slug": slug, "round": _act["round"]})
             out.setdefault("notes", []).append(
-                f"2AIに聞きます（{_act['round']}回目・台帳へは積みません）")
+                f"2AIに聞きます（{_act['round']}回目・運営者へは回しません）")
         else:
             ledger_once(slug,
                         "作り直すと検索から外れるので書けません（育てる処理を止めています）",
@@ -2446,9 +2414,8 @@ def selftest() -> int:
     #   ★呼ぶ側が読んでいる実体を差し替える★＝このファイルを直接動かすと
     #   自分は __main__ になるため、名前で取り直す。
     import tempfile
-    import open_issues as _oi_mod
-    _keep_ledger, _tmp_dir = _oi_mod.DEFAULT_FILE, tempfile.mkdtemp()
-    _oi_mod.DEFAULT_FILE = _oi_mod.Path(_tmp_dir) / "issues.json"
+    _keep_ledger, _tmp_dir = _oq.STORE, tempfile.mkdtemp()
+    _oq.STORE = _oq.Path(_tmp_dir) / "owner_questions.json"
     # ★★行き詰まりの控えも一時の置き場へ向ける★★
     #   （2026-09-08・Codexの指摘3）
     #   ★直す前は本番の grow_check.json を書き換えていた★＝
@@ -3639,37 +3606,25 @@ def selftest() -> int:
       any("育てる対象ではありません" in p for p in _st_out["problems"]))
     t("　知らないslugは対象にしない",
       any("一覧にありません" in p for p in plan_one("no_such_slug")["problems"]))
-    # 台帳で止まっている機種は触らない
-    real_blocking = _oi.blocking_slugs
-    try:
-        _oi.blocking_slugs = lambda: {"zz": ["#1 止める"]}
-        t("★★台帳で止まっている機種は育てない★★",
-          any("止めるべき案件" in x for x in blocked_by_ledger("zz"))
-          and not blocked_by_ledger("other"))
-        _oi.blocking_slugs = lambda: (_ for _ in ()).throw(RuntimeError("読めない"))
-        t("★★台帳を読めない時は進めない★★",
-          any("台帳を読めません" in x for x in blocked_by_ledger("zz")))
-    finally:
-        _oi.blocking_slugs = real_blocking
     # ★本番の台帳ではなく、使い捨ての台帳へ書いたことを確かめる★
     # ★その環境に本番の置き場が無くても落ちないこと★（2026-08-13）
     #   CIはLinuxなので C:/Users/... は存在しない。
     #   samefile() は存在しないパスに例外を投げるため、
     #   **自己テストがそこで落ちてCIが赤になっていた**。
     def _not_the_real_ledger() -> bool:
-        if _oi_mod.DEFAULT_FILE == _keep_ledger:
+        if _oq.STORE == _keep_ledger:
             return False
         try:
             # 実在する時だけ「同じ場所ではない」ことも確かめる
-            if _keep_ledger.exists() and _oi_mod.DEFAULT_FILE.exists():
-                return not _keep_ledger.samefile(_oi_mod.DEFAULT_FILE)
+            if _keep_ledger.exists() and _oq.STORE.exists():
+                return not _keep_ledger.samefile(_oq.STORE)
         except OSError:
             pass                       # 触れない置き場なら、違う場所とみなす
         return True
 
-    t("★★自己テストは本番の台帳に書かない★★（実際にごみが3件入ったので固定する）",
+    t("★★自己テストは本番の控えに書かない★★（実際にごみが3件入ったので固定する）",
       _not_the_real_ledger())
-    _oi_mod.DEFAULT_FILE = _keep_ledger
+    _oq.STORE = _keep_ledger
     # ★差し替えた出典探しを必ず戻す★（試験のあとに本番が空を返さないように）
     globals()["find_sources"] = _keep_find
     import shutil
@@ -4835,9 +4790,9 @@ def selftest() -> int:
             #   （Codexの指摘＝`round_=3` と書くだけで積めては、
             #     「3回の判断を通した」の証明にならない）
             _wrote = []
-            _keep_add = _oi.add_issue
+            _keep_add = _oq.add
             try:
-                _oi.add_issue = lambda *a, **k: _wrote.append(k.get("slug"))
+                _oq.add = lambda _p, title, detail: _wrote.append(title.split(":")[0])
                 grow_result("zzz_g", True)          # ★まず0に戻す★
                 ledger_once("zzz_g", "題", "中身")
                 t("★★行き詰まっていないうちは台帳へ積まない★★"
@@ -4860,7 +4815,7 @@ def selftest() -> int:
                   and (ledger_once("zzz_g", "題", "中身") or True)
                   and _wrote == ["zzz_g"])
             finally:
-                _oi.add_issue = _keep_add
+                _oq.add = _keep_add
             _a3 = grow_result("zzz_s", False, "理由", today="2026-08-03")
             t("★★3回目でだけ人へ報告する★★",
               _a3["do"] == "ledger" and _a3["round"] == STUCK_ASK_LIMIT)

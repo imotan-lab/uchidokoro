@@ -6,7 +6,7 @@
 
 ★止まる所は必ず理由を残す★
   「新台なし」で静かに終わるのが一番こわいので、
-  取れなかった・決められなかったときは要確認台帳に残す。
+  取れなかった・決められなかったときは、その晩のログに理由を残す。
 
 ★既定は dry-run★
   `--apply` を付けたときだけ書き込む。書き込む前に
@@ -135,25 +135,20 @@ def _now() -> str:
     return datetime.now().strftime("%Y/%m/%d %H:%M:%S")
 
 
-def _ledger(slug, kind, severity, code, title, detail) -> bool:
-    """要確認台帳に残す。★止まった理由を必ず残すため★
+def _record_issue(slug, kind, severity, code, title, detail) -> bool:
+    """止まった理由を、その晩のログに必ず残す（2026-10-01・台帳の廃止でログへ）。
 
     ★残せたかどうかを返す★（2026-07-31・Codex19回目）
-      以前は成否を見ていなかった。台帳に入らなかったのに待ち行列から外すと、
-      **待ち行列にも台帳にも無い機種**になる。
-      公式URLは既知なので、二度と出てこない＝黙って消える。
+      残せなかったのに待ち行列から外すと、**待ち行列にもどこにも無い機種**になる。
     """
-    # ★★実行まで1か所に閉じ込める★★（2026-08-21・Codexの再指摘）
-    #   ★オプション名を並べる場所も、別プロセスを起動する場所も1つ★
-    #   ＝字面の監査に頼らず、書きようがない形にする。
-    import open_issues as _oi
-    ok, out = _oi.run_add(source="add-machine", slug=slug, kind=kind,
-                          severity=severity, reason_code=code,
-                          title=title, detail=detail)
-    if not ok:
-        _log(f"  ★台帳に登録できませんでした: {out[:200]}★")
+    try:
+        _log(f"  ★記録 [{code}] {slug}・{kind}・{severity}★ {title}")
+        for line in str(detail or "").splitlines():
+            _log(f"    {line}")
+        return True
+    except Exception as e:                               # noqa: BLE001
+        print(f"★止まった理由をログへ書けませんでした: {e}★", file=sys.stderr)
         return False
-    return True
 
 
 def _forget(seen: dict, maker_id: str, url: str) -> None:
@@ -249,7 +244,7 @@ def recheck_known(mid: str, r: dict, seen: dict, out: dict) -> None:
         now_t = unicodedata.normalize("NFKC", _nw.page_title(html)).strip()
         old_t = titles.get(url) or ""
         if old_t and now_t and old_t != now_t:
-            if _ledger("site", "structural", "MATERIAL",
+            if _record_issue("site", "structural", "MATERIAL",
                        "KNOWN_URL_CONTENT_CHANGED",
                        "既知の公式URLのページ題が変わりました（使い回しの疑い）",
                        f"{url} / {old_t[:80]} → {now_t[:80]}"):
@@ -2433,7 +2428,7 @@ def _remember_url(name, url, maker, release, reason) -> bool:
         _log(f"  ★待ち行列に入れられませんでした: {url} / {e}★")
         # ★台帳にも残せなければ「見た」ことにしない★（2026-07-31・Codex20回目）
         #   どちらにも残らないまま seen に入れると、その機種は二度と出てこない。
-        return _ledger("site", "structural", "MATERIAL", "PENDING_WRITE_FAILED",
+        return _record_issue("site", "structural", "MATERIAL", "PENDING_WRITE_FAILED",
                        "新台を待ち行列に入れられませんでした",
                        f"{url} / {e}")
 
@@ -2900,7 +2895,7 @@ def give_up_now(pend: dict, queue_id: str, url: str, name: str,
       台帳へ移したはずの機種が毎晩蘇っていた**（台帳にも毎晩同じ件が積まれる）。
       行列の保存は「1回の実行につき1つの行列オブジェクト」に一本化する。
     """
-    if not _ledger("site", "structural", "MATERIAL", "PENDING_PERMANENT_BLOCK",
+    if not _record_issue("site", "structural", "MATERIAL", "PENDING_PERMANENT_BLOCK",
                    "新台を記事にできません（やり直しても変わらない理由）",
                    f"{name} / {url} / " + " / ".join(problems)[:1200]):
         # ★台帳に残せなかったら行列からも外さない★（消えるより残るほうがまし）
@@ -3327,8 +3322,8 @@ def _ask_key(question: str) -> str:
     return head or "unknown"
 
 
-def ask_ledger_body(question: str, code: str = "ASK_2AI") -> str:
-    """★台帳に載せる本文★＝**記録先の案内は問いの種類ごとに書き分ける**
+def question_record_body(question: str, code: str = "ASK_2AI") -> str:
+    """★2AIへの問いの本文★＝**記録先の案内は問いの種類ごとに書き分ける**
 
     ★なぜ関数に切り出したか★＝ここが違う置き場へ案内すると、
     答える側は質問文どおりに動けない（2026-09-18・Codexの指摘で実際に起きた）。
@@ -3341,7 +3336,7 @@ def ask_ledger_body(question: str, code: str = "ASK_2AI") -> str:
         howto = ("手順は新台SKILL.mdの STEP 3-B-M（メーカー表記の照合）。"
                  "見るのは記事の原文ではなく、名鑑のその機種のページと"
                  "当事会社の公式サイトです。決まれば "
-                 "maker_identity_cache.py --record へ控え、この行は閉じられます。\n")
+                 "maker_identity_cache.py --record へ控えます。\n")
     elif code == "ASK_2AI_LINEAGE":
         # ★★同じ出どころか、の問いは記録先が違う★★（2026-09-18・Codexの指摘）
         #   ★直す前はメーカー表記の質問に相乗りしていた★ので、
@@ -3354,18 +3349,18 @@ def ask_ledger_body(question: str, code: str = "ASK_2AI") -> str:
                  "実測では、独立した名鑑どうしの一致率は0%です。\n")
     else:
         howto = ("（手元の出典→3つ目の出典→検索で別系統）。"
-                 "決まれば confirmed_values へ記録し、この行は閉じられます。\n")
+                 "決まれば confirmed_values へ記録します。\n")
     return (f"{question}\n\n"
             "★機械では決められない意味の判断です★\n"
             "★人が判断する案件ではありません★＝新台タスクが同じ晩のうちに、"
             "材料を変えながらやり直します。\n"
             + howto
-            + "やり直しの上限（open_issues.py の ASK_MAX_ATTEMPTS）で2AIが割れたときだけ、"
+            + "1つの食い違いにつき3回まで（毎回材料を足す）。3回で2AIが割れたときだけ、"
               "両者の言い分と根拠URLを並べて運営者に判断してもらいます"
-              "（reason_code OWNER_DECISION）。それ以外は人へ回しません。")
+              "（owner_questions.py add）。それ以外は人へ回しません。")
 
 
-def _ask_ledger(slug: str, name: str, question: str, key: str = "",
+def _record_question(slug: str, name: str, question: str, key: str = "",
                 code: str = "ASK_2AI") -> bool:
     """★2AIで決まらなかったことを台帳へ★（2026-08-12・運営者決定）
 
@@ -3373,13 +3368,13 @@ def _ask_ledger(slug: str, name: str, question: str, key: str = "",
     それでも答えが出ないまま公開まで来たときだけ、ここで知らせる。
     ★メールを送るのは台帳のまとめ（翌朝）★＝公開処理はメールで止めない。
     """
-    return _ledger(
+    return _record_issue(
         slug, "quality", "QUALITY", code,
         # ★質問ごとに別の案件にする★（2026-08-12・依頼164のP1）
         #   機種名だけだと、同じ機種の**別の質問**が同じ案件に合流し、
         #   片方の回数が満了しただけで新しい質問まで自動の輪から消える。
         f"{name}: 2AIで決まらなかった項目があります（{(key or _ask_key(question))}）",
-        ask_ledger_body(question, code))
+        question_record_body(question, code))
 
 
 
@@ -3428,7 +3423,7 @@ def _ledger_questions(out: dict, name: str) -> None:
     ★読めなくて止まった機種ほど台帳に届かなかった★。
     """
     for q in out.get("ask_2ai") or []:
-        if not _ask_ledger(out.get("slug"), name, q):
+        if not _record_question(out.get("slug"), name, q):
             # ★載せられなくても公開は止めない★が、黙って消さない
             out["problems"].append(f"2AIへの質問を台帳に載せられません: {q[:80]}")
 
@@ -3533,7 +3528,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
         # ★メーカー表記の質問だけ見分けられるようにする★（依頼190）
         #   聞き方が違う（記事の原文ではなく名鑑と公式の会社情報を読む）ので、
         #   手順書の STEP 3-B-M へ確実に振り分けるため。
-        if apply_it and not _ask_ledger(out["slug"], name, _q["text"],
+        if apply_it and not _record_question(out["slug"], name, _q["text"],
                                         key=_q.get("key"),
                                         code="ASK_2AI_MAKER"):
             out["problems"].append(
@@ -3541,7 +3536,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
     # ★★同じ出どころかの問いは、別の記録先へ案内する★★（2026-09-18）
     for _q in out["lineage_questions"]:
         _log(f"  ★2AIに聞くこと（同じ出どころか）: {_q['text'][:120]}")
-        if apply_it and not _ask_ledger(out["slug"], name, _q["text"],
+        if apply_it and not _record_question(out["slug"], name, _q["text"],
                                         key=_q.get("key"),
                                         code="ASK_2AI_LINEAGE"):
             out["problems"].append(
@@ -3918,9 +3913,9 @@ def _selftest_body() -> int:
     # ★試験は本番の台帳にも書かない★（2026-08-11・依頼157のP1）
     #   局所で偽物に差し替えていたが、分類の回帰や待ち行列の保存失敗など
     #   別の経路から本物の _ledger が呼ばれうる。全体で差し替える。
-    real_ledger = globals()["_ledger"]
+    real_ledger = globals()["_record_issue"]
     _ledger_calls: list = []
-    globals()["_ledger"] = (
+    globals()["_record_issue"] = (
         lambda *a, **k: _ledger_calls.append((a, k)) or True)
     # ★試験は本番の日次ログにも書かない★（2026-08-01・実際に混入した）
     #   混入すると完了マーカーが末尾から離れ、番兵（task-watchdog）が
@@ -4805,9 +4800,9 @@ def _selftest_body() -> int:
         #   （2026-08-01・複数夜の通しで見つけた。give_up_now が別読みして
         #     外していたので、ループ側の古い行列の保存が削除を打ち消していた）
         _real_store = _pend.STORE
-        _real_lg = globals()["_ledger"]
+        _real_lg = globals()["_record_issue"]
         _pend.STORE = os.path.join(_tmpdir, "pend_resurrect.json")
-        globals()["_ledger"] = lambda *a, **k: True
+        globals()["_record_issue"] = lambda *a, **k: True
         try:
             _pd = _pend._empty()
             _stay = _pend.add(_pd, "残る機種", "https://m.example/stay/", "m",
@@ -4829,7 +4824,7 @@ def _selftest_body() -> int:
               and "pend" in inspect.signature(finish_publish).parameters)
         finally:
             _pend.STORE = _real_store
-            globals()["_ledger"] = _real_lg
+            globals()["_record_issue"] = _real_lg
         t("★★コミットが通った直後に止まっても、次で分かる★★"
           "（WRITTEN のままコミット済みだと、やり直しが永久に失敗した・Codex22回目）",
           "_committed_on_top" in inspect.getsource(retry_push_first)
@@ -5216,12 +5211,12 @@ def _selftest_body() -> int:
                                  "前の機種|EXAMPLE"}}
             _out28 = {"problems": []}
             _nw._get = lambda u, timeout=20: "<title>新しい別機種|EXAMPLE</title>"
-            _real_lg28 = globals()["_ledger"]
-            globals()["_ledger"] = lambda *a, **k: True
+            _real_lg28 = globals()["_record_issue"]
+            globals()["_record_issue"] = lambda *a, **k: True
             try:
                 recheck_known("m", {"new": []}, _seen28, _out28)
             finally:
-                globals()["_ledger"] = _real_lg28
+                globals()["_record_issue"] = _real_lg28
             t("★★既知URLの題が変わったら台帳に残して知らせる★★"
               "（使い回しは差分0件で黙って見逃していた・Codex28〜29回目）",
               any("変わりました" in x for x in _out28["problems"])
@@ -5440,22 +5435,22 @@ def _selftest_body() -> int:
             #   台帳へ載せる＝翌朝のまとめメールで届く。
             #   ★載せられなくても公開は止めない★（ログには必ず残す）
             _asked = []
-            _keep_ledger_fn = globals()["_ledger"]
-            globals()["_ledger"] = lambda *a: (_asked.append(a), True)[1]
+            _keep_ledger_fn = globals()["_record_issue"]
+            globals()["_record_issue"] = lambda *a: (_asked.append(a), True)[1]
             try:
-                _ask_ledger("zzz", "試験機", "天井はどれですか")
+                _record_question("zzz", "試験機", "天井はどれですか")
                 _ok_call = (len(_asked) == 1 and _asked[0][0] == "zzz"
                             and _asked[0][3] == "ASK_2AI")
-                globals()["_ledger"] = lambda *a: False    # 載せられない場合
-                _ask_ledger("zzz", "試験機", "天井はどれですか")
+                globals()["_record_issue"] = lambda *a: False    # 載せられない場合
+                _record_question("zzz", "試験機", "天井はどれですか")
                 _no_raise = True
             except Exception:                        # noqa: BLE001
                 _ok_call, _no_raise = False, False
             finally:
-                globals()["_ledger"] = _keep_ledger_fn
-            t("★★2AIで決まらなかった質問は台帳へ載せる★★（翌朝のメールで届く）",
+                globals()["_record_issue"] = _keep_ledger_fn
+            t("★★2AIで決まらなかった質問はその晩のログへ残す★★",
               _ok_call)
-            t("★★台帳に載せられなくても公開を止めない★★", _no_raise)
+            t("★★ログへ残せなくても公開を止めない★★", _no_raise)
             # ★公開より先に載せる★（2026-08-12・依頼163の2）
             #   公開の途中で落ちると、質問がどこにも残らなくなる。
             _src = inspect.getsource(run_one)
@@ -5800,9 +5795,9 @@ def _selftest_body() -> int:
             #   （2026-09-18・Codexの指摘＝相乗りさせたせいで、
             #     「登録簿に書いて」と聞きながら本文は
             #     「maker_identity_cache へ控えて」と案内していた）
-            _b_lin = ask_ledger_body("問い", "ASK_2AI_LINEAGE")
-            _b_mak = ask_ledger_body("問い", "ASK_2AI_MAKER")
-            _b_def = ask_ledger_body("問い")
+            _b_lin = question_record_body("問い", "ASK_2AI_LINEAGE")
+            _b_mak = question_record_body("問い", "ASK_2AI_MAKER")
+            _b_def = question_record_body("問い")
             t("★★同じ出どころかの問いは、登録簿へ案内する★★",
               "source-registry.json" in _b_lin
               and "maker_identity_cache" not in _b_lin
@@ -5811,7 +5806,7 @@ def _selftest_body() -> int:
             #   ★直す前は案内文だけを見ていた★ので、
             #   質問文が「独立なら手がかりを挙げて」と言い、案内文が
             #   「その答えは採りません」と言う**正反対の指示**に気づけなかった。
-            _whole = ask_ledger_body(_mg["questions"][0]["text"],
+            _whole = question_record_body(_mg["questions"][0]["text"],
                                      "ASK_2AI_LINEAGE")
             t("★★問いと案内文を合わせても、言っていることが1つ★★"
               "（★独立なら手がかりを、と聞きながら『採りません』とは書かない★）",
@@ -6303,7 +6298,7 @@ def _selftest_body() -> int:
         _lc.check = real_lc
         _pend.STORE = real_store
         globals()["PUSH_PENDING"] = real_mark
-        globals()["_ledger"] = real_ledger
+        globals()["_record_issue"] = real_ledger
         globals()["_log"] = real_log
         __import__("shutil").rmtree(_tmpdir, ignore_errors=True)
 
@@ -6785,7 +6780,7 @@ def _main() -> int:
                "**公開もpushもしないでください**")
         _log(msg)
         print(msg)
-        _ledger("site", "structural", "MATERIAL", "PUBLISH_UNFINISHED",
+        _record_issue("site", "structural", "MATERIAL", "PUBLISH_UNFINISHED",
                 "前回の公開が途中で終わっています",
                 f"{left.get('slug')} / {left.get('started_at')} / "
                 "--recover --apply で戻してください")
@@ -6822,7 +6817,7 @@ def _main() -> int:
     #   ここなら「その晩の巡回でも結び付かなかった」と確定している。
     #   ★控えは消さない★＝あとから載れば自動の経路へ戻せる。
     for it in (_pend.calendar_missing_due(pend) if apply_it else []):
-        if _ledger("site", "structural", "MATERIAL", "DMM_CALENDAR_MISSING",
+        if _record_issue("site", "structural", "MATERIAL", "DMM_CALENDAR_MISSING",
                    "導入日を過ぎてもDMMのカレンダーに載りません",
                    f"{it['name']} / 登場 {it.get('release', '')} / "
                    f"見つけた日 {it.get('first_seen', '')} / "
@@ -6838,7 +6833,7 @@ def _main() -> int:
                  f": {it['name']}")
     # ★待ちすぎた分は黙って消さず、台帳に残す★
     for it in (_pend.give_up(pend) if apply_it else []):
-        if not _ledger("site", "structural", "MATERIAL", "PENDING_GAVE_UP",
+        if not _record_issue("site", "structural", "MATERIAL", "PENDING_GAVE_UP",
                        f"新台を{_pend.GIVE_UP_DAYS}日待っても記事にできませんでした",
                        f"{it['name']} / {it.get('identity_url', '')} / "
                        f"直近の理由: {it.get('last_reason', '')}"):
@@ -6927,7 +6922,7 @@ def _main() -> int:
                   "★同じ機種か、別機種にURLが使い回されたのかを確かめてください★\n"
                   f"確かめたら、待ち行列の {_cfkey}_conflict を"
                   "消してください。")
-            if apply_it and _ledger(_slug_hint(work["identity_url"]), "structural",
+            if apply_it and _record_issue(_slug_hint(work["identity_url"]), "structural",
                                     "MATERIAL", "MAKER_NAME_CONFLICT", _t, _d):
                 _log(f"  ★表示名の食い違いを台帳へ上げました: "
                      f"{work['identity_url']}")
@@ -6967,7 +6962,7 @@ def _main() -> int:
                 print("  ✗ " + x[:200])
                 _log("  ✗ " + x[:300])
             if ng:
-                _ledger("site", "structural", "MATERIAL", "PUSH_BLOCKED",
+                _record_issue("site", "structural", "MATERIAL", "PUSH_BLOCKED",
                         "公開はしたがpushできませんでした",
                         f"{res['slug']} / " + " / ".join(ng)[:1200])
             d["problems"] += ng
@@ -6997,7 +6992,7 @@ def _main() -> int:
                 print("（下見）やり直しても変わらない理由です"
                       "（--apply の実行が台帳へ移します）: " + work["name"])
     if d["problems"]:
-        _ledger("site", "structural", "MATERIAL", "WATCH_PROBLEM",
+        _record_issue("site", "structural", "MATERIAL", "WATCH_PROBLEM",
                 "新台の見張りで確認が要る点が出ました",
                 " / ".join(d["problems"])[:1500])
         _log(f"台帳に登録しました: 確認が要る{len(d['problems'])}件")

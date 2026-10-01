@@ -35,7 +35,7 @@ EV = "eval"
 CASES = [
     # ---- 2026-08-08 の事故そのもの ----
     ("★台帳にコマンド名を飾りで書く（事故の再現）★",
-     'python scripts/open_issues.py add --detail "' + BQ
+     'python scripts/owner_questions.py add --detail "' + BQ
      + 'python scripts/codex_reported.py' + BQ + ' を実行する"', True),
 
     # ---- 依頼126で挙がったカナリア ----
@@ -92,9 +92,9 @@ CASES = [
     # ---- 通ってよいもの（誤って止めない）----
     ("　普通のコマンドは通る", "python scripts/audit_site.py", False),
     ("　二重引用符の日本語も通る",
-     'python scripts/open_issues.py add --title "天井が採れません"', False),
+     'python scripts/owner_questions.py add --title "天井が採れません"', False),
     ("　シングルクォート内の文章も通る",
-     "python scripts/open_issues.py add --title " + Q + "天井が採れません" + Q,
+     "python scripts/owner_questions.py add --title " + Q + "天井が採れません" + Q,
      False),
     ("　日付を実値で書けば通る", 'python log.py "auto_add_2026-08-09" "開始"',
      False),

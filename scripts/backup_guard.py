@@ -64,6 +64,7 @@ ALLOW_BASENAMES = {
     "uchidokoro_CLAUDE_history.md",
     # 要確認台帳（人間の判断待ち案件の唯一の恒久記録・台帳 #153）
     "open_issues.json",
+    "owner_questions.json",
     # ★台帳を越えた修正の記録★（2026-08-04・Codex84回目）
     #   運営者の承認で例外的に直した記録。失うと「なぜ直したか」が消える。
     "manual_overrides.json",
