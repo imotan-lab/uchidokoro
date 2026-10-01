@@ -65,10 +65,9 @@ import local_paths as _lp             # noqa: E402  ★置き場は1か所で決
 
 # ★ビルドの出力は監査の対象外★（2026-07-30）
 #   .preview-site/ は公開されない写し（全ページ noindex・robots全面Disallow）、
-#   _site/ は保護CIが空から組み立てる成果物。どちらもGit管理外なので、
+#   _site/ は旧い組み立て経路の出力（2026-10-01撤去・残骸があっても見ない）。どちらもGit管理外なので、
 #   ここを本番と同じ物差しで測ると「直す必要のないNG」が出て判断を誤らせる。
-#   ★写し自身の検査は build_preview_site.py が、成果物の検査は
-#     build_pages_artifact.py の audit() が別に行う★
+#   ★写し自身の検査は build_preview_site.py が行う★
 BUILD_DIRS = {".preview-site", "_site", "_site.next"}
 # ★試験用に保存した他所のページも対象外★（2026-08-16）
 #   tests/fixtures/ には**他サイトの実ページをそのまま保存**してある。

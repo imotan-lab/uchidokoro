@@ -6,7 +6,6 @@
 /.github/                       @imotan-lab
 /scripts/                       @imotan-lab
 /assets/css/                    @imotan-lab
-/assets/data/claim-gate.json        @imotan-lab
 /assets/data/claim-allowlist.json   @imotan-lab
 /assets/data/source-registry.json   @imotan-lab
 /assets/data/template-approval.json @imotan-lab

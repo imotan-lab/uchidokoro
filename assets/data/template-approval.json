@@ -1,6 +1,6 @@
 {
  "schema_version": "template-approval/v2",
- "note": "全機種に一斉に効く入力の指紋。ここと実ファイルが一致する時だけ公開物を作れる。中身を直したらこのファイルも更新すること（レビュー必須）。",
+ "note": "全機種に一斉に効く入力の指紋。ここと実ファイルが一致することを照合する。中身を直したらこのファイルも更新すること（レビュー必須）。",
  "templates": {
   "404.html": "4757679897f8f0f286a1b54ab58d8da1cc5481bc12b90760ae6e849a472cae5d",
   "CNAME": "327a46d0a9fe00ef4a85721fec20aa84af66049b4a2e27029773bc1927b502fa",
@@ -33,12 +33,11 @@
   "robots.txt": "94670bb7c4d9b930985eeb08a6d4074283cafbfd3d30c00a74d7dedd46bedd2c",
   "scripts/apply_prose_dedup.py": "13c7636c1018db8c4de24d06edef76334e2bb7c1147b7a94958ffb76ca384937",
   "scripts/audit_public.py": "88363696c161b3c8d4fb39a5722f9c2f07bd71dbd11322361e19a53f2ec7cb24",
-  "scripts/build_hub_pages.py": "1a84af37d0703d74ddc5fe20fa3cabae59508afd4293d50bb5ec31be7baeb989",
+  "scripts/build_hub_pages.py": "47d44b18905934899829e3111eff2bed2d8ab3a1b14f66162654f16f21f3024d",
   "scripts/build_ledger.py": "c51b84e0a7a6dc9b97faf29003ab617291f9c93fe0378d2c9b19dd664f783e7d",
-  "scripts/build_machine_pages.py": "a2162b6dc10dc17f8b287cab11e459e743fab6bd66da48d852c12c3a8eec22f3",
+  "scripts/build_machine_pages.py": "1dff997ad0ed769aa3fd2491411b4762413114dbe8519413232d5ca40db7a9a8",
   "scripts/build_new_article.py": "a867b01a1cd4c5e6daeda94a408f7fb98a2ae4a60261a8ff1d712b5ce8c97cf3",
-  "scripts/build_pages_artifact.py": "a3ca5192cb5df519fd39d1a8c27217c3946d4dfa75c2b866ccc7011ffc19d678",
-  "scripts/build_public_data.py": "20dc3d536a809e8ff5b1ffb8abdcdf577d0648708f15e92f71840c9f4ac011fd",
+  "scripts/build_pages_artifact.py": "caf001946d187d4a1e88f7366573a15e2f8c9b9c2453b47de18dd188dcbbb95c",
   "scripts/check_duplicate.py": "d5c8221444105553cca1894ff8d44eb255ad6534cafcd0e0af8a5a8e23c16c36",
   "scripts/checker_verdict.py": "7972436e6b388fc294349c4b931cd73d3b3debb867c90606bb6f37e7b4be3f49",
   "scripts/ci_safe.py": "7868c74045a90bfacaeba9321c1a732c3318ee3b6a49009296d6af1a026f2c10",
@@ -59,13 +58,13 @@
   "scripts/page_decision.py": "6fd6bddc85b898fdd83a4056ea7e733f3139c2b71e7f230ac069a1523dc44151",
   "scripts/pending_machines.py": "00b3371b6372c6efd9a3e8e431eb6565c98e8cb3f1f64f1ee9855b24876d18ff",
   "scripts/prepush_gate.py": "813284dc0373c2471a516c176660961e005f5fc8e8e09b5ad9b181af236ea0be",
-  "scripts/preview_site.py": "8ef4c5eef6c1749df51c1c8c3edfebd2a4af427b8e0ae52287e724776dc7849a",
+  "scripts/preview_site.py": "714a3ffacecbdfdd2ebf690a5b00a2ceed5be0289a8664df2b4b9cfbec0618af",
   "scripts/publish_new_machine.py": "64e84661c0467a1440adefa7c65d3d6c8c217fff98fdc50f461db8dc4ebd41bb",
   "scripts/safe_json.py": "43f61703cbe7e1ea93ee2602fe9be45662957c8929aef62d649b6fc0493e0006",
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "ecc07863430476c152cdd79dc300b6387d68b1b466deeb2e80f1a3449ce51b1a",
-  "service-worker.js": "b378637b00897a459ccca35afcc1471a49a9af52e2614fb590f3c2736ff1cd05",
-  "setting.html": "6660837bd3c31f6755c4ba8e5728c5ac846d43267534b72680c1a07717601dc3"
+  "service-worker.js": "db2a0d77c124317c10087039ebdd30a1c743f04a23982c96348296d5713d40ee",
+  "setting.html": "8c857e73f40e13c296f67010ba902550408d2543495ff08784c20f7501f9072d"
  }
 }

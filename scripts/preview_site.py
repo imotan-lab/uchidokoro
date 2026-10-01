@@ -9,8 +9,7 @@
   1. 出力先は .preview-site/ の中だけ。外へ書こうとしたら例外で止める（assert_inside）
   2. 全ページに noindex,nofollow ／ 目印 PREVIEW_BUILD ／ 見て分かるバナー
   3. robots.txt は全面 Disallow
-  4. .gitignore 対象なのでコミットされない。本番 artifact 側でも明示的に拒否する
-     （build_pages_artifact.py が PREVIEW_BUILD を見つけたら失敗する）
+  4. .gitignore 対象なのでコミットされない
 
 ★使い方★
   python scripts/build_preview_site.py

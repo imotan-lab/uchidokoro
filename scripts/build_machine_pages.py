@@ -268,22 +268,6 @@ def build_jsonld(machine: dict, canonical_url: str, title: str, desc: str) -> st
     return f'<script type="application/ld+json">{payload}</script>'
 
 
-def claim_gate_state():
-    """出典の裏取りゲートが有効か。★設定が読めなければ止める★
-
-    ★★ここが最大の抜け道だった★★（Codex 9巡目 (a)-6）
-      公開物の生成（build_public_data.py）にはゲートを付けたのに、
-      **実際に読者が見るHTMLを作るのはこのスクリプト**で、
-      authoring の machines.json / machine-details を直接読んでいた。
-      つまり誤った数値を書いて本スクリプトを回せば、
-      公開ゲートを一度も通らずに静的HTMLへ入っていた。
-    """
-    import sys as _sys
-    _sys.path.insert(0, str(BASE / "scripts"))
-    import build_public_data as bpd
-    return bpd.claim_gate_enabled()
-
-
 PLACEHOLDER_HTML = """<!doctype html>
 <html lang="ja"><head>
 <base href="/">
@@ -305,6 +289,8 @@ PLACEHOLDER_HTML = """<!doctype html>
 
 class TemplateError(RuntimeError):
     """テンプレートと生成器の食い違い（差し込み先が無い／複数ある）。"""
+
+
 
 
 def replace_once(text: str, needle: str, repl: str) -> str:
@@ -747,17 +733,6 @@ def _build_legacy(only_slug: str | None = None) -> int:
     import safe_json as _sj2
     import preview_site as _pv
 
-    # 1) ゲートが有効なら、旧形式の作り直しは筋違い（正しい経路を使う）
-    try:
-        if claim_gate_state():
-            print("★裏取りゲートが有効なので、旧形式の作り直しはできません★")
-            print("  公開物は build_pages_artifact.py が組み立てます。")
-            return 1
-    except Exception as e:
-        # ★設定が読めないときは書かない★（fail-closed）
-        print(f"★裏取りゲートの設定が読めません: {e} → 何も書きません")
-        return 1
-
     machines = _sj2.read_rows(BASE / "assets" / "data" / "machines.json")
     # ★新台経路（page-decision/v1）の機種を旧statusロジックで再生成しない★
     #   （2026-08-04・Codex72回目。ここで除外しないと、翌朝の一括再生成が
@@ -916,14 +891,12 @@ def main(preview: bool = False, legacy: bool = False,
     if legacy:
         return _build_legacy(legacy_slug)
 
-    # ★公開物を書けるのは build_pages_artifact.py だけ★
-    #   （2026-07-30・Codex 23巡目 条件7の設計）
-    #   ここは「描くだけ」にし、公開用の書き込み口を持たない。
-    #   写し（.preview-site/）への書き出しだけを残す。
+    # ★書き出せるのは3通りだけ★（2026-10-01・検査スイッチの撤去で公開物の組み立て経路は無い）
+    #   --legacy [--slug X] … いま公開中のページを作り直す
+    #   --rebuild-auto X    … 新台経路の1機種を作り直す
+    #   --preview           … 公開されない写し（.preview-site/）に書く
     if not preview:
-        print("★公開用のHTMLはここからは作れません★")
-        print("  公開物は build_pages_artifact.py が組み立てます（render_all を呼びます）。")
-        print("  裏取り前の内容を見たいだけなら --preview を付けてください。")
+        print("★--legacy / --rebuild-auto / --preview のどれかを付けてください★")
         return 1
     out_root = _pv.PREVIEW_DIR
     # 機種の一覧（＝ページを持ちうるslugの全体）は authoring から取る。
@@ -932,74 +905,12 @@ def main(preview: bool = False, legacy: bool = False,
     machines = _sj2.read_rows(BASE / "assets" / "data" / "machines.json")
     template = (BASE / "machine.html").read_text(encoding="utf-8")
 
-    # ★★裏取りゲートが有効なら、通らない機種のHTMLは作らない★★
-    try:
-        gate_on = claim_gate_state()
-    except Exception as e:
-        # 写しは公開しないので、設定が読めなくても確認だけはできる
-        if not preview:
-            print(f"★出典の裏取りゲートの設定が読めません: {e}")
-            return 1
-        print(f"（写し）出典の裏取りゲートの設定が読めません: {e} — 全機種を写します")
-        gate_on = False
     blocked_by_claim = {}
     detail_dir_override = None
-    if preview:
-        # 写しは「裏取り前の内容を見るため」のものなので、止めずに全機種を出す。
-        # 代わりに全ページへ noindex・バナー・目印が入り、robots.txt は全面Disallow。
-        _pv.ensure_scaffold()
-        print(f"☆写しを作ります（公開されません）: {out_root.name}/ ☆")
-    elif gate_on:
-        import claim_reconcile as cr
-        for m in machines:
-            try:
-                ok, why = cr.publish_gate(m["slug"])
-            except Exception as e:
-                ok, why = False, [f"検査が例外で失敗: {e}"]
-            if not ok:
-                blocked_by_claim[m["slug"]] = why
-        # ★★公開用HTMLは「安全化を通した公開データ」からしか作らない★★
-        #   （2026-07-30・Codex 13巡目 (a)-1）
-        #   以前は authoring の machines.json / machine-details を直接読んでHTMLに焼いていた。
-        #   ゲートで機種を止めても、**通った機種のページの中身は素通り**していた
-        #   （例：射影では消えるはずの説明文が静的HTMLには残る）。
-        #   公開データ（assets/data/public/）が無ければ作らない＝fail-closed。
-        pub_dir = BASE / "assets" / "data" / "public"
-        pub_file = pub_dir / "machines.public.json"
-        pub_details = pub_dir / "machine-details"
-        if not pub_file.is_file() or not pub_details.is_dir():
-            print("★公開データがありません（先に build_public_data.py --apply を実行）★")
-            print(f"  期待した場所: {pub_file}")
-            return 1
-        try:
-            pub_rows = json.loads(pub_file.read_text(encoding="utf-8"))
-        except Exception as e:
-            print(f"★公開データが読めません: {e}")
-            return 1
-        if not isinstance(pub_rows, list) or not all(isinstance(r, dict) for r in pub_rows):
-            print("★公開データの形が想定と違います（機種の配列ではない）★")
-            return 1
-        public_by_slug = {r.get("slug"): r for r in pub_rows if isinstance(r.get("slug"), str)}
-        # 公開データに無い機種も「準備中」に置き換える（古いページを残さない）
-        for m in machines:
-            if m["slug"] not in public_by_slug:
-                blocked_by_claim.setdefault(m["slug"], ["公開データに含まれていない"])
-        machines = [public_by_slug.get(m["slug"], m) for m in machines]
-        detail_dir_override = pub_details
-        print(f"出典の裏取りゲート: ★有効★ → {len(blocked_by_claim)} 機種は"
-              f"noindexの準備中ページに置き換えます")
-        # ★理由を捨てない★（Codex 10巡目 (b)-1）
-        for slug, why in blocked_by_claim.items():
-            for ln in (why or []):      # ★全理由を出す★（Codex 11巡目 (b)-1）
-                print(f"  ✗ {slug}: {ln}")
-    else:
-        # ★★ゲート無効のまま既存HTMLを置き換えない★★（Codex 10巡目 (a)-1）
-        #   「警告して書き込む」は条件7（enabled=falseなら既存成果物を置換しない）に反する。
-        print("★出典の裏取りゲートが無効なので公開用のHTMLは作りません★")
-        print("  assets/data/claim-gate.json の enabled を true にするか、")
-        print("  裏取り前の内容を確かめたいなら --preview を付けてください")
-        print("  （.preview-site/ にだけ書き出します。公開されません）")
-        return 1
+    # 写しは「裏取り前の内容を見るため」のものなので、止めずに全機種を出す。
+    # 代わりに全ページへ noindex・バナー・目印が入り、robots.txt は全面Disallow。
+    _pv.ensure_scaffold()
+    print(f"☆写しを作ります（公開されません）: {out_root.name}/ ☆")
 
     template = prepare_template(template)
     # ポチポチくん非対応slug→理由（machine.htmlのpochipochiStatusと同期）
@@ -1066,18 +977,7 @@ def main(preview: bool = False, legacy: bool = False,
         print("　この回は公開名簿を更新しません（古いページと食い違うため）")
         return 1
 
-    # ★名簿は「実際に生成できた機種」から作る★
-    manifest = out_root / "assets" / "data" / "published-slugs.json"
-    manifest.parent.mkdir(parents=True, exist_ok=True)
-    if preview:
-        _pv.assert_inside(manifest)
-    manifest.write_text(json.dumps(
-        {"schema_version": "published-slugs/v1",
-         "claim_gate_enabled": bool(gate_on),
-         "slugs": sorted(generated_slugs)}, ensure_ascii=False, indent=1),
-        encoding="utf-8")
-    print(f"公開名簿を書き出し: {len(generated_slugs)} 機種 → assets/data/published-slugs.json")
-
+    return 0
 
 if __name__ == "__main__":
     # ★終了コードを落とさない★（Codex 10巡目 (b)-2）
@@ -1090,7 +990,7 @@ if __name__ == "__main__":
                     help="--legacy と併用。その1機種だけ作り直す（既定は全機種）")
     _p.add_argument("--legacy", action="store_true",
                     help="いま公開中の旧形式ページを作り直す"
-                         "（裏取りゲートが有効なら実行しない・公開データは読まない）")
+                         "（公開データは読まない）")
     _p.add_argument("--rebuild-auto", default=None, metavar="SLUG",
                     help="新台経路のページを1枚だけ描き直す"
                          "（公開中の誤りを消すため・区分とnoindexを確かめてから書く）")

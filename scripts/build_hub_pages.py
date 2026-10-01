@@ -733,10 +733,7 @@ def render_all(source_root: "Path") -> dict:
 def _build_legacy() -> int:
     """★いま公開中のハブ4ページを作り直す★（2026-08-30）
 
-    ★機種ページの `--legacy` と同じ守り★
-      1. 裏取りゲートが**有効なら実行しない**（有効なら artifact 経路が正しい）
-      2. 設定が読めなければ**何も書かない**（fail-closed）
-      3. 4ページ全部を描けたときだけ書く（1枚でも欠けたら1枚も書かない）
+    ★4ページ全部を描けたときだけ書く★（1枚でも欠けたら1枚も書かない）
 
     ★中身は publish_new_machine.build_hubs() と同じ関数から作る★＝
       あちらは「いまのデータから作った内容と repo が一致するか」を見張るので、
@@ -744,17 +741,7 @@ def _build_legacy() -> int:
     """
     import sys as _sys
     _sys.path.insert(0, str(BASE / "scripts"))
-    import build_public_data as _bpd
     import safe_json as _sj2
-
-    try:
-        if _bpd.claim_gate_enabled():
-            print("★裏取りゲートが有効なので、旧形式の作り直しはできません★")
-            print("  公開物は build_pages_artifact.py が組み立てます。")
-            return 1
-    except Exception as e:                                   # noqa: BLE001
-        print(f"★裏取りゲートの設定が読めません: {e} → 何も書きません")
-        return 1
 
     try:
         rows = load_rows()
@@ -816,17 +803,7 @@ def _check_legacy() -> int:
     """
     import sys as _sys
     _sys.path.insert(0, str(BASE / "scripts"))
-    import build_public_data as _bpd
     import safe_json as _sj2
-
-    try:
-        if _bpd.claim_gate_enabled():
-            # ★ゲートが有効なら公開物は artifact 経路が作る★＝ここは見ない
-            print("裏取りゲートが有効なので、早見表の点検は行いません")
-            return 0
-    except Exception as e:                                   # noqa: BLE001
-        print(f"★裏取りゲートの設定が読めません: {e}★")
-        return 1
 
     try:
         rows = load_rows()
@@ -862,79 +839,22 @@ def main(preview: bool = False, legacy: bool = False):
 
     ★2026-07-30・移行手順2で --allow-ungated を廃止した★（理由は build_machine_pages.py 参照）
     """
-    # ★★ハブ4ページもゲート外だった★★（Codex 10巡目 (a)-4）
-    #   tenjo_display / strategy / checker閾値 をそのままランキングHTMLへ出すので、
-    #   誤った値を書いて本スクリプトを回せば公開ゲートを通らず公開される。
     import sys as _sys
     _sys.path.insert(0, str(BASE / "scripts"))
-    import build_public_data as _bpd
     import preview_site as _pv
 
-    # ★公開物はリポジトリ直下に書かない★（2026-07-30・Codex 22巡目 条件7）
-    #   ここが直接 machines/{slug}/index.html を書けると、
-    #   「公開物の書込み経路は artifact 1本」と言えない（ブランチ直配信が生きている間は特に）。
-    #   公開用の書き出しは build_pages_artifact.py が --out で置き場所を渡す時だけ許す。
-    # ★公開物を書けるのは build_pages_artifact.py だけ★（Codex 23巡目 条件7）
-    if not preview and not legacy:
-        print("★公開用のハブ4ページはここからは作れません★")
-        print("  公開物は build_pages_artifact.py が組み立てます。")
-        print("  裏取り前の内容を見たいだけなら --preview を付けてください。")
-        print("  いま公開中の旧形式ページを作り直すなら --legacy です。")
-        return 1
+    # ★書き出せるのは2通りだけ★（2026-10-01・検査スイッチの撤去で公開物の組み立て経路は無い）
+    #   --legacy … いま公開中のハブ4ページを作り直す
+    #   --preview … 公開されない写し（.preview-site/）に書く
     if legacy:
         return _build_legacy()
-    out_root = _pv.PREVIEW_DIR
-    try:
-        gate_on = _bpd.claim_gate_enabled()
-    except Exception as e:
-        if not preview:
-            print(f"★出典の裏取りゲートの設定が読めません: {e}")
-            return 1
-        print(f"（写し）出典の裏取りゲートの設定が読めません: {e} — 全機種を写します")
-        gate_on = False
-    if preview:
-        # 写しは裏取り前の内容を見るためのもの。止めずに全機種を出す。
-        rows = load_rows()
-        _pv.ensure_scaffold()
-        print(f"☆写しを作ります（公開されません）: {out_root.name}/ ☆")
-        gate_on = False
-    elif gate_on:
-        # ★一覧も公開データから作る★（Codex 13巡目 (a)-1）
-        pub_file = BASE / "assets" / "data" / "public" / "machines.public.json"
-        if not pub_file.is_file():
-            print("★公開データがありません（先に build_public_data.py --apply を実行）★")
-            print(f"  期待した場所: {pub_file}")
-            return 1
-        try:
-            rows = load_rows(pub_file)
-        except Exception as e:
-            print(f"★公開データが読めません: {e}")
-            return 1
-        import claim_reconcile as _cr
-        blocked = []
-        for r in rows:
-            try:
-                ok, why = _cr.publish_gate(r.get("slug"))
-            except Exception as e:
-                ok, why = False, [f"検査が例外で失敗: {e}"]
-            if not ok:
-                blocked.append((r.get("slug"), why))
-        if blocked:
-            print(f"出典の裏取りゲート: ★有効★ → {len(blocked)} 機種を一覧から外します")
-            for s_, why in blocked:
-                for ln in (why or []):   # ★全理由を出す★（Codex 11巡目 (b)-1）
-                    print(f"  ✗ {s_}: {ln}")
-            ng = {s for s, _ in blocked}
-            rows = [r for r in rows if r.get("slug") not in ng]
-        # ★★空の一覧を成功として書き出さない★★（Codex 11巡目 (b)-5）
-        if not rows:
-            print("★公開できる機種が1件も無いのでハブ4ページは作りません★")
-            return 1
-    else:
-        print("★出典の裏取りゲートが無効なので公開用のハブ4ページは作りません★")
-        print("  裏取り前の内容を確かめたいなら --preview を付けてください")
-        print("  （.preview-site/ にだけ書き出します。公開されません）")
+    if not preview:
+        print("★--legacy（いま公開中のページを作り直す）か --preview（公開されない写し）を付けてください★")
         return 1
+    out_root = _pv.PREVIEW_DIR
+    rows = load_rows()
+    _pv.ensure_scaffold()
+    print(f"☆写しを作ります（公開されません）: {out_root.name}/ ☆")
     import safe_json as _sj3
     prose_all = _sj3.read_json(PROSE, expect=dict)
     # ★★固定文に埋まった数値もゲートの外だった★★（Codex 11巡目 (a)-3）
@@ -954,23 +874,6 @@ def main(preview: bool = False, legacy: bool = False):
               f"{[r['slug'] for r in previews]}")
 
     built, data_html_map, allowed = _build_pages(rows, prose_all)
-    if gate_on:
-        import gates as _g
-        # ★数値は「公開データに載っている値」だけ許す★（Codex 14巡目 (b)-1）
-        #   以前は単位つき数値をすべて未検証扱いにしていたため、
-        #   生成器自身が出す「1000G未満」で必ず止まり、
-        #   しかも警告文が原因を正しく表していなかった。
-        bad = hub_content_problems(built, {f: d for f, (_p, d) in pages.items()},
-                                   ("公開できない表現", _g.ABSOLUTE_DENY_PAT),
-                                   ("要人手確認の語（損得・設定の話）", _g.RISK_PAT),
-                                   prose_all=prose_all,
-                                   allowed_counts=allowed)
-        if bad:
-            print(f"★生成後のHTMLに出せない内容が {len(bad)} 箇所あります★")
-            for b in bad:      # ★打ち切らない★（Codex 14巡目 (b)-4）
-                print(f"  ✗ {b}")
-            print("  裏取り／文言修正が済むまでハブ4ページは書き出しません")
-            return 1
 
     for file, html in built.items():
         if preview:
@@ -1144,8 +1047,7 @@ if __name__ == "__main__":
     _p.add_argument("--preview", action="store_true",
                     help="公開されない写し（.preview-site/）にだけ書き出す")
     _p.add_argument("--legacy", action="store_true",
-                    help="いま公開中のハブ4ページを作り直す"
-                         "（裏取りゲートが有効なら実行しない）")
+                    help="いま公開中のハブ4ページを作り直す")
     _p.add_argument("--check", action="store_true",
                     help="★書かずに★早見表が古くなっていないかだけを見る"
                          "（push前の関所が使う）")

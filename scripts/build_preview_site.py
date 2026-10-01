@@ -79,7 +79,7 @@ def main() -> int:
 
     # ★写しに内部情報が置かれていないか★（同 (a)-3）
     #   以前は assets/data を丸ごと写していたので台帳・出典レジストリまで置かれていた。
-    for leaked in ("assets/data/ledger.json", "assets/data/claim-gate.json",
+    for leaked in ("assets/data/ledger.json",
                    "assets/data/source-registry.json", "assets/data/claim-allowlist.json",
                    "assets/data/claim-evidence", "assets/data/facts",
                    "assets/data/public"):
