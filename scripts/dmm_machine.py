@@ -84,6 +84,14 @@ class MachineError(Exception):
         self.raw = raw
 
 
+class ReleaseUndecided(MachineError):
+    """★DMMが導入開始日を「未定」と書いている★（2026-10-02）
+
+    「読めない」のではなく「まだ決まっていない」。待つのが正常なので、
+    呼ぶ側はこれを見て待ち行列に印（release_tbd）を付け、番兵は知らせない。
+    """
+
+
 def _one(pairs: list, label: str) -> str:
     """その表の中の1項目。★2つ以上あって値が違えば止める★"""
     got = [v for k, v in pairs if str(k).strip() == label]
@@ -272,6 +280,8 @@ def parse(html: str, want_id: str = "") -> dict:
     else:
         dm = _DATE_MONTH.search(rel_raw)
         if not dm:
+            if "未定" in rel_raw:
+                raise ReleaseUndecided(f"導入開始日は未定です: {rel_raw[:40]}")
             raise MachineError(f"導入開始日を読めません: {rel_raw[:40]}")
         rel, prec = ("%s-%02d" % (dm.group(1), int(dm.group(2))), "month")
     # ④ パチスロか
@@ -467,6 +477,13 @@ def selftest() -> int:
 
 
     _read_failure_tests(t)
+    def _catch(fn):
+        try:
+            fn()
+        except Exception as e:            # noqa: BLE001
+            return e
+        return None
+
     def raises(fn, word=""):
         try:
             fn()
@@ -512,6 +529,17 @@ def selftest() -> int:
                   "モグモグ風林火山 大海戦の巻"))
         t("　短すぎる名前は同定に使わない", not ok_(g["heading"], "L"))
         t("　導入予定かどうかも分かる", g["planned"] is True)
+        _tbd = h.replace("2026年09月07日（月）予定", "未定", 1)
+        t("★★導入開始日が「未定」なら、読めない失敗とは別の型で返す★★"
+          "（2026-10-02・番兵が毎朝「作れていない」と誤って知らせていた）",
+          _tbd != h and (lambda: (
+              [isinstance(e, ReleaseUndecided)
+               for e in [_catch(lambda: parse(_tbd, "5049"))]][0]))())
+        t("　（対照）読めない日付は今までどおりの失敗で、未定とは分ける",
+          (lambda e: isinstance(e, MachineError)
+           and not isinstance(e, ReleaseUndecided))(
+              _catch(lambda: parse(h.replace("2026年09月07日（月）予定",
+                                              "近日", 1), "5049"))))
         t("★★URLのIDとページが名乗るIDが違えば止める★★",
           raises(lambda: parse(h, "9999"), "違います"))
         # ★★名乗りが無いページを通さない★★（2026-08-16・Codex依頼212の指摘7）

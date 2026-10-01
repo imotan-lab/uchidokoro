@@ -92,7 +92,7 @@ def _read_text_arg(inline: str, path: str, label: str,
             raise SystemExit(
                 f"★{label}: この置き場のファイルは使えません: {real}★ "
                 + "／".join(str(r) for r in TEXT_ROOTS) + " の下に置いてください"
-                "（うっかり認証情報のファイルを指しても台帳に写らないため）")
+                "（うっかり認証情報のファイルを指しても控えやメールに写らないため）")
         size = real.stat().st_size          # ★読む前に大きさを見る★
         if size > MAX_TEXT_BYTES:
             raise SystemExit(

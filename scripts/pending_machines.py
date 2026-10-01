@@ -188,7 +188,27 @@ def add(data: dict, name: str, url: str, maker: str, release: str,
         it["last_try"] = _today()
         it["last_reason"] = reason[:300]
         # ★名前や登場年月が変わることがある（公式の書き換え）★
-        it["name"], it["maker"], it["release"] = name, maker, release
+        # ★★空の値では上書きしない★★（2026-10-02・Codex review201）＝
+        #   機種ページを読めなかった晩は名前以外が空で来るので、
+        #   覚えていた導入日とメーカーが消え、導入3日前の🔴が出なくなっていた。
+        if str(name or "").strip():
+            it["name"] = name
+        if str(maker or "").strip():
+            it["maker"] = maker
+        if str(release or "").strip():
+            it["release"] = release
+            # ★導入日が来た＝もう未定ではない★（2026-10-02・Codex review202）
+            #   巡回で日付が分かっても印が残ると、記事づくりまで進めなかった晩、
+            #   番兵がその機種を「未定」として黙って🔴を出さなかった。
+            it.pop("release_tbd", None)
+            # ★★日の欄も新しい導入日にそろえる★★（2026-10-02・Codex review203）
+            #   release_of() は日の欄を優先するので、古い日が残ると
+            #   早まった・延びた導入日が番兵に届かない。
+            _r = str(release).strip()
+            if len(_r) >= 10:
+                it["release_day"] = _r[:10]
+            elif not str(it.get("release_day") or "").startswith(_r[:7]):
+                it.pop("release_day", None)
         if url:
             it["identity_url"] = url
         if source_machine_id:
@@ -252,8 +272,63 @@ def waited_days(item: dict, today: str = "") -> int:
     return (b - a).days
 
 
+def release_of(item: dict) -> str:
+    """★待ち行列の導入日★（2026-10-02）
+
+    日まで分かっていれば release_day、無ければ年月の release。
+    （release は待ち行列の決まりで年月までにしてあるので、
+      日は別の欄に持つ＝今までの読み手を変えない）
+    """
+    return str(item.get("release_day") or item.get("release") or "").strip()
+
+
+def release_last_day(item: dict) -> str:
+    """導入日のいちばん遅い可能性（日ならその日・月ならその月末・分からなければ空）。
+
+    ★DMMが「未定」と書いている印があれば空★（Codex review200）＝
+    未定になる前の古い日付が欄に残っていても、それで数えない。
+    """
+    if item.get("release_tbd"):
+        return ""
+    r = release_of(item)
+    try:
+        if len(r) == 10:
+            return date.fromisoformat(r).isoformat()
+        if len(r) == 7:
+            return month_end(r)
+    except (ValueError, TypeError):
+        return ""
+    return ""
+
+
+def would_give_up(it: dict, today: str = "") -> bool:
+    """★確かめた日を除いて、打ち切りの条件を満たすか★（取り直す候補を選ぶため）"""
+    today = today or _today()
+    if it.get("state") != READY:
+        return False
+    if waited_days(it, today) < GIVE_UP_DAYS:
+        return False
+    if int(it.get("runs", 0)) < 1:
+        return False
+    last = release_last_day(it)
+    if not last:
+        return False
+    try:
+        return (date.fromisoformat(today[:10])
+                - date.fromisoformat(last)).days >= GIVE_UP_DAYS
+    except ValueError:
+        return False
+
+
 def give_up(data: dict, today: str = "") -> list:
-    """★待ちすぎたものを外して返す（黙って消さず台帳へ）★
+    """★導入日から GIVE_UP_DAYS 日たっても記事にできないものを外して返す★
+
+    ★★数える起点は導入日★★（2026-10-02・運営者の判断）
+      直す前は「見つけた日」から数えていたので、8月に見つけた11月導入の
+      機種が導入前に打ち切られるところだった（SAO・聖闘士星矢）。
+      導入前は出典に情報が無いのが当たり前なので、日数だけで切らない。
+      ★導入日が分からない（未定・読めない）ものは打ち切らない★。
+      外したものは呼ぶ側がその晩のログに残す（台帳は2026-10-01に廃止）。
 
     ★一度も記事づくりを試していないものは打ち切らない★（Codex21回目）
       待ち行列の先頭が詰まっていると後ろは一度も試されない。
@@ -275,6 +350,22 @@ def give_up(data: dict, today: str = "") -> list:
             continue
         if int(it.get("runs", 0)) < 1:
             continue                      # ★まだ一度も試していない★
+        # ★★導入日をその日にDMMで確かめたものだけ打ち切る★★
+        #   （2026-10-02・Codex review201/202）＝古い日付のまま外すと、
+        #   確かめたあとに延期・未定になった機種が消える。
+        #   呼ぶ側（add_machine_run）は、would_give_up の候補を先に取り直してから呼ぶ。
+        if str(it.get("release_checked") or "")[:10] != today[:10]:
+            continue
+        last = release_last_day(it)
+        if not last:
+            continue                      # ★導入日が分からないものは打ち切らない★
+        try:
+            gone = (date.fromisoformat(today[:10])
+                    - date.fromisoformat(last)).days
+        except ValueError:
+            continue
+        if gone < GIVE_UP_DAYS:
+            continue                      # ★導入日から GIVE_UP_DAYS 日たっていない★
         out.append(data["items"].pop(qid))
     return out
 
@@ -500,8 +591,9 @@ def selftest() -> int:
     add(d2, "古い機種", DMM + "1", "m", "2026-01", source_machine_id="1")
     d2["items"]["q_0001"]["first_seen"] = "2026-01-01"
     mark_tried(d2, "q_0001")                       # ★一度は試している★
+    d2["items"]["q_0001"]["release_checked"] = "2026-07-31"
     add(d2, "新しい機種", DMM + "2", "m", "2026-09", source_machine_id="2")
-    t("★★待ちすぎたものだけ取り出す★★（黙って消さない・台帳に残すため）",
+    t("★★待ちすぎたものだけ取り出す★★（黙って消さない・その晩のログに残すため）",
       [x["name"] for x in give_up(d2, "2026-07-31")] == ["古い機種"]
       and len(d2["items"]) == 1)
     t("　まだ待てるものは残る", "q_0002" in d2["items"])
@@ -521,7 +613,81 @@ def selftest() -> int:
       "（先頭が詰まると後ろは一度も試されない・Codex21回目）",
       give_up(d4) == [] and "q_0001" in d4["items"])
     mark_tried(d4, "q_0001")
+    d4["items"]["q_0001"]["release_checked"] = _today()
     t("　一度でも試したものは、待ちすぎたら取り出す", len(give_up(d4)) == 1)
+
+    # ★★導入前の機種は、見つけてからの日数で打ち切らない★★（2026-10-02）
+    #   8/13に見つけた11月導入の機種が、10/12に導入前のまま消えるところだった。
+    d5 = _empty()
+    add(d5, "11月導入の機種", DMM + "5", "m", "2026-11", source_machine_id="5")
+    d5["items"]["q_0001"]["first_seen"] = "2026-08-13"
+    mark_tried(d5, "q_0001")
+    t("★★導入前の機種は、見つけて60日たっても打ち切らない★★"
+      "（数える起点は導入日・2026-10-02）",
+      give_up(d5, "2026-10-13") == [] and "q_0001" in d5["items"])
+    d5["items"]["q_0001"]["release_checked"] = "2027-01-28"
+    _d5a = give_up(d5, "2027-01-28")
+    if "q_0001" in d5["items"]:              # ★壊れた版では先に消えている★
+        d5["items"]["q_0001"]["release_checked"] = "2027-01-29"
+    t("　導入日（月なら月末）から60日たってから打ち切る",
+      _d5a == [] and len(give_up(d5, "2027-01-29")) == 1)
+    d6 = _empty()
+    add(d6, "導入日が未定の機種", DMM + "6", "m", "", source_machine_id="6")
+    d6["items"]["q_0001"]["first_seen"] = "2026-01-01"
+    mark_tried(d6, "q_0001")
+    t("★★導入日が分からないものは打ち切らない★★",
+      give_up(d6, "2027-01-01") == [] and "q_0001" in d6["items"])
+    d7 = _empty()
+    add(d7, "日まで分かった機種", DMM + "7", "m", "2026-10", source_machine_id="7")
+    d7["items"]["q_0001"]["first_seen"] = "2026-01-01"
+    d7["items"]["q_0001"]["release_day"] = "2026-10-05"
+    mark_tried(d7, "q_0001")
+    d7["items"]["q_0001"]["release_checked"] = "2026-12-04"
+    d9 = _empty()
+    add(d9, "確かめていない機種", DMM + "9", "m", "2026-01", source_machine_id="9")
+    d9["items"]["q_0001"]["first_seen"] = "2026-01-01"
+    mark_tried(d9, "q_0001")
+    d9["items"]["q_0001"]["release_checked"] = "2026-10-04"
+    t("★★その日に導入日を確かめていなければ打ち切らない★★"
+      "（前日の確認では、そのあとの延期・未定を見落とす・Codex review202）",
+      give_up(d9, "2026-10-05") == [] and would_give_up(d9["items"]["q_0001"], "2026-10-05")
+      and len(give_up(d9, "2026-10-04")) == 1)
+    d11 = _empty()
+    add(d11, "未定だった機種", DMM + "11", "m", "", source_machine_id="11")
+    d11["items"]["q_0001"]["release_tbd"] = True
+    add(d11, "未定だった機種", DMM + "11", "m", "2026-11-02", source_machine_id="11")
+    t("★★巡回で導入日が来たら、未定の印を外す★★（Codex review202）",
+      "release_tbd" not in d11["items"]["q_0001"])
+    d12 = _empty()
+    add(d12, "導入日が変わる機種", DMM + "12", "m", "2026-11-02", source_machine_id="12")
+    d12["items"]["q_0001"]["release_day"] = "2026-10-25"   # ★同じ月の中で変わる★
+    add(d12, "導入日が変わる機種", DMM + "12", "m", "2026-10-19", source_machine_id="12")
+    _a = release_of(d12["items"]["q_0001"])
+    add(d12, "導入日が変わる機種", DMM + "12", "m", "2026-12", source_machine_id="12")
+    t("★★導入日が変わったら、日の欄も新しい日にそろえる★★（Codex review203）",
+      _a == "2026-10-19")
+    t("　月だけの導入日に変わり、古い日と月が違えば古い日を捨てる",
+      release_of(d12["items"]["q_0001"]) == "2026-12")
+    d10 = _empty()
+    add(d10, "覚えている機種", DMM + "10", "maker_x", "2026-10-19",
+        source_machine_id="10")
+    add(d10, "覚えている機種", DMM + "10", "", "", source_machine_id="10")
+    t("★★読めなかった晩の空の値で、覚えていた導入日とメーカーを消さない★★"
+      "（Codex review201）",
+      d10["items"]["q_0001"]["release"] == "2026-10-19"
+      and d10["items"]["q_0001"]["maker"] == "maker_x")
+    d8 = _empty()
+    add(d8, "未定に戻った機種", DMM + "8", "m", "2026-01", source_machine_id="8")
+    d8["items"]["q_0001"]["first_seen"] = "2026-01-01"
+    d8["items"]["q_0001"]["release_tbd"] = True
+    mark_tried(d8, "q_0001")
+    d8["items"]["q_0001"]["release_checked"] = "2027-01-01"   # ★確かめた日の関門は通す★
+    t("★★「未定」の印があれば、古い日付が残っていても打ち切らない★★"
+      "（Codex review200）",
+      give_up(d8, "2027-01-01") == [] and "q_0001" in d8["items"])
+    t("★★日まで分かっていれば、月末ではなくその日から数える★★",
+      release_of(d7["items"]["q_0001"]) == "2026-10-05"
+      and len(give_up(d7, "2026-12-04")) == 1)
 
     t("★★名前が無くても覚える★★"
       "（読めなかったURLを拒否すると、既知のまま二度と出てこない・Codex17回目）",

@@ -2905,12 +2905,12 @@ def give_up_now(pend: dict, queue_id: str, url: str, name: str,
                    "新台を記事にできません（やり直しても変わらない理由）",
                    f"{name} / {url} / " + " / ".join(problems)[:1200]):
         # ★台帳に残せなかったら行列からも外さない★（消えるより残るほうがまし）
-        _log(f"  台帳に残せなかったので待ち行列に残します: {name or url}")
+        _log(f"  ログに残せなかったので待ち行列に残します: {name or url}")
         return
     try:
         if _pend.done(pend, queue_id):
             _pend.save(pend)
-            _log(f"待ち行列から出して台帳へ移しました: {name or url}")
+            _log(f"待ち行列から出しました（理由はこのログの上）: {name or url}")
     except Exception as e:                # noqa: BLE001
         _log(f"  ✗ 待ち行列から出せませんでした: {e}")
 
@@ -2959,9 +2959,21 @@ def _fill_missing_dmm(work: dict) -> dict:
         return work
     try:
         got = _dm.fetch(mid)
+    except _dm.ReleaseUndecided:
+        # ★DMMが導入日を「未定」と書いている★（2026-10-02）
+        #   読めないのではなく決まっていない。印を残し、番兵は知らせない。
+        work["release_tbd"] = True
+        work.pop("release_day", None)     # ★未定になったら古い日は使わない★
+        _log(f"  導入日はまだ未定です（DMM）: {work.get('identity_url', '')}")
+        return work
     except _dm.MachineError as e:
         _log(f"  機種ページを見直せませんでした: {str(e)[:110]}")
         return work
+    # ★取れた＝導入日は未定ではない★＝名前の照合より先に印を外す
+    #   （2026-10-02・Codex review201。後ろで外すと、名前が食い違った機種が
+    #     古い未定の印のまま毎晩黙って待ち続けた）
+    work.pop("release_tbd", None)
+    work["release_checked"] = _pend._today()
     # ★名前が今もこのページの機種を指しているか★
     name = str(work.get("name") or "")
     if name:
@@ -2975,6 +2987,14 @@ def _fill_missing_dmm(work: dict) -> dict:
             return work
     if got.get("release_date"):
         work["release"] = got["release_date"][:7]   # 待ち行列は年月まで
+        # ★日まで分かったら別の欄に残す★（2026-10-02）
+        #   年月のままだと番兵が「その月の1日」で見るので、
+        #   10/19導入の機種を10/1導入と読んで誤って知らせていた（ウミンチュ）。
+        if len(got["release_date"]) >= 10:
+            work["release_day"] = got["release_date"][:10]
+        else:
+            # ★日から月へ戻ったら、古い日を捨てる★（Codex review200）
+            work.pop("release_day", None)
     if got.get("maker") and not work.get("dmm_maker"):
         work["dmm_maker"] = got["maker"]
     # ★★名簿に足された社を、待ち行列にも効かせる★★（2026-08-17）
@@ -4729,9 +4749,9 @@ def _selftest_body() -> int:
           _verify_maker("https://evil.example/x/", "fujishoji") != []
           and _blocking(_verify_maker("https://evil.example/x/",
                                       "fujishoji")) == [])
-        t("★★台帳に残せなかったら待ち行列から外さない★★"
-          "（待ち行列にも台帳にも無い機種＝黙って消える・Codex19回目）",
-          "台帳に残せなかったので" in inspect.getsource(give_up_now))
+        t("★★ログに残せなかったら待ち行列から外さない★★"
+          "（待ち行列にもどこにも無い機種＝黙って消える・Codex19回目）",
+          "ログに残せなかったので" in inspect.getsource(give_up_now))
         t("★★コミットしたのに出せていないものを、次の実行で先に出す★★"
           "（未pushのコミットが後続を全部止める・Codex19回目）",
           "_mark_push_pending" in inspect.getsource(push_after_publish)
@@ -4762,7 +4782,7 @@ def _selftest_body() -> int:
         t("★★1日の枠は公開部の中、最初の書き込み直前に使う★★"
           "（途中公開や監査で断られたときにも枠が消えていた・Codex20回目）",
           "before_write" in inspect.getsource(_pub._publish))
-        t("　60日打ち切りも、台帳に残せたときだけ外す",
+        t("　60日打ち切りも、ログに残せたときだけ外す",
           "待ち行列に戻しました" in inspect.getsource(main))
         t("★★型式名が『まだ載っていない』と『食い違う』を分ける★★"
           "（同じ扱いで、明日には載る新台を初回で捨てていた・Codex21回目）",
@@ -5306,6 +5326,79 @@ def _selftest_body() -> int:
             t("　（対照）既に入っている値は上書きしない",
               fill_missing(dict(_w_unknown, maker="daitogiken")).get("maker")
               == "daitogiken")
+            # ★★DMMで日まで分かった導入日と「未定」を、待ち行列に残す★★
+            #   （2026-10-02。日が無いと番兵が月の1日で読んで誤って知らせ、
+            #     未定の機種は毎朝「作れていない」と出ていた）
+            _dm_fm.fetch = lambda mid, get=None: {
+                "id": mid, "heading": "LB試験機X-300 （新台スマスロ）パチスロ｜天井",
+                "maker": "清龍ジャパン", "release_date": "2026-10-19",
+                "model_code": "", "has_model_code": False,
+                "url": f"https://p-town.dmm.com/machines/{mid}"}
+            try:
+                _w_day = fill_missing(
+                    {"name": "LB試験機X-300", "maker": "seiryu_japan",
+                     "identity_url": "https://p-town.dmm.com/machines/5089",
+                     "release": "2026-10", "release_tbd": True})
+
+                def _tbd(mid, get=None):
+                    raise _dm_fm.ReleaseUndecided("導入開始日は未定です: 未定")
+                _dm_fm.fetch = _tbd
+                _w_tbd = fill_missing(
+                    {"name": "LB試験機X-300", "maker": "seiryu_japan",
+                     "identity_url": "https://p-town.dmm.com/machines/5089",
+                     "release": ""})
+            finally:
+                _dm_fm.fetch = _real_dm_fetch
+            t("★★DMMで日まで分かったら待ち行列に日を残す★★（年月の欄は変えない）",
+              _w_day.get("release_day") == "2026-10-19"
+              and _w_day.get("release") == "2026-10")
+            t("　取れた晩は「導入日を確かめた日」を残す（打ち切りの前提・review201）",
+              _w_day.get("release_checked") == _pend._today())
+            t("　導入日が決まったら「未定」の印を外す",
+              "release_tbd" not in _w_day)
+            t("★★DMMが「未定」と書いていれば印を付ける★★（番兵が知らせないため）",
+              _w_tbd.get("release_tbd") is True)
+            _dm_fm.fetch = lambda mid, get=None: {
+                "id": mid, "heading": "LB試験機X-300 （新台スマスロ）パチスロ｜天井",
+                "maker": "清龍ジャパン", "release_date": "2026-11",
+                "model_code": "", "has_model_code": False,
+                "url": f"https://p-town.dmm.com/machines/{mid}"}
+            try:
+                _w_back = fill_missing(dict(_w_day))
+
+                def _tbd2(mid, get=None):
+                    raise _dm_fm.ReleaseUndecided("導入開始日は未定です: 未定")
+                _dm_fm.fetch = _tbd2
+                _w_tbd2 = fill_missing(dict(_w_day))
+            finally:
+                _dm_fm.fetch = _real_dm_fetch
+            t("★★DMMの日付が日から月へ戻ったら、古い日を捨てる★★（Codex review200）",
+              "release_day" not in _w_back and _w_back.get("release") == "2026-11")
+            t("★★未定になったら、古い日を捨てる★★",
+              "release_day" not in _w_tbd2 and _w_tbd2.get("release_tbd") is True)
+            _src_main = inspect.getsource(main)
+            t("★★未定の機種は、記事づくり（run_one）へ進まない★★（Codex review200）",
+              "if work.get(\"release_tbd\"):" in _src_main
+              and _src_main.index("if work.get(\"release_tbd\"):")
+              < _src_main.index("res = run_one(work[\"name\"]")
+              and _src_main.index("if work.get(\"_name_conflict\"):")
+              < _src_main.index("if work.get(\"release_tbd\"):"))
+            t("★★打ち切る候補は、その場でDMMを取り直してから決める★★（review202）",
+              "fill_missing(_cand)" in _src_main
+              and _src_main.index("fill_missing(_cand)")
+              < _src_main.index("_pend.give_up(pend)"))
+            t("★★取れた晩は、名前の照合より先に未定の印を外す★★"
+              "（名前が食い違った機種が古い未定の印で黙って待ち続けた・review201）",
+              (lambda w: "release_tbd" not in w and w.get("_name_conflict"))(
+                  (lambda: (setattr(_dm_fm, "fetch", lambda mid, get=None: {
+                      "id": mid, "heading": "まったく別の機種 （新台スマスロ）パチスロ｜天井",
+                      "maker": "清龍ジャパン", "release_date": "2026-10-19",
+                      "model_code": "", "has_model_code": False,
+                      "url": f"https://p-town.dmm.com/machines/{mid}"}),
+                      fill_missing({"name": "LB試験機X-300", "maker": "seiryu_japan",
+                                    "identity_url": "https://p-town.dmm.com/machines/5089",
+                                    "release": "2026-10", "release_tbd": True}))[1])()))
+            _dm_fm.fetch = _real_dm_fetch
             t("★★規格を読めない公式名では型式を採用しない★★"
               "（照合を飛ばすと同名旧機種の型式・材料で新台を書けた・Codex39回目）",
               "規格（L/S）が公式名" in inspect.getsource(gather))
@@ -6853,18 +6946,28 @@ def _main() -> int:
             _log(f"  DMM未掲載を台帳に残せませんでした（明晩また知らせます）"
                  f": {it['name']}")
     # ★待ちすぎた分は黙って消さず、台帳に残す★
+    # ★★打ち切る候補は、その場でDMMを取り直してから決める★★
+    #   （2026-10-02・Codex review202）＝前に確かめた日付のまま外すと、
+    #   そのあと延期・未定になった機種が消える。取り直せたものだけが
+    #   give_up() の「その日に確かめた」を満たす。
+    if apply_it:
+        for _cand in [x for x in pend["items"].values() if _pend.would_give_up(x)]:
+            try:
+                fill_missing(_cand)
+            except Exception as e:        # noqa: BLE001
+                _log(f"  打ち切りの前に導入日を取り直せませんでした（外しません）: {e}")
     for it in (_pend.give_up(pend) if apply_it else []):
         if not _record_issue("site", "structural", "MATERIAL", "PENDING_GAVE_UP",
-                       f"新台を{_pend.GIVE_UP_DAYS}日待っても記事にできませんでした",
+                       f"導入日から{_pend.GIVE_UP_DAYS}日たっても記事にできませんでした",
                        f"{it['name']} / {it.get('identity_url', '')} / "
                        f"直近の理由: {it.get('last_reason', '')}"):
             # ★台帳に残せなかったら行列へ戻す★（2026-07-31・Codex20回目）
             #   give_up() は返す前に外してしまうので、そのまま保存すると
             #   **待ち行列にも台帳にも無い機種**になる。
             pend["items"][it["queue_id"]] = it
-            _log(f"  台帳に残せなかったので待ち行列に戻しました: {it['name']}")
+            _log(f"  ログに残せなかったので待ち行列に戻しました: {it['name']}")
             continue
-        print(f"  ★{_pend.GIVE_UP_DAYS}日待っても記事にできませんでした: {it['name']}★")
+        print(f"  ★導入日から{_pend.GIVE_UP_DAYS}日たっても記事にできませんでした: {it['name']}★")
     if apply_it:
         _pend.save(pend)                  # ★下見は古い姿を書き戻さない★（Codex30回目）
     print(f"新台候補: {len(d['candidates'])} 件 / 確認が要る: {len(d['problems'])} 件")
@@ -6908,13 +7011,26 @@ def _main() -> int:
                 give_up_now(pend, work["queue_id"], work["identity_url"],
                             work["name"], [msg])
             else:
-                print("（下見）--apply の実行が台帳へ移します")
+                print("（下見）--apply の実行が待ち行列から外します")
+            continue
+        # ★★DMMが導入日を「未定」と書いている機種は、今晩は記事づくりへ進まない★★
+        #   （2026-10-02・Codex review200）＝進むと毎晩の取得と2AIを使い、
+        #   本人性の確認で止まるだけで、後ろの機種が遅れる。
+        #   ★名前の食い違いより後に見る★（review201）＝先に見ると食い違いが隠れる。
+        if work.get("release_tbd"):
+            _log(f"  導入日が未定なので今晩は進めません: "
+                 f"{work.get('name') or work['identity_url']}")
+            if apply_it:
+                _pend.mark_tried(pend, work["queue_id"], "RELEASE_TBD")
+                _pend.save(pend)
             continue
         if not (work["name"] and work["maker"]):
             _log(f"  まだ記事にできません（名前かメーカーが取れない）: {work['identity_url']}")
             # ★早く抜けるときも試した日を残す★（残さないと毎晩ここで詰まる）
             if apply_it:
-                _pend.mark_tried(pend, work["queue_id"])
+                # ★未定なら符丁を残す★（番兵が「待つのが正常」と分かるように）
+                _pend.mark_tried(pend, work["queue_id"],
+                                 "RELEASE_TBD" if work.get("release_tbd") else "")
                 _pend.save(pend)
             continue
         _log(f"試す: {work['name']} / {work['maker']} / {work['release']}")

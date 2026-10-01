@@ -256,7 +256,9 @@ def run(apply_it: bool = False, today=None) -> dict:
             # ★飛ばさずに待ち行列へ残す★（翌晩また試す）
             if apply_it:
                 # ★あとで引き直せない手掛かりを必ず残す★（台帳#335の項目4）
-                _pend.add(data, row["name"], row["url"], "", "",
+                # ★カレンダーの導入日は渡す★（2026-10-02・Codex review201）
+                _pend.add(data, row["name"], row["url"], "",
+                          row.get("release_date") or "",
                           reason=got["reason"],
                           source_machine_id=row["id"], identity_source="dmm",
                           extra={"dmm_maker": got.get("dmm_maker", ""),

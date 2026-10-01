@@ -6868,6 +6868,187 @@ MUTATIONS = [
         "after": "            cells = [\"\" if isinstance(c, dict) else str(c)\n",
         "run": ["scripts/grow_machine.py"],
     },
+    # ─── 2026-10-02・導入日から数える打ち切り／未定／3日前の🔴 ──────────
+    {
+        "why": "★導入日からの日数を見ずに打ち切る"
+               "（★8月に見つけた11月導入の機種が、導入前に待ち行列から消える★）★",
+        "file": "scripts/pending_machines.py",
+        "before": "        if gone < GIVE_UP_DAYS:\n",
+        "after": "        if False:\n",
+        "run": ["scripts/pending_machines.py"],
+    },
+    {
+        "why": "★DMMの「未定」を、読めない失敗と同じ型で返す"
+               "（★番兵が未定の機種を毎朝『作れていない』と知らせる★）★",
+        "file": "scripts/dmm_machine.py",
+        "before": '            if "未定" in rel_raw:\n',
+        "after": "            if False:\n",
+        "run": ["scripts/dmm_machine.py"],
+    },
+    {
+        "why": "★DMMで日まで分かった導入日を待ち行列に残さない"
+               "（★10/19導入を10/1と読んで誤って知らせる★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '            work["release_day"] = got["release_date"][:10]\n',
+        "after": "            pass\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★DMMが「未定」と書いていても待ち行列に印を付けない★",
+        "file": "scripts/add_machine_run.py",
+        "before": '        work["release_tbd"] = True\n',
+        "after": "        pass\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★導入日が未定の機種でも、番兵が知らせる"
+               "（★毎朝おなじ機種が出て、本物の警告が埋もれる★）★",
+        "file": "scripts/add_machine_health.py",
+        "before": '        if it.get("release_tbd"):\n            continue\n',
+        "after": "        if False:\n            continue\n",
+        "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★導入3日前の知らせを🔴にしない"
+               "（★運営者の指示「黄色じゃないよ それは赤にして」に反する★）★",
+        "file": "scripts/add_machine_health.py",
+        "before": "    return 2 if any(str(x).startswith(RED) for x in ng) else 1\n",
+        "after": "    return 1\n",
+        "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★番兵が日の欄を見ず、年月（その月の1日）で導入日を読む"
+               "（★ウミンチュの誤った知らせが戻る★）★",
+        "file": "scripts/add_machine_health.py",
+        "before": "        if rel and not far_from_release(rel, today):\n            ng.append(\n",
+        "after": '        if rel and not far_from_release(it.get("release"), today):\n            ng.append(\n',
+        "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★知らせ始めるのを導入7日前に戻す（★運営者の指示は3日前★）★",
+        "file": "scripts/add_machine_health.py",
+        "before": "                     days: int = OWNER_ALERT_DAYS) -> bool:\n",
+        "after": "                     days: int = 7) -> bool:\n",
+        "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★導入3日前の🔴を、材料が無い理由で止まった機種だけにする"
+               "（★取得の失敗などで止まった機種は導入日に記事が無くても🔴にならない★"
+               "＝Codex review200）★",
+        "file": "scripts/add_machine_health.py",
+        "before": "        if rel and not far_from_release(rel, today):\n            ng.append(\n",
+        "after": "        if code in PRE_RELEASE_QUIET and rel and not far_from_release(rel, today):\n            ng.append(\n",
+        "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★「未定」の印があっても古い日付で60日打ち切る（★機種が黙って消える★）★",
+        "file": "scripts/pending_machines.py",
+        "before": '    if item.get("release_tbd"):\n        return ""\n',
+        "after": "",
+        "run": ["scripts/pending_machines.py"],
+    },
+    {
+        "why": "★DMMの日付が日から月へ戻っても、古い日を残す（★誤った🔴・早すぎる打ち切り★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '        else:\n            # ★日から月へ戻ったら、古い日を捨てる★（Codex review200）\n            work.pop("release_day", None)\n',
+        "after": "",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★未定の機種も記事づくりへ進む（★毎晩の取得と2AIを無駄に使い、後ろの機種が遅れる★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '        if work.get("release_tbd"):\n            _log(f"  導入日が未定なので今晩は進めません: "\n',
+        "after": '        if False:\n            _log(f"  導入日が未定なので今晩は進めません: "\n',
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★読めなかった晩の空の導入日で、覚えていた導入日を消す"
+               "（★導入3日前の🔴が出なくなる・Codex review201★）★",
+        "file": "scripts/pending_machines.py",
+        "before": '        if str(release or "").strip():\n            it["release"] = release\n',
+        "after": '        it["release"] = release\n        if True:\n',
+        "run": ["scripts/pending_machines.py"],
+    },
+    {
+        "why": "★読めなかった晩の空のメーカーで、覚えていたメーカーを消す★",
+        "file": "scripts/pending_machines.py",
+        "before": '        if str(maker or "").strip():\n            it["maker"] = maker\n',
+        "after": '        it["maker"] = maker\n',
+        "run": ["scripts/pending_machines.py"],
+    },
+    {
+        "why": "★導入日を最近確かめていなくても打ち切る"
+               "（★延期・未定になった機種が古い日付のまま消える・review201★）★",
+        "file": "scripts/pending_machines.py",
+        "before": '        if str(it.get("release_checked") or "")[:10] != today[:10]:\n',
+        "after": "        if False:\n",
+        "run": ["scripts/pending_machines.py"],
+    },
+    {
+        "why": "★取れた晩に、名前の照合より後で未定の印を外す"
+               "（★名前が食い違った機種が古い未定の印で黙って待ち続ける★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '    work.pop("release_tbd", None)\n    work["release_checked"] = _pend._today()\n',
+        "after": '    work["release_checked"] = _pend._today()\n',
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★取れた晩に「導入日を確かめた日」を残さない（★打ち切りが永久に起きず、"
+               "または古い日で判断する★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '    work["release_checked"] = _pend._today()\n',
+        "after": "",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★巡回で導入日が来ても、未定の印を残す（★🔴が出ない・review202★）★",
+        "file": "scripts/pending_machines.py",
+        "before": '            it.pop("release_tbd", None)\n',
+        "after": "",
+        "run": ["scripts/pending_machines.py"],
+    },
+    {
+        "why": "★打ち切る候補を取り直さずに決める（★延期・未定になった機種が消える★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "                fill_missing(_cand)\n",
+        "after": "                pass\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★その晩以外のログまで数える（★前の晩・次の晩の打ち切りを今朝のものとして知らせる★）★",
+        "file": "scripts/add_machine_health.py",
+        "before": '    _night = (text.split(START_MARK, 1)[1] if START_MARK in text else "") \\\n',
+        "after": '    _night = text + "" \\\n',
+        "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★やり直せない理由で外した新台を朝の点検に出さない（★人知れず消える★）★",
+        "file": "scripts/add_machine_health.py",
+        "before": '                                ("[PENDING_PERMANENT_BLOCK]",\n',
+        "after": '                                ("[NEVER_MATCHES]",\n',
+        "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★導入日が変わっても日の欄を古いまま残す（★🔴が遅れる・要らない🔴が出る・review203★）★",
+        "file": "scripts/pending_machines.py",
+        "before": '            if len(_r) >= 10:\n                it["release_day"] = _r[:10]\n',
+        "after": "            if False:\n                pass\n",
+        "run": ["scripts/pending_machines.py"],
+    },
+    {
+        "why": "★やり直せない理由で外した新台を🟡にする（★もう記事にならないのに赤で届かない★）★",
+        "file": "scripts/add_machine_health.py",
+        "before": '                                 "やり直しても記事にできない理由で、待ち行列から外した", RED)):\n',
+        "after": '                                 "やり直しても記事にできない理由で、待ち行列から外した", "")):\n',
+        "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★DMMのカレンダー待ちの機種は、導入3日前を過ぎても知らせない★",
+        "file": "scripts/add_machine_health.py",
+        "before": "        if rel and not far_from_release(rel, today):\n            ng.append(f",
+        "after": "        if False:\n            ng.append(f",
+        "run": ["scripts/add_machine_health.py"],
+    },
 ]
 
 

@@ -9,7 +9,7 @@
   ② 各社の状態が OK 以外になっていないか（FETCH_FAILED / PARSE_SUSPECT）
   ③ 残存率が下がっていないか（一覧の作りが変わった兆候）
   ④ 「前回の公開が途中で終わっています」が出ていないか
-  ⑤ 待ち行列が増え続けていないか（名鑑に載らないまま60日で台帳へ）
+  ⑤ ★導入3日前を過ぎても記事にできていない機種★（🔴・2026-10-02 運営者の指示）
   ⑥ ★機種ページは分かっているのに、何度やっても記事にできていない機種★
      （2026-08-22追加。5日連続で公開0件だったのに誰も気づかなかったため）
 
@@ -45,8 +45,13 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 LOG_DIR = os.path.join(os.path.expanduser("~"), "Documents", "uchidokoro", "logs")
 
-# 待ち行列がこの日数を超えたら知らせる（60日で台帳へ行く前の予告）
-PENDING_WARN_DAYS = 30
+# ★★導入日のこの日数前を過ぎても記事にできていなければ🔴で知らせる★★
+#   （2026-10-02・運営者「導入日3日前になっても情報がない時は私にメールで」
+#     「黄色じゃないよ それは赤にして」）
+#   ★それより前は知らせない★＝導入前は出典に情報が無いのが当たり前。
+OWNER_ALERT_DAYS = 3
+# ★🔴の行の頭★＝main が見て終了コード2を返し、番兵が🔴メールにする。
+RED = "🔴 "
 # ★機種ページが分かっているのに作れていない回数のしきい値★（2026-08-22）
 #   毎晩1回挑むので、7回＝1週間ぶん詰まっている状態。
 #   ★実測（2026-08-22）★ q_0001=13回 / q_0004=20回 だった。
@@ -147,6 +152,23 @@ def check_log(day: str) -> list:
                           "（一覧の作りが変わった兆候）")
         except ValueError:
             pass
+    # ★★導入日から60日たって待ち行列から外した機種があれば知らせる★★
+    #   （2026-10-02・Codex review201）＝ログに1行残るだけだと誰も気づかない。
+    #   ★文章は読まず、符丁だけを数える★
+    #   ★その晩のぶんだけ数える★＝その日のログは「始まり」から後、
+    #   翌日のログは次の「始まり」より前（日をまたいだ部分）。Codex review202。
+    _night = (text.split(START_MARK, 1)[1] if START_MARK in text else "") \
+        + ((_nx or "").split(START_MARK, 1)[0])
+    #   ★やり直せない理由で外したものは🔴★（Codex review203）＝その機種はもう
+    #   自動では記事にならない。導入直前に外れた晩も🔴にするため、理由を問わず赤。
+    for _code, _what, _mark in (("[PENDING_GAVE_UP]",
+                                 "導入日から60日たっても記事にできず、待ち行列から外した", ""),
+                                ("[PENDING_PERMANENT_BLOCK]",
+                                 "やり直しても記事にできない理由で、待ち行列から外した", RED)):
+        _n = _night.count(_code)
+        if _n:
+            ng.append(f"{_mark}{day}: {_what}新台が {_n} 件あります"
+                      "（その晩のログに名前と理由）")
     if "前回の公開が途中で終わっています" in text:
         # ★いま残っているかどうかで判断する★（2026-07-31・自分で気づいた）
         #   ログは「そのとき出た」記録なので、既に戻してあっても残る。
@@ -166,7 +188,8 @@ PRE_RELEASE_QUIET = ("NO_MATERIAL", "NOT_ENOUGH_DIRECTORIES",
                      "MODEL_CODE_MISSING")
 
 
-def far_from_release(release: str, today=None) -> bool:
+def far_from_release(release: str, today=None,
+                     days: int = OWNER_ALERT_DAYS) -> bool:
     """★導入まで、まだ十分に先か★（2026-08-30・台帳#507）
 
     ★読めない日付では黙らない★（fail-loud）＝
@@ -190,23 +213,30 @@ def far_from_release(release: str, today=None) -> bool:
             now = _dt.date.fromisoformat(now)
         except ValueError:
             return False
-    import adoption_basis as _ab
-    return now < d - _dt.timedelta(days=_ab.NEAR_RELEASE_DAYS)
+    return now < d - _dt.timedelta(days=days)
 
 
-def check_pending() -> list:
-    """待ち行列が長引いていないか。"""
+def check_pending(today=None) -> list:
+    """★DMMのカレンダーにまだ載っていない控えが、導入3日前を過ぎていないか★
+
+    （2026-10-02に作り直した）直す前は「見つけてから30日」で知らせていたが、
+    導入前は待つのが当たり前なので毎朝おなじ機種が出ていた。
+    ★機種ページが分かっているもの（READY）は check_stuck が見る★。
+    """
     import pending_machines as _pend
     ng = []
     try:
         data = _pend.load()
     except Exception as e:                # noqa: BLE001
         return [f"待ち行列を読めません: {e}"]
-    for it in _pend.due(data):
-        days = _pend.waited_days(it)
-        if days >= PENDING_WARN_DAYS:
-            ng.append(f"{it['name']} が {days} 日待っています"
-                      f"（{_pend.GIVE_UP_DAYS} 日で台帳へ）")
+    for it in _pend.due(data, all_states=True):
+        if str(it.get("state") or "") == "READY" or it.get("release_tbd"):
+            continue
+        rel = _pend.release_of(it)
+        if rel and not far_from_release(rel, today):
+            ng.append(f"{RED}{it.get('name')} は導入日（{rel}）の"
+                      f"{OWNER_ALERT_DAYS}日前を過ぎましたが、"
+                      "DMMのカレンダーにまだ載らず記事にできていません")
     return ng
 
 
@@ -256,12 +286,27 @@ def check_stuck(today=None) -> list:
         #   3回だと夜間タスク3回ぶんを失って遅い（Codexの助言）。
         streak = int(it.get("blocker_streak") or 0)
         code = str(it.get("last_blocker") or "")
+        rel = _pend.release_of(it)
+        # ★★DMMが導入日を「未定」と書いている機種は知らせない★★（2026-10-02）
+        #   導入が決まっていないので、情報が無いのは当たり前。
+        #   ★見るのは印だけ★＝符丁（RELEASE_TBD）は導入日が決まった晩も
+        #   次に止まるまで古いまま残るので、符丁で黙ると決まった機種まで隠れる。
+        if it.get("release_tbd"):
+            continue
+        # ★★導入3日前を過ぎても記事にできていない＝運営者へ🔴★★（2026-10-02）
+        #   ★止まった理由は問わない★（Codex review200 の指摘）＝取得の失敗や
+        #   うちの都合で止まっていても、読者から見れば「導入日に記事が無い」。
+        if rel and not far_from_release(rel, today):
+            ng.append(
+                f"{RED}{it.get('name')} は導入日（{rel}）の"
+                f"{OWNER_ALERT_DAYS}日前を過ぎましたが、まだ記事にできていません"
+                f"（理由: {code or '記録なし'}／{it.get('identity_url')}）")
+            continue
         # ★★導入がまだ先で、情報が世に出ていないだけなら知らせない★★
         #   （2026-08-30・台帳#507）
         #   ★実測＝導入65日前の2機種が10回続けて出ていた★。
         #   このままだと導入日まで毎朝出続けて、本物の警告が埋もれる。
-        if code in PRE_RELEASE_QUIET \
-                and far_from_release(it.get("release"), today):
+        if code in PRE_RELEASE_QUIET and far_from_release(rel, today):
             continue
         if code and streak >= BLOCKER_STREAK:
             ng.append(
@@ -437,9 +482,10 @@ def selftest() -> int:
         # ★★#507：導入がまだ先なら、材料が無いことを知らせない★★
         #   （2026-08-30。実測＝導入65日前の2機種が10回続けて出ていた）
         _T7 = "2026-08-30"
-        t("★★導入まで十分に先か★★（境目は導入7日前）",
+        t("★★導入まで十分に先か★★（境目は導入3日前・2026-10-02に7日から変えた）",
           far_from_release("2026-11-02", _T7) is True
-          and far_from_release("2026-09-05", _T7) is False)
+          and far_from_release("2026-09-03", _T7) is True
+          and far_from_release("2026-09-02", _T7) is False)
         t("　★月までしか分からない導入日は、その月の1日で見る★"
           "（黙る期間を短いほうへ倒す）",
           far_from_release("2026-09", _T7) is False
@@ -460,8 +506,56 @@ def selftest() -> int:
           check_stuck(_T7) == [])
         t("　★回数のほうでも知らせない★（27回試していても）",
           not any("作れていません" in x for x in check_stuck(_T7)))
-        t("★★導入7日前まで来たら、ちゃんと知らせる★★",
-          len(check_stuck("2026-10-27")) == 1)
+        t("　導入6日前ではまだ知らせない（3日前まで待つ）",
+          check_stuck("2026-10-27") == [])
+        _red = check_stuck("2026-10-30")
+        t("★★導入3日前を過ぎて情報が無ければ、🔴で知らせる★★"
+          "（2026-10-02・運営者「黄色じゃないよ それは赤にして」）",
+          len(_red) == 1 and _red[0].startswith(RED)
+          and "導入がまだ先の機種" in _red[0])
+        _fake({"q_1": dict(_far["q_1"], release="2026-10",
+                           release_day="2026-10-19")})
+        t("★★日まで分かっていれば、その日で数える★★"
+          "（月のままだと10/19導入を10/1と読んで誤って知らせた・ウミンチュ）",
+          check_stuck("2026-10-02") == []
+          and len(check_stuck("2026-10-16")) == 1)
+        _fake({"q_1": {"name": "うちの都合で止まる機種", "state": "READY",
+                       "release": "2026-10", "release_day": "2026-10-19",
+                       "tries": 1, "last_blocker": "SOURCE_FETCH_FAILED",
+                       "blocker_streak": 1,
+                       "identity_url": "https://p-town.dmm.com/machines/1"}})
+        _rr = check_stuck("2026-10-17")
+        t("★★導入3日前を過ぎたら、止まった理由に関係なく🔴★★"
+          "（取得の失敗・1回目でも。Codex review200）",
+          len(_rr) == 1 and _rr[0].startswith(RED))
+        _fake({"q_1": {"name": "まだ一度も止まっていない機種", "state": "READY",
+                       "release": "2026-10", "release_day": "2026-10-19",
+                       "identity_url": "https://p-town.dmm.com/machines/1"}})
+        _rn = check_stuck("2026-10-17")
+        t("　理由が記録されていない機種も🔴",
+          len(_rn) == 1 and _rn[0].startswith(RED))
+        _fake({"q_1": {"name": "未定が決まった機種", "state": "READY",
+                       "release": "2026-10", "release_day": "2026-10-19",
+                       "last_blocker": "RELEASE_TBD", "blocker_streak": 3,
+                       "identity_url": "https://p-town.dmm.com/machines/1"}})
+        t("★★導入日が決まったら、古い RELEASE_TBD の符丁が残っていても知らせる★★",
+          len(check_stuck("2026-10-17")) == 1)
+        _fake({"q_1": {"name": "導入日が未定の機種", "state": "READY",
+                       "release": "", "tries": 30,
+                       "last_blocker": "RELEASE_TBD", "blocker_streak": 11,
+                       "release_tbd": True,
+                       "identity_url": "https://p-town.dmm.com/machines/1"}})
+        t("★★DMMが導入日を「未定」と書いている機種は知らせない★★"
+          "（ゴジラ対エヴァ2・アサルトリリィが毎朝出ていた）",
+          check_stuck(_T7) == [])
+        _fake({"q_1": {"name": "カレンダー待ちの機種",
+                       "state": "AWAITING_DMM_ID",
+                       "release": "2026-10", "release_day": "2026-10-19"}})
+        _cp = check_pending("2026-10-17")
+        t("★★DMMのカレンダー待ちも、導入3日前を過ぎたら🔴★★"
+          "（見つけてからの日数では知らせない）",
+          check_pending("2026-10-02") == []
+          and len(_cp) == 1 and _cp[0].startswith(RED))
 
         #   ★うちの都合で止まっているものは、導入がどれだけ先でも知らせる★
         _ours = {"q_1": dict(_far["q_1"],
@@ -573,6 +667,50 @@ def selftest() -> int:
       _c3 in PRE_RELEASE_QUIET)
 
     t("　待ち行列も見られる", isinstance(check_pending(), list))
+    # ★★待ち行列から外した機種を、その晩のぶんだけ数えて知らせる★★（Codex review202）
+    import tempfile as _tf
+    _keep_dir = globals()["LOG_DIR"]
+    with _tf.TemporaryDirectory() as _td:
+        globals()["LOG_DIR"] = _td
+        try:
+            with open(log_path("2026-10-01"), "w", encoding="utf-8") as f:
+                f.write("[00:10] ★記録 [PENDING_GAVE_UP] 前の晩のぶん\n"
+                        f"[23:30] {START_MARK}\n"
+                        "[23:40] ★記録 [PENDING_PERMANENT_BLOCK] x\n")
+            with open(log_path("2026-10-02"), "w", encoding="utf-8") as f:
+                f.write("[00:05] ★記録 [PENDING_GAVE_UP] a\n"
+                        "[00:06] ★記録 [PENDING_GAVE_UP] b\n"
+                        f"[00:07] {END_MARK}\n"
+                        f"[23:30] {START_MARK}\n"
+                        "[23:31] ★記録 [PENDING_GAVE_UP] 次の晩のぶん\n")
+            _cl = check_log("2026-10-01")
+        finally:
+            globals()["LOG_DIR"] = _keep_dir
+    t("★★導入日から60日で外した新台を、その晩のぶんだけ数える★★"
+      "（日をまたいだ部分も・前後の晩は数えない）",
+      any("待ち行列から外した新台が 2 件" in x and "60日" in x for x in _cl))
+    t("★★やり直しても記事にできない理由で外した新台も知らせる★★",
+      any("やり直しても記事にできない" in x and "1 件" in x for x in _cl))
+    t("　それは🔴（もう自動では記事にならない・Codex review203）",
+      any(x.startswith(RED) and "やり直しても記事にできない" in x for x in _cl))
+    _rmain = []
+    _orig = (check_log, check_pending, check_stuck, check_now)
+    try:
+        globals()["check_log"] = lambda d: []
+        globals()["check_pending"] = lambda *a: []
+        globals()["check_now"] = lambda: []
+        globals()["check_stuck"] = lambda *a: [RED + "赤い機種"]
+        sys.argv = ["x", "--date", "2026-10-01"]
+        _rmain.append(main())
+        globals()["check_stuck"] = lambda *a: ["黄色い機種"]
+        _rmain.append(main())
+    finally:
+        (globals()["check_log"], globals()["check_pending"],
+         globals()["check_stuck"], globals()["check_now"]) = _orig
+        sys.argv = ["x", "--selftest"]
+    t("★★🔴が1件でもあれば終了コード2、それ以外の知らせは1★★"
+      "（番兵が終了コードで🔴メールと🟡メールを分ける）",
+      _rmain == [2, 1])
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
@@ -599,8 +737,9 @@ def main() -> int:
         return 0
     print(f"★{day}: 確かめてほしい点が {len(ng)} 件★")
     for x in ng:
-        print("  ✗ " + x[:160])
-    return 1
+        print("  ✗ " + x[:200])
+    # ★🔴が1件でもあれば終了コード2★＝番兵が🔴メールにする（2026-10-02）
+    return 2 if any(str(x).startswith(RED) for x in ng) else 1
 
 
 if __name__ == "__main__":
