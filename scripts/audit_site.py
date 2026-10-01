@@ -352,8 +352,9 @@ def check_8_readme_count(machines: list) -> list[str]:
     #   公開ページは守れていたのに、CLAUDE.md 自身が
     #   「機種数は書かない」と書きながら「全120機種」と書いていた。
     #   ルールを書いた場所こそ、静かに戻りやすい。
-    for rel in ("README.md", "about.html", "guide-ichiran.html", "CLAUDE.md",
-                "index.html"):
+    # ★★CLAUDE.md は見ない★★（2026-10-01・台帳#545）＝読者に出ない手元のメモなのに、
+    #   ここに機種数を書いた晩は新台の公開が監査で黙って止まっていた。
+    for rel in ("README.md", "about.html", "guide-ichiran.html", "index.html"):
         # ★手元にしか無いファイルは、無くても止めない★（2026-08-12）
         #   CLAUDE.md は Git 管理外なので CI には存在しない。
         #   読めないだけで**サイトの配信が落ちた**（実際に3回の失敗メール）。

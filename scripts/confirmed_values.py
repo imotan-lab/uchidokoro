@@ -436,6 +436,13 @@ def check_spec_shape(field: str, value) -> list:
     if kind == "games":
         if not (isinstance(value, dict) and "games" in value):
             raise ConfirmedError(f"{field}: games を持つ組で書きます")
+        # ★★数で受け取る★★（2026-10-01・台帳#597/#602）＝記事を作る側は
+        #   `{games:g}` と数として書くので、文字の "31.0" を通すと育成・新台づくりが
+        #   例外で丸ごと落ちる（受け口が使う側より緩かった）。
+        if isinstance(value["games"], bool) \
+                or not isinstance(value["games"], (int, float)):
+            raise ConfirmedError(
+                f"{field}: games は数で書きます（文字の {value['games']!r} は受け取りません）")
         if not _sp.normalize_games("%sG" % value["games"]):
             raise ConfirmedError(
                 f"{field}: G数として読めません（5〜100の数）: {value}")
@@ -2258,6 +2265,13 @@ def selftest() -> int:
     t("　★過不足なく同じか（exact）は、余計な名前を認めない★",
       not judges_exact(["claude", "codex", "claude-agent-a"])
       and judges_pair(["claude", "codex", "owner"]) is not None)
+
+    # ★★50枚あたりのゲーム数は数で受け取る★★（2026-10-01・台帳#597/#602）
+    stops("★★50枚あたりのゲーム数を文字で受け取らない★★"
+          "（記事を作る側は数として書くので、育成・新台づくりが例外で落ちる）",
+          lambda: check_spec_shape("games_per_50", {"games": "31.0"}))
+    t("　★数なら今までどおり受け取る★",
+      check_spec_shape("games_per_50", {"games": 31.0}) == ["31.0"])
 
     NAME = "L試験機"
     Q1 = "天井は1000G+α"

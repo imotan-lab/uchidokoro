@@ -479,6 +479,11 @@ def commit_verified(fid: str, commit: str) -> dict:
     rec = load(fid)
     if not re.fullmatch(r"[0-9a-f]{7,40}", commit or ""):
         raise JournalError(f"コミットの形が違います: {commit!r}")
+    # ★★実在しないコミットは受け取らない★★（2026-10-01・台帳#618・実際に1件できた）
+    #   ★直す前は形だけ見ていた★ので、無いSHAで COMMIT_VERIFIED になると
+    #   push の確認で永久に進めず、取り下げ（AGREED だけ）も使えない袋小路になった。
+    if not _full_sha(commit):
+        raise JournalError(f"そのコミットはこのリポジトリにありません: {commit[:12]}")
     return _step(rec, "COMMIT_VERIFIED", "差分とコミットが結び付いた",
                  commit=commit)
 
@@ -1046,7 +1051,20 @@ def _selftest() -> int:
             t("　コミットの形を見る", False)
         except JournalError:
             t("　コミットの形を見る", True)
-        commit_verified(fid, "0" * 40)
+        # ★★実在しないコミットは受け取らない★★（2026-10-01・台帳#618）
+        try:
+            commit_verified(fid, "0" * 40)
+            t("★★実在しないコミットでは先へ進めない★★（push の確認で永久に止まる袋小路）", False)
+        except JournalError as _e618:
+            t("★★実在しないコミットでは先へ進めない★★（push の確認で永久に止まる袋小路）",
+              "ありません" in str(_e618) and load(fid)["state"] == "APPLIED")
+        # 以下は「push されていない実在のコミット」の扱いを試すので、実在の確認だけ差し替える
+        _keep_full = globals()["_full_sha"]
+        globals()["_full_sha"] = lambda c: c if re.fullmatch(r"[0-9a-f]{40}", c) else ""
+        try:
+            commit_verified(fid, "0" * 40)
+        finally:
+            globals()["_full_sha"] = _keep_full
 
         # push されていないコミットでは進めない
         try:
@@ -1095,7 +1113,12 @@ def _selftest() -> int:
                              name="dec501"),
               "text_gone", ["Claude", "codex"])
         applied(f501, "c" * 64)
-        commit_verified(f501, "1" * 40)
+        _keep_full = globals()["_full_sha"]
+        globals()["_full_sha"] = lambda c: c if re.fullmatch(r"[0-9a-f]{40}", c) else ""
+        try:
+            commit_verified(f501, "1" * 40)
+        finally:
+            globals()["_full_sha"] = _keep_full
 
         class _FakeRecheck:
             # ★記録された版と見分けるために、わざと違う値にする★

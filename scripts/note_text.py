@@ -403,9 +403,18 @@ def retarget_text(note: str, bd: dict, unit: str):
     if good is None or caution is None or good == caution:
         return None, "その枝に候補と狙い目の両方がありません"
     pat = re.compile(r"(?<!\d)%d\s*(%s)" % (caution, re.escape(unit)))
-    after, n = pat.subn(lambda m: "%d%s" % (good, m.group(1)), note)
-    if not n:
+    hits = len(pat.findall(note))
+    if not hits:
         return None, "候補の値（%d%s）がこの注記にありません" % (caution, unit)
+    # ★★同じ数値が2回以上出る注記は書き換えない★★（2026-10-01・台帳#650）
+    #   ★直す前は全部を置き換えていた★＝候補の値と天井の値が同じ機種では、
+    #   ★天井の数字まで狙い目の値に書き換わった★。どれが着席の基準かは
+    #   機械には決められないので、ここでは断って2AIに言い換えを任せる。
+    if hits > 1:
+        return None, ("候補の値（%d%s）がこの注記に%d回出ます"
+                      "（天井など別の意味の同じ数値を書き換えないため、2AIで言い換えてください）"
+                      % (caution, unit, hits))
+    after, _n = pat.subn(lambda m: "%d%s" % (good, m.group(1)), note)
     return after, ""
 
 
@@ -608,6 +617,13 @@ def _selftest() -> int:
     t("★1文字でも足したら通さない★", not _is_subsequence("あいえ", "あいう"))
     t("　順番が入れ替わったら通さない", not _is_subsequence("うあ", "あいう"))
     t("　空は部分列（別の検査で断る）", _is_subsequence("", "あ"))
+    # ★★同じ数値が2回出る注記は書き換えない★★（2026-10-01・台帳#650）
+    _a1, _w1 = retarget_text("400Gから様子見。天井は400G短縮。",
+                             {"caution": 400, "good": 500}, "G")
+    t("★★同じ数値が2回出る注記は書き換えない（天井まで書き換わる）★★",
+      _a1 is None and "2回" in _w1)
+    _a2, _w2 = retarget_text("400Gから狙えます。", {"caution": 400, "good": 500}, "G")
+    t("　★1回だけなら、その値を狙い目の値へ直す★", _a2 == "500Gから狙えます。")
 
     sw = {"slug": "zzz", "checker": {
         "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],

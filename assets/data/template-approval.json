@@ -55,7 +55,7 @@
   "scripts/grow_legacy.py": "e08a7ebfc8959646d670a608e2380e3c0a2fc15d71a531db8cc7f8d28e8890e4",
   "scripts/grow_machine.py": "7dd2be3171c8ef3ddada5317bc751e081882df8687b897099199f13e38940020",
   "scripts/hub_prose.json": "64a009136a554be1c7d9b13638f02c29928c383e9021e3e9449e464d2e2cce27",
-  "scripts/note_text.py": "5202b88091857df087f2bc957f57d065b31ddc30bc4532f27b6abf5a1e3f46a0",
+  "scripts/note_text.py": "a2b48bed0a3c49514a100432dc759ea7700ce6c3559289583375a33977671ca6",
   "scripts/page_decision.py": "6fd6bddc85b898fdd83a4056ea7e733f3139c2b71e7f230ac069a1523dc44151",
   "scripts/pending_machines.py": "00b3371b6372c6efd9a3e8e431eb6565c98e8cb3f1f64f1ee9855b24876d18ff",
   "scripts/prepush_gate.py": "813284dc0373c2471a516c176660961e005f5fc8e8e09b5ad9b181af236ea0be",

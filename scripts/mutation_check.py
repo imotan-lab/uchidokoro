@@ -4546,6 +4546,38 @@ MUTATIONS = [
         "after": "              f\"add --reason-code {OWNER_DECISION} ／ \"",
         "run": ["scripts/open_issues.py"],
     },
+    # ─── 2026-10-01・実在しないコミットで直しの記録が袋小路になる（#618）───
+    {
+        "why": "★実在しないコミットでも直しの記録を進める（★push の確認で永久に止まり、出口も無い★）★",
+        "file": "scripts/repair_journal.py",
+        "before": "    if not _full_sha(commit):\n        raise JournalError(f\"そのコミットは",
+        "after": "    if False:\n        raise JournalError(f\"そのコミットは",
+        "run": ["scripts/repair_journal.py"],
+    },
+    # ─── 2026-10-01・注記を直す道具が天井まで書き換えうる（#650）───
+    {
+        "why": "★注記の中の同じ数値を全部置き換える（★天井の数字まで狙い目の値に書き換わる★）★",
+        "file": "scripts/note_text.py",
+        "before": "    if hits > 1:\n        return None, (\"候補の値",
+        "after": "    if False:\n        return None, (\"候補の値",
+        "run": ["scripts/note_text.py"],
+    },
+    # ─── 2026-10-01・50枚あたりのゲーム数を文字で受け取っていた（#597/#602）───
+    {
+        "why": "★50枚あたりのゲーム数を文字でも受け取る（★記事を作る側が例外で落ち、その機種が育たない★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "        if isinstance(value[\"games\"], bool) \\\n                or not isinstance(value[\"games\"], (int, float)):",
+        "after": "        if False:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    # ─── 2026-10-01・台帳の自己試験が無人タスクの実行中だけ赤くなる（#708）───
+    {
+        "why": "★台帳の自己試験の後半で本物のロックを見る（★無人タスクの実行中だけ赤くなり、タスクの自己修正が止まる★）★",
+        "file": "scripts/open_issues.py",
+        "before": "        globals()[\"LOCK_PATH\"] = Path(_d2) / \"task.lock\"",
+        "after": "        pass",
+        "run": ["scripts/open_issues.py"],
+    },
     # ─── 2026-09-30・Codexが利用制限のときの代役（エージェント2つ・運営者の指示）───
     {
         "why": "★代役の組を認めない（★Codexが上限で止まった日は、2AIの判断を1件も記録できない★）★",
