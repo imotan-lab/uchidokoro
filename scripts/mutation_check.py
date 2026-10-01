@@ -2577,8 +2577,8 @@ MUTATIONS = [
                "（記録そのものを殺す＝止まった晩に何が起きたか誰にも分からない。"
                "『試験では書かない』だけを確かめると、これが緑で通る）★",
         "file": "scripts/add_machine_run.py",
-        "before": '    _log_write(f"add_machine_{date.today().isoformat()}", msg)',
-        "after": "    return",
+        "before": '    return _log_write(f"add_machine_{date.today().isoformat()}", msg)',
+        "after": "    return True",
         "run": ["scripts/add_machine_run.py"],
         "issues": [655],
     },
@@ -4488,6 +4488,14 @@ MUTATIONS = [
         "run": ["scripts/ci_status.py"],
     },
     # ─── 2026-09-30・人へ回すのは運営者の判断が要る案件だけ（運営者の指示）───
+    # ─── 2026-10-01・ログが書けなくても「記録した」と答えていた（Codexの指摘）───
+    {
+        "why": "★新台タスクの記録で、ログが書けなくても成功と答える（★待ち行列から候補を外し、どこにも残らない★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "        return bool(ok)\n    except Exception as e:",
+        "after": "        return True\n    except Exception as e:",
+        "run": ["scripts/add_machine_run.py"],
+    },
     # ─── 2026-10-01・実在しないコミットで直しの記録が袋小路になる（#618）───
     {
         "why": "★実在しないコミットでも直しの記録を進める（★push の確認で永久に止まり、出口も無い★）★",

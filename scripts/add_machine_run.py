@@ -95,7 +95,7 @@ _IN_SELFTEST = False
 _SELFTEST_DEFAULT_WAS_OFF = False
 
 
-def _log_write(name: str, msg: str) -> None:
+def _log_write(name: str, msg: str) -> bool:
     """★本番の書き込み口★（ここだけがファイルへ残す）
 
     ★行き先は `local_paths.LOGS` の1か所★（2026-09-13・台帳#655）＝
@@ -103,6 +103,8 @@ def _log_write(name: str, msg: str) -> None:
     そちらは置き場を**コードに直書き**しているので、
     守りを1行ずつ壊して確かめる道具から★本番のログを守れなかった★。
     ★書く形は今までどおり★＝`[時:分:秒] 本文`（番兵が完了の印を探すので変えない）。
+    ★書けたかどうかを返す★（2026-10-01・Codexの指摘）＝止まった理由の記録は、
+    書けたときだけ「記録した」と扱う（書けないのに待ち行列から外すと、どこにも残らない）。
     """
     try:
         import datetime as _dt
@@ -112,11 +114,12 @@ def _log_write(name: str, msg: str) -> None:
                   encoding="utf-8") as fh:
             for ln in str(msg).replace("\r\n", "\n").split("\n"):
                 fh.write(f"[{stamp}] {ln}\n")
+        return True
     except Exception:                     # noqa: BLE001
-        pass                              # ★ログが書けなくても処理は止めない★
+        return False                      # ★ログが書けなくても処理は止めない★（成否は返す）
 
 
-def _log(msg: str) -> None:
+def _log(msg: str) -> bool:
     """★1行ずつファイルに残す★（プロジェクトの最優先ルール）
 
     無人で動くので、翌朝ログだけで「何を・いくつ・どこに・成否」を追えること。
@@ -126,8 +129,8 @@ def _log(msg: str) -> None:
     line = f"[{_now()}] {msg}"
     print(line)
     if _IN_SELFTEST:
-        return                            # ★試験では書かない★（台帳#655）
-    _log_write(f"add_machine_{date.today().isoformat()}", msg)
+        return True                       # ★試験では書かない★（台帳#655・書かないのは意図どおり）
+    return _log_write(f"add_machine_{date.today().isoformat()}", msg)
 
 
 def _now() -> str:
@@ -142,10 +145,13 @@ def _record_issue(slug, kind, severity, code, title, detail) -> bool:
       残せなかったのに待ち行列から外すと、**待ち行列にもどこにも無い機種**になる。
     """
     try:
-        _log(f"  ★記録 [{code}] {slug}・{kind}・{severity}★ {title}")
+        ok = _log(f"  ★記録 [{code}] {slug}・{kind}・{severity}★ {title}")
         for line in str(detail or "").splitlines():
-            _log(f"    {line}")
-        return True
+            ok = _log(f"    {line}") and ok
+        if not ok:
+            # ★書けなかったら「記録した」と言わない★（2026-10-01・Codexの指摘）
+            print(f"★止まった理由をログへ書けませんでした（{code} {slug}）★", file=sys.stderr)
+        return bool(ok)
     except Exception as e:                               # noqa: BLE001
         print(f"★止まった理由をログへ書けませんでした: {e}★", file=sys.stderr)
         return False
@@ -3853,6 +3859,21 @@ def _selftest_body() -> int:
               "（★書かないと、止まった晩に何が起きたか誰にも分からない★）",
               os.path.exists(_sink)
               and "本番の書き込み" in open(_sink, encoding="utf-8").read())
+            # ★★ログが書けないときは「記録した」と言わない★★（2026-10-01・Codexの指摘）
+            #   ★直す前は書けなくても成功扱い★＝待ち行列から候補を外し、どこにも残らなかった。
+            _blocker = os.path.join(_tmp, "not_a_dir")
+            open(_blocker, "w").close()           # ★ファイルなので、その下にフォルダを作れない★
+            _lp.LOGS = os.path.join(_blocker, "logs")
+            globals()["_IN_SELFTEST"] = False
+            try:
+                _ok_bad = _record_issue("zz_test", "structural", "MATERIAL",
+                                        "TEST_CODE", "試験の題", "試験の中身")
+            finally:
+                globals()["_IN_SELFTEST"] = True
+                _lp.LOGS = os.path.join(_tmp, "logs")
+            t("★★ログが書けないときは、止まった理由を「記録した」と言わない★★"
+              "（★書けたことにすると、待ち行列から候補を外してどこにも残らない★）",
+              _ok_bad is False)
             # ★★既定値そのものも見る★★（2026-09-13・Codexの指摘）＝
             #   試験は自分で True／False を置き直すので、
             #   ★既定を True にされても上の2本は両方とも合格する★
