@@ -49,8 +49,6 @@ EXPECTED_NEEDS_EDIT = {
     # ★2026-08-04: 記事の誤りを直した結果、台帳のALLOWが外れた（文言が変われば
     #   承認も外れる設計）。台帳の再登録は更新用タスクで行う（台帳 #223）★
     "happy_juggler_v3",
-    "azurlane",
-    "birdie_wing",
     "banchou4",
     "bandori",
     "burning_express",
@@ -63,7 +61,6 @@ EXPECTED_NEEDS_EDIT = {
     "hanabi",
     "hanma_baki",
     "isekai_quattro_bt",
-    "iza_bancho",
     "kaguya",
     "kizumonogatari",
     "koukaku",
@@ -71,10 +68,7 @@ EXPECTED_NEEDS_EDIT = {
     "monkeyv",
     "my_juggler_v",
     "neoplanet",
-    "okidoki_black",
-    "okidoki_encore",
     "okidoki_gorgeous",
-    "railgun2",
     "rotis",
     "sao",
     "shake_bt",
@@ -112,7 +106,8 @@ EXPECTED_PUBLIC = EXPECTED_LEGACY_TOTAL - len(EXPECTED_NEEDS_EDIT) - len(EXPECTE
 #   2026-09-28: sengoku_otome5 の記事を2AIで直して公開できるようになり 73 → 74
 #   2026-09-30: code_geass の記事を2AIで直して公開できるようになり 74 → 75
 #   2026-10-01: gundam_seed の記事を2AIで直して公開できるようになり 75 → 76
-EXPECTED_CHECKER_MACHINES = 76
+#   2026-10-01: 禁止語を2AIで消し、6機種（azurlane/birdie_wing/iza_bancho/okidoki_black/okidoki_encore/railgun2）が公開できるようになり 76 → 82
+EXPECTED_CHECKER_MACHINES = 82
 #   2026-07-27（25巡目）: 表示整合の要修正を止めたため 71機種131mode → 67機種123mode
 #     （当初10機種→UIが交換率別の狙い目をチェッカーから組み立てるようにして5機種解消）
 #   2026-07-27（24巡目）: 原稿に「公開できない表現」が残る41機種を編集待ちとして
@@ -126,7 +121,8 @@ EXPECTED_CHECKER_MACHINES = 76
 #   2026-09-28: sengoku_otome5 が公開できるようになり 135 → 137（normal / reset の2mode。cycle は軸契約で止めたまま）
 #   2026-09-30: code_geass が公開できるようになり 137 → 139（normal / reset の2mode）
 #   2026-10-01: gundam_seed が公開できるようになり 139 → 142（normal / suru / reset の3mode）
-EXPECTED_CHECKER_MODES = 142
+#   2026-10-01: 同じ6機種が公開できるようになり 142 → 151
+EXPECTED_CHECKER_MODES = 151
 
 # ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
 #   集合そのものを持つ。機種を増減したら意図した変更として更新すること。
@@ -134,23 +130,25 @@ EXPECTED_PUBLIC_SLUGS = {
     "akudama", "animal_dotch", "azurlane", "babel", "bakemonogatari", "baki", "banchou4",
     "bandori", "basilisk_tenzen", "bigdream_pusher", "biohazard", "biohazard_re3",
     "birdie_wing", "bofuri", "burning_express", "chibaryo2", "code_geass", "dark_haibi",
-    "darlifra", "discup_ur", "dmc5_st", "dragon_hanahana_senko", "dumbbell", "enen", "enen2",
-    "eva_yakusoku", "fujiko_bt", "funky_juggler2", "galfy", "gineiden_dnt", "goblin",
-    "godeater", "godzilla", "gogo_juggler3", "goji_eva", "gundam_seed", "gundam_uc2", "hanabi",
-    "hanma_baki", "hihou", "hokuto", "hokuto_tensei2", "isekai_quattro_bt",
-    "iza_bancho", "jashinchan", "kabaneri", "kaguya", "karakuri", "karakuri2", "kengan_ashura",
-    "kerot5bt", "king_hanahana", "kizumonogatari", "koukaku", "kurea_bt", "kyokousuiri",
-    "lupin_daikokaisha", "madomagi_forte", "magireco", "mhrise", "midoridon_viva",
-    "milliongod_kiseki", "monkeyv", "mr_juggler", "mushoku", "my_juggler_v", "nanatsuma",
-    "nangoku_special", "neo_aim_juggler", "neoplanet", "new_king_hanahana_v", "okidoki_black",
-    "okidoki_encore", "okidoki_gold", "okidoki_gorgeous", "onepunchman", "onimusha3",
-    "prismnana", "railgun2", "revengers", "revue_starlight", "rezero2", "rotis", "sao", "sao2",
-    "sengoku_collection6", "sengoku_otome4", "sengoku_otome5", "sf5", "sf6", "shake_bt",
-    "shaman_king", "shinuchi_yoshimune", "super_binmusume", "super_blackjack", "super_rio_ace2",
+    "darlifra", "discup_ur", "dmc5_st", "dragon_hanahana_senko", "dumbbell", "enen",
+    "enen2", "eva_yakusoku", "fujiko_bt", "funky_juggler2", "galfy", "gineiden_dnt",
+    "goblin", "godeater", "godzilla", "gogo_juggler3", "goji_eva", "gundam_seed",
+    "gundam_uc2", "hanabi", "hanma_baki", "hihou", "hokuto", "hokuto_tensei2",
+    "isekai_quattro_bt", "iza_bancho", "jashinchan", "kabaneri", "kaguya", "karakuri",
+    "karakuri2", "kengan_ashura", "kerot5bt", "king_hanahana", "kizumonogatari", "koukaku",
+    "kurea_bt", "kyokousuiri", "lupin_daikokaisha", "madomagi_forte", "magireco", "mhrise",
+    "midoridon_viva", "milliongod_kiseki", "monkeyv", "mr_juggler", "mushoku",
+    "my_juggler_v", "nanatsuma", "nangoku_special", "neo_aim_juggler", "neoplanet",
+    "new_king_hanahana_v", "okidoki_black", "okidoki_encore", "okidoki_gold",
+    "okidoki_gorgeous", "onepunchman", "onimusha3", "prismnana", "railgun2", "revengers",
+    "revue_starlight", "rezero2", "rotis", "sao", "sao2", "sengoku_collection6",
+    "sengoku_otome4", "sengoku_otome5", "sf5", "sf6", "shake_bt", "shaman_king",
+    "shinuchi_yoshimune", "super_binmusume", "super_blackjack", "super_rio_ace2",
     "takt_opus", "tekken6", "tenken", "tensura", "thunder_v", "toaru_index2", "tokyo_ghoul",
-    "tolove_darkness", "tonsuki", "triple_crown_7", "ultraman_final", "umineko2", "valvrave",
-    "valvrave2", "world_dai_star", "yabachiba", "yajikita_mairu", "yorumungando", "yoshimune",
-    "youjitsu", "zenigata5", "zettai_shougeki4", "zombieland_saga",
+    "tolove_darkness", "tonsuki", "triple_crown_7", "ultraman_final", "umineko2",
+    "valvrave", "valvrave2", "world_dai_star", "yabachiba", "yajikita_mairu",
+    "yorumungando", "yoshimune", "youjitsu", "zenigata5", "zettai_shougeki4",
+    "zombieland_saga",
 }
 
 # ★軸契約の固定集合（件数ではなく (slug, mode) で持つ）★
