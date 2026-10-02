@@ -4950,7 +4950,7 @@ MUTATIONS = [
                "本日導入・人気12位の機種で実際に書き込みが取り消された・罠㊺★）",
         "file": "scripts/build_new_article.py",
         "before": ('                if _rs_same.count(kind) > 1 '
-                   'and c.get("counted"):'),
+                   'and _counted_norm(c):'),
         "after": "                if False:",
         "run": ["scripts/build_new_article.py"],
     },
@@ -7200,6 +7200,49 @@ MUTATIONS = [
         "before": '{"slug": "zzz_test56", "stage": "WRITTEN", "sha": "", "selftest": True}))',
         "after": '{"slug": "zzz_test56", "stage": "WRITTEN", "sha": ""}))',
         "run": ["scripts/publish_new_machine.py"],
+    },
+    # ─── 2026-10-02・読者に影響しうる小さめの穴 ──────────
+    {
+        "why": "★名簿の内部ID（net・okk…）をメーカーの照合に使う（★関係ない文字の一部に当たってMATCHになり、2AIを通らずに材料になる★）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": '            toks = [str(conf.get("name") or "")]\n',
+        "after": '            toks = [str(conf.get("name") or ""), str(mid)]\n',
+        "run": ["scripts/model_code_lookup.py"],
+    },
+    {
+        "why": "★何を数えるかの文に生の文字を入れる（★空白だけの値で「（   を数えます）」と出る★）★",
+        "file": "scripts/build_new_article.py",
+        "before": "    n = _counted_norm(c)\n",
+        "after": "    n = str(c.get(\"counted\") or \"\")\n",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★前に無かったページが出てきても、モード・ゾーンを聞き直さない（★古い判断が記事に残る★）★",
+        "file": "scripts/page_corpus.py",
+        "before": '        return "CHANGED", f"前に無かったページが出てきました（{g}）"\n',
+        "after": "        continue\n",
+        "run": ["scripts/page_corpus.py"],
+    },
+    {
+        "why": "★前の記録に本体の指紋が無いのに「同じ」と答える（★見ていないのに前の判断を使う★）★",
+        "file": "scripts/page_corpus.py",
+        "before": "    if _fp(text_of(root)) != was_fp:\n",
+        "after": "    if was_fp and _fp(text_of(root)) != was_fp:\n",
+        "run": ["scripts/page_corpus.py"],
+    },
+    {
+        "why": "★記事を直す2AIへ、チェッカーの線を渡さない（★記事とカウンターの食い違いに気づけない★）★",
+        "file": "scripts/decide_now.py",
+        "before": "            if k in conf:\n                row[k] = conf[k]\n",
+        "after": "            if False:\n                row[k] = conf[k]\n",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★2AIへ渡す線から、読者に見える天井・目安・周期を落とす（★記事との食い違いに気づけない★）★",
+        "file": "scripts/decide_now.py",
+        "before": '_CHECKER_KEYS = ("good", "caution", "excellent", "ceiling", "limit", "target",\n',
+        "after": '_CHECKER_KEYS = ("good", "caution", "excellent", "ceiling",\n',
+        "run": ["scripts/decide_now.py"],
     },
 ]
 

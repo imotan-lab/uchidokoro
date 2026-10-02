@@ -169,7 +169,8 @@ def collect(catalog: dict, machine_url: str, fetch, text_of,
 
 
 def quick_check(catalog: dict, machine_url: str, fetch, text_of,
-                saved: dict, max_sub: int = DEFAULT_MAX_SUB) -> tuple:
+                saved: dict, max_sub: int = DEFAULT_MAX_SUB,
+                missing=None) -> tuple:
     """★1ページだけ見て、前の判断をそのまま使えるかを決める★
 
     （2026-09-02・運営者の判断「それでいいよ」）
@@ -209,8 +210,24 @@ def quick_check(catalog: dict, machine_url: str, fetch, text_of,
         return "CHANGED", (f"下位ページの顔ぶれが変わりました"
                            f"（増えた {len(added)} / 減った {len(lost)}）")
 
+    # ★★前に無かった（404）ページが復活していないか、1回だけ取り直す★★（2026-10-02）
+    #   顔ぶれ（URLの集合）は同じでも、無かったページに中身が出たら判断の材料が変わる。
+    #   ★直す前は取り直さず、復活しても「同じ」と答えていた★。
+    _miss = missing or is_missing
+    _orig = {_norm(u): u for u in subs}        # ★記録は整えた形なので、リンクの元の形で取り直す★
+    for g in sorted(set(saved.get("gone") or [])):
+        try:
+            fetch(_orig.get(g, g))
+        except Exception as e:                               # noqa: BLE001
+            if _miss(e):
+                continue                # ★まだ無い★
+            return "UNREADABLE", f"前に無かったページを確かめられません（{g} … {str(e)[:60]}）"
+        return "CHANGED", f"前に無かったページが出てきました（{g}）"
+
     was_fp = (saved.get("page_fp") or {}).get(_norm(machine_url))
-    if was_fp and _fp(text_of(root)) != was_fp:
+    # ★前の記録に指紋が無ければ「同じ」と言えない★（fail-closed・2026-10-02）＝
+    #   直す前は「指紋があるときだけ比べる」書き方で、指紋が無いと比べずに「同じ」と答えていた。
+    if _fp(text_of(root)) != was_fp:
         return "CHANGED", "機種ページの中身が変わりました"
     return "SAME", ""
 
@@ -467,10 +484,15 @@ def selftest() -> int:
                   manifest({}, False))[0] == "CHANGED")
     # ★404で読めなかったURLも「顔ぶれ」に数える★＝
     #   数えないと、毎回「減った」と見なして永久に聞き直しになる。
+    _saved_gone = collect(NANA, ROOT, _one_gone, _text)["manifest"]
     t("　無かったページ（404）は顔ぶれに数える（毎回聞き直しにならない）",
-      quick_check(NANA, ROOT, _one_page, _text,
-                  collect(NANA, ROOT, _one_gone, _text)["manifest"])[0]
-      == "SAME")
+      quick_check(NANA, ROOT, _one_gone, _text, _saved_gone)[0] == "SAME")
+    t("★★前に無かったページが出てきたら聞き直す★★（2026-10-02）",
+      bool(_saved_gone.get("gone"))
+      and quick_check(NANA, ROOT, _one_page, _text, _saved_gone)[0] == "CHANGED")
+    _no_fp = dict(_saved, page_fp={})
+    t("★★前の記録に本体の指紋が無ければ「同じ」と言わない★★（2026-10-02）",
+      quick_check(NANA, ROOT, _one_page, _text, _no_fp)[0] == "CHANGED")
 
     t("　同じ集合なら以前の判定を使える", same_corpus(m1, m2) is True)
     t("★集合が変われば以前の判定を使わない★", same_corpus(m1, m4) is False)

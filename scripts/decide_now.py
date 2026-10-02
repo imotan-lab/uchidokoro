@@ -110,6 +110,36 @@ HINT_KINDS = ("重複", "文体", "型式名", "時制")
 _SLUG_OK = None
 
 
+_CHECKER_KEYS = ("good", "caution", "excellent", "ceiling", "limit", "target",
+                 "note", "byRate", "suru", "suruMax", "cycle", "unit", "_disabled")
+
+
+def checker_lines(ck) -> list:
+    """★チェッカーの線を、区切りごとに2AIへ渡す形にする★（2026-10-02）
+
+    ★直す前は区切りの名前と最大値だけ★を渡していたので、記事とチェッカーの
+    食い違い（狙い目・天井・注記）を2AIが見つけられなかった。
+    線は modeData の中にある機種と、checker の直下にある機種がある（両方見る）。
+    """
+    ck = ck if isinstance(ck, dict) else {}
+    md_all = ck.get("modeData") if isinstance(ck.get("modeData"), dict) else {}
+    out = []
+    for md in (ck.get("modes") or []):
+        if not isinstance(md, dict):
+            continue
+        key = md.get("key")
+        conf = md_all.get(key) if isinstance(md_all.get(key), dict) else (
+            ck.get(key) if isinstance(ck.get(key), dict) else {})
+        row = {"key": key, "label": md.get("label"), "max": md.get("max")}
+        for k in _CHECKER_KEYS:
+            if k in conf:
+                row[k] = conf[k]
+            elif k in md:
+                row[k] = md[k]
+        out.append(row)
+    return out
+
+
 def _check_slug(slug: str) -> str:
     """★置き場の外を指せないようにする★（2026-08-27・Codexの指摘18）
 
@@ -248,12 +278,10 @@ def gather(slug: str) -> dict:
                 # ★一覧・トップページに出ている、この機種の狙い目★
                 "strategy": m.get("strategy"),
                 "seo_title": (m.get("seo") or {}).get("title"),
-                # ★チェッカーが既定で出す区切り★（読者が実際に押して見る数値）
-                "checker_modes": [
-                    {"key": md.get("key"), "label": md.get("label"),
-                     "caution": md.get("caution"), "max": md.get("max")}
-                    for md in (ck.get("modes") or []) if isinstance(md, dict)
-                ],
+                # ★交換率ごとの狙い目の文★（機種ページの箱に出る）
+                "strategyByRate": m.get("strategyByRate"),
+                # ★チェッカーの線★（読者が実際に押して見る数値・2026-10-02）
+                "checker_modes": checker_lines(ck),
             }
     except Exception as e:                                   # noqa: BLE001
         out.setdefault("problems", []).append(
@@ -2022,6 +2050,26 @@ def _selftest() -> int:
         print(("✅ " if cond else "❌ ") + name)
         if not cond:
             ng.append(name)
+
+    # ★★チェッカーの線を2AIへ渡す★★（2026-10-02）＝直す前は名前と最大値だけだった
+    _ck1 = {"modes": [{"key": "cz", "label": "CZ間"}],
+            "modeData": {"cz": {"good": 250, "caution": 180, "note": "CZ天井600G",
+                                "byRate": {"eq56": {"good": 300}}}}}
+    _ck2 = {"modes": [{"key": "normal", "label": "通常時"}],
+            "normal": {"good": 500, "ceiling": 999, "limit": 750, "target": 570,
+                       "cycle": [1, 2]}}
+    _l1, _l2 = checker_lines(_ck1), checker_lines(_ck2)
+    t("★★チェッカーの線（狙い目・手前・注記・交換率ごと）を2AIへ渡す★★"
+      "（直す前は名前と最大値だけで、記事との食い違いに気づけなかった）",
+      _l1 and _l1[0].get("good") == 250 and _l1[0].get("caution") == 180
+      and _l1[0].get("byRate") == {"eq56": {"good": 300}}
+      and "CZ天井" in str(_l1[0].get("note")))
+    t("　線が checker の直下にある機種でも渡す",
+      _l2 and _l2[0].get("good") == 500 and _l2[0].get("ceiling") == 999)
+    t("　読者に見えている天井（limit）・目安（target）・周期（cycle）も渡す"
+      "（2AIの代役レビューで2人とも指摘）",
+      _l2 and _l2[0].get("limit") == 750 and _l2[0].get("target") == 570
+      and _l2[0].get("cycle") == [1, 2])
 
     td = tempfile.mkdtemp()
     _keep = globals()["DETAILS"]

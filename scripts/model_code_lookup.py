@@ -759,7 +759,11 @@ def _maker_core_owners(core_text: str) -> set:
             # ★名鑑での別名（directory_names）も見る★（2026-08-02・Codex44回目）
             #   KPE↔コナミアミューズメント、ユニバーサル↔ミズホ/メーシー/アクロス等。
             #   別名が解決できるほど「別の社」の検知が広がる（誤拒否は増えない）。
-            toks = [str(conf.get("name") or ""), str(mid)]
+            # ★★名簿の内部ID（net・okk・sammy…）は照合に使わない★★（2026-10-02）＝
+            #   人が確かめた表記ではなく、短いIDは関係ない文字の一部に当たって
+            #   MATCH になり、2AIを通らずに材料として採られうる。
+            #   名簿に無い表記は UNKNOWN になって2AIへ回る（誤って弾く側には倒れない）。
+            toks = [str(conf.get("name") or "")]
             toks += [str(x) for x in (conf.get("directory_names") or [])]
             best = 0
             for tok in toks:
@@ -1687,6 +1691,11 @@ def selftest() -> int:
                        expected_maker="sanslay"),
                 setattr(_w, "_get", _w._get_bak174))[2])()
       ["reason"].startswith("DIRECTORY_MAKER_MISMATCH"))
+    t("★★名簿の内部ID（sammy・heiwa など）だけでは、どの社にも当てない★★"
+      "（人が確かめた表記ではない・短いIDが別の文字の一部に当たる・2026-10-02）",
+      _maker_core_owners(_ci.normalize_core("heiwa")) == set()
+      and _maker_core_owners(_ci.normalize_core("sammy")) == set()
+      and _maker_core_owners(_ci.normalize_core("平和")) == {"heiwa"})
     t("★★巡回しない社（list_urlなし）も名簿として解決できる★★"
       "（京楽・サンスリー等が『解決できません』で落ちていた）",
       _maker_core_owners(_ci.normalize_core("京楽産業.")) == {"kyoraku"}

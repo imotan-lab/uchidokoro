@@ -1183,6 +1183,16 @@ def _counted_norm(c) -> str:
     return " ".join(s.split())
 
 
+def counted_phrase(c) -> str:
+    """★「（〇〇を数えます）」の文★＝整えた形で書く。空白だけなら書かない（2026-10-02）。
+
+    ★直す前は生の文字をそのまま入れていた★＝空白だけの値だと「（   を数えます）」、
+    全角の値だと見出し（整えた形）と食い違う。
+    """
+    n = _counted_norm(c)
+    return f"（{n}を数えます）" if n else ""
+
+
 def ceiling_labels(ceil) -> list:
     """★天井の見出しを決める唯一の場所★（本文と基本情報表が同じものを使う）
 
@@ -1275,8 +1285,7 @@ def build_detail(slug, name, release, material) -> dict:
         for c, jp in zip(ceil, _labels):
             # ★区別が見出しへ入ったら、本文からは外す★（同じことを2度書かない）
             counted = ("" if jp != _ceiling_base(c)
-                       else (f"（{c['counted']}を数えます）"
-                             if c.get("counted") else ""))
+                       else counted_phrase(c))
             # ★値ごとに根拠を名乗る★（2026-08-23・Codexの指摘4）
             #   ★CZの表だけ直して本文を忘れていた★＝単独確認の天井が
             #   断りなしで出る状態だった。
@@ -1401,8 +1410,8 @@ def build_detail(slug, name, release, material) -> dict:
             _m = _t(c)
             if kind == "CEILING_SHORTENED":
                 _lab = "設定変更後の天井"
-                if _rs_same.count(kind) > 1 and c.get("counted"):
-                    _lab = f"{_lab}（{c['counted']}）"
+                if _rs_same.count(kind) > 1 and _counted_norm(c):
+                    _lab = f"{_lab}（{_counted_norm(c)}）"
                 body.append(f"**{_lab}**：{c['games']}G{_m}")
             elif kind == "MORNING_STATE":
                 body.append(f"**朝一の状態**：{c['state']}{_m}")
@@ -1628,6 +1637,11 @@ def selftest() -> int:
     def t(name, cond):
         results.append((name, bool(cond)))
         print(("✅" if cond else "❌") + " " + name)
+
+    t("★★何を数えるかの文は、整えた形で書き、空白だけなら書かない★★（2026-10-02）",
+      counted_phrase({"counted": " ＣＺ間 "}) == "（CZ間を数えます）"
+      and counted_phrase({"counted": "   "}) == ""
+      and counted_phrase({}) == "")
 
     def _old_wording_article():
         """表の箱に古い文言だけが入っている記事（ssb1・prskkm と同じ形）。"""
