@@ -2437,7 +2437,11 @@
     }
    ],
    "normal": {
-    "ceiling": 699
+    "ceiling": 699,
+    "caution": 300,
+    "good": 400,
+    "excellent": 500,
+    "target": 400
    }
   }
  },
