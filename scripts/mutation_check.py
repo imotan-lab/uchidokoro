@@ -7244,6 +7244,70 @@ MUTATIONS = [
         "after": '_CHECKER_KEYS = ("good", "caution", "excellent", "ceiling",\n',
         "run": ["scripts/decide_now.py"],
     },
+    # ─── 2026-10-02・交換率ごとの線を受け取る（#428） ──────────
+    {
+        "why": "★交換率ごとの線の逆転を、書く前に止めない（★交換率が良いほど深く回す誤った案内が残る★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "    out += rate_view_problems(_after, touched)\n",
+        "after": "",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★その機種に無い交換率の線を受け取る★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        if rk not in rates:\n",
+        "after": "        if False:\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★交換率ごとの注記に、作った数字を書かせる（★出典のどこにも無い数字が読者に出る★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "                if made:\n                    ng.append(f\"{rt}: 注記に、",
+        "after": "                if False:\n                    ng.append(f\"{rt}: 注記に、",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★交換率ごとの線で、浅い→深いの順を見ない（★様子見が狙い目より深い線が通る★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "            if any(lv_vals[j][1] > lv_vals[j + 1][1] for j in range(len(lv_vals) - 1)):\n",
+        "after": "            if False:\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★交換率の比べに、byRate に行が無い交換率（等価・直下の値）を入れない★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        views = [(r, rate_view(conf, r)) for r in rates]\n",
+        "after": "        views = [(r, rate_view(conf, r)) for r in rates if r in (conf.get('byRate') or {})]\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★交換率ごとの値が、その欄の天井を超えても受け取る★",
+        "file": "scripts/checker_verdict.py",
+        "before": "                if ce is not None and val > ce:\n",
+        "after": "                if False:\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★線を変えて注記が古い数字のまま残るのを止めない（交換率ごと）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "    out += new_note_problems(m, _after, touched)\n",
+        "after": "",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★回数の表（周期・スルー）の欄にも byRate を書かせる（画面は読まない）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "    if _mode.get(\"hasCycle\") or _mode.get(\"hasSuru\") or any(\n",
+        "after": "    if False and any(\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★新しい欄を byRate だけで作らせる（ほかの交換率に線が無くなる）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        if \"good\" not in vals and not (md.get(\"byRate\") and key in _have):\n",
+        "after": "        if \"good\" not in vals and not md.get(\"byRate\"):\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
 ]
 
 

@@ -300,11 +300,10 @@ def decision_problems(dec, ms=None) -> list:
     #   ★要るようになったら、そのとき実データで作る★（罠㉖）。
     if str(ck.get("unit") or "G") != "G":
         ng.append(f"{slug}: G数以外の機種（{ck.get('unit')}）はまだ受け取れません")
-    if ck.get("exchangeRates"):
-        # ★交換率ごとの線は、いまは受け取らない★＝新台経路に該当が0件で、
-        #   ★一度も本物で動かしていない道を作らない★（罠㉖）。
-        #   要るようになったら、そのとき実データで作る。
-        ng.append(f"{slug}: 交換率の切替を持つ機種はまだ受け取れません")
+    # ★★交換率ごとの線（byRate）も受け取る★★（2026-10-02・#428）
+    #   ★直す前は交換率を持つ機種を一律に断っていた★ので、交換率が良いほうが
+    #   深い狙い目になっている機種（monkeyv・onimusha3）を、2AIが決めても直せなかった。
+    rates = rate_keys(m)
     modes = dec.get("modes")
     if not isinstance(modes, list) or not modes:
         return ng + ["modes が1件もありません"]
@@ -391,7 +390,7 @@ def decision_problems(dec, ms=None) -> list:
                 ng.append(f"{tag}: {lv} が 1〜{MAX_VALUE} の整数ではありません")
                 continue
             vals[lv] = v
-        if "good" not in vals:
+        if "good" not in vals and not (md.get("byRate") and key in _have):
             ng.append(f"{tag}: good（狙い目）がありません")
         # ★浅い→深いの順になっているか★（意味ではなく大小の筋）
         order = [vals[lv] for lv in LEVELS if lv in vals]
@@ -431,6 +430,7 @@ def decision_problems(dec, ms=None) -> list:
             if limit is not None and lv in vals and vals[lv] > limit:
                 ng.append(f"{tag}: {lv}（{vals[lv]}）が、{why}（{limit}）を"
                           "超えています")
+        ng += by_rate_problems(tag, md, rates, limit, why, m, key, nums)
     if ng:
         return ng
     # ★★当てたあとの完成形でも、もう一度だけ見る★★（2026-09-18）
@@ -442,8 +442,151 @@ def decision_problems(dec, ms=None) -> list:
     #   ★同じ理由づけは `decide_now` の「書く直前の照合」にもある★
     touched = {str(x.get("key") or "") for x in (dec.get("modes") or [])
                if isinstance(x, dict)}
-    return [p for p in merged_problems(merged(m, dec))
-            if any(f"当てたあと: {k} の" in p for k in touched)]
+    _after = merged(m, dec)
+    out = [p for p in merged_problems(_after)
+           if any(f"当てたあと: {k} の" in p for k in touched)]
+    # ★★交換率が悪くなるほど、同じか深くなっていること★★（2026-10-02・#428）
+    out += rate_view_problems(_after, touched)
+    # ★★注記の数値が線と食い違うようにならないこと★★（2026-10-02・#428）＝
+    #   線だけ直すと「5.6枚交換なら420Gから」の注記が古い数値のまま残る。
+    #   ★新しく生まれる食い違いだけを断る★（元からあるものまで断ると直す道が無くなる）
+    out += new_note_problems(m, _after, touched)
+    return out
+
+
+def rate_keys(m: dict | None) -> list:
+    """★その機種が持っている交換率の鍵★（持っていなければ空）"""
+    ck = (m or {}).get("checker") or {}
+    rs = ck.get("exchangeRates") if isinstance(ck, dict) else None
+    if not isinstance(rs, list):
+        rs = (m or {}).get("exchangeRates") if isinstance((m or {}).get("exchangeRates"), list) else []
+    return [str(x.get("key")) for x in rs if isinstance(x, dict) and x.get("key")]
+
+
+def _mode_conf(m: dict | None, key: str) -> dict:
+    ck = (m or {}).get("checker") or {}
+    md = ck.get("modeData") if isinstance(ck.get("modeData"), dict) else {}
+    c = md.get(key) if isinstance(md.get(key), dict) else ck.get(key)
+    return c if isinstance(c, dict) else {}
+
+
+def by_rate_problems(tag, md, rates, limit, why, m, key, nums) -> list:
+    """★交換率ごとの線の形★（持っている交換率だけ・順番・天井・数字を作らない）"""
+    by = md.get("byRate")
+    if by is None:
+        return []
+    if not rates:
+        return [f"{tag}: この機種は交換率の切替を持たないので byRate は書けません"]
+    if not isinstance(by, dict) or not by:
+        return [f"{tag}: byRate が辞書ではありません"]
+    # ★回数の表（周期・スルー）の欄は、行ごとに交換率を持つ★＝欄に書いても画面は読まない
+    _mode = next((x for x in (((m or {}).get("checker") or {}).get("modes") or [])
+                  if isinstance(x, dict) and str(x.get("key") or "") == key), {})
+    _conf = _mode_conf(m, key)
+    if _mode.get("hasCycle") or _mode.get("hasSuru") or any(
+            isinstance(_conf.get(k), list) for k in ("cycle", "suru")):
+        return [f"{tag}: 回数の表（周期・スルー）の欄には byRate を書けません"
+                "（行ごとに交換率を持つので、欄に書いても画面は読みません）"]
+    ng = []
+    old_by = (_mode_conf(m, key).get("byRate") or {})
+    import decide_now as _dn_num
+    for rk, rv in by.items():
+        rt = f"{tag}.byRate.{rk}"
+        if rk not in rates:
+            ng.append(f"{rt}: この機種に無い交換率です（あるのは {'・'.join(rates)}）")
+            continue
+        if not isinstance(rv, dict):
+            ng.append(f"{rt}: 辞書ではありません")
+            continue
+        vals = {}
+        for lv in LEVELS:
+            if lv not in rv:
+                continue
+            v = _int(rv.get(lv))
+            if v is None or not (0 < v <= MAX_VALUE):
+                ng.append(f"{rt}: {lv} が 1〜{MAX_VALUE} の整数ではありません")
+                continue
+            vals[lv] = v
+        old = old_by.get(rk) if isinstance(old_by.get(rk), dict) else {}
+        full = {lv: (vals[lv] if lv in vals else _int(old.get(lv))) for lv in LEVELS}
+        # ★段の順・交換率の順・天井は、書いたあとの画面と同じ姿で見る★（rate_view_problems）
+        for lv in LEVELS:
+            if limit is not None and lv in vals and vals[lv] > limit:
+                ng.append(f"{rt}: {lv}（{vals[lv]}）が、{why}（{limit}）を超えています")
+        if "note" in rv:
+            nt = rv.get("note")
+            if not isinstance(nt, str) or not nt.strip():
+                ng.append(f"{rt}: note（注記）が空です")
+            else:
+                # ★数字を作らない★＝注記の数字は、この交換率の線・天井・いまの注記に在るものだけ
+                allowed = set(_dn_num.numbers_with_unit(str(old.get("note") or "")))
+                # 交換率の呼び名（「5.6枚」）の数字は作った数字ではない
+                _ck0 = (m or {}).get("checker") or {}
+                for _x in (_ck0.get("exchangeRates") or (m or {}).get("exchangeRates") or []):
+                    if isinstance(_x, dict):
+                        allowed |= set(_dn_num.numbers_with_unit(str(_x.get("label") or "")))
+                for v in [x for x in full.values() if x is not None] + list(nums):
+                    allowed |= {(str(v), "G"), (str(v), "")}
+                made = [n + u for n, u in _dn_num.numbers_with_unit(nt) if (n, u) not in allowed]
+                if made:
+                    ng.append(f"{rt}: 注記に、線にも天井にも今の注記にも無い数字があります: "
+                              + " / ".join(made[:4]) + "（数字を作らない）")
+    return ng
+
+
+def rate_view(conf: dict, rk: str) -> dict:
+    """★その交換率で読者が見る値★（machine.html と同じ重ね方＝直下の値の上に交換率ごとの値）
+
+    ★鍵が在れば中身が null でも上書きする★（`target_display.effective_good` と同じ）
+    """
+    base = {k: v for k, v in (conf or {}).items() if k != "byRate"}
+    by = (conf or {}).get("byRate")
+    over = by.get(rk) if isinstance(by, dict) and isinstance(by.get(rk), dict) else {}
+    return {**base, **over}
+
+
+def rate_view_problems(after: dict, touched) -> list:
+    """★書いたあとの画面と同じ姿で、交換率ごとの線の筋を見る★（2026-10-02・#428）
+
+    ①その交換率の中で caution ≦ good ≦ excellent ②その欄の天井を超えない
+    ③交換率が悪くなるほど同じか深い（★並びは機種の交換率の並び＝等価を含む★）
+    ★byRate に行が無い交換率も、直下の値で比べに入れる★（画面がそうするので）
+    """
+    ng = []
+    rates = rate_keys(after)
+    if not rates:
+        return ng
+    for key in sorted(touched):
+        conf = _mode_conf(after, key)
+        if not conf:
+            continue
+        views = [(r, rate_view(conf, r)) for r in rates]
+        for r, v in views:
+            lv_vals = [(lv, _int(v.get(lv))) for lv in LEVELS if _int(v.get(lv)) is not None]
+            if any(lv_vals[j][1] > lv_vals[j + 1][1] for j in range(len(lv_vals) - 1)):
+                ng.append(f"当てたあと: {key} の {r} で caution ≦ good ≦ excellent の順になっていません（"
+                          + " / ".join(f"{a}={b}" for a, b in lv_vals) + "）")
+            ce = _lead_int(v.get("ceiling"))
+            for lv, val in lv_vals:
+                if ce is not None and val > ce:
+                    ng.append(f"当てたあと: {key} の {r} の {lv}（{val}）がその欄の天井（{ce}）を超えます")
+        for lv in LEVELS:
+            seq = [(r, _int(v.get(lv))) for r, v in views if _int(v.get(lv)) is not None]
+            if any(seq[i][1] > seq[i + 1][1] for i in range(len(seq) - 1)):
+                ng.append(f"当てたあと: {key} の {lv} が、交換率が良いほうが深くなっています（"
+                          + " / ".join(f"{r}={v}" for r, v in seq) + "）")
+    return ng
+
+
+def new_note_problems(before: dict, after: dict, touched) -> list:
+    """★当てたことで新しく生まれる、注記と線の食い違い★（note_text の点検をそのまま使う）"""
+    try:
+        import note_text as _nt
+        was = set(_nt.check_problems([before]))
+        now = _nt.check_problems([after])
+    except Exception as e:                # noqa: BLE001
+        return [f"注記の点検を動かせません（書きません）: {type(e).__name__}: {e}"]
+    return ["当てたあと: 注記が線と食い違います: " + p for p in now if p not in was]
 
 
 def mode_ceiling(m: dict | None, key: str):
@@ -579,6 +722,21 @@ def merged(m: dict, dec: dict) -> dict:
         # ★target は good と同じ値★（読者の画面の「目安」表示に使う）
         if "good" in md:
             conf["target"] = md["good"]
+        # ★★交換率ごとの線★★（2026-10-02・#428）＝決めた交換率・決めた欄だけ書き換える
+        if isinstance(md.get("byRate"), dict):
+            _by = json.loads(json.dumps(conf.get("byRate") or {}, ensure_ascii=False))
+            for rk, rv in md["byRate"].items():
+                cur = dict(_by.get(rk) or {})
+                for lv in LEVELS:
+                    if lv in rv:
+                        cur[lv] = rv[lv]
+                # ★その交換率が target を持っていれば good にそろえる★（無ければ足さない）
+                if "good" in rv and "target" in cur:
+                    cur["target"] = rv["good"]
+                if "note" in rv:
+                    cur["note"] = rv["note"]
+                _by[rk] = cur
+            conf["byRate"] = _by
         if _in_md:
             _md = dict(_md)
             _md[key] = conf
@@ -645,6 +803,15 @@ def apply_decision(path: str, dry_run: bool = False) -> int:
         print("  " + json.dumps(new.get("checker"), ensure_ascii=False)[:600])
         return 0
     ms[i] = new
+    with open(MACHINES, "rb") as _f0:
+        _backup = _f0.read()           # ★作り直しが駄目なら書き戻す★
+    # ★一覧の作り直しは記事データの箱も書く★ので、記事データも控える（全機種ぶん）
+    _dback = {}
+    if rate_keys(new):
+        for _fn in os.listdir(DETAILS):
+            if _fn.endswith(".json"):
+                with open(os.path.join(DETAILS, _fn), "rb") as _f2:
+                    _dback[_fn] = _f2.read()
     tmp = MACHINES + ".tmp"
     # ★字下げ1・LF★＝ほかの書き手（grow_machine / publish_new_machine 等）と同じ書式。
     #   （2026-09-25）直す前は字下げ2・Windowsでは CRLF で、線を1本入れただけで
@@ -657,10 +824,32 @@ def apply_decision(path: str, dry_run: bool = False) -> int:
     if back != new:
         print("★書いた後の読み直しが合いません★（手で確かめてください）")
         return 1
+    if rate_keys(new):
+        # ★★交換率を持つ機種は、一覧と箱の文を同じ場で作り直す★★（2026-10-02・#428）
+        #   ★作り直せなければ、線も書き戻す★（線だけ変わって一覧が古いまま残らない）
+        try:
+            import target_display as _td
+            _rc = _td.apply_all()
+        except Exception as e:            # noqa: BLE001
+            print(f"★一覧の文を作り直せません: {type(e).__name__}: {e}★")
+            _rc = 1
+        if _rc != 0:
+            with open(MACHINES, "wb") as _f1:
+                _f1.write(_backup)
+            for _fn, _b in _dback.items():
+                _p = os.path.join(DETAILS, _fn)
+                with open(_p, "rb") as _f3:
+                    _now = _f3.read()
+                if _now != _b:
+                    with open(_p, "wb") as _f4:
+                        _f4.write(_b)
+            print("★一覧の文を作り直せなかったので、線も元に戻しました（何も変えていません）★")
+            return 1
     print(f"{slug}: 狙い目の線を書きました "
           f"（{'・'.join(str(x.get('key')) for x in dec.get('modes') or [])}）")
-    print("★次にやること★ python scripts/target_display.py --check"
-          "（一覧の文は手で書かない）")
+    if not rate_keys(new):
+        print("★次にやること★ python scripts/target_display.py --check"
+              "（一覧の文は手で書かない）")
     return 0
 
 
@@ -988,14 +1177,103 @@ def selftest() -> int:
                        "publication_policy": "page-decision/v1",
                        "checker": {"modes": [{"key": "normal",
                                               "label": "通常"}]}}]))
-        t("★交換率を持つ機種は、まだ受け取らない★",
-          any("交換率" in x for x in decision_problems(
-              dec(), [{"slug": "zzz_auto", "name": "試験機",
-                       "publication_policy": "page-decision/v1",
-                       "checker": {"unit": "G",
-                                   "exchangeRates": [{"key": "eq56"}],
-                                   "modes": [{"key": "normal",
-                                              "label": "通常"}]}}])))
+        # ★★交換率ごとの線（2026-10-02・#428）★★＝monkeyv と同じ形の試験機
+        _rate_m = [{"slug": "zzz_rate", "name": "交換率の試験機",
+                    "checker": {"unit": "G",
+                                "exchangeRates": [{"key": k, "label": lb} for k, lb in
+                                                  (("eq56", "5.6枚"), ("rate55", "6.0枚"),
+                                                   ("rate50", "6.5枚"), ("rate45", "7.0枚"))],
+                                "modes": [{"key": "normal", "label": "通常"}],
+                                "normal": {"good": 410, "caution": 310, "excellent": 600,
+                                           "byRate": {
+                                               "eq56": {"caution": 250, "good": 380, "excellent": 550},
+                                               "rate55": {"caution": 300, "good": 400, "excellent": 600},
+                                               "rate50": {"caution": 350, "good": 450, "excellent": 650},
+                                               "rate45": {"caution": 400, "good": 500, "excellent": 700}}}}}]
+
+        def _rd(by, **kw):
+            d = dec(slug="zzz_rate", modes=[{"key": "normal", "byRate": by}])
+            d.update(kw)
+            return d
+
+        t("★★交換率を持つ機種でも、交換率ごとの線を受け取る★★"
+          "（直す前は一律に断っていて、逆転した2機種を直せなかった・#428）",
+          not decision_problems(_rd({"eq56": {"good": 400}}), _rate_m))
+        _after428 = merged(_rate_m[0], _rd({"eq56": {"good": 400}}))
+        _e56 = ((_after428["checker"]["normal"].get("byRate") or {}).get("eq56") or {})
+        t("　当てると、その交換率の good だけが変わる（target は付けない）（ほかは元のまま）",
+          _e56.get("good") == 400 and "target" not in _e56
+          and _e56.get("caution") == 250
+          and _after428["checker"]["normal"]["byRate"]["rate55"]["good"] == 400)
+        t("★★交換率が良いほうが深くなる決定は受け取らない★★（逆転を書く前に止める）",
+          any("交換率が良いほうが深く" in x
+              for x in decision_problems(_rd({"eq56": {"good": 450}}), _rate_m)))
+        t("　元から逆転していない試験機である（上の試験が元の姿で赤くなっていない）",
+          not decision_problems(_rd({"eq56": {"good": 390}}), _rate_m))
+        import copy as _cp
+        # ★等価が先頭の機種★＝等価の線は直下の値（byRate に行が無い）
+        _eq_m = _cp.deepcopy(_rate_m)
+        _eq_m[0]["checker"]["exchangeRates"].insert(0, {"key": "equal", "label": "等価"})
+        _eq_m[0]["checker"]["normal"]["good"] = 370
+        t("★★等価（直下の値）より5.6枚が浅い決定は受け取らない★★"
+          "（直す前は等価を比べに入れていなかった）",
+          any("交換率が良いほうが深く" in x and "equal" in x
+              for x in decision_problems(_rd({"eq56": {"good": 360}}), _eq_m)))
+        # ★交換率ごとの値が一部しか無い欄★＝ほかの交換率は直下の値で画面に出る
+        _part_m = _cp.deepcopy(_rate_m)
+        _part_m[0]["checker"]["normal"] = {"caution": 300, "good": 400, "excellent": 600}
+        t("★★直下の値で埋まる交換率も比べる（段の順）★★"
+          "（5.6枚の狙い目だけ浅くすると、様子見300より浅くなる）",
+          any("順になっていません" in x
+              for x in decision_problems(_rd({"eq56": {"good": 290}}), _part_m)))
+        t("★★直下の値で埋まる交換率も比べる（交換率の順）★★",
+          any("交換率が良いほうが深く" in x
+              for x in decision_problems(_rd({"rate45": {"good": 350}}), _part_m)))
+        # ★天井★＝その欄の天井を、書いていない交換率の値が超えている
+        _ce_m = _cp.deepcopy(_rate_m)
+        _ce_m[0]["checker"]["normal"]["ceiling"] = 650
+        t("★★交換率ごとの値も、その欄の天井を超えたら受け取らない★★",
+          any("天井" in x and "rate45" in x
+              for x in decision_problems(_rd({"eq56": {"good": 390}}), _ce_m)))
+        # ★注記★＝線だけ直して古い数字の注記を残すと断る
+        _nt_m = _cp.deepcopy(_rate_m)
+        _nt_m[0]["checker"]["normal"]["byRate"]["eq56"]["note"] = "5.6枚交換ならG数380Gから狙い目です。"
+        t("★★線を変えたのに注記が古い数字のままなら受け取らない★★",
+          any("注記が線と食い違います" in x
+              for x in decision_problems(_rd({"eq56": {"good": 390}}), _nt_m)))
+        t("　注記も一緒に直せば通る",
+          not decision_problems(_rd({"eq56": {"good": 390, "note": "5.6枚交換ならG数390Gから狙い目です。"}}), _nt_m))
+        # ★回数の表の欄・新しい欄★
+        _cy_m = _cp.deepcopy(_rate_m)
+        _cy_m[0]["checker"]["modes"].append({"key": "cycle", "label": "周期", "hasCycle": True})
+        _cy_m[0]["checker"]["cycle"] = {"cycle": [{"count": 1, "good": 500}]}
+        t("★★回数の表（周期・スルー）の欄に byRate は書かせない★★（画面が読まない）",
+          any("回数の表" in x for x in decision_problems(
+              dec(slug="zzz_rate", modes=[{"key": "cycle", "byRate": {"eq56": {"good": 400}}}]), _cy_m)))
+        t("★★新しい欄を byRate だけで作らせない★★（ほかの交換率に線が無くなる）",
+          any("good（狙い目）がありません" in x for x in decision_problems(
+              dec(slug="zzz_rate", modes=[{"key": "at", "label": "AT間",
+                                           "byRate": {"eq56": {"good": 400}}}]), _rate_m)))
+        _tg_m = _cp.deepcopy(_rate_m)
+        _tg_m[0]["checker"]["normal"]["byRate"]["eq56"]["target"] = 380
+        t("　交換率ごとの target があれば good にそろえる",
+          merged(_tg_m[0], _rd({"eq56": {"good": 390}}))["checker"]["normal"]["byRate"]["eq56"]["target"] == 390)
+        t("★★その機種に無い交換率は書かせない★★",
+          any("無い交換率" in x
+              for x in decision_problems(_rd({"rate99": {"good": 400}}), _rate_m)))
+        t("★★交換率の切替を持たない機種に byRate は書かせない★★",
+          any("byRate は書けません" in x for x in decision_problems(
+              dec(slug="zzz_legacy", modes=[{"key": "normal",
+                                             "byRate": {"eq56": {"good": 400}}}]), base_ms)))
+        t("★★注記に、線にも天井にも今の注記にも無い数字は書かせない★★（数字を作らない）",
+          any("数字を作らない" in x for x in decision_problems(
+              _rd({"eq56": {"good": 400, "note": "5.6枚交換は777Gから狙い目です。"}}), _rate_m)))
+        t("★★交換率ごとでも、様子見が狙い目より深い線は書かせない★★",
+          any("順になっていません" in x
+              for x in decision_problems(_rd({"rate50": {"caution": 500}}), _rate_m)))
+        t("　線と交換率の呼び名だけの注記は通る（「5.6枚」は作った数字ではない）",
+          not decision_problems(
+              _rd({"eq56": {"good": 390, "note": "5.6枚交換は390Gから狙い目です。"}}), _rate_m))
         # ── 当てた後の姿
         got = merged(base_ms[0], dec())
         conf = (got.get("checker") or {}).get("normal") or {}
