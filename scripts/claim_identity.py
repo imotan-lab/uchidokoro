@@ -235,8 +235,10 @@ _PACHINKO_PREFIX_RE = re.compile(r"(?<![0-9a-z])[pe][ 　]?(?=[^0-9a-z\s])", re.
 # ★2026-07-21 Codex4巡目★「対決」「違い」は演出名や同一機種内の説明にも普通に使うので外す
 #   （例「対決演出の法則」「設定変更と電源OFF・ONの違い」＝正しい単独ページ）。
 _COMPARE_WORDS = ("比較", "比べ", "VS", "ｖｓ", "vs", "どっち", "どちらが")
-# 「L」「Lパチスロ」等の型式接頭辞（スマスロ機に付く）。語の先頭にある L のみ。
-_L_PREFIX_RE = re.compile(r"(?:^|[\s　【\[(（])[lｌ](?=[^a-z]|$)", re.IGNORECASE)
+# 「L」「Lパチスロ」「LB」等の型式接頭辞（スマスロ機に付く）。語の先頭にある L のみ。
+# ★「LB」も接頭辞★（2026-10-03）＝スマスロのボーナストリガー機（LBクレア・LBトリプルクラウン等）。
+#   直後が英字なら接頭辞にしない（Lbaby・LBX は別の語）。
+_L_PREFIX_RE = re.compile(r"(?:^|[\s　【\[(（])[lｌ][bｂ]?(?=[^a-z]|$)", re.IGNORECASE)
 # 「スマスロ○○」「L○○」＝機種名が名指しされている箇所（比較記事の検出に使う）
 _MARKER_RE = re.compile(
     r"(?:スマスロ|スマートパチスロ|スマートスロット|(?<![0-9a-z])[lｌ](?=[^0-9a-z]))"
@@ -904,6 +906,17 @@ def selftest() -> int:
     eq(check_tags("【スマートパチスロ北斗の拳】天井", {"smart"})[0], True, "正式名称表記が通る")
     # L+数字（Codex指摘8）
     eq(check_tags("【L009 RE:CYBORG】天井", {"smart"})[0], True, "L009がスマスロと認識される")
+    # ★★「LB」（スマスロのボーナストリガー機）も型式接頭辞★★（2026-10-03・更新タスクの自己修正）
+    #   新台経路の機種は info が空なので、名前の「LB」だけがスマスロの手がかり。
+    #   ★直す前は「L」の直後が英字だと接頭辞と見なさなかった★ので、
+    #   DMMの題に「スマスロ」が付いた日から dmm_5089（LBトリプルクラウンX-300）が
+    #   「タイトルはスマスロ版だが自機種はスマスロではない」で毎朝止まった。
+    lb_new = {"slug": "zzz_lb", "name": "LBトリプルクラウンX-300", "info": ""}
+    eq(machine_tags(lb_new), {"smart", "smart_name"}, "LB…（info空）はスマスロ扱い")
+    eq(check_tags("LBトリプルクラウンX-300 スマスロ パチスロ", machine_tags(lb_new))[0], True,
+       "LB機の題に『スマスロ』があっても自己不合格しない（dmm_5089の実例）")
+    eq(is_smart_text("Lbaby"), False, "L+英単語（Lbaby）は接頭辞にしない")
+    eq(is_smart_text("LBX"), False, "LBの直後が英字なら接頭辞にしない")
     # 括弧の外の比較・続編（Codex指摘3・4）
     eq(check_title("【スマスロ北斗の拳】VS L吉宗 天井比較", ["北斗の拳"], ["吉宗"])[0], False,
        "括弧の外の他機種併記は不合格")
@@ -1235,6 +1248,11 @@ def selftest() -> int:
             # スマスロ機に「世代表記の無い同名タイトル」を当てる（同名旧機種の代表例）
             if "smart_name" in tg:
                 plain = normalize_core(base)
+                # ★芯に「LB」が残る機種は、その印も外して「世代表記の無い題」にする★
+                #   （2026-10-03）芯は「L」は落とすが「LB」は落とさないので、
+                #   外さないと負例の題に世代の印が残り、負例になっていない。
+                if re.match(r"[lｌ][bｂ](?=[^a-z]|$)", plain):
+                    plain = plain[2:]
                 if check_tags(f"【{plain}】天井・解析", tg, cs)[0]:
                     neg_fail.append((m["slug"], f"世代表記なし:{plain}"))
         eq(neg_fail[:5], [], f"負例が合格した（{len(neg_fail)}件）")
@@ -1247,7 +1265,7 @@ def selftest() -> int:
     except FileNotFoundError:
         print("  (machines.json 不在のためカタログ検査skip)")
 
-    print(f"claim_identity selftest: {ok}/{ok + fail}")
+    print(f"claim_identity selftest: {ok}/{ok + fail} 合格")
     return 0 if fail == 0 else 1
 
 

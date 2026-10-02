@@ -72,6 +72,16 @@ _AUTO_ACCEPT_LINES = (
 
 MUTATIONS = [
     {
+        "why": "★型式接頭辞「LB」をスマスロの印と見なさない"
+               "（★info が空の新台経路の LB 機が、DMMの題に『スマスロ』が付いた日から"
+               "本人性の確認で毎朝止まる＝dmm_5089 の実例★）★",
+        "file": "scripts/claim_identity.py",
+        "before": '_L_PREFIX_RE = re.compile(r"(?:^|[\\s　【\\[(（])[lｌ][bｂ]?(?=[^a-z]|$)", re.IGNORECASE)',
+        "after": '_L_PREFIX_RE = re.compile(r"(?:^|[\\s　【\\[(（])[lｌ](?=[^a-z]|$)", re.IGNORECASE)',
+        "run": ["scripts/claim_identity.py"],
+        "issues": [],
+    },
+    {
         "why": "★AIごとの判断がそろっているかを見ない"
                "（★1つだけの実行が「2AIで決めた」ことになる＝"
                "実行漏れ・配線切れに気づけない★＝Codexの指摘1）★",
