@@ -726,7 +726,7 @@ def confirmed_fingerprint(slug: str) -> str:
 #   見送りの分岐で早期に戻るので `machine_row_drift()` まで届かず、
 #   ★判定書が古いまま永久に見送られる★。
 #   人が控えを消して回るのではなく、機械が気づくようにする。
-GROW_RULES_VERSION = "2026-09-06"
+GROW_RULES_VERSION = "2026-10-02"   # ★裏付けが強まって名乗りが外れる更新を通すようにした★
 
 
 def has_confirmed(slug: str) -> bool:
@@ -926,8 +926,20 @@ def _same(a, b) -> bool:
         if not (a_cell and b_cell):
             return False
         from collections import Counter
-        want = Counter(x for x in a[1:] if x != ANY)
-        return not (want - Counter(b[1:]))
+        have = Counter(b[1:])
+        for x in (x for x in a[1:] if x != ANY):
+            if have[x] > 0:
+                have[x] -= 1
+                continue
+            # ★★裏付けが強まって名乗りだけ外れた★★（2026-10-02・自己修正）
+            #   「1/431（確認1件のみ）」→「1/431」。★値は一字も変わらない★。
+            #   ★外れてよいのは後ろの名乗りだけ★（値が変われば一致しない）。
+            core = _strip_basis_tag(x)
+            if core is not None and have[core] > 0:
+                have[core] -= 1
+                continue
+            return False
+        return True
     if isinstance(a, tuple) and isinstance(b, tuple):
         return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
     return a == b
@@ -950,11 +962,155 @@ def _note_grew(old_u, n) -> bool:
         and n[3] == old_u[3] + sn
 
 
-def _match(old_u, new_units) -> bool:
-    """未確定の欄を除いて、同じ単位が新しい側にあるか。"""
-    return any((len(n) == len(old_u)
-                and all(_same(x, y) for x, y in zip(old_u, n)))
+def _basis_tags() -> list:
+    """値のうしろに付く根拠の名乗り（空でないもの）。生成器の表から取る。"""
+    return [t for t in (getattr(_ba, "BASIS_SUFFIX", {}) or {}).values() if t]
+
+
+def _strip_basis_tag(x):
+    """「値＋名乗り」なら値を返す。名乗りが付いていなければ None。"""
+    if not isinstance(x, str):
+        return None
+    for tag in _basis_tags():
+        if x.endswith(tag) and x[:-len(tag)].strip():
+            return x[:-len(tag)]
+    return None
+
+
+def _has_basis_tag(u) -> bool:
+    """単位の中に名乗りが1つでも残っているか（入れ子の欄まで見る）。"""
+    if isinstance(u, tuple):
+        return any(_has_basis_tag(x) for x in u)
+    return isinstance(u, str) and any(t in u for t in _basis_tags())
+
+
+def _note_shrank(old_u, n, new_units) -> bool:
+    """★裏付けが強まって、注記の後ろの断りが外れただけか★（2026-10-02・自己修正）
+
+    `_note_grew` の逆向き。★条件は2つ★＝
+      ①前の注記 ＝ いまの注記 ＋ 断り（★前半は一字も変わらない★）
+      ②同じ表の欄に、名乗り（確認1件のみ）が★1つも残っていない★
+    ②が無いと、欄に名乗りが残ったまま断りだけ消える生成不具合を通す（#718・Codexの指摘）。
+    """
+    sn = getattr(_ba, "SINGLE_SOURCE_NOTE", "")
+    # ★断りが注記の途中に入る形（設定表の「未掲載の設定」の文が続く形）は、
+    #   その文が「未確定の欄」なので最初から比較に入らない★（_units が外す）
+    #   ＝ここは末尾の形だけ見ればよい（届かない形を緩めない）。
+    if not (sn and old_u[0] == "note" and len(n) == len(old_u)
+            and n[0] == "note" and tuple(n[1:3]) == tuple(old_u[1:3])
+            and old_u[3] == n[3] + sn):
+        return False
+    return not any(m[0] == "table" and tuple(m[1:3]) == tuple(old_u[1:3])
+                   and _has_basis_tag(m) for m in new_units)
+
+
+def _raw_tables(detail: dict) -> dict:
+    """(節の題, 表のラベル) → (欄の文字すべて, 注記) を生のまま集める。"""
+    out = {}
+    for sec in (detail or {}).get("sections") or []:
+        if not isinstance(sec, dict):
+            continue
+        for tb in sec.get("tables") or []:
+            if not isinstance(tb, dict):
+                continue
+            # ★辞書の欄（バッジ付き）は描画側と同じく text を読む★（Codexの6回目の指摘）
+            cells = [str(c.get("text") or "") if isinstance(c, dict) else str(c)
+                     for r in (tb.get("rows") or []) for c in (r or [])]
+            # ★言い換えた表題は同じ表として扱う★（Codexの5回目の指摘2・_units と同じ）
+            _lb = str(tb.get("label") or "")
+            _lb = RENAMED_TABLE_LABELS.get(_lb, _lb)
+            out[(sec.get("title"), _lb)] = (cells, str(tb.get("note") or ""))
+    return out
+
+
+def _strengthened_tables_keeping_note(old_detail: dict, new_detail: dict) -> list:
+    """★前は欄に名乗りがあり、いまは1つも無いのに、注記に断りが残っている表★
+
+    （2026-10-02・Codexの指摘2と2回目の指摘1）＝名乗りが外れることを通すので、
+    生成器が名乗りだけ落として断りを残すと、単独確認の値が確定値と同じ顔で出る。
+    ★生の表で見る★（未掲載の設定の文を含む注記は比べる単位から外れるため）。
+    """
+    sn = getattr(_ba, "SINGLE_SOURCE_NOTE", "")
+    if not sn:
+        return []
+    old, new = _raw_tables(old_detail), _raw_tables(new_detail)
+    bad = []
+    for key, (cells, note) in new.items():
+        was = old.get(key)
+        if (was and any(_has_basis_tag(c) for c in was[0])
+                and not any(_has_basis_tag(c) for c in cells) and sn in note):
+            bad.append(key)
+        # ★逆向き★（Codexの3回目の指摘）＝欄に名乗りが残っているのに、
+        #   前はあった断りだけ注記から消えた（未掲載の文を含む注記は比べる単位から
+        #   外れるので、ここで見ないと気づけない）。
+        #   ★注記が丸ごと消えた（空）ときも止める★（Codexの4回目の指摘）
+        elif (was and sn in was[1] and sn not in note
+              and any(_has_basis_tag(c) for c in cells)):
+            bad.append(key)
+    return bad
+
+
+def _tags_dropped(a, b) -> bool:
+    """★値の文字から名乗り（確認1件のみ）だけが外れたか★（2026-10-02・自己修正）
+
+    名乗りを全部取り除いた残りが一字も変わらず、名乗りの数だけが減ったときだけ真。
+    """
+    if not (isinstance(a, str) and isinstance(b, str)) or a == b:
+        return False
+    tags = _basis_tags()
+    if not tags:
+        return False
+    # ★同じ位置の名乗りを消しただけか★（Codexの5回目の指摘1）＝
+    #   名乗りの総数と残りの文字だけで比べると、名乗りの「移動」
+    #   （A（確認1件のみ）／C → A／C（確認1件のみ））を削除と見誤り、
+    #   強かった値を弱める更新を通す。★旧の文字を先頭から読み、名乗りの所だけ
+    #   「残す／消す」を選べる★として、新の文字にちょうどなるかを見る。
+    import re as _re_t
+    parts = _re_t.split("(" + "|".join(_re_t.escape(t) for t in tags) + ")", a)
+
+    def can(i, j):
+        if i == len(parts):
+            return j == len(b)
+        p = parts[i]
+        if i % 2 == 0:                       # 名乗り以外＝そのまま一致が要る
+            return b.startswith(p, j) and can(i + 1, j + len(p))
+        return (b.startswith(p, j) and can(i + 1, j + len(p))) or can(i + 1, j)
+    return can(0, 0)
+
+
+# ★名乗りが外れてよい「値の位置」★（2026-10-02・Codexの指摘1）
+#   ★題や項目名は緩めない★＝値の入る位置だけ。表の欄は _same の CELL が見る。
+#   fact は (fact, 項目, 値) の最後。
+_VALUE_SLOT = {"body": 2, "spec-row": 2, "box": 2, "fact": -1}
+
+
+def _unit_same(old_u, n) -> bool:
+    """単位が同じか。値の位置だけは「名乗りが外れただけ」も同じとみなす。"""
+    if len(n) != len(old_u) or not old_u or n[0] != old_u[0]:
+        return False
+    slot = _VALUE_SLOT.get(old_u[0])
+    if slot is not None and slot < 0:
+        slot = len(old_u) + slot
+    for i, (x, y) in enumerate(zip(old_u, n)):
+        if _same(x, y):
+            continue
+        if i == slot and _tags_dropped(x, y):
+            continue
+        return False
+    return True
+
+
+def _match(old_u, new_units, context=None) -> bool:
+    """未確定の欄を除いて、同じ単位が新しい側にあるか。
+
+    ★context＝新しい側の単位すべて★（2026-10-02）＝呼ぶ側は候補を1つずつ
+    渡すので、注記の判定に「同じ表の欄」を見せるには別に渡す必要がある。
+    ★渡さなければ候補だけを見る★（＝欄が見えないので断りは外れてよいことにしない）。
+    """
+    ctx = new_units if context is None else context
+    return any(_unit_same(old_u, n)
                or _note_grew(old_u, n)
+               or (context is not None and _note_shrank(old_u, n, ctx))
                for n in new_units)
 
 
@@ -1233,11 +1389,20 @@ def text_kept(old_detail: dict, new_detail: dict) -> list:
     rest = list(new)
     gone = []
     for u in old:
-        hit = next((n for n in rest if _match(u, [n])), None)
+        hit = next((n for n in rest if _match(u, [n], new)), None)
         if hit is None:
             gone.append(" ".join(str(x) for x in u).replace(ANY, "（未確定）")[:60])
         else:
             rest.remove(hit)               # ★同じ物を二重に使わない（数も見る）★
+    # ★★名乗りが全部外れたのに、注記の断りだけ残っていたら止める★★
+    #   （2026-10-02・Codexの指摘2）＝名乗りが外れることを通すようにしたので、
+    #   生成器が名乗りだけ落として断りを残す不具合が入ると、単独確認の値が
+    #   ★確定値と同じ顔で★読者に出る。前の表に名乗りがあった表だけを見る。
+    #   ★比べる単位ではなく生の表と注記で見る★（Codexの2回目の指摘1）＝
+    #   未掲載の設定の文を含む注記は「未確定の欄」として単位から外れるので、
+    #   単位で見ると断りが残っていても気づかない。
+    for _t, _l in _strengthened_tables_keeping_note(old_detail, new_detail):
+        gone.append(f"名乗りが全部外れたのに断りが残っています: {_t} {_l}")
     if not gone:
         return []
     return [f"前に載っていた内容が消える/変わる更新です: {' / '.join(gone[:3])}"]
@@ -2557,6 +2722,121 @@ def selftest() -> int:
     t("　断りが付いたままの注記は、そのままなら通る（#718）",
       not text_kept(_with_note(_single_note, _rows_new),
                     _with_note(_single_note, _rows_new)))
+    # ★★裏付けが強まって（確認1件のみ）が外れただけなら、消えたと言わない★★
+    #   （2026-10-02・更新タスクの自己修正）＝1件だけで載せた値が、あとで
+    #   独立2出典の確定値になると、生成器は欄の名乗りと注記の断りを外す。
+    #   ★値は一字も変わらない★のに「前に載っていた内容が消えた」と判定され、
+    #   モグモグ風林火山のAT初当たり確率と出玉率の表が育たなくなっていた（実測）。
+    #   ★外れてよいのは名乗りだけ★＝値そのものが変わったら今までどおり止める。
+    _rows_strong = [["喰霊チャンス", "10G", "レア役"],
+                    ["叩き", "10G", "レア役"],
+                    ["大戦", "確認中", "確認中"]]
+    t("★★裏付けが強まって欄の（確認1件のみ）と注記の断りが外れただけなら通る★★（実測の形）",
+      not text_kept(_with_note(_single_note, _rows_new),
+                    _with_note(_base_note, _rows_strong)))
+    t("★★名乗りが外れても、値そのものが変わったら止める★★",
+      bool(text_kept(_with_note(_single_note, _rows_new),
+                     _with_note(_base_note,
+                                [_rows_strong[0], ["叩き", "12G", "レア役"],
+                                 _rows_strong[2]]))))
+    t("★★名乗りが外れたのに、注記の前半が変わったら止める★★",
+      bool(text_kept(_with_note(_single_note, _rows_new),
+                     _with_note("全種類を載せています。", _rows_strong))))
+    # ★★実際の設定表の形★★（2026-10-02・Codexの指摘3）＝「設定示唆まとめ」に
+    #   2列の表が2つ（AT初当たり確率・出玉率）。注記は生成器と同じ組み立て
+    #   （基本文＋断り＋未掲載の設定の文。★未掲載の文を含む注記は「未確定の欄」
+    #     なので比較に入らない★＝もう片方の表の注記で断りの外れ方を見る）。
+    _snn = _ba.SINGLE_SOURCE_NOTE
+    _miss = "この機種には設定3もありますが、値が確認できていないため掲載していません。"
+
+    def _settei(at, po, note_at, note_po):
+        return {"sections": [{"title": "設定示唆まとめ", "type": "settei", "tables": [
+            {"label": "AT初当たり確率", "headers": ["設定", "AT初当たり確率"],
+             "rows": [["設定1", at[0]], ["設定6", at[1]]], "note": note_at},
+            {"label": "出玉率", "headers": ["設定", "出玉率"],
+             "rows": [["設定1", po[0]], ["設定6", po[1]]], "note": note_po}]}]}
+    _nb = "確認が取れた設定のみ掲載しています。"
+    _old_settei = _settei(["1/431" + _tag, "1/358" + _tag], ["97.5%" + _tag, "111.5%" + _tag],
+                          _nb + _snn + _miss, _nb + _snn)
+    t("★★設定示唆まとめの2表で名乗りと断りが外れただけなら通る★★（pw_10523の形）",
+      not text_kept(_old_settei,
+                    _settei(["1/431", "1/358"], ["97.5%", "111.5%"], _nb + _miss, _nb)))
+    t("★★設定表の値が1つでも変わったら止める★★",
+      bool(text_kept(_old_settei,
+                     _settei(["1/432", "1/358"], ["97.5%", "111.5%"], _nb + _miss, _nb))))
+    t("★★名乗りは全部外れたのに注記の断りが残ったら止める★★（Codexの指摘2）",
+      bool(text_kept(_old_settei,
+                     _settei(["1/431", "1/358"], ["97.5%", "111.5%"],
+                             _nb + _snn + _miss, _nb + _snn))))
+    t("★★未掲載の設定の文を含む注記でも、断りが残ったら止める★★（Codexの2回目の指摘1・2表とも）",
+      bool(text_kept(_settei(["1/431" + _tag, "1/358" + _tag], ["97.5%" + _tag, "111.5%" + _tag],
+                             _nb + _snn + _miss, _nb + _snn + _miss),
+                     _settei(["1/431", "1/358"], ["97.5%", "111.5%"],
+                             _nb + _snn + _miss, _nb + _snn + _miss))))
+    _one = lambda at, note: {"sections": [{"title": "設定示唆まとめ", "type": "settei", "tables": [
+        {"label": "AT初当たり確率", "headers": ["設定", "AT初当たり確率"],
+         "rows": [["設定1", at[0]], ["設定6", at[1]]], "note": note}]}]}
+    t("★★表が1つで未掲載の文を含むとき、断りが残ったら止める★★（Codexの2回目の指摘1）",
+      bool(text_kept(_one(["1/431" + _tag, "1/358" + _tag], _nb + _snn + _miss),
+                     _one(["1/431", "1/358"], _nb + _snn + _miss))))
+    t("★★未掲載の文を含む注記で、名乗りが残ったまま断りだけ消えたら止める★★（Codexの3回目の指摘）",
+      bool(text_kept(_one(["1/431" + _tag, "1/358" + _tag], _nb + _snn + _miss),
+                     _one(["1/431" + _tag, "1/358" + _tag], _nb + _miss))))
+    t("★★名乗りが残ったまま注記が丸ごと消えたら止める★★（Codexの4回目の指摘）",
+      bool(text_kept(_one(["1/431" + _tag, "1/358" + _tag], _nb + _snn + _miss),
+                     _one(["1/431" + _tag, "1/358" + _tag], ""))))
+    _dc = lambda: [["設定1", {"text": "1/431" + _tag, "badge": "weak"}]]
+    _dict_tb = lambda note: {"sections": [{"title": "設定示唆まとめ", "type": "settei", "tables": [
+        {"label": "AT初当たり確率", "headers": ["設定", "AT初当たり確率"], "rows": _dc(), "note": note}]}]}
+    t("★★辞書の欄に名乗りが残ったまま断りだけ消えたら止める★★（Codexの6回目の指摘）",
+      bool(text_kept(_dict_tb(_nb + _snn + _miss), _dict_tb(_nb + _miss))))
+    t("　表が1つで未掲載の文を含むとき、名乗りと断りがそろって外れれば通る",
+      not text_kept(_one(["1/431" + _tag, "1/358" + _tag], _nb + _snn + _miss),
+                    _one(["1/431", "1/358"], _nb + _miss)))
+    _bx = lambda v: {"summaryBoxes": [{"label": "機械割", "value": v}], "sections": []}
+    t("★★まとめ箱の値から名乗りが外れただけなら通る★★（Codexの2回目の指摘2）",
+      not text_kept(_bx("97.0%〜110.0%" + _tag), _bx("97.0%〜110.0%")))
+    t("★★まとめ箱の値が変わったら止める★★",
+      bool(text_kept(_bx("97.0%〜110.0%" + _tag), _bx("97.0%〜111.0%"))))
+    t("　まとめ箱に名乗りが付いただけ（弱まる向き）は通さない",
+      bool(text_kept(_bx("97.0%〜110.0%"), _bx("97.0%〜110.0%" + _tag))))
+    t("　片方の表だけ強まり、もう片方は名乗りと断りが残るなら通る",
+      not text_kept(_old_settei,
+                    _settei(["1/431", "1/358"], ["97.5%" + _tag, "111.5%" + _tag],
+                            _nb + _miss, _nb + _snn)))
+    # ★★表以外の値の位置★★（Codexの指摘1・dmm_5089の形）＝基本情報表・
+    #   基本スペック（太字の行）・本文・まとめ箱にも同じ名乗りが付く。
+    _ft = lambda v: {"factTable": [["機械割", v]], "sections": []}
+    t("★★基本情報表の値から名乗りが外れただけなら通る★★",
+      not text_kept(_ft("97.0%〜110.0%" + _tag), _ft("97.0%〜110.0%")))
+    t("★★基本情報表の値が変わったら止める★★",
+      bool(text_kept(_ft("97.0%〜110.0%" + _tag), _ft("97.0%〜111.0%"))))
+    _sb = lambda v: {"sections": [{"title": "基本スペック", "body": ["**機械割**：" + v]}]}
+    t("★★基本スペックの値から名乗りが外れただけなら通る★★",
+      not text_kept(_sb("97.0%〜110.0%" + _tag), _sb("97.0%〜110.0%")))
+    _bd = lambda v: {"sections": [{"title": "ゲーム性", "body": [v]}]}
+    t("★★本文の途中の名乗りが外れただけなら通る★★",
+      not text_kept(_bd("ATの純増は約3.1枚/G" + _tag + "です。"),
+                    _bd("ATの純増は約3.1枚/Gです。")))
+    t("★★本文で名乗りが外れても、ほかの文字が変わったら止める★★",
+      bool(text_kept(_bd("ATの純増は約3.1枚/G" + _tag + "です。"),
+                     _bd("ATの純増は約3.2枚/Gです。"))))
+    t("★★名乗りが別の値へ移っただけ（強かった値が弱まる）は止める★★（Codexの5回目の指摘1）",
+      bool(text_kept(_bd("CZは10G" + _tag + "、ATは20G" + _tag + "、上位は30Gです。"),
+                     _bd("CZは10G、ATは20G、上位は30G" + _tag + "です。"))))
+    t("　名乗りが2つのうち1つだけ同じ位置で外れたなら通る",
+      not text_kept(_bd("CZは10G" + _tag + "、ATは20G" + _tag + "です。"),
+                    _bd("CZは10G、ATは20G" + _tag + "です。")))
+    _old_label = next(iter(RENAMED_TABLE_LABELS))
+    _lab = lambda lb, rows, note: {"sections": [{"title": "確認できたCZ", "type": "table", "tables": [
+        {"label": lb, "headers": ["名前", "継続"], "rows": rows, "note": note}]}]}
+    t("★★表題を言い換えた日も、名乗りが全部外れて断りが残ったら止める★★（Codexの5回目の指摘2）",
+      bool(text_kept(_lab(_old_label, [["叩き" + _tag, "10G" + _tag]], _base_note + _snn),
+                     _lab(RENAMED_TABLE_LABELS[_old_label], [["叩き", "10G"]],
+                          _base_note + _snn))))
+    t("　名乗りが付いただけ（弱まる向き）は通さない",
+      bool(text_kept(_bd("ATの純増は約3.1枚/Gです。"),
+                     _bd("ATの純増は約3.1枚/G" + _tag + "です。"))))
     # ★★導入文はここでは比べない★★（2026-08-23・台帳#461で変更）
     #   ★守りを外したのではなく、守る場所を1つにした★＝
     #   導入文は「機種名」と「登場時期」をはめ込んだ定型文で、

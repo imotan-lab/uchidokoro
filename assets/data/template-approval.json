@@ -52,7 +52,7 @@
   "scripts/fix_plain_style.py": "b8af9b83920fa38aea0210f9bcaa5ddadbc742dca902b39eb0762746743c6d56",
   "scripts/gates.py": "fa87aab6ca198e1999798b163235446ac9c58c8a3ee648bc690068cf249b3dfc",
   "scripts/grow_legacy.py": "e4d9bd2939367f92b5fd6167c19f53eb0baefd6d4ef87732250f21aba2c70094",
-  "scripts/grow_machine.py": "1075678dd1ad8d79e26abfe3e250631b75c673eefe000204ddd1fbc30be37fb6",
+  "scripts/grow_machine.py": "c2081583fb0fc8c09ac36a546bd0b43df28ea49b3eb04f977071cd621bea37e8",
   "scripts/hub_prose.json": "64a009136a554be1c7d9b13638f02c29928c383e9021e3e9449e464d2e2cce27",
   "scripts/note_text.py": "a2b48bed0a3c49514a100432dc759ea7700ce6c3559289583375a33977671ca6",
   "scripts/page_decision.py": "6fd6bddc85b898fdd83a4056ea7e733f3139c2b71e7f230ac069a1523dc44151",
