@@ -2637,7 +2637,7 @@ MUTATIONS = [
                "（表は見出しと値が別の行なので、値が在るのに"
                "「まだ載っていない」と言い、天井を採り損ねる）★",
         "file": "scripts/ceiling_lookup.py",
-        "before": "        near += lines[i:i + 2]",
+        "before": "        near += lines[i:i + 3]",
         "after": "        near += lines[i:i + 1]",
         "run": ["scripts/ceiling_lookup.py"],
         "issues": [649],
@@ -4037,10 +4037,12 @@ MUTATIONS = [
     {
         "why": "試験用の偽の機種を掃除しない（2026-08-24・自分で踏んだ）",
         "file": "scripts/publish_new_machine.py",
-        "before": "        if apply_it:\n"
-                  "            _sh.rmtree(d, ignore_errors=True)",
-        "after": "        if False:\n"
-                 "            _sh.rmtree(d, ignore_errors=True)",
+        "before": "    for p, rel in _residue_paths():\n"
+                  "        found.append(rel)\n"
+                  "        if apply_it:\n",
+        "after": "    for p, rel in _residue_paths():\n"
+                 "        found.append(rel)\n"
+                 "        if False:\n",
         # ★この1本だけ4分ほどかかる★（本番と同じ経路を丸ごと通すため）
         "run": ["scripts/publish_new_machine.py"],
     },
@@ -7105,6 +7107,99 @@ MUTATIONS = [
         "before": 'KEEP_UNTIL = {"add-machine": "04:30"}\n',
         "after": "KEEP_UNTIL = {}\n",
         "run": ["scripts/task_lock.py"],
+    },
+    # ─── 2026-10-02・試験が残した公開途中の目印を夜のタスクが掃除する ──────────
+    {
+        "why": "★試験が残した公開途中の目印（zzz_）を見分けない（★毎晩止まり新台が永久に公開されない★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "    return _pub.is_selftest_marker(left)\n",
+        "after": "    return False\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★名前（zzz_）だけで試験の目印とみなす（★本物の公開途中を試験の残骸として消す★）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": '            and mk.get("selftest") is True)\n',
+        "after": "            )\n",
+        "run": ["scripts/add_machine_run.py", "scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★天井の欄を次の1行しか見ない（★見出しと値のあいだに1行ある表で天井が空欄のままになる★）★",
+        "file": "scripts/ceiling_lookup.py",
+        "before": "        near += lines[i:i + 3]\n",
+        "after": "        near += lines[i:i + 2]\n",
+        "run": ["scripts/ceiling_lookup.py"],
+    },
+    # ─── 2026-10-02・育成で2AIが「落としてよい」と決めた内容を受け取る ──────────
+    {
+        "why": "★2AIが落としてよいと決めた内容でも、消えたら止める（★同じ問いが毎朝くり返され育成が進まない★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "            if _ok.get(_unit_label(u), 0) > 0:\n",
+        "after": "            if False:\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★落としてよい控えを、記事が変わっても効かせる（★古い判断で別の内容が消える★）★",
+        "file": "scripts/grow_machine.py",
+        "before": '    if dec.get("old_sha256") != detail_sha(old_detail):\n',
+        "after": "    if False:\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★落としてよいという決定を、判断者がそろっていなくても受け取る（★1つのAIだけで記事の内容を消せる★）★",
+        "file": "scripts/grow_machine.py",
+        "before": '    if not _cv.judges_exact(dec.get("by")):\n',
+        "after": "    if False:\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★掃除で戻せないものが残っても目印を消す（★翌晩は掃除されず、別の関所で黙って止まり続ける★）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": '    return not any("触りません" in str(x) for x in (found or []))\n',
+        "after": "    return True\n",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★落としてよい控えを、読むときに検査しない（★控えを直接書けば2AIを通さずに内容を消せる★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    if accept_loss_problems(dict(rec, slug=slug), old_detail):\n",
+        "after": "    if False:\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★認めた件数を数えない（★同じ文が2つ消えるとき1件の承認で全部を免除する★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "                _ok[_unit_label(u)] -= 1   # ★2AIが落としてよいと決めた内容★\n",
+        "after": "                pass\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★本番でも試験用の名前（zzz_）で新台を作れる（★掃除が本物を試験の残骸として消しうる★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "            or os.environ.get(_pub.SELFTEST_MARK_ENV) == \"1\")\n",
+        "after": "            or True)\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★照合の文字を空白でつなぐ（★区切りの位置が違う別の文を取り違え、承認していない内容を消せる★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    return json.dumps([str(x).replace(ANY, \"（未確定）\") for x in u], ensure_ascii=False)\n",
+        "after": "    return \" \".join(str(x) for x in u).replace(ANY, \"（未確定）\")\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★git が読めないときに「記録されていない」と読む（★記録済みの本物の zzz_ を消しうる★）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": "            if _ls.returncode != 0:\n",
+        "after": "            if False:\n",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★試験が本物の置き場に書くpush待ちの目印に札を付けない（★強制終了で残ると本物扱いで二度と掃除されず、夜の公開が止まる★）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": '{"slug": "zzz_test56", "stage": "WRITTEN", "sha": "", "selftest": True}))',
+        "after": '{"slug": "zzz_test56", "stage": "WRITTEN", "sha": ""}))',
+        "run": ["scripts/publish_new_machine.py"],
     },
 ]
 

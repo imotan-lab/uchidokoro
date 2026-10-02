@@ -157,6 +157,21 @@ def _record_issue(slug, kind, severity, code, title, detail) -> bool:
         return False
 
 
+def zzz_slug_allowed(slug) -> bool:
+    """★試験用の名前（zzz_）は、自己試験の最中だけ使ってよい★"""
+    return (not str(slug or "").startswith(_pub.TEST_SLUG_PREFIX)
+            or os.environ.get(_pub.SELFTEST_MARK_ENV) == "1")
+
+
+def is_test_marker(left) -> bool:
+    """★公開途中の目印が、試験が残したものか★（2026-10-02）
+
+    ★名前（zzz_）と試験用の札の両方で見る★（Codex review210）＝判定は
+    publish_new_machine.is_selftest_marker の1か所。
+    """
+    return _pub.is_selftest_marker(left)
+
+
 def _forget(seen: dict, maker_id: str, url: str) -> None:
     """★そのURLを「見たことがある」から外す★（2026-07-31・Codex20回目）
 
@@ -3514,6 +3529,11 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #   メーカー欄が「分からない」ときに、**この機種の控え**を見るため。
     #   以前は材料集めのあとで slug を決めていたので、控えを引けなかった。
     out["slug"] = _ba.slug_from_url(official_url)
+    # ★★本番では試験用の名前（zzz_）で新台を作らない★★（2026-10-02・Codex review211）＝
+    #   試験の残骸の掃除が「zzz_ は必ず試験のもの」を前提にしているため。
+    if not zzz_slug_allowed(out["slug"]):
+        out["blocked"].append(f"試験用の名前は本番では使えません: {out['slug']}")
+        return out
     # ★DMMで確かめた機種名・導入日を材料集めへ渡す★
     #   （2026-08-17・Codex依頼229の指摘1）メーカー欄の控えを、
     #   **この機種のもの**だと突き合わせてから使うため。
@@ -3828,6 +3848,7 @@ def selftest() -> int:
 
 def _selftest_body() -> int:
     import inspect
+    _pub.selftest_marks_on()            # ★この試験で置く目印は試験用の札つき★
     results = []
     nl = chr(10)
 
@@ -4749,6 +4770,19 @@ def _selftest_body() -> int:
           _verify_maker("https://evil.example/x/", "fujishoji") != []
           and _blocking(_verify_maker("https://evil.example/x/",
                                       "fujishoji")) == [])
+        t("★★試験が残した公開途中の目印（zzz_）は、夜のタスクが掃除してから進む★★"
+          "（残ると毎晩ここで止まり、新台が永久に公開されなかった・2026-10-02）",
+          is_test_marker({"slug": "zzz_audit33", "selftest": True}) is True
+          and is_test_marker({"slug": "zzz_audit33"}) is False
+          and is_test_marker({"slug": "dmm_5104", "selftest": True}) is False
+          and zzz_slug_allowed("dmm_5104") is True
+          and zzz_slug_allowed("zzz_x") is True                     # ★いまは試験の最中★
+          and (lambda k: (os.environ.pop(_pub.SELFTEST_MARK_ENV, None),
+                          zzz_slug_allowed("zzz_x"),
+                          os.environ.__setitem__(_pub.SELFTEST_MARK_ENV, "1"))[1])(0) is False
+          and is_test_marker({}) is False and is_test_marker(None) is False
+          and inspect.getsource(main).index("is_test_marker(left)")
+          < inspect.getsource(main).index("    if left:\n        msg = "))
         t("★★ログに残せなかったら待ち行列から外さない★★"
           "（待ち行列にもどこにも無い機種＝黙って消える・Codex19回目）",
           "ログに残せなかったので" in inspect.getsource(give_up_now))
@@ -6887,6 +6921,18 @@ def _main() -> int:
     #   見張りだけなら書き込まないので進んでよいが、
     #   **気づかないまま作業を続けてpushしてしまう**のが危ない。
     left = _pub.unfinished()
+    # ★★試験用の目印（zzz_）なら、掃除してから進む★★（2026-10-02）
+    #   自己試験は本物の場所に目印を置く（監査が別プロセスで本物のファイルを見るため）。
+    #   試験の途中で止まると目印が残り、ここで毎晩止まって新台が永久に公開されなかった。
+    #   ★本物の公開途中には触らない★（試験用の名前のときだけ）。
+    if is_test_marker(left):
+        _log(f"  試験用の公開途中の目印が残っていたので掃除します（{left.get('slug')}）")
+        if apply_it:
+            for _x in _pub.purge_test_residue(apply_it=True):
+                _log(f"    掃除: {_x}")
+        left = _pub.unfinished()
+        if left:
+            _log("  ★試験の残骸を戻しきれませんでした（人の変更と混ざっている）。目印は残しました★")
     if left:
         msg = (f"★前回の公開が途中で終わっています（{left.get('slug')} / "
                f"{left.get('started_at')}）★ "

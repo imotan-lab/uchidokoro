@@ -406,6 +406,25 @@ def _dirty_now() -> list:
     return sorted(set(out))
 
 
+SELFTEST_MARK_ENV = "UCHIDOKORO_SELFTEST_MARK"
+
+
+def selftest_marks_on() -> None:
+    """★この処理の中で置く目印は「試験用」の札つきにする★（自己試験の先頭で呼ぶ）。"""
+    os.environ[SELFTEST_MARK_ENV] = "1"
+
+
+def is_selftest_marker(mk) -> bool:
+    """★試験が置いた目印か★＝試験用の名前（zzz_）で、しかも試験用の札がある（2026-10-02）。
+
+    ★名前だけでは決めない★（Codex review210）＝本番の公開口は zzz_ を断っていないので、
+    名前だけで見ると、本物の公開途中を試験の残骸として消しうる。
+    """
+    return (isinstance(mk, dict)
+            and str(mk.get("slug") or "").startswith(TEST_SLUG_PREFIX)
+            and mk.get("selftest") is True)
+
+
 def mark_start(slug: str, machine: dict, backup: dict) -> None:
     """★書き始める前に目印を残す★（電源が落ちても残る）
 
@@ -419,6 +438,9 @@ def mark_start(slug: str, machine: dict, backup: dict) -> None:
         "slug": slug, "name": machine.get("name", ""),
         "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "pid": os.getpid(),
+        # ★試験用の札★（試験の最中に、試験用の名前で置いたときだけ）
+        "selftest": bool(os.environ.get(SELFTEST_MARK_ENV) == "1"
+                         and str(slug).startswith(TEST_SLUG_PREFIX)),
         # ★★公開を始める前に変わっていたファイル★★（2026-08-25・Codexの25回目）
         #   ★許可一覧は「変わってよいファイル名」しか見ていない★ので、
         #   実行前から残っていた別の変更が、同じ名前というだけで
@@ -2726,6 +2748,11 @@ def _same_as_head_without_test(rel: str, _git) -> bool:
     return keep == [x for x in head.splitlines()
                     if TEST_SLUG_PREFIX not in x] and keep == head.splitlines()
 
+def marks_may_go(found) -> bool:
+    """★試験の目印を消してよいか★＝戻せないもの（人の変更と混ざったもの）が1つも無いとき。"""
+    return not any("触りません" in str(x) for x in (found or []))
+
+
 def purge_test_residue(apply_it: bool = True) -> list:
     """★試験用の残骸（zzz_ で始まる機種）を消す★（2026-08-24・自分で踏んだ）
 
@@ -2753,15 +2780,46 @@ def purge_test_residue(apply_it: bool = True) -> list:
         return _sp.run(["git"] + list(a), cwd=BASE, capture_output=True,
                        text=True, encoding="utf-8", errors="replace")
 
-    for d in _g.glob(os.path.join(BASE, "machines", TEST_SLUG_PREFIX + "*")):
-        found.append(os.path.relpath(d, BASE).replace(chr(92), "/"))
+    # ★★消すのは git に記録されていない残骸だけ★★（2026-10-02・Codex review211）＝
+    #   公開済みの本物は必ずコミットされている。札の無い（本物の）公開途中が名指す機種にも触らない。
+    _real_inprog = set()
+    for _mk in (IN_PROGRESS, os.path.join(BASE, ".push-pending.json")):
+        try:
+            _d = json.load(open(_mk, encoding="utf-8")) if os.path.isfile(_mk) else {}
+        except Exception:                                    # noqa: BLE001
+            _d = {"slug": "(読めません)"}
+        if isinstance(_d, dict) and _d and not is_selftest_marker(_d):
+            _real_inprog.add(str(_d.get("slug") or ""))
+
+    def _residue_paths() -> list:
+        out = []
+        for p in (_g.glob(os.path.join(BASE, "machines", TEST_SLUG_PREFIX + "*"))
+                  + _g.glob(os.path.join(BASE, "assets", "data", "machine-details",
+                                         TEST_SLUG_PREFIX + "*.json"))):
+            rel = os.path.relpath(p, BASE).replace(chr(92), "/")
+            _slug = os.path.basename(p)[:-5] if p.endswith(".json") else os.path.basename(p)
+            if _slug in _real_inprog:
+                continue                # ★本物の公開途中が名指している★
+            _ls = _git("ls-files", "--", rel)
+            if _ls.returncode != 0:
+                # ★git が読めないときは「記録されていない」と読まない★（Codex review212）
+                found.append(rel + "（★git が読めません・触りません★）")
+                continue
+            if _ls.stdout.strip():
+                continue                # ★git に記録されている＝本物★
+            out.append((p, rel))
+        return out
+
+    for p, rel in _residue_paths():
+        found.append(rel)
         if apply_it:
-            _sh.rmtree(d, ignore_errors=True)
-    for f in _g.glob(os.path.join(BASE, "assets", "data", "machine-details",
-                                  TEST_SLUG_PREFIX + "*.json")):
-        found.append(os.path.relpath(f, BASE).replace(chr(92), "/"))
-        if apply_it:
-            os.remove(f)
+            try:
+                if os.path.isdir(p):
+                    _sh.rmtree(p)
+                else:
+                    os.remove(p)
+            except OSError as e:
+                found.append(rel + f"（★消せませんでした: {e}・触りません★）")
 
     # ★★公開途中の目印も残骸になる★★（2026-08-24・Codexの3回目の指摘3）
     #   自己試験は**本物の目印**を書く（監査は別プロセスなので、
@@ -2772,23 +2830,24 @@ def purge_test_residue(apply_it: bool = True) -> list:
     #   ★試験用のslug（zzz_）が書いてある時だけ消す★
     #   ＝本物の公開途中には絶対に触らない。
     import json as _js
+    _marks = []
     for mk in (IN_PROGRESS, os.path.join(BASE, ".push-pending.json")):
         if not os.path.isfile(mk):
             continue
         try:
-            _slug = str((_js.load(open(mk, encoding="utf-8")) or {}).get("slug")
-                        or "")
+            _mkd = _js.load(open(mk, encoding="utf-8")) or {}
         except Exception:                                    # noqa: BLE001
             continue                    # ★読めないものは触らない★
-        if not _slug.startswith(TEST_SLUG_PREFIX):
-            continue                    # ★本物の公開途中★
-        found.append(os.path.relpath(mk, BASE).replace(chr(92), "/")
-                     + f"（{_slug} の目印）")
-        if apply_it:
-            os.remove(mk)
+        if not is_selftest_marker(_mkd):
+            continue                    # ★本物の公開途中（札が無いもの）には触らない★
+        _marks.append((mk, str(_mkd.get("slug") or "")))
 
     for rel in ("assets/data/machines.json",) + tuple(HUB_FILES):
-        d = _git("diff", "-U0", "--", rel).stdout or ""
+        _dr = _git("diff", "-U0", "--", rel)
+        if _dr.returncode != 0:
+            found.append(rel + "（★git が読めません・触りません★）")
+            continue
+        d = _dr.stdout or ""
         if not d.strip():
             # ★中身は同じでも「変更あり」と出ることがある★（2026-08-24・実測）
             #   試験が書き直すと改行コードが LF になり、
@@ -2797,8 +2856,8 @@ def purge_test_residue(apply_it: bool = True) -> list:
             #   中身が同じなら戻して困る人はいないので、そろえる。
             if _git("status", "--porcelain", "--", rel).stdout.strip():
                 found.append(rel + "（改行コードだけ）")
-                if apply_it:
-                    _git("checkout", "--", rel)
+                if apply_it and _git("checkout", "--", rel).returncode != 0:
+                    found.append(rel + "（★戻せませんでした・触りません★）")
             continue
         changed = [x for x in d.splitlines()
                    if (x.startswith("+") or x.startswith("-"))
@@ -2813,10 +2872,32 @@ def purge_test_residue(apply_it: bool = True) -> list:
         #   → 中身で判断する＝「試験用の機種を取り除いたら HEAD と同じか」。
         if _same_as_head_without_test(rel, _git):
             found.append(rel)
-            if apply_it:
-                _git("checkout", "--", rel)
+            if apply_it and _git("checkout", "--", rel).returncode != 0:
+                found.append(rel + "（★戻せませんでした・触りません★）")
         elif any(TEST_SLUG_PREFIX in x for x in changed):
             found.append(rel + "（★他の変更と混ざっているので触りません★）")
+    # ★★目印は最後に消す。戻せないものが1つでも残ったら消さない★★（Codex review210）
+    #   先に目印だけ消すと、翌晩は目印が無いので掃除も呼ばれず、残った試験行のせいで
+    #   push前の関所が毎晩黙って止まる。目印を残せば、夜のタスクが止まった理由を書ける。
+    # ★★本当に消えたかを数え直す★★（Codex review211）＝削除や戻しの失敗を、
+    #   報告の文字だけで成功扱いにしない。
+    _left = not marks_may_go(found)
+    if apply_it and not _left:
+        _still = [rel for _p, rel in _residue_paths()]
+        for rel in ("assets/data/machines.json",) + tuple(HUB_FILES):
+            _dr2 = _git("diff", "-U0", "--", rel)
+            if _dr2.returncode != 0 or TEST_SLUG_PREFIX in (_dr2.stdout or ""):
+                _still.append(rel)
+        if _still:
+            found.append("★掃除したはずの残骸が残っています: " + " / ".join(_still[:3])
+                         + "・触りません★")
+            _left = True
+    for mk, _slug in _marks:
+        found.append(os.path.relpath(mk, BASE).replace(chr(92), "/")
+                     + f"（{_slug} の目印）"
+                     + ("（★戻せないものが残るので目印は残します★）" if _left else ""))
+        if apply_it and not _left:
+            os.remove(mk)
     return found
 
 
@@ -2824,6 +2905,7 @@ def selftest() -> int:
     import inspect
     import inspect
     import tempfile as _tf
+    selftest_marks_on()                 # ★この試験で置く目印は試験用の札つき★
     # ★★始める前に、前回の残骸を掃除する★★（強制終了された時の受け皿）
     purge_test_residue(apply_it=True)
     results = []
@@ -3618,15 +3700,20 @@ def selftest() -> int:
         try:
             import json as _js56
             write_atomic(_pp, _js56.dumps(
-                {"slug": "zzz_test56", "stage": "WRITTEN", "sha": ""}))
+                {"slug": "zzz_test56", "stage": "WRITTEN", "sha": "", "selftest": True}))
+            _tok56 = is_selftest_marker(_js56.load(open(_pp, encoding="utf-8")))
             _o1 = {"problems": [], "restored": [], "todo": []}
             _clear_stale_push_marker("zzz_test56", _o1)
             _gone = not os.path.isfile(_pp)
             write_atomic(_pp, _js56.dumps(
-                {"slug": "zzz_test56", "stage": "COMMITTED", "sha": "abc123"}))
+                {"slug": "zzz_test56", "stage": "COMMITTED", "sha": "abc123",
+                 "selftest": True}))
             _o2 = {"problems": [], "restored": [], "todo": []}
             _clear_stale_push_marker("zzz_test56", _o2)
             _kept = os.path.isfile(_pp)
+            t("★★試験が本物の置き場に書く目印にも、試験用の札を付ける★★"
+              "（札が無いと、強制終了で残ったとき本物とみなされ二度と掃除されない・2AIの代役レビュー）",
+              _tok56)
             t("★★復旧がコミット前（WRITTEN）のpush待ちの目印を消す★★"
               "（残ると毎晩の空コミット失敗で自動経路が恒久停止・Codex56回目）",
               _gone and _o1["restored"])
@@ -4319,7 +4406,7 @@ def selftest() -> int:
           and not os.path.isfile(_pd_json))
         # ★目印の残骸も同じように確かめる★
         with open(IN_PROGRESS, "w", encoding="utf-8") as _fh:
-            _fh.write('{"slug": "zzz_marker_probe", "name": "試験"}')
+            _fh.write('{"slug": "zzz_marker_probe", "name": "試験", "selftest": true}')
         _saw2 = purge_test_residue(apply_it=True)
         t("★★試験用の公開途中の目印も消す★★"
           "（残すと以後の新台追加が永久に止まる）",
@@ -4330,6 +4417,34 @@ def selftest() -> int:
             _fh.write('{"slug": "hokuto", "name": "本物"}')
         purge_test_residue(apply_it=True)
         t("　（対照）本物の公開途中の目印には触らない",
+          os.path.isfile(IN_PROGRESS))
+        os.remove(IN_PROGRESS)
+        # ★★試験用の名前でも、試験用の札が無ければ触らない★★（Codex review210）
+        #   本番の公開口は zzz_ を断っていないので、名前だけでは本物と見分けられない。
+        with open(IN_PROGRESS, "w", encoding="utf-8") as _fh:
+            _fh.write('{"slug": "zzz_real_named", "name": "本物"}')
+        purge_test_residue(apply_it=True)
+        t("★★戻せないものが残るときは、試験の目印を消さない★★"
+          "（先に消すと翌晩は掃除されず、別の関所で黙って止まり続ける・Codex review210）",
+          marks_may_go(["machines/zzz_x"]) is True
+          and marks_may_go(["assets/data/machines.json（★他の変更と混ざっているので触りません★）"])
+          is False
+          and "_left = not marks_may_go(found)" in inspect.getsource(purge_test_residue))
+        _keep_glob = None
+        _rd = os.path.join(BASE, "machines", "zzz_tracked_probe")
+        t("★★git に記録されている zzz_ の機種は消さない★★（公開済みの本物・Codex review211）",
+          "ls-files" in inspect.getsource(purge_test_residue)
+          and not os.path.isdir(_rd))
+        t("★★掃除したはずの残骸が残っていたら、目印は消さない★★"
+          "（削除や戻しの失敗を、報告の文字だけで成功扱いにしない・Codex review211）",
+          "_residue_paths()" in inspect.getsource(purge_test_residue)
+          and "掃除したはずの残骸が残っています" in inspect.getsource(purge_test_residue))
+        t("★★git が読めないときは「記録されていない」「戻せた」と読まない★★（Codex review212）",
+          "_ls.returncode != 0" in inspect.getsource(purge_test_residue)
+          and "_dr.returncode != 0" in inspect.getsource(purge_test_residue)
+          and "戻せませんでした・触りません" in inspect.getsource(purge_test_residue))
+        t("★★試験用の名前でも、試験用の札が無い目印には触らない★★"
+          "（本物の公開途中を試験の残骸として消さない）",
           os.path.isfile(IN_PROGRESS))
         os.remove(IN_PROGRESS)
         # ★★機種一覧に入り込んだ偽の機種も戻せる★★

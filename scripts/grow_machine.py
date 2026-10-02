@@ -314,6 +314,9 @@ import sys as _sys_lp               # noqa: E402
 _sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
 import local_paths as _lp           # noqa: E402
 STATE_PATH = _lp.doc("grow_check.json")
+# ★★2AIが「この内容は落としてよい」と決めた控え★★（2026-10-02）
+LOSS_STORE = _lp.doc("grow_loss_accepted.json")
+MIN_LOSS_WHY = 15
 
 
 PROBE_STATE = _lp.doc("grow_sources.json")
@@ -1371,7 +1374,108 @@ def _ceiling_note_may_go(old_detail: dict, new_detail: dict) -> bool:
             and now == was)
 
 
-def text_kept(old_detail: dict, new_detail: dict) -> list:
+def detail_sha(detail) -> str:
+    """★記事データの指紋★（落としてよいと決めた時の記事と同じかを見る）。"""
+    import hashlib
+    return hashlib.sha256(json.dumps(detail or {}, ensure_ascii=False, sort_keys=True)
+                          .encode("utf-8")).hexdigest()
+
+
+def _json_or_none(x):
+    """試験用：JSONとして読めなければ None（壊れた版で試験ごと落ちないため）。"""
+    try:
+        return json.loads(x)
+    except Exception:                     # noqa: BLE001
+        return None
+
+
+def _unit_label(u) -> str:
+    """消えた内容を人と2AIに見せる形（★切らない★＝落としてよい控えも、この全文で照合する）。
+
+    ★60字で切っていた★（Codex review210）＝先頭が同じ長文どうしが同じ文字になり、
+    片方だけ認めると、もう片方まで消えてよいことになった。
+    """
+    # ★要素の区切りを保つ★（Codex review211）＝空白でつなぐと ("A B","C") と ("A","B C") が同じ文字になる
+    return json.dumps([str(x).replace(ANY, "（未確定）") for x in u], ensure_ascii=False)
+
+
+def accepted_losses(slug: str, old_detail: dict, store: str = "") -> frozenset:
+    """★2AIが落としてよいと決めた内容★（いまの記事が決めたときと同じときだけ効く）。
+
+    ★記事が変われば無効★＝古い判断で、別の内容が消えるのを通さない。
+    ★読めない・壊れているときは何も認めない★（今までどおり止まる側）。
+    """
+    try:
+        with open(store or LOSS_STORE, encoding="utf-8") as f:
+            got = json.load(f)
+    except Exception:                     # noqa: BLE001
+        return frozenset()
+    rec = got.get(slug) if isinstance(got, dict) else None
+    if not isinstance(rec, dict):
+        return frozenset()
+    # ★記事の指紋は accept_loss_problems の1か所で見る★（同じ検査を2か所に書かない）
+    # ★★読むたびに、受け取るときと同じ検査をかける★★（Codex review210）＝
+    #   控えを直接書き換えて判断者や理由を抜いても効かない。
+    if accept_loss_problems(dict(rec, slug=slug), old_detail):
+        return frozenset()
+    return tuple(str(x) for x in (rec.get("lose") or []) if str(x).strip())
+
+
+def accept_loss_problems(dec, old_detail) -> list:
+    """★落としてよいという決定を受け取れるか★（言うだけでは通さない）。"""
+    if not isinstance(dec, dict):
+        return ["決定ファイルが辞書ではありません"]
+    ng = []
+    if not re.fullmatch(r"[a-z0-9_]+", str(dec.get("slug") or "")):
+        ng.append("slug が英小文字・数字・下線ではありません")
+    lose = dec.get("lose")
+    if not isinstance(lose, list) or not lose or not all(
+            isinstance(x, str) and x.strip() for x in lose):
+        ng.append("lose（消えてよい内容の逐語）が空です")
+    if not _cv.judges_exact(dec.get("by")):
+        ng.append("判断者は claude,codex（代役なら claude-agent-a,claude-agent-b）の組だけです")
+    if len(str(dec.get("why") or "").strip()) < MIN_LOSS_WHY:
+        ng.append(f"理由（why）が{MIN_LOSS_WHY}字に足りません")
+    if dec.get("old_sha256") != detail_sha(old_detail):
+        ng.append("記事が、決めたときから変わっています（指紋が違う）。見直してください")
+    return ng
+
+
+def accept_loss(path: str, store: str = "") -> int:
+    """★2AIの「落としてよい」を控える★（`--accept-loss <決定ファイル>`）。"""
+    try:
+        dec = _sj.read_json(path, expect=dict)
+    except Exception as e:                # noqa: BLE001
+        print(f"★決定ファイルが読めません: {e}★")
+        return 1
+    slug = str(dec.get("slug") or "")
+    dp = _detail_path(slug) if re.fullmatch(r"[a-z0-9_]+", slug) else ""
+    old = _sj.read_json(dp, expect=dict) if dp and os.path.isfile(dp) else {}
+    ng = accept_loss_problems(dec, old)
+    if ng:
+        for x in ng:
+            print("  ✗ " + x)
+        return 1
+    st = store or LOSS_STORE
+    try:
+        with open(st, encoding="utf-8") as f:
+            got = json.load(f)
+        got = got if isinstance(got, dict) else {}
+    except FileNotFoundError:
+        got = {}
+    got[slug] = {"old_sha256": dec["old_sha256"], "lose": list(dec["lose"]),
+                 "by": dec["by"], "why": dec["why"],
+                 "at": _dt.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}
+    tmp = st + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(got, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, st)
+    _log(f"育成: {slug} の『落としてよい』を控えました（{len(dec['lose'])}件・{dec['by']}）")
+    print(f"控えました: {slug}（{len(dec['lose'])}件）。次の育成で、この内容が消えても止めません")
+    return 0
+
+
+def text_kept(old_detail: dict, new_detail: dict, accepted=frozenset()) -> list:
     """★前に載っていた文が、そのまま残っているか★（値の書き換えを止める）
 
     2026-08-05・Codex102回目の指摘2。claim ID の比較では
@@ -1388,10 +1492,17 @@ def text_kept(old_detail: dict, new_detail: dict) -> list:
         old = [u for u in old if not (u[0] == "body" and u[-1] == note)]
     rest = list(new)
     gone = []
+    # ★認めた内容は、認めた件数だけ消えてよい★（同じ文が2つあれば2つ書く）
+    _ok = {}
+    for _x in accepted:
+        _ok[_x] = _ok.get(_x, 0) + 1
     for u in old:
         hit = next((n for n in rest if _match(u, [n], new)), None)
         if hit is None:
-            gone.append(" ".join(str(x) for x in u).replace(ANY, "（未確定）")[:60])
+            if _ok.get(_unit_label(u), 0) > 0:
+                _ok[_unit_label(u)] -= 1   # ★2AIが落としてよいと決めた内容★
+                continue
+            gone.append(_unit_label(u))
         else:
             rest.remove(hit)               # ★同じ物を二重に使わない（数も見る）★
     # ★★名乗りが全部外れたのに、注記の断りだけ残っていたら止める★★
@@ -1405,7 +1516,7 @@ def text_kept(old_detail: dict, new_detail: dict) -> list:
         gone.append(f"名乗りが全部外れたのに断りが残っています: {_t} {_l}")
     if not gone:
         return []
-    return [f"前に載っていた内容が消える/変わる更新です: {' / '.join(gone[:3])}"]
+    return [f"前に載っていた内容が消える/変わる更新です: {' ／ '.join(gone[:10])}"]
 
 
 # ★★2AIで何回まで粘るか★★（2026-08-27・運営者の指示）
@@ -1701,7 +1812,10 @@ def grow_result(slug: str, ok: bool, why: str = "",
                          + " で、前に載せた内容を今夜の材料で再現できません: "
                          + why
                          + "／出典を取り直すか、別の出典を当たるか、"
-                         "その内容を落とすかを決めてください"
+                         "その内容を落とすかを決めてください。"
+                         "★落とすなら★決定ファイル（slug・lose＝上の『消える/変わる』に並んだ文を"
+                         "そのまま・by＝claude,codex・why＝15字以上・old_sha256＝上の記事の指紋）を書き、"
+                         "python scripts/grow_machine.py --accept-loss <そのファイル> で控える"
                          f"（{n}回目・{STUCK_ASK_LIMIT}回で報告します）")}
     return {"do": "ledger", "round": n,
             "detail": (why + f"／★2AIで{STUCK_ASK_LIMIT}回試しても"
@@ -2110,7 +2224,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     out["problems"] += claims_grew(cur.get("page_decision"), mat)
     dp = _detail_path(slug)
     old_detail = _sj.read_json(dp, expect=dict) if os.path.isfile(dp) else {}
-    lost = text_kept(old_detail, detail)
+    lost = text_kept(old_detail, detail, accepted_losses(slug, old_detail))
     out["problems"] += lost
     # ★ここまで問題ゼロなら「最後まで読み比べられた」★（依頼190のP1④）
     #   その上で nothing_new だけが立つ＝「調べたが足すものが無い」。
@@ -2160,7 +2274,8 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
             #   ★直す前は、その場で台帳へ積んでいた★＝人が来るまで止まったまま。
             #   1〜2回目は2AIに聞く。3回目でどうしても決まらなければ報告する。
             _why = " / ".join(
-                lost + [p for p in out["problems"] if "消えます" in p])[:900]
+                lost + [p for p in out["problems"] if "消えます" in p])[:900] \
+                + f"／記事の指紋={detail_sha(old_detail)}"
             _act = grow_result(slug, False, _why)
             if _act["do"] == "ask":
                 out.setdefault("questions", []).append({
@@ -2571,6 +2686,7 @@ def apply_one(got: dict) -> dict:
 
 def selftest() -> int:
     ok, ran = True, [0]
+    _pub.selftest_marks_on()            # ★この試験で置く目印は試験用の札つき★
 
     # ★★自己テストは本番の台帳に書かない★★（2026-08-11・台帳#310/#311/#320）
     #   ここは plan_one を偽の材料で呼ぶので、必ず「前に載っていた内容が消える」
@@ -2669,6 +2785,49 @@ def selftest() -> int:
         return d
 
     t("　同じ内容なら通る", not text_kept(OLD, _mod(lambda d: None)))
+    # ★★2AIが「落としてよい」と決めた内容は、消えても止めない★★（2026-10-02）
+    _NEW_L = _mod(lambda d: d["sections"][0]["body"].__setitem__(0, "**型式名**：L機/2"))
+    _all_l = frozenset(_unit_label(u) for u in _units(OLD))
+    t("★★2AIが落としてよいと決めた内容は、消えても止めない★★"
+      "（直す前は答える口が無く、同じ問いが毎朝くり返された）",
+      text_kept(OLD, _NEW_L) and not text_kept(OLD, _NEW_L, _all_l))
+    t("　決めていない内容が消えたら、今までどおり止める",
+      bool(text_kept(OLD, _NEW_L, frozenset({"無関係の文"}))))
+    import tempfile as _tfl
+    _ls = os.path.join(_tfl.mkdtemp(), "loss.json")
+    with open(_ls, "w", encoding="utf-8") as _f:
+        json.dump({"x_machine": {"old_sha256": detail_sha(OLD), "lose": ["A文"]}}, _f)
+    with open(_ls, "w", encoding="utf-8") as _f:
+        json.dump({"x_machine": {"old_sha256": detail_sha(OLD), "lose": ["A文"],
+                                 "by": "claude,codex", "why": "出典が記述を取り下げたので落とす"}}, _f)
+    t("★★控えは、記事が決めたときと同じときだけ効く★★（古い判断で別の内容を消さない）",
+      accepted_losses("x_machine", OLD, _ls) == ("A文",)
+      and accepted_losses("x_machine", _NEW_L, _ls) == frozenset()
+      and accepted_losses("other", OLD, _ls) == frozenset())
+    with open(_ls, "w", encoding="utf-8") as _f:
+        json.dump({"x_machine": {"old_sha256": detail_sha(OLD), "lose": ["A文"]}}, _f)
+    t("★★控えを直接書いて判断者や理由を抜いても効かない★★（読むたびに同じ検査・Codex review210）",
+      accepted_losses("x_machine", OLD, _ls) == frozenset())
+    _lab = [_unit_label(u) for u in _units(OLD)]
+    t("★★照合の文字は切らない★★（先頭が同じ長文を取り違えない・Codex review210）",
+      all((lambda x, u: (lambda v: v == [str(y).replace(ANY, "（未確定）") for y in u])(
+          _json_or_none(x)))(x, u) for x, u in zip(_lab, _units(OLD))))
+    t("★★区切りの位置が違う別の文を、同じ文字にしない★★（Codex review211）",
+      _unit_label(("body", "A B", "C")) != _unit_label(("body", "A", "B C")))
+    _DUP = {"sections": [{"title": "基本スペック", "body": ["**純増**：2.8枚", "**純増**：2.8枚"]}]}
+    _DUP1 = {"sections": [{"title": "基本スペック", "body": []}]}
+    _dl = [_unit_label(u) for u in _units(_DUP)]
+    t("★★同じ文が2つ消えるなら、2つ認めないと通さない★★（1件の承認で全部を免除しない）",
+      bool(_dl) and bool(text_kept(_DUP, _DUP1, (_dl[0],)))
+      and not text_kept(_DUP, _DUP1, tuple(_dl)))
+    _dec = {"slug": "x_machine", "lose": ["A文"], "by": "claude,codex",
+            "why": "出典が恩恵の記述を取り下げたため落とす", "old_sha256": detail_sha(OLD)}
+    t("★★落としてよいという決定は、判断者2人・理由・記事の指紋がそろえば受け取る★★",
+      accept_loss_problems(_dec, OLD) == [])
+    t("　判断者が1人なら受け取らない（言うだけでは通さない）",
+      bool(accept_loss_problems(dict(_dec, by="claude"), OLD)))
+    t("　理由が短ければ受け取らない", bool(accept_loss_problems(dict(_dec, why="落とす"), OLD)))
+    t("　記事が変わっていたら受け取らない", bool(accept_loss_problems(_dec, _NEW_L)))
     t("　中身を足すのは通る",
       not text_kept(OLD, _mod(lambda d: d["sections"][0]["body"].append("**純増**：2.8枚"))))
     t("★★段落の値を書き換えたら止める★★",
@@ -5221,9 +5380,12 @@ def _main() -> int:
     ap.add_argument("--slug")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--accept-loss", help="2AIの『落としてよい』の決定ファイル")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.accept_loss:
+        return accept_loss(a.accept_loss)
     rows = _read_rows()
     # ★今日見る分だけを選ぶ★（2026-08-13・台帳#346）
     #   毎朝すべてをフル確認すると1機種8分×機種数かかる。
