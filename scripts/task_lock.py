@@ -495,9 +495,16 @@ def owner_alive(pid: int, created: int | None) -> bool:
             return False
     except Exception:              # noqa: BLE001
         return False
-    # ★作成時刻が読めない・控えに無いなら生きているとはみなさない★（Codex review206）
-    #   ＝番号が使い回されたとき、関係の無いプロセスを本体とみなして打ち続けないため。
-    return now is not None and created is not None and now == created
+    return alive_judge(now, created)
+
+
+def alive_judge(now_created, created) -> bool:
+    """★作成時刻で「同じ本体か」を決める（OSに関係なく試せる形）★
+
+    ★作成時刻が読めない・控えに無いなら生きているとはみなさない★（Codex review206）
+    ＝番号が使い回されたとき、関係の無いプロセスを本体とみなして打ち続けないため。
+    """
+    return now_created is not None and created is not None and now_created == created
 
 
 def _start_keeper(task: str, run_id: str, lock_path: str) -> str:
@@ -896,7 +903,9 @@ def _selftest_body() -> int:
       why3.startswith("ロックが自分のものでなくなった"))
     t("★★本体の作成時刻が読めない・控えに無いなら、生きているとみなさない★★"
       "（番号の使い回しで関係の無いプロセスを本体とみなさない・Codex review206）",
-      owner_alive(os.getpid(), None) is False)
+      owner_alive(os.getpid(), None) is False
+      and alive_judge(5, None) is False and alive_judge(None, 5) is False
+      and alive_judge(5, 6) is False and alive_judge(5, 5) is True)
     with open(kp, "w", encoding="utf-8") as f:
         json.dump({"task": "x", "run_id": "r9", "started_at": "2000-01-01T00:00:00",
                    "heartbeat": _now_iso()}, f)

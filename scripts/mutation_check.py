@@ -7088,8 +7088,8 @@ MUTATIONS = [
     {
         "why": "★本体の作成時刻が読めなくても生きているとみなす（★番号の使い回しで無関係のプロセスを本体にする★）★",
         "file": "scripts/task_lock.py",
-        "before": "    return now is not None and created is not None and now == created\n",
-        "after": "    return now is not None and (created is None or now == created)\n",
+        "before": "    return now_created is not None and created is not None and now_created == created\n",
+        "after": "    return now_created is not None and (created is None or now_created == created)\n",
         "run": ["scripts/task_lock.py"],
     },
     {
