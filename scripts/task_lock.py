@@ -68,6 +68,19 @@ LOCK_PATH = _lp.doc("task.lock")
 LOG_PATH = _os_lp.path.join(_lp.LOGS, "task_lock.log")
 CTX_DIR = _lp.DOCS
 STALE_MINUTES = 30  # 最終heartbeatからこの分数を超えたら異常終了の残骸とみなす
+# ★★合図を打ち続ける見張り役★★（2026-10-02）
+#   ★なぜ要るか★＝合図はタスク（AI）が手順書に従って手で打っていたので、
+#   長い作業（自己修正の試験・Codexとの往復）の間に打ち忘れ、タスクは生きているのに
+#   30分で「残骸」とみなされていた（2026-09-14の夜・2026-10-02の朝＝8:22で止まり10:52まで動いた）。
+#   ＝★他のタスクや対話セッションがロックを奪い、同じファイルを同時に書き換えうる★。
+#   ★手順書に「忘れずに打つ」と書いても直らない★ので、仕組みで打つ。
+KEEP_EVERY_SEC = 300          # 5分ごとに打つ（30分の残骸判定より十分短い）
+KEEP_MAX_SEC = 8 * 3600       # ★上限★＝本体が固まって生き続けても、8時間で必ず止まる
+# ★★タスクごとの「この時刻で必ず止まる」★★（Codex review207）＝夜の新台タスクが固まると、
+#   8時間の上限では 23:30＋8時間＝7:30 まで残り、5:05 の朝のタスクが入れない。
+#   4:30 で止めれば 30分後の 5:00 に残骸扱いになり、朝のタスクが入れる。
+#   （夜のタスクは 4:30 以降は新しい機種に着手しない決まり。それ以降は手で打つ）
+KEEP_UNTIL = {"add-machine": "04:30"}
 
 
 def _ctx_path(task: str, run_id: str, lock_path: str) -> str:
@@ -313,6 +326,7 @@ def _acquire_locked(task: str, lock_path: str) -> int:
             return 1
         _cleanup_old_ctx(task, lock_path)
         _log(f"acquire({task}): 取得成功 run_id={run_id} ctx={os.path.basename(ctx)}")
+        _start_keeper(task, run_id, lock_path)
         print(f"CTX={ctx}")
         print(run_id)  # 互換のため最終行はrun_id（既存呼び出しがsplitlines()[-1]で読む）
         return 0
@@ -380,6 +394,215 @@ def cmd_status(lock_path: str) -> int:
         age = _age_minutes(data)
         print(json.dumps({**data, "_age_min": round(age, 1) if age is not None else None}, ensure_ascii=False))
     return 0
+
+
+# ───────────────────────────── 合図を打ち続ける見張り役（2026-10-02）
+def _win_processes() -> dict:
+    """{pid: (親pid, 実行ファイル名)}（Windowsの標準APIだけで読む）。"""
+    import ctypes
+    import ctypes.wintypes as w
+
+    class _PE(ctypes.Structure):
+        _fields_ = [("dwSize", w.DWORD), ("cntUsage", w.DWORD),
+                    ("th32ProcessID", w.DWORD), ("th32DefaultHeapID", ctypes.c_size_t),
+                    ("th32ModuleID", w.DWORD), ("cntThreads", w.DWORD),
+                    ("th32ParentProcessID", w.DWORD), ("pcPriClassBase", ctypes.c_long),
+                    ("dwFlags", w.DWORD), ("szExeFile", ctypes.c_wchar * 260)]
+    k = ctypes.windll.kernel32
+    snap = k.CreateToolhelp32Snapshot(0x2, 0)
+    out = {}
+    e = _PE()
+    e.dwSize = ctypes.sizeof(_PE)
+    ok = k.Process32FirstW(snap, ctypes.byref(e))
+    while ok:
+        out[int(e.th32ProcessID)] = (int(e.th32ParentProcessID), str(e.szExeFile))
+        ok = k.Process32NextW(snap, ctypes.byref(e))
+    k.CloseHandle(snap)
+    return out
+
+
+def _win_created(pid: int) -> int | None:
+    """プロセスの作成時刻（同じ番号の使い回しを見分けるため）。読めなければ None。"""
+    import ctypes
+    import ctypes.wintypes as w
+    k = ctypes.windll.kernel32
+    h = k.OpenProcess(0x1000, False, int(pid))      # PROCESS_QUERY_LIMITED_INFORMATION
+    if not h:
+        return None
+    try:
+        c, x, kt, ut = w.FILETIME(), w.FILETIME(), w.FILETIME(), w.FILETIME()
+        if not k.GetProcessTimes(h, ctypes.byref(c), ctypes.byref(x),
+                                 ctypes.byref(kt), ctypes.byref(ut)):
+            return None
+        return (int(c.dwHighDateTime) << 32) | int(c.dwLowDateTime)
+    finally:
+        k.CloseHandle(h)
+
+
+def owner_process(procs: dict | None = None, start: int | None = None):
+    """★このタスクの本体（AIのプロセス）を探す★＝(pid, 作成時刻) か None。
+
+    ★本体＝祖先のうち最も近い claude.exe で、その親も claude.exe のもの★
+    （＝アプリ本体の下で動く、そのタスク専用のプロセス）。
+    ★アプリ本体そのものしか見つからなければ None★＝アプリ本体はずっと生きているので、
+    それを本体とみなすとロックが上限まで残り、次のタスクが入れなくなる。
+    """
+    if os.name != "nt":
+        return None
+    try:
+        procs = procs if procs is not None else _win_processes()
+    except Exception:              # noqa: BLE001
+        return None
+    return _find_owner(procs, int(start if start is not None else os.getpid()))
+
+
+def _find_owner(procs: dict, pid: int):
+    """★祖先をたどって本体を決める（OSに関係なく試せる形）★"""
+    seen = set()
+    while pid in procs and pid not in seen:
+        seen.add(pid)
+        ppid, name = procs[pid]
+        if name.lower() == "claude.exe":
+            parent = procs.get(ppid)
+            if parent and parent[1].lower() == "claude.exe":
+                return pid
+            return None
+        pid = ppid
+    return None
+
+
+def _win_running(pid: int) -> bool:
+    """★まだ終わっていないか★（Codex review207）＝終わったプロセスも、誰かが握っている間は
+    作成時刻を読めるので、作成時刻だけでは「生きている」と言えない。"""
+    import ctypes
+    k = ctypes.windll.kernel32
+    h = k.OpenProcess(0x1000 | 0x00100000, False, int(pid))   # 情報＋待機
+    if not h:
+        return False
+    try:
+        return k.WaitForSingleObject(h, 0) == 0x102              # WAIT_TIMEOUT＝まだ動いている
+    finally:
+        k.CloseHandle(h)
+
+
+def owner_alive(pid: int, created: int | None) -> bool:
+    """★本体がまだ生きているか★（番号の使い回しは作成時刻で見分ける）。"""
+    if os.name != "nt":
+        return False
+    try:
+        now = _win_created(pid)
+        if not _win_running(pid):
+            return False
+    except Exception:              # noqa: BLE001
+        return False
+    # ★作成時刻が読めない・控えに無いなら生きているとはみなさない★（Codex review206）
+    #   ＝番号が使い回されたとき、関係の無いプロセスを本体とみなして打ち続けないため。
+    return now is not None and created is not None and now == created
+
+
+def _start_keeper(task: str, run_id: str, lock_path: str) -> str:
+    """★本物のロックを取ったときだけ、見張り役を裏で起こす★（窓を出さない）。
+
+    ★試験用の一時ロックでは起こさない★＝試験が裏に見張り役を残さないため。
+    起こせなくても取得は成功のまま（今までどおり手で打つ形に戻るだけ）。
+    """
+    if os.path.abspath(lock_path) != os.path.abspath(LOCK_PATH):
+        return "not_real_lock"
+    if os.environ.get("UCHIDOKORO_NO_KEEPER") == "1":
+        return "disabled"
+    pid = owner_process()
+    if pid is None:
+        _log(f"keeper({task}): 本体が見つからないので見張り役は起こしません（手で打つ形のまま）")
+        return "no_owner"
+    created = _win_created(pid)
+    try:
+        _chain = []
+        _ps = _win_processes()
+        _p, _seen = os.getpid(), set()
+        while _p in _ps and _p not in _seen and len(_chain) < 8:
+            _seen.add(_p)
+            _chain.append(f"{_p}:{_ps[_p][1]}")
+            _p = _ps[_p][0]
+        _log(f"keeper({task}): 祖先の並び＝{' <- '.join(_chain)}")
+    except Exception:              # noqa: BLE001
+        pass
+    if created is None:
+        # ★作成時刻が読めなければ起こさない★（Codex review206）
+        _log(f"keeper({task}): 本体の作成時刻が読めないので見張り役は起こしません（手で打つ形のまま）")
+        return "no_created"
+    try:
+        import subprocess
+        exe = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+        if not os.path.isfile(exe):
+            exe = sys.executable
+        flags = 0x00000008 | 0x00000200 | 0x08000000  # DETACHED|NEW_GROUP|NO_WINDOW
+        subprocess.Popen([exe, os.path.abspath(__file__), "keep", "--run-id", run_id,
+                          "--lock-path", lock_path, "--owner-pid", str(pid),
+                          "--owner-created", str(created or "")],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, close_fds=True, creationflags=flags)
+        _log(f"keeper({task}): 見張り役を起こしました（本体pid={pid}・5分ごと・上限8時間）")
+        return "started"
+    except Exception as e:         # noqa: BLE001
+        _log(f"keeper({task}): 見張り役を起こせませんでした（手で打つ形のまま）: {e}")
+        return "failed"
+
+
+def keep_until_seconds(task: str, started_at: str, now=None) -> float | None:
+    """★そのタスクの見張り役が止まる時刻まで、あと何秒か★（決まりが無ければ None）。
+
+    止まる時刻は「ロックを取った時刻のあとで最初に来る KEEP_UNTIL の時刻」。
+    """
+    hm = KEEP_UNTIL.get(str(task or ""))
+    if not hm:
+        return None
+    try:
+        st = datetime.datetime.strptime(str(started_at)[:19], "%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        return 0.0                 # ★読めなければすぐ止まる側★
+    h, m = (int(x) for x in hm.split(":"))
+    end = st.replace(hour=h, minute=m, second=0)
+    if end <= st:
+        end += datetime.timedelta(days=1)
+    return (end - (now or datetime.datetime.now())).total_seconds()
+
+
+def cmd_keep(run_id: str, lock_path: str, owner_pid: int, owner_created,
+             every: float = KEEP_EVERY_SEC, max_sec: float = KEEP_MAX_SEC,
+             alive=None, sleep=time.sleep, clock=time.monotonic, now=None) -> str:
+    """★本体が生きていてロックが自分のものである間、合図を打ち続ける★。止まった理由を返す。"""
+    alive = alive or owner_alive
+    t0 = clock()
+    # ★★上限はロックを取った時刻から数える★★（Codex review206）＝見張り役を
+    #   あとから起こし直しても上限が延びないように。
+    _lk = _read_lock(lock_path) or {}
+    try:
+        _st = datetime.datetime.strptime(
+            str(_lk.get("started_at") or "")[:19], "%Y-%m-%dT%H:%M:%S")
+        t0 -= max(0.0, ((now or datetime.datetime.now()) - _st).total_seconds())
+    except Exception:              # noqa: BLE001
+        pass
+    _until = keep_until_seconds(_lk.get("task"), _lk.get("started_at"), now)
+    if _until is not None:
+        # ★止まる時刻のほうが早ければ、そちらを上限にする★
+        max_sec = min(max_sec, (clock() - t0) + max(0.0, _until))
+    while True:
+        sleep(every)
+        if not alive(owner_pid, owner_created):
+            why = "本体が終わった"
+            break
+        if clock() - t0 > max_sec:
+            why = "上限の時間に達した"
+            break
+        import contextlib
+        import io as _io
+        with contextlib.redirect_stdout(_io.StringIO()):
+            rc = cmd_heartbeat(run_id, lock_path)
+        if rc != 0:
+            why = "ロックが自分のものでなくなった（解放・奪取）"
+            break
+    _log(f"keeper: 合図を止めました（{why}・run_id={run_id[:8]}…）")
+    return why
 
 
 def selftest() -> int:
@@ -622,6 +845,101 @@ def _selftest_body() -> int:
     gB.__exit__()
     t("OSガード: 旧世代の終了処理は現世代のロックを解放しない（ABA解消）", still_locked)
 
+    # ★★合図を打ち続ける見張り役★★（2026-10-02）
+    kp = os.path.join(d, "keep.lock")
+    _calls = []
+    _orig_start = globals()["_start_keeper"]
+    globals()["_start_keeper"] = lambda *a: _calls.append(_orig_start(*a))
+    _env_keep = os.environ.get("UCHIDOKORO_NO_KEEPER")
+    os.environ["UCHIDOKORO_NO_KEEPER"] = "1"   # ★守りが壊れても裏に見張り役を残さない★
+    try:
+        import contextlib, io as _io
+        with contextlib.redirect_stdout(_io.StringIO()) as _o:
+            cmd_acquire("keep-test", kp)
+    finally:
+        globals()["_start_keeper"] = _orig_start
+        if _env_keep is None:
+            os.environ.pop("UCHIDOKORO_NO_KEEPER", None)
+        else:
+            os.environ["UCHIDOKORO_NO_KEEPER"] = _env_keep
+    krid = _o.getvalue().strip().splitlines()[-1]
+    _before = _read_lock(kp)["heartbeat"]
+    _clock = iter([0, 1, 2, 3, 99999])
+    _alive = iter([True, True, False])
+    with open(kp, encoding="utf-8") as f:
+        _d0 = json.load(f)
+    _d0["heartbeat"] = "2000-01-01T00:00:00"
+    with open(kp, "w", encoding="utf-8") as f:
+        json.dump(_d0, f)
+    why = cmd_keep(krid, kp, 1, None, every=0, max_sec=100,
+                   alive=lambda p, c: next(_alive), sleep=lambda s: None,
+                   clock=lambda: next(_clock))
+    t("★★見張り役は、本体が生きている間は合図を打つ★★（2026-10-02・朝のタスクで合図が2時間止まった）",
+      _read_lock(kp)["heartbeat"] != "2000-01-01T00:00:00")
+    t("★★本体が終わったら止まる★★（落ちたタスクのロックを残し続けない）", why == "本体が終わった")
+    import itertools as _it
+
+    def _alive_n(n):
+        c = _it.count()
+        return lambda p, cr: next(c) < n          # n回目までは生きている
+
+    why2 = cmd_keep(krid, kp, 1, None, every=0, max_sec=5,
+                    alive=_alive_n(3), sleep=lambda s: None,
+                    clock=_it.count(0, 10).__next__)
+    t("★★上限の時間で必ず止まる★★（本体が固まって生き続けても、次のタスクを締め出さない）",
+      why2 == "上限の時間に達した")
+    cmd_release(krid, kp)
+    why3 = cmd_keep(krid, kp, 1, None, every=0, max_sec=100,
+                    alive=_alive_n(3), sleep=lambda s: None,
+                    clock=_it.count().__next__)
+    t("★★ロックを手放したら止まる★★（解放・奪取のあとに打ち続けない）",
+      why3.startswith("ロックが自分のものでなくなった"))
+    t("★★本体の作成時刻が読めない・控えに無いなら、生きているとみなさない★★"
+      "（番号の使い回しで関係の無いプロセスを本体とみなさない・Codex review206）",
+      owner_alive(os.getpid(), None) is False)
+    with open(kp, "w", encoding="utf-8") as f:
+        json.dump({"task": "x", "run_id": "r9", "started_at": "2000-01-01T00:00:00",
+                   "heartbeat": _now_iso()}, f)
+    why4 = cmd_keep("r9", kp, 1, None, every=0, max_sec=3600,
+                    alive=_alive_n(3), sleep=lambda s: None,
+                    clock=_it.count().__next__)
+    t("★★上限はロックを取った時刻から数える★★（起こし直しても延びない・Codex review206）",
+      why4 == "上限の時間に達した")
+    _N = datetime.datetime(2026, 10, 3, 4, 31, 0)
+    with open(kp, "w", encoding="utf-8") as f:
+        json.dump({"task": "add-machine", "run_id": "r8", "started_at": "2026-10-02T23:30:00",
+                   "heartbeat": _now_iso()}, f)
+    why5 = cmd_keep("r8", kp, 1, None, every=0, max_sec=KEEP_MAX_SEC,
+                    alive=_alive_n(3), sleep=lambda s: None,
+                    clock=_it.count().__next__, now=_N)
+    t("★★夜の新台タスクの見張り役は、朝4:30で止まる★★"
+      "（固まっても5:05の朝のタスクを締め出さない・Codex review207）",
+      why5 == "上限の時間に達した")
+    t("　（対照）朝のタスクには止まる時刻の決まりは無い（8時間の上限だけ）",
+      keep_until_seconds("update-machine", "2026-10-02T05:05:00", _N) is None
+      and 0 < keep_until_seconds("add-machine", "2026-10-02T23:30:00",
+                                 datetime.datetime(2026, 10, 3, 1, 0)) <= 3.5 * 3600)
+    if os.name == "nt":
+        import subprocess as _sp
+        _pp = _sp.Popen([sys.executable, "-c", "import time; time.sleep(1)"])
+        _cr = _win_created(_pp.pid)
+        _alive_then = owner_alive(_pp.pid, _cr)
+        _pp.wait()                       # ★握ったまま終わらせる★（作成時刻はまだ読める）
+        t("★★終わったプロセスは、作成時刻が読めても生きているとみなさない★★"
+          "（誰かが握っている間も情報が残る・Codex review207）",
+          _alive_then is True and owner_alive(_pp.pid, _cr) is False)
+    t("★★試験用の一時ロックでは見張り役を起こさない★★（試験が裏に残さない）",
+      _calls == ["not_real_lock"])
+    _P = {10: (9, "python.exe"), 9: (8, "bash.exe"), 8: (7, "claude.exe"),
+          7: (6, "claude.exe"), 6: (1, "sihost.exe")}
+    t("★★本体は、アプリ本体の下で動くそのタスク専用のAIプロセス★★",
+      _find_owner(_P, 10) == 8)
+    _Q = {10: (9, "python.exe"), 9: (7, "bash.exe"), 7: (6, "claude.exe"),
+          6: (1, "sihost.exe")}
+    t("★★アプリ本体そのものしか見つからなければ見張り役を起こさない★★"
+      "（ずっと生きているので、ロックが上限まで残る）",
+      _find_owner(_Q, 10) is None)
+
     ok = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格")
     return 0 if ok else 1
@@ -629,7 +947,9 @@ def _selftest_body() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="うちどころ自動タスクの排他ロック")
-    parser.add_argument("command", nargs="?", choices=["acquire", "heartbeat", "check", "release", "status"])
+    parser.add_argument("command", nargs="?", choices=["acquire", "heartbeat", "check", "release", "status", "keep"])
+    parser.add_argument("--owner-pid", type=int, help=argparse.SUPPRESS)
+    parser.add_argument("--owner-created", default="", help=argparse.SUPPRESS)
     parser.add_argument("--task", help="タスク名（acquire時に必要）")
     parser.add_argument("--ctx", help="acquireが出力した実行コンテキストのパス（CTX=行）")
     parser.add_argument("--run-id", help="run_idの明示指定（--ctxの代わり）")
@@ -661,6 +981,10 @@ def main() -> int:
         return cmd_release(resolve_run_id(), args.lock_path)
     if args.command == "status":
         return cmd_status(args.lock_path)
+    if args.command == "keep":
+        cmd_keep(resolve_run_id(), args.lock_path, int(args.owner_pid or 0),
+                 int(args.owner_created) if str(args.owner_created).isdigit() else None)
+        return 0
     parser.error("コマンドを指定（acquire/heartbeat/check/release/status か --selftest）")
     return 2
 

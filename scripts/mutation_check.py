@@ -7049,6 +7049,63 @@ MUTATIONS = [
         "after": "        if False:\n            ng.append(f",
         "run": ["scripts/add_machine_health.py"],
     },
+    # ─── 2026-10-02・合図を打ち続ける見張り役（task_lock） ──────────
+    {
+        "why": "★見張り役が、本体が終わっても合図を打ち続ける（★落ちたタスクのロックが残り続ける★）★",
+        "file": "scripts/task_lock.py",
+        "before": "        if not alive(owner_pid, owner_created):\n",
+        "after": "        if False:\n",
+        "run": ["scripts/task_lock.py"],
+    },
+    {
+        "why": "★見張り役が上限の時間で止まらない（★固まった本体が次のタスクを締め出す★）★",
+        "file": "scripts/task_lock.py",
+        "before": "        if clock() - t0 > max_sec:\n",
+        "after": "        if clock() - t0 > max_sec * 1000000:\n",
+        "run": ["scripts/task_lock.py"],
+    },
+    {
+        "why": "★ロックを手放した・奪われたあとも見張り役が止まらない★",
+        "file": "scripts/task_lock.py",
+        "before": "        if rc != 0:\n            why = \"ロックが自分のものでなくなった（解放・奪取）\"\n",
+        "after": "        if False:\n            why = \"ロックが自分のものでなくなった（解放・奪取）\"\n",
+        "run": ["scripts/task_lock.py"],
+    },
+    {
+        "why": "★試験用の一時ロックでも見張り役を起こす（★試験が裏に見張り役を残す★）★",
+        "file": "scripts/task_lock.py",
+        "before": "    if os.path.abspath(lock_path) != os.path.abspath(LOCK_PATH):\n        return \"not_real_lock\"\n",
+        "after": "",
+        "run": ["scripts/task_lock.py"],
+    },
+    {
+        "why": "★アプリ本体を本体とみなす（★ずっと生きているので、落ちたタスクのロックが上限まで残る★）★",
+        "file": "scripts/task_lock.py",
+        "before": "                return pid\n            return None\n",
+        "after": "                return pid\n            return pid\n",
+        "run": ["scripts/task_lock.py"],
+    },
+    {
+        "why": "★本体の作成時刻が読めなくても生きているとみなす（★番号の使い回しで無関係のプロセスを本体にする★）★",
+        "file": "scripts/task_lock.py",
+        "before": "    return now is not None and created is not None and now == created\n",
+        "after": "    return now is not None and (created is None or now == created)\n",
+        "run": ["scripts/task_lock.py"],
+    },
+    {
+        "why": "★上限を見張り役が起きた時刻から数える（★起こし直すと上限が延びる★）★",
+        "file": "scripts/task_lock.py",
+        "before": "        t0 -= max(0.0, ((now or datetime.datetime.now()) - _st).total_seconds())\n",
+        "after": "        pass\n",
+        "run": ["scripts/task_lock.py"],
+    },
+    {
+        "why": "★夜の新台タスクの見張り役が朝4:30で止まらない（★固まった晩に5:05の朝のタスクが入れない★）★",
+        "file": "scripts/task_lock.py",
+        "before": 'KEEP_UNTIL = {"add-machine": "04:30"}\n',
+        "after": "KEEP_UNTIL = {}\n",
+        "run": ["scripts/task_lock.py"],
+    },
 ]
 
 
