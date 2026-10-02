@@ -2398,13 +2398,16 @@
     "at:MAIN_AT",
     "at_prob",
     "ceiling:GAME:",
+    "ceiling:THROUGH:CZ",
     "cz:モグモグ大戦",
+    "cz:モグラ叩き",
+    "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-28",
-   "input_digest": "sha256:079391941f2d3ee0ef65c8ae96d38a3fb591fc058d9a4265d1b1bb164e6e471b"
+   "decided_at": "2026-10-02",
+   "input_digest": "sha256:f267946610230403394fdbb5756a95b69be46e5c7e9a0dea20fe67bdf4c9f592"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -2425,6 +2428,7 @@
    "regulatory_model_code": "Lモグモグ風林火山 大海戦の巻ZB"
   },
   "checker": {
+   "coinRate": 32.0,
    "unit": "G",
    "modes": [
     {
