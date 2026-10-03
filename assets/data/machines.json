@@ -12460,7 +12460,7 @@
    "input_digest": "sha256:9798729c4bb7ab5bcd3047baac83b783e2d2d9331e32559d764bd710d4db6463"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-12",
+  "release_date": "2026-12-21",
   "identity": {
    "manufacturer_id": "universal",
    "official_product_url": "https://p-town.dmm.com/machines/5100",
@@ -12468,7 +12468,7 @@
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5100 型式=未掲載 メーカー=アクロス 導入=2026-12 確認日=2026-09-13",
-   "market_release_date": "2026-12"
+   "market_release_date": "2026-12-21"
   }
  }
 ]
