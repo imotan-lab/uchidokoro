@@ -12412,7 +12412,7 @@
    "input_digest": "sha256:7807fe8477a17ea8227feb91589688c5301d70d363f59a7945a04802fe97fb4a"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-12",
+  "release_date": "2026-12-07",
   "identity": {
    "manufacturer_id": "yamasa_next",
    "official_product_url": "https://p-town.dmm.com/machines/5109",
@@ -12420,7 +12420,7 @@
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5109 型式=未掲載 メーカー=山佐ネクスト 導入=2026-12 確認日=2026-09-10",
-   "market_release_date": "2026-12"
+   "market_release_date": "2026-12-07"
   }
  },
  {
