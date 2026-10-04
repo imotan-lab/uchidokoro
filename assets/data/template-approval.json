@@ -26,7 +26,7 @@
   "guide-reset.html": "79fcc06cbce7c1326f56d1b2582c77cb5ad53773a79bdad6b91c233a6866603c",
   "guide-yamedoki.html": "c942817c9ef5faac33a6bf7d09bfd2ed692ce8c5391f36101cff4620186af8b1",
   "index.html": "cfd7088efb16afa404a99c2263ab38c7dbf6760dbc8e3aed127375501a8802f1",
-  "machine.html": "e47d01cf77d10e57a5d9f5301496de2d56e42e252b11948d3d7fa1d43d4824f5",
+  "machine.html": "2c8c876e3d20392b0fde930cf1985982f0ddcca29b992f26a80b74e97e0a7ee7",
   "manifest.json": "23be5d18069cfeb2c331b135f8976478e36543b3213006b991ed91e53a9bb90e",
   "meta-auto.js": "d99aab6119e4f465d6ca6cddeeea3339d9b0954297513507a8b4042943370032",
   "privacy.html": "5c53483dfaf0f543aa641561a711503153e224216dadba3971fd89bc05e4908d",
@@ -64,7 +64,7 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "ecc07863430476c152cdd79dc300b6387d68b1b466deeb2e80f1a3449ce51b1a",
-  "service-worker.js": "bc0cba27f8788cda0965d59c7d611af7a4580688bf65b3bc8126cbf7417d9f7b",
+  "service-worker.js": "94ba9dec7fa79f7653b207c2bbc11f57b188f98b4ad71bdb53a9aa54f6726093",
   "setting.html": "8c857e73f40e13c296f67010ba902550408d2543495ff08784c20f7501f9072d"
  }
 }

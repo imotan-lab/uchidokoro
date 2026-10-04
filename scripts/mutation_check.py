@@ -7354,6 +7354,20 @@ MUTATIONS = [
         "after": "",
         "run": ["scripts/checker_verdict.py"],
     },
+    {
+        "why": "★新台ページの期待値早見表に、狙い目から作る列が出ていても止めない（記事の『未確認』と食い違う）★",
+        "file": "scripts/audit_render.py",
+        "before": "        bad = [h for h in (v.get(\"heads\") or []) if any(w in str(h) for w in EV_TARGET_HEADS)]\n",
+        "after": "        bad = []\n",
+        "run": ["scripts/audit_render.py"],
+    },
+    {
+        "why": "★新台ページの帯の表で、判定の印の付いた行が出ていても止めない（見出し『判定』は名簿で拾えない形がある）★",
+        "file": "scripts/audit_render.py",
+        "before": "        if bad or int(v.get(\"judged\") or 0) > 0 or \"狙い目比\" in str(v.get(\"notes\") or \"\"):\n",
+        "after": "        if bad or \"狙い目比\" in str(v.get(\"notes\") or \"\"):\n",
+        "run": ["scripts/audit_render.py"],
+    },
 ]
 
 

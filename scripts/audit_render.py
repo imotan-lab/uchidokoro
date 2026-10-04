@@ -511,6 +511,50 @@ def _raises(fn) -> bool:
     return False
 
 
+EV_TARGET_HEADS = ("判定", "狙い目比")
+
+
+def judge_auto_ev(is_auto: bool, views) -> list:
+    """★R17：新台ページの期待値早見表に、狙い目から作る判定・比較が出ていないか★（2026-10-04）
+
+    ★なぜ★＝新台の記事の「当サイトの狙い目」は未確認のままなので、2AIがチェッカーに線を
+    入れると、同じページで「未確認」と「○ 目安以上」が並んで食い違っていた（Codex review221）。
+    ★見るのは見出しの文字だけではない★（代役の指摘）＝帯の表は見出しが「判定」だけで、
+    行に判定の印（ev-row-*）が付く。★早見表のモードを全部切り替えた姿★を受け取る。
+    views = [{"mode": 欄, "heads": [見出し], "judged": 判定の印の付いた行の数, "notes": 注記}]
+    """
+    if not is_auto:
+        return []
+    out = []
+    for v in (views or []):
+        if not isinstance(v, dict):
+            continue
+        bad = [h for h in (v.get("heads") or []) if any(w in str(h) for w in EV_TARGET_HEADS)]
+        if bad or int(v.get("judged") or 0) > 0 or "狙い目比" in str(v.get("notes") or ""):
+            out.append(f"R17: 新台ページの期待値早見表（{v.get('mode')}）に、狙い目から作る判定・比較が"
+                       f"出ています: 見出し={'・'.join(bad) or 'なし'} / 判定の行={v.get('judged')}")
+    return out
+
+
+EV_VIEWS_JS = r"""() => {
+  const out = [];
+  const grab = (mode) => ({
+    mode,
+    heads: Array.from(document.querySelectorAll('#evTable th')).map(e => e.textContent.trim()),
+    judged: document.querySelectorAll('#evTable tr.ev-row-ok, #evTable tr.ev-row-ng, #evTable tr.ev-row-wait, #evTable tr.ev-row-great').length,
+    notes: (document.getElementById('evTableNote') || {}).textContent || ''
+  });
+  const radios = Array.from(document.querySelectorAll('input[name="evMode"]'));
+  if (!radios.length) { out.push(grab('（切替なし）')); return out; }
+  for (const r of radios) {
+    r.checked = true;
+    r.dispatchEvent(new Event('change', { bubbles: true }));
+    out.push(grab(r.value));
+  }
+  return out;
+}"""
+
+
 def judge_toc(toc: dict, want: list) -> list[str]:
     """目次表が契約どおりか（★ブラウザ無しで試験できる純関数★）。"""
     ngs: list[str] = []
@@ -708,6 +752,11 @@ def check_one(page, machine: dict) -> list[str]:
     else:
         ngs += judge_toc(page.evaluate(TOC_JS), _want14)
 
+    # R17: 新台ページの期待値早見表に、狙い目から作る判定・比較が出ていないか（2026-10-04）
+    #   ★早見表のモードを全部切り替えて見る★（最初のモードだけだと2番目以降を見落とす）
+    if _is_auto:
+        ngs += judge_auto_ev(True, page.evaluate(EV_VIEWS_JS))
+
 
     # ★★R16: 交換率を実際に切り替えて、狙い目の箱を照合する★★
     #   （2026-09-11・Codexの指摘）＝
@@ -783,7 +832,13 @@ def check_one(page, machine: dict) -> list[str]:
     ev_modes = page.eval_on_selector_all(
         'input[name="evMode"]', "els=>els.map(e=>e.value)")
     common = [m for m in modes if m in ev_modes]
-    if len(common) >= 2:
+    # ★★チェッカーが隠れているページでは R12/R12b を当てない★★（2026-10-04）＝
+    #   新台ページはチェッカーを隠す（R14 が「隠れていること」を独立に確かめる）。
+    #   隠れた切替を押しに行って30秒待ち、時間切れを「同期の失敗」と報告していた（pw_10543）。
+    _ck_hidden = bool(page.evaluate(
+        "() => { const b = document.getElementById('checkerBlock');"
+        " return !b || b.classList.contains('is-hidden'); }"))
+    if len(common) >= 2 and not _ck_hidden:
         try:
             page.click(f'label[for="mode_{common[1]}"]')
             page.wait_for_timeout(120)
@@ -801,7 +856,7 @@ def check_one(page, machine: dict) -> list[str]:
     # R12b: 早見表に無いmode（スルー・周期）を選んだら、古いmodeの表が残らないこと
     #   （2026-07-27 Codex閉鎖確認2回目: 同期の例外経路が抜けていた）
     only_checker = [m for m in modes if m not in ev_modes]
-    if only_checker and ev_modes:
+    if only_checker and ev_modes and not _ck_hidden:
         try:
             page.click(f'label[for="mode_{only_checker[0]}"]')
             page.wait_for_timeout(120)
@@ -1095,6 +1150,23 @@ def selftest() -> int:
       _raises(lambda: expected_toc(
           {**_auto, "page_decision": {"schema_version": "こわれ"}},
           _det14, {})))
+
+    # ---- R17: 新台の期待値早見表（2026-10-04）
+    _ok_v = {"mode": "normal", "heads": ["打ち出しG数", "天井まで", "直行なら投入"], "judged": 0, "notes": ""}
+    t("★★新台ページの期待値早見表に『当サイト判定』『狙い目比』が出ていたら止める★★"
+      "（記事は狙い目未確認のまま、2AIの線で判定が出て食い違っていた）",
+      len(judge_auto_ev(True, [{**_ok_v, "heads": _ok_v["heads"] + ["当サイト判定"]}])) == 1
+      and len(judge_auto_ev(True, [{**_ok_v, "heads": ["打ち出しG数", "狙い目比"]}])) == 1)
+    t("★★帯の表（見出し『判定』・判定の印の付いた行）でも止める★★（代役の指摘・天井が無い欄）",
+      len(judge_auto_ev(True, [{"mode": "reset", "heads": ["G数帯", "判定"], "judged": 3, "notes": ""}])) == 1
+      and len(judge_auto_ev(True, [{**_ok_v, "judged": 2}])) == 1)
+    t("★★2番目以降のモードだけに判定が出ても止める★★",
+      len(judge_auto_ev(True, [_ok_v, {"mode": "reset", "heads": ["G数帯", "判定"], "judged": 1, "notes": ""}])) == 1)
+    t("　『狙い目比』の注記だけが残っても止める",
+      len(judge_auto_ev(True, [{**_ok_v, "notes": "「狙い目比」は、当サイトの狙い目ラインを±0円…"}])) == 1)
+    t("　天井までと投入額だけなら通る／既存機種は対象外",
+      judge_auto_ev(True, [_ok_v]) == []
+      and judge_auto_ev(False, [{"mode": "x", "heads": ["判定"], "judged": 5, "notes": "狙い目比"}]) == [])
 
     def _toc_of(labels, shown=True, exists=True, target_shown=True,
                 doc="https://x/machines/zzz/"):
