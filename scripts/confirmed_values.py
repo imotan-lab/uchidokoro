@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import io
 import json
 import os
 import sys
@@ -2899,6 +2900,35 @@ def selftest() -> int:
               "（★正常な控えを『壊れています』と案内していた★）",
               _rc5 == 2 and "渡された値のファイル" in _b5.getvalue()
               and "控えのファイルが壊れています" not in _b5.getvalue())
+
+            # ★★--wording-why-file を受け取れること★★（2026-10-05）
+            #   ★直す前は io を取り込んでいなかった★ので、ファイルを読む所で
+            #   名前の誤りになり「読めません」で必ず止まった＝2AIが決めた
+            #   書き方の違い（台帳#691）を CLI から記録する口が一度も動かなかった。
+            #   ★出典を渡さない形で呼ぶ★＝理由を読んだあと、通信の前で止まる。
+            _wf6 = os.path.join(os.path.dirname(STORE), "書き方の理由.txt")
+            open(_wf6, "w", encoding="utf-8").write(
+                "同じ仕組みを語順だけ変えて書いていると2AIが判断した理由です")
+            _b6 = _io596.StringIO()
+            _av6 = sys.argv
+            sys.argv = ["confirmed_values.py", "--record", "--slug", "zzz",
+                        "--field", "gameplay#normal_cz", "--value", "x",
+                        "--official-url", "https://p-town.dmm.com/machines/1",
+                        "--by", "claude,codex", "--why", "試験のためです",
+                        "--wording", "https://nana-press.com/kaiseki/machine/1/"
+                        "|リプレイの規定回数|規定リプレイ回数",
+                        "--wording-why-file", _wf6]
+            try:
+                with _cl596.redirect_stdout(_b6):
+                    _rc6 = main()
+            except Exception as _e6:                         # noqa: BLE001
+                _rc6 = "落ちました: " + type(_e6).__name__
+            finally:
+                sys.argv = _av6
+            t("★★--wording-why-file を受け取れる★★"
+              "（★直す前は io を取り込んでおらず、読む所で必ず止まっていた★）",
+              "--wording-why-file を読めません" not in _b6.getvalue()
+              and not str(_rc6).startswith("落ちました"))
 
             t("★★控えのファイルが壊れていても、理由を出して終わる★★"
               "（★直す前は traceback で落ち、何が起きたか伝わらなかった★）",

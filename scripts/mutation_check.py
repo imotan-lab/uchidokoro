@@ -7368,6 +7368,14 @@ MUTATIONS = [
         "after": "        if bad or \"狙い目比\" in str(v.get(\"notes\") or \"\"):\n",
         "run": ["scripts/audit_render.py"],
     },
+    # ─── 2026-10-05・更新タスクの自己修正（書き方の違いの理由を受け取る口）───
+    {
+        "why": "★io を取り込まない（★--wording-why-file が必ず『読めません』で止まり、2AIが決めた書き方の違いを記録できない★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "import datetime\nimport io\nimport json\n",
+        "after": "import datetime\nimport json\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
 ]
 
 
