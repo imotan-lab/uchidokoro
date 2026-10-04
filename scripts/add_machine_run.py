@@ -899,6 +899,39 @@ def missing_benefit_questions(rows) -> list:
         rec = mb.get("record") if isinstance(mb.get("record"), dict) else {}
         rp = ("／".join(f"{k}={v}" for k, v in rec.items())
               or "kind・amount・unit・counted")
+        # ★★設定変更後に短くなるゲーム数天井は、朝一・リセットの記録へ案内する★★
+        #   （2026-10-04・pw_10501 で実際に起きた）＝下の案内どおり天井の項目へ
+        #   記録すると、天井・恩恵の欄に「設定変更後」と書かれない2本目の
+        #   ゲーム数天井ができ、★監査36（同じ見出しの重複）が書き込みを毎回取り消す★。
+        #   サイトの作りでは、この天井は `reset#ceiling`（CEILING_SHORTENED）で、
+        #   朝一・リセット情報の欄に「設定変更後の天井」として出る。
+        #   ★判定は記録の値（機械が読めた after_event と kind）だけで決める★
+        if (str(rec.get("after_event") or "") == "設定変更"
+                and str(rec.get("kind") or "") == "GAME"):
+            rc = f"／counted={rec['counted']}" if rec.get("counted") else ""
+            # ★★項目名は候補ごとに分ける★★（2026-10-04・Codexの指摘1）＝
+            #   `reset#ceiling` 固定だと、設定変更後の天井が2つ（CZ間・AT間など）
+            #   ある機種で★あとの答えが前の記録を上書きする★（記録は項目名で入れ替わる）。
+            #   候補の項目名（`ceiling#game-600-e455c4`）の「#」より後ろを使う。
+            rf = "reset#" + (str(mb.get("field") or "").split("#", 1)[1]
+                             if "#" in str(mb.get("field") or "")
+                             else f"ceiling-{mb.get('amount')}")
+            out.append(
+                f"★{mb.get('jp') or '天井'}{c} は "
+                f"{mb.get('amount')}{mb.get('unit') or ''} と読めましたが、"
+                f"{ipart}"
+                "★これは設定変更後に短くなる天井です★"
+                "／出典で設定変更後に短くなることを確かめられたら、"
+                f"confirmed_values.py --record --field {rf} で記録してください"
+                f"（値に入れる項目＝kind=CEILING_SHORTENED／games={mb.get('amount')}{rc}）"
+                "／★天井の項目名（ceiling# で始まる名前）では記録しないでください★"
+                "（天井・恩恵の欄に「設定変更後」と書かれない2本目の天井ができ、"
+                "同じ見出しの重複として書き込みが毎回取り消されます）"
+                "／★項目名はこの候補のためのものです★（ほかの reset# の記録を上書きしないため）"
+                "／★同じ事実を reset# の項目（reset#ceiling・reset#cz・reset#at など）で"
+                "既に記録してあれば、答えなくてかまいません★"
+                f"（読んだ先: {where}）")
+            continue
         out.append(
             f"★{mb.get('jp') or '天井'}{c} は "
             f"{mb.get('amount')}{mb.get('unit') or ''} と読めましたが、"
@@ -4284,6 +4317,46 @@ def _selftest_body() -> int:
           sum("mode=特殊モード" in q for q in _qs_mode) == 1
           and all("counted=通常時" in q and "kind=GAME" in q
                   for q in _qs_mode))
+        # ★★設定変更後に短くなる天井は、朝一・リセットの記録へ案内する★★
+        #   （2026-10-04・pw_10501 で実際に起きた）＝案内どおり `ceiling#…` に
+        #   記録すると、天井・恩恵の欄に「設定変更後」と書かれない2本目の
+        #   ゲーム数天井ができ、★監査36が書き込みを毎回取り消す★。
+        #   サイトの作りでは、この天井は `reset#ceiling`（CEILING_SHORTENED）。
+        _mb_rs = _cl.compare([
+            {"ok": True, "host": h, "url": f"https://{h}/zz/5/", "ceilings": [
+                _cl._atom("GAME", 600, "G", counted="通常時", benefit="",
+                          after_event="設定変更")]}
+            for h in ("chonborista.com", "nana-press.com")]).get(
+                "missing_benefit") or []
+        _qs_rs = missing_benefit_questions(_mb_rs)
+        t("★★設定変更後に短くなる天井は reset# の記録へ案内する★★"
+          "（★ceiling#… へ記録すると監査36が書き込みを毎回取り消す★）",
+          len(_qs_rs) == 1
+          and "--field reset#" in _qs_rs[0]
+          and "kind=CEILING_SHORTENED" in _qs_rs[0]
+          and "games=600" in _qs_rs[0]
+          and "--field ceiling#" not in _qs_rs[0])
+        # ★★設定変更後の天井が2つなら、記録の項目名も2つに分かれる★★
+        #   （2026-10-04・Codexの指摘1）＝`reset#ceiling` 固定だと、
+        #   ★あとの答えが前の記録を上書きする★。
+        _mb_rs2 = _cl.compare([
+            {"ok": True, "host": h, "url": f"https://{h}/zz/6/", "ceilings": [
+                _cl._atom("GAME", 250, "G", counted="CZ間", benefit="",
+                          after_event="設定変更"),
+                _cl._atom("GAME", 600, "G", counted="AT間", benefit="",
+                          after_event="設定変更")]}
+            for h in ("chonborista.com", "nana-press.com")]).get(
+                "missing_benefit") or []
+        _qs_rs2 = missing_benefit_questions(_mb_rs2)
+        t("★★設定変更後の天井が2つなら、reset# の項目名も2つに分かれる★★"
+          "（★同じ名前だと、あとの答えが前の記録を上書きする★）",
+          len(_qs_rs2) == 2
+          and all("--field reset#" in q for q in _qs_rs2)
+          and len({q.split("--field ", 1)[1].split(" ", 1)[0]
+                   for q in _qs_rs2}) == 2)
+        t("　（対照）設定変更と関係の無い天井は、今までどおり候補の項目名へ案内する",
+          "--field ceiling#" in _qs_mode[0]
+          and "reset#ceiling" not in _qs_mode[0])
         t("　URLが控えられていないときは、問いにそう書く（黙ってURL無しにしない）",
           "控えられていません" in missing_benefit_questions(
               [{"jp": "スルー天井", "amount": 6, "unit": "スルー",

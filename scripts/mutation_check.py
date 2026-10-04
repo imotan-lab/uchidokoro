@@ -917,6 +917,20 @@ MUTATIONS = [
         "run": ["scripts/add_machine_run.py"],
     },
     {
+        "why": "★設定変更後に短くなる天井も天井の項目へ案内する（★2本目の天井ができて監査36が書き込みを毎回取り消す★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "        if (str(rec.get(\"after_event\") or \"\") == \"設定変更\"\n                and str(rec.get(\"kind\") or \"\") == \"GAME\"):",
+        "after": "        if (False\n                and str(rec.get(\"kind\") or \"\") == \"GAME\"):",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★設定変更後の天井の記録先を reset#ceiling 固定にする（★天井が2つある機種で、あとの答えが前の記録を上書きする★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "            rf = \"reset#\" + (str(mb.get(\"field\") or \"\").split(\"#\", 1)[1]",
+        "after": "            rf = \"reset#ceiling\" or (str(mb.get(\"field\") or \"\").split(\"#\", 1)[1]",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
         "why": "★候補ごとの項目名をやめて `ceiling` 固定にする（★2つ目の答えが1つ目と既存の記録を消す★）★",
         "file": "scripts/ceiling_lookup.py",
         "before": "    return \"ceiling#\" + head + \"-\" + sig",

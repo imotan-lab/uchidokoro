@@ -6,7 +6,7 @@
   "assets/data/directory-catalogs.json": "a368d3e2839d3944b2b8064e40c735268c34da52d8eec6b294e1e55bf91205eb",
   "assets/data/maker-catalogs.json": "c1bfaa9377e999f95bcefc5d1958a88e07356d2dbb40f2e1f6ef2a68e2952308",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
-  "scripts/add_machine_run.py": "71a85dce85f483d73ac794626a331d17801290e0c8a039ae163c6003c73cc411",
+  "scripts/add_machine_run.py": "a1a0e1caf55d3fc62228af501e5a36c3fdefa34803cdfc7822ef9641410f7ec1",
   "scripts/adoption_basis.py": "e24f2f35aa8451b0466cceeff6035266b078e89f216482a9aa30348a42a3837e",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
