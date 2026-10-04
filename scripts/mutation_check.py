@@ -7347,6 +7347,13 @@ MUTATIONS = [
         "after": "",
         "run": ["scripts/add_machine_health.py"],
     },
+    {
+        "why": "★線がすでに同じだと一覧の作り直しを流さない（途中で失敗した状態が二度と収束しない・Codex review219）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        if rate_keys(new) and not dry_run:\n            return _rebuild_target_text()\n",
+        "after": "",
+        "run": ["scripts/checker_verdict.py"],
+    },
 ]
 
 

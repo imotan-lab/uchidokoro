@@ -763,6 +763,26 @@ def merged(m: dict, dec: dict) -> dict:
     return out
 
 
+def _rebuild_target_text() -> int:
+    """★交換率を持つ機種の一覧と箱の文を、チェッカーの線から作り直す★（target_display・全か無か）
+
+    ★失敗しても何も元に戻さない★（2026-10-04・Codex review218/219）＝
+    控えで上書きすると、照合と書き戻しの隙間に入った他人の更新を消しうる。
+    線は書いたまま残り、★同じ決定をもう一度流せばここが呼ばれて収束する★
+    （食い違ったままの公開は、push 前の関所が target_display --check で止める）。
+    """
+    try:
+        import target_display as _td
+        rc = _td.apply_all()
+    except Exception as e:                # noqa: BLE001
+        print(f"★一覧の文を作り直せません: {type(e).__name__}: {e}★")
+        rc = 1
+    if rc != 0:
+        print("★線は書きましたが、一覧の文を作り直せませんでした★（何も元に戻していません。"
+              "同じ決定をもう一度流すと作り直します）")
+    return rc
+
+
 def apply_decision(path: str, dry_run: bool = False) -> int:
     dec = _sj.read_json(path, expect=dict)
     ms = _machines()
@@ -797,21 +817,17 @@ def apply_decision(path: str, dry_run: bool = False) -> int:
     new = merged(ms[i], dec)
     if new == ms[i]:
         print(f"{slug}: すでにその線になっています（書きません）")
+        # ★★交換率を持つ機種は、一覧の作り直しだけは必ず流す★★（Codex review219）＝
+        #   前回の作り直しが途中で失敗していると、ここで終わると二度と作り直されず、
+        #   push 前の関所が止まり続ける（同じ決定の再実行で収束させる）。
+        if rate_keys(new) and not dry_run:
+            return _rebuild_target_text()
         return 0
     if dry_run:
         print(f"{slug}: こう書きます →")
         print("  " + json.dumps(new.get("checker"), ensure_ascii=False)[:600])
         return 0
     ms[i] = new
-    with open(MACHINES, "rb") as _f0:
-        _backup = _f0.read()           # ★作り直しが駄目なら書き戻す★
-    # ★一覧の作り直しは記事データの箱も書く★ので、記事データも控える（全機種ぶん）
-    _dback = {}
-    if rate_keys(new):
-        for _fn in os.listdir(DETAILS):
-            if _fn.endswith(".json"):
-                with open(os.path.join(DETAILS, _fn), "rb") as _f2:
-                    _dback[_fn] = _f2.read()
     tmp = MACHINES + ".tmp"
     # ★字下げ1・LF★＝ほかの書き手（grow_machine / publish_new_machine 等）と同じ書式。
     #   （2026-09-25）直す前は字下げ2・Windowsでは CRLF で、線を1本入れただけで
@@ -826,24 +842,7 @@ def apply_decision(path: str, dry_run: bool = False) -> int:
         return 1
     if rate_keys(new):
         # ★★交換率を持つ機種は、一覧と箱の文を同じ場で作り直す★★（2026-10-02・#428）
-        #   ★作り直せなければ、線も書き戻す★（線だけ変わって一覧が古いまま残らない）
-        try:
-            import target_display as _td
-            _rc = _td.apply_all()
-        except Exception as e:            # noqa: BLE001
-            print(f"★一覧の文を作り直せません: {type(e).__name__}: {e}★")
-            _rc = 1
-        if _rc != 0:
-            with open(MACHINES, "wb") as _f1:
-                _f1.write(_backup)
-            for _fn, _b in _dback.items():
-                _p = os.path.join(DETAILS, _fn)
-                with open(_p, "rb") as _f3:
-                    _now = _f3.read()
-                if _now != _b:
-                    with open(_p, "wb") as _f4:
-                        _f4.write(_b)
-            print("★一覧の文を作り直せなかったので、線も元に戻しました（何も変えていません）★")
+        if _rebuild_target_text() != 0:
             return 1
     print(f"{slug}: 狙い目の線を書きました "
           f"（{'・'.join(str(x.get('key')) for x in dec.get('modes') or [])}）")
@@ -960,6 +959,83 @@ def _format_tests(t) -> None:
           and '\n  "zeta": "後",\n  "slug": "zzz_other",\n  "alpha": "前"\n' in _txt)
     finally:
         MACHINES = keep
+        import shutil
+        shutil.rmtree(tmpd, ignore_errors=True)
+
+
+def _restore_tests(t) -> None:
+    """★一覧の作り直しが失敗したときの書き戻し★（2026-10-04・Codex review218）
+
+    ★本物の machines.json には触らない★＝一時の場所へ向け直し、作り直しの道具は偽物に差し替える。
+    """
+    import tempfile
+    import types
+    import contextlib
+    import io as _io
+    global MACHINES
+    keep = MACHINES
+    keep_td = sys.modules.get("target_display")
+    tmpd = tempfile.mkdtemp(prefix="ckrst_")
+    try:
+        ms = [{"slug": "zzz_rate", "name": "試験機",
+               "checker": {"unit": "G",
+                           "exchangeRates": [{"key": "eq56", "label": "5.6枚"},
+                                             {"key": "rate55", "label": "6.0枚"}],
+                           "modes": [{"key": "normal", "label": "通常"}],
+                           "normal": {"ceiling": 1000, "caution": 300, "good": 450,
+                                      "excellent": 600,
+                                      "byRate": {"eq56": {"good": 420}}}}}]
+        orig = (json.dumps(ms, ensure_ascii=False, indent=1) + "\n").encode("utf-8")
+        MACHINES = os.path.join(tmpd, "machines.json")
+        dp = os.path.join(tmpd, "dec.json")
+        with open(dp, "w", encoding="utf-8") as f:
+            json.dump({"slug": "zzz_rate", "judges": ["claude", "codex"],
+                       "why": "交換率の逆転を直すための試験の決定です",
+                       "modes": [{"key": "normal", "byRate": {"eq56": {"good": 400}}}]},
+                      f, ensure_ascii=False)
+        other = b'[{"slug": "zzz_rate", "name": "\xe5\x88\xa5\xe3\x81\xae\xe6\x9b\xb8\xe3\x81\x8d\xe6\x89\x8b"}]\n'
+
+        def _run(apply_all):
+            with open(MACHINES, "wb") as f:
+                f.write(orig)
+            sys.modules["target_display"] = types.SimpleNamespace(apply_all=apply_all)
+            with contextlib.redirect_stdout(_io.StringIO()):
+                rc = apply_decision(dp)
+            with open(MACHINES, "rb") as f:
+                return rc, f.read()
+
+        def _intrude():
+            with open(MACHINES, "wb") as f:   # ★ほかの書き手が入った★
+                f.write(other)
+            return 1
+
+        rc1, got1 = _run(lambda: 1)
+        _g1 = json.loads(got1.decode("utf-8"))
+        _e1 = (((_g1[0].get("checker") or {}).get("normal") or {}).get("byRate") or {}).get("eq56") or {}
+        t("★★作り直しが失敗しても、何も元に戻さない★★（線は書いたまま・非0で終わる）"
+          "（控えで上書きすると、隙間に入った他人の更新を消しうる・Codex review219）",
+          rc1 == 1 and _e1.get("good") == 400)
+        calls = []
+
+        def _ok():
+            calls.append(1)
+            return 0
+        sys.modules["target_display"] = types.SimpleNamespace(apply_all=_ok)
+        with contextlib.redirect_stdout(_io.StringIO()):
+            rc2 = apply_decision(dp)          # ★書かずに、同じ決定をもう一度★
+        with open(MACHINES, "rb") as f:
+            got2 = f.read()
+        t("★★線がすでに同じでも、同じ決定の再実行で一覧の作り直しを流す★★"
+          "（直す前は『すでにその線』で終わり、二度と作り直されなかった・Codex review219）",
+          rc2 == 0 and calls == [1] and got2 == got1)
+        rc3, got3 = _run(_intrude)
+        t("　作り直しの途中で他人が書き換えても、その内容を消さない", rc3 == 1 and got3 == other)
+    finally:
+        MACHINES = keep
+        if keep_td is not None:
+            sys.modules["target_display"] = keep_td
+        else:
+            sys.modules.pop("target_display", None)
         import shutil
         shutil.rmtree(tmpd, ignore_errors=True)
 
@@ -1416,6 +1492,7 @@ def selftest() -> int:
 
     _no_line_tests(t)
     _format_tests(t)
+    _restore_tests(t)
     print(f"\n{ok[0]}/{ok[1]} 合格")
     return 0 if ok[0] == ok[1] else 1
 
