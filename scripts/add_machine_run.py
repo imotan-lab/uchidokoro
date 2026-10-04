@@ -1953,6 +1953,14 @@ _BLOCKER_CODES = (
     ("取得できません", "SOURCE_FETCH_FAILED"),
     ("名鑑の個別ページが", "NOT_ENOUGH_DIRECTORIES"),
     ("メーカー照合の控えを読めません", "MAKER_CACHE_UNREADABLE"),
+    # ★★名鑑ページの採否を2AIに聞いている、は別の符丁★★（2026-10-04・Codex review215）＝
+    #   番兵が導入前に黙るのはこれだけ。★メーカーの本物の異常（名簿を読めない・名簿に無い・
+    #   食い違う・読めない）は先に拾って MAKER_UNRESOLVED のまま★（黙らせない）。
+    ("メーカー名簿を読めません", "MAKER_UNRESOLVED"),
+    ("メーカーが名簿にありません", "MAKER_UNRESOLVED"),
+    ("メーカーが食い違います", "MAKER_UNRESOLVED"),
+    ("メーカーを読めませんでした", "MAKER_UNRESOLVED"),
+    ("メーカー欄を確かめられない", "MAKER_REVIEW_PENDING"),
     ("メーカー", "MAKER_UNRESOLVED"),
     ("採用できた材料", "NO_MATERIAL"),
     ("型式", "MODEL_CODE_MISSING"),

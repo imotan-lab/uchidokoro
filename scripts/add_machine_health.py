@@ -185,7 +185,12 @@ def check_log(day: str) -> list:
 #   ここに無い符丁（サイト監査・公開の関所・取得の失敗・控えが読めない）は
 #   **うちの都合**なので、導入がどれだけ先でも知らせる。
 PRE_RELEASE_QUIET = ("NO_MATERIAL", "NOT_ENOUGH_DIRECTORIES",
-                     "MODEL_CODE_MISSING")
+                     "MODEL_CODE_MISSING",
+                     # ★導入前のメーカー照合待ち★（2026-10-04）＝相手のページが全項目
+                     #   「調査中」の間は、2AIで割れても足す材料が無く、夜のタスクは
+                     #   回数を使わずに待つ（手順書の決まり）。毎朝🟡が出ていた
+                     #   （L聖闘士星矢・8回）。★3日前を過ぎれば理由を問わず🔴★
+                     "MAKER_REVIEW_PENDING")
 
 
 def far_from_release(release: str, today=None,
@@ -506,6 +511,13 @@ def selftest() -> int:
           check_stuck(_T7) == [])
         t("　★回数のほうでも知らせない★（27回試していても）",
           not any("作れていません" in x for x in check_stuck(_T7)))
+        _fake({"q_1": {**_far["q_1"], "last_blocker": "MAKER_REVIEW_PENDING"}})
+        t("★★導入前のメーカー照合待ちも、3日前までは知らせない★★"
+          "（相手が全項目『調査中』の間は2AIに足す材料が無く、夜のタスクが待つ決まり・"
+          "L聖闘士星矢で毎朝🟡が出ていた）",
+          check_stuck(_T7) == []
+          and len(check_stuck("2026-10-30")) == 1)
+        _fake(_far)
         t("　導入6日前ではまだ知らせない（3日前まで待つ）",
           check_stuck("2026-10-27") == [])
         _red = check_stuck("2026-10-30")
@@ -659,6 +671,19 @@ def selftest() -> int:
         t(f"★★{_name}晩は黙らない★★"
           "（本番では『名鑑の個別ページが0件』も同時に出る）",
           bool(_c) and _c not in PRE_RELEASE_QUIET)
+    _c4 = _amr._blocker_code({"blocked": [], "problems": [
+        "読めなかった出典があります（メーカー欄を確かめられない）: chonborista.com",
+        "型式名: 型式名が1つの名鑑にしか載っていません"]})
+    t("★★名鑑ページの採否を2AIに聞いている晩は、導入前は黙る対象★★"
+      "（L聖闘士星矢で毎朝🟡が出ていた）",
+      _c4 == "MAKER_REVIEW_PENDING" and _c4 in PRE_RELEASE_QUIET)
+    for _bad in ("メーカー名簿を読めません: x", "メーカーが名簿にありません: 'x'",
+                 "メーカーが食い違います（期待: a / 名鑑: b）"):
+        _c5 = _amr._blocker_code({"blocked": [], "problems": [
+            "読めなかった出典があります（メーカー欄を確かめられない）: chonborista.com",
+            _bad]})
+        t(f"★★メーカーの本物の異常は黙らない★★（{_bad[:12]}…・Codex review215）",
+          _c5 == "MAKER_UNRESOLVED" and _c5 not in PRE_RELEASE_QUIET)
     _c2 = _amr._blocker_code({"blocked": [], "problems": [_NO_MAT]})
     t("　本当に材料が無いだけの晩は、今までどおり黙る対象",
       _c2 in PRE_RELEASE_QUIET)

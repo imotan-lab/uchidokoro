@@ -7332,6 +7332,21 @@ MUTATIONS = [
         "after": "        if \"good\" not in vals and not md.get(\"byRate\"):\n",
         "run": ["scripts/checker_verdict.py"],
     },
+    # ─── 2026-10-04・番兵が導入前に黙るのは「名鑑ページの採否を2AIに聞いている」だけ ───
+    {
+        "why": "★導入前のメーカー照合待ち（名鑑ページの採否を2AIに聞いている）で毎朝🟡を出す（意図して待っている機種で本物の警告が埋もれる）★",
+        "file": "scripts/add_machine_health.py",
+        "before": "                     \"MAKER_REVIEW_PENDING\")\n",
+        "after": "                     )\n",
+        "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★メーカーの本物の異常（食い違い）まで『2AIに聞いている』として番兵が黙る★",
+        "file": "scripts/add_machine_run.py",
+        "before": "    (\"メーカーが食い違います\", \"MAKER_UNRESOLVED\"),\n",
+        "after": "",
+        "run": ["scripts/add_machine_health.py"],
+    },
 ]
 
 
