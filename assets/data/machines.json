@@ -76,62 +76,6 @@
   }
  },
  {
-  "slug": "ssb1",
-  "name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
-  "seo": {
-   "title": "L青春ブタ野郎はバニーガール先輩の夢を見ない スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [
-    "ceiling",
-    "cz",
-    "gameplay"
-   ],
-   "pending_topics": [
-    "spec",
-    "setting",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at:MAIN_AT",
-    "ceiling:GAME:CZ間",
-    "ceiling:GAME:ボーナス間",
-    "ceiling:POINT:思春期ポイント",
-    "cz:エピソードチャンス"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-09-09",
-   "input_digest": "sha256:ac49a5778c930e9982e96b2f53c8531ce704da3e16ff82836c12c92215b5ca2d"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-09-07",
-  "identity": {
-   "manufacturer_id": "heiwa",
-   "official_product_url": "https://p-town.dmm.com/machines/5064",
-   "announced_name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
-   "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5064 型式=L青春ブタ野郎L1 メーカー=オリンピア 導入=2026-09-07 確認日=2026-08-16",
-   "market_release_date": "2026-09-07",
-   "_legacy_official_product_url": "https://www.heiwanet.co.jp/products/pachislot/ssb1/",
-   "regulatory_model_code": "L青春ブタ野郎L1",
-   "_model_code_sources": [
-    "p-town.dmm.com",
-    "p-world.co.jp"
-   ]
-  }
- },
- {
   "slug": "tokyo_ghoul",
   "name": "L 東京喰種",
   "seo": {
@@ -388,6 +332,62 @@
   }
  },
  {
+  "slug": "ssb1",
+  "name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
+  "seo": {
+   "title": "L青春ブタ野郎はバニーガール先輩の夢を見ない スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "ceiling",
+    "cz",
+    "gameplay"
+   ],
+   "pending_topics": [
+    "spec",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "ceiling:GAME:CZ間",
+    "ceiling:GAME:ボーナス間",
+    "ceiling:POINT:思春期ポイント",
+    "cz:エピソードチャンス"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-09",
+   "input_digest": "sha256:ac49a5778c930e9982e96b2f53c8531ce704da3e16ff82836c12c92215b5ca2d"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-09-07",
+  "identity": {
+   "manufacturer_id": "heiwa",
+   "official_product_url": "https://p-town.dmm.com/machines/5064",
+   "announced_name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5064 型式=L青春ブタ野郎L1 メーカー=オリンピア 導入=2026-09-07 確認日=2026-08-16",
+   "market_release_date": "2026-09-07",
+   "_legacy_official_product_url": "https://www.heiwanet.co.jp/products/pachislot/ssb1/",
+   "regulatory_model_code": "L青春ブタ野郎L1",
+   "_model_code_sources": [
+    "p-town.dmm.com",
+    "p-world.co.jp"
+   ]
+  }
+ },
+ {
   "slug": "sao2",
   "name": "スマスロ ソードアート・オンラインⅡ",
   "release_date": "2026-06-08",
@@ -615,6 +615,35 @@
   }
  },
  {
+  "slug": "toaru_index2",
+  "name": "スマスロ とある魔術の禁書目録2",
+  "release_date": "2026-08-03",
+  "seo": {
+   "title": "スマスロ とある魔術の禁書目録2 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "算定中（AT間1200G／CZ間800G+α）",
+  "aliases": [
+   "禁書目録2",
+   "とある魔術の禁書目録2",
+   "インデックス2",
+   "きんしょもくろく2",
+   "とある2",
+   "とあるまじゅつのきんしょもくろく2"
+  ],
+  "limit": null,
+  "original": {
+   "title": "とある魔術の禁書目録",
+   "kind": "ライトノベル",
+   "search": "とある魔術の禁書目録 小説"
+  },
+  "identity": {
+   "manufacturer_id": "fujishoji",
+   "regulatory_model_code": "Lとある魔術の禁書目録2FA",
+   "market_release_date": "2026-08-03"
+  }
+ },
+ {
   "slug": "pw_10543",
   "name": "Lパチスロ 彼女、お借りします",
   "seo": {
@@ -711,35 +740,6 @@
     "ceiling": 600,
     "target": 180
    }
-  }
- },
- {
-  "slug": "toaru_index2",
-  "name": "スマスロ とある魔術の禁書目録2",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "スマスロ とある魔術の禁書目録2 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（AT間1200G／CZ間800G+α）",
-  "aliases": [
-   "禁書目録2",
-   "とある魔術の禁書目録2",
-   "インデックス2",
-   "きんしょもくろく2",
-   "とある2",
-   "とあるまじゅつのきんしょもくろく2"
-  ],
-  "limit": null,
-  "original": {
-   "title": "とある魔術の禁書目録",
-   "kind": "ライトノベル",
-   "search": "とある魔術の禁書目録 小説"
-  },
-  "identity": {
-   "manufacturer_id": "fujishoji",
-   "regulatory_model_code": "Lとある魔術の禁書目録2FA",
-   "market_release_date": "2026-08-03"
   }
  },
  {
@@ -1413,6 +1413,127 @@
   "tenjo_display": "液晶1200G/実890G"
  },
  {
+  "slug": "dmm_5095",
+  "name": "スマスロ モンスターハンターライズ：サンブレイク",
+  "seo": {
+   "title": "スマスロ モンスターハンターライズ：サンブレイク スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "cz",
+    "gameplay",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "ceiling",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "at_prob",
+    "cz:アイルー福引",
+    "cz:ブレイクゾーン",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-29",
+   "input_digest": "sha256:2fbc6b6a1738c8fcdb677218716d28b5158e21156a514177fc85c1271e0dc94e"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-05",
+  "identity": {
+   "manufacturer_id": "adelion",
+   "official_product_url": "https://p-town.dmm.com/machines/5095",
+   "announced_name": "スマスロ モンスターハンターライズ：サンブレイク",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5095 型式=L MHRサンブレイクXA メーカー=アデリオン 導入=2026-10-05 確認日=2026-09-24",
+   "market_release_date": "2026-10-05",
+   "observed_model_code": "L MHRサンブレイクXA",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  }
+ },
+ {
+  "slug": "pw_10521",
+  "name": "スマスロ 獣王",
+  "seo": {
+   "title": "スマスロ 獣王 スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "gameplay",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "cz",
+    "ceiling",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-28",
+   "input_digest": "sha256:4b9280e489d25dbc3570576f47836fb43ca0ea5a94efdf13c9ee3ade8a9acf5b"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-05",
+  "identity": {
+   "manufacturer_id": "sammy",
+   "official_product_url": "https://p-town.dmm.com/machines/5061",
+   "announced_name": "スマスロ 獣王",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5061 型式=未掲載 メーカー=サミー 導入=2026-10-05 確認日=2026-08-16",
+   "market_release_date": "2026-10-05",
+   "_legacy_evidence_ref": "pworld:10521 型式=L 獣王 XZ 検定=6S0560 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10521",
+   "observed_model_code": "L 獣王 XZ",
+   "_observed_model_code_sources": [
+    "p-world.co.jp"
+   ]
+  },
+  "checker": {
+   "coinRate": 31.8,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {}
+  }
+ },
+ {
   "slug": "valvrave2",
   "name": "Lパチスロ 革命機ヴァルヴレイヴ2",
   "seo": {
@@ -1950,66 +2071,6 @@
   }
  },
  {
-  "slug": "yajikita_mairu",
-  "name": "スマスロ やじきた道中記参る！",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "スマスロ やじきた道中記参る！ 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（天井は999まいる／6スルー）",
-  "aliases": [
-   "やじきた道中記参る",
-   "やじきた",
-   "やじきた道中記",
-   "やじきた参る",
-   "やじきたどうちゅうき",
-   "参る"
-  ],
-  "limit": null
- },
- {
-  "slug": "sengoku_collection6",
-  "name": "L戦国コレクション6",
-  "release_date": "2026-07-06",
-  "seo": {
-   "title": "L戦国コレクション6 天井・狙い目・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "チェッカー基準 通常720G〜",
-  "aliases": [
-   "戦国コレクション6",
-   "戦コレ6",
-   "せんごくコレクション6",
-   "せんこれ6",
-   "sengoku_collection6",
-   "sencolle6",
-   "L戦国コレクション6",
-   "戦国コレクション6スマスロ"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "excellent": 850,
-    "good": 720,
-    "caution": 580,
-    "note": "G数天井999G+αと周期天井最大6周期の複合型。リセット後は周期天井が最大3周期に短縮（リセット狙い目ラインは解析待ち）。"
-   }
-  },
-  "limit": 999,
-  "original": {
-   "title": "戦国コレクション",
-   "kind": "ゲーム",
-   "search": "戦国コレクション ゲーム"
-  }
- },
- {
   "slug": "magireco",
   "name": "Lスマスロマギアレコード",
   "seo": {
@@ -2133,6 +2194,66 @@
   }
  },
  {
+  "slug": "yajikita_mairu",
+  "name": "スマスロ やじきた道中記参る！",
+  "release_date": "2026-08-03",
+  "seo": {
+   "title": "スマスロ やじきた道中記参る！ 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "算定中（天井は999まいる／6スルー）",
+  "aliases": [
+   "やじきた道中記参る",
+   "やじきた",
+   "やじきた道中記",
+   "やじきた参る",
+   "やじきたどうちゅうき",
+   "参る"
+  ],
+  "limit": null
+ },
+ {
+  "slug": "sengoku_collection6",
+  "name": "L戦国コレクション6",
+  "release_date": "2026-07-06",
+  "seo": {
+   "title": "L戦国コレクション6 天井・狙い目・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 通常720G〜",
+  "aliases": [
+   "戦国コレクション6",
+   "戦コレ6",
+   "せんごくコレクション6",
+   "せんこれ6",
+   "sengoku_collection6",
+   "sencolle6",
+   "L戦国コレクション6",
+   "戦国コレクション6スマスロ"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "excellent": 850,
+    "good": 720,
+    "caution": 580,
+    "note": "G数天井999G+αと周期天井最大6周期の複合型。リセット後は周期天井が最大3周期に短縮（リセット狙い目ラインは解析待ち）。"
+   }
+  },
+  "limit": 999,
+  "original": {
+   "title": "戦国コレクション",
+   "kind": "ゲーム",
+   "search": "戦国コレクション ゲーム"
+  }
+ },
+ {
   "slug": "milliongod_kiseki",
   "name": "スマスロ ミリオンゴッド-神々の軌跡-",
   "seo": {
@@ -2178,28 +2299,6 @@
    "title": "ミリオンゴッド",
    "kind": "シリーズ",
    "search": "ミリオンゴッド"
-  }
- },
- {
-  "slug": "world_dai_star",
-  "name": "スマスロ ワールドダイスター",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "スマスロ ワールドダイスター 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（天井は通常時999G+α）",
-  "aliases": [
-   "ワールドダイスター",
-   "ワルスタ",
-   "わーるどだいすたー",
-   "ワールドダイスタァ"
-  ],
-  "limit": null,
-  "original": {
-   "title": "ワールドダイスター",
-   "kind": "アニメ",
-   "search": "ワールドダイスター"
   }
  },
  {
@@ -2299,6 +2398,168 @@
    "rate55": "あべし間840あべし〜 / リセット625あべし〜",
    "rate50": "あべし間950あべし〜 / リセット625あべし〜",
    "rate45": "あべし間1000あべし〜 / リセット625あべし〜"
+  }
+ },
+ {
+  "slug": "pw_10513",
+  "name": "マイジャグラーVI",
+  "seo": {
+   "title": "マイジャグラーVI スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "BONUS",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3"
+   ],
+   "claims": [
+    "bonus_prob",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-08-27",
+   "input_digest": "sha256:7145ca9e7a0372c57252ddc514d5231da4700f874bc6efb3d30ae59953bafa51"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-05",
+  "identity": {
+   "manufacturer_id": "kitadenshi",
+   "official_product_url": "https://p-town.dmm.com/machines/5054",
+   "announced_name": "マイジャグラーVI",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5054 型式=未掲載 メーカー=北電子 導入=2026-10-05 確認日=2026-08-16",
+   "market_release_date": "2026-10-05",
+   "_legacy_evidence_ref": "pworld:10513 型式=SマイジャグラーVI KK 検定=5S0437 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10513",
+   "observed_model_code": "SマイジャグラーVI KK",
+   "_observed_model_code_sources": [
+    "p-world.co.jp"
+   ]
+  }
+ },
+ {
+  "slug": "dmm_5086",
+  "name": "L 転生王女と天才令嬢の魔法革命",
+  "seo": {
+   "title": "L 転生王女と天才令嬢の魔法革命 スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "cz",
+    "setting"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "ceiling",
+    "spec",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at_prob",
+    "cz:エピソードバトル",
+    "cz:輪廻転天チャレンジ"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-19",
+   "input_digest": "sha256:7c0b2f519bfb6e63457d67a4610b2b86dbf7e0ed8721990323ecf4e25c5e624c"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-05",
+  "identity": {
+   "manufacturer_id": "olympia_estate",
+   "official_product_url": "https://p-town.dmm.com/machines/5086",
+   "announced_name": "L 転生王女と天才令嬢の魔法革命",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5086 型式=未掲載 メーカー=オリンピアエステート 導入=2026-10-05 確認日=2026-08-28",
+   "market_release_date": "2026-10-05",
+   "observed_model_code": "L転生王女と天才令嬢の魔法革命S3",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  }
+ },
+ {
+  "slug": "prskkm",
+  "name": "スマスロパリピ孔明",
+  "seo": {
+   "title": "スマスロパリピ孔明 スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "cz",
+    "gameplay",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "ceiling",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "at:UPPER_AT",
+    "cz:石兵八陣",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-08",
+   "input_digest": "sha256:985f687afb13b02b6a14d5e5db5e713d0502cd916cecf6a8345cf027c7dde641"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-05",
+  "identity": {
+   "manufacturer_id": "yamasa_next",
+   "official_product_url": "https://p-town.dmm.com/machines/5057",
+   "announced_name": "スマスロパリピ孔明",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5057 型式=未掲載 メーカー=山佐 導入=2026-10-05 確認日=2026-08-16",
+   "market_release_date": "2026-10-05",
+   "_legacy_official_product_url": "https://yamasa-next.co.jp/slot/prskkm/",
+   "observed_model_code": "Lパチスロパリピ孔明YE05H",
+   "_observed_model_code_sources": [
+    "p-world.co.jp"
+   ]
   }
  },
  {
@@ -2585,6 +2846,28 @@
    "normal": {
     "ceiling": 999
    }
+  }
+ },
+ {
+  "slug": "world_dai_star",
+  "name": "スマスロ ワールドダイスター",
+  "release_date": "2026-08-03",
+  "seo": {
+   "title": "スマスロ ワールドダイスター 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "算定中（天井は通常時999G+α）",
+  "aliases": [
+   "ワールドダイスター",
+   "ワルスタ",
+   "わーるどだいすたー",
+   "ワールドダイスタァ"
+  ],
+  "limit": null,
+  "original": {
+   "title": "ワールドダイスター",
+   "kind": "アニメ",
+   "search": "ワールドダイスター"
   }
  },
  {
@@ -11878,289 +12161,6 @@
    }
   },
   "limit": null
- },
- {
-  "slug": "pw_10513",
-  "name": "マイジャグラーVI",
-  "seo": {
-   "title": "マイジャグラーVI スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "BONUS",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "cz",
-    "ceiling",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [
-    "CLAIMS_LT_3"
-   ],
-   "claims": [
-    "bonus_prob",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-08-27",
-   "input_digest": "sha256:7145ca9e7a0372c57252ddc514d5231da4700f874bc6efb3d30ae59953bafa51"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10-05",
-  "identity": {
-   "manufacturer_id": "kitadenshi",
-   "official_product_url": "https://p-town.dmm.com/machines/5054",
-   "announced_name": "マイジャグラーVI",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5054 型式=未掲載 メーカー=北電子 導入=2026-10-05 確認日=2026-08-16",
-   "market_release_date": "2026-10-05",
-   "_legacy_evidence_ref": "pworld:10513 型式=SマイジャグラーVI KK 検定=5S0437 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10513",
-   "observed_model_code": "SマイジャグラーVI KK",
-   "_observed_model_code_sources": [
-    "p-world.co.jp"
-   ]
-  }
- },
- {
-  "slug": "pw_10521",
-  "name": "スマスロ 獣王",
-  "seo": {
-   "title": "スマスロ 獣王 スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [
-    "gameplay",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "cz",
-    "ceiling",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at:MAIN_AT",
-    "games_per_50",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-09-28",
-   "input_digest": "sha256:4b9280e489d25dbc3570576f47836fb43ca0ea5a94efdf13c9ee3ade8a9acf5b"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10-05",
-  "identity": {
-   "manufacturer_id": "sammy",
-   "official_product_url": "https://p-town.dmm.com/machines/5061",
-   "announced_name": "スマスロ 獣王",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5061 型式=未掲載 メーカー=サミー 導入=2026-10-05 確認日=2026-08-16",
-   "market_release_date": "2026-10-05",
-   "_legacy_evidence_ref": "pworld:10521 型式=L 獣王 XZ 検定=6S0560 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10521",
-   "observed_model_code": "L 獣王 XZ",
-   "_observed_model_code_sources": [
-    "p-world.co.jp"
-   ]
-  },
-  "checker": {
-   "coinRate": 31.8,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {}
-  }
- },
- {
-  "slug": "dmm_5086",
-  "name": "L 転生王女と天才令嬢の魔法革命",
-  "seo": {
-   "title": "L 転生王女と天才令嬢の魔法革命 スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [
-    "cz",
-    "setting"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "ceiling",
-    "spec",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at_prob",
-    "cz:エピソードバトル",
-    "cz:輪廻転天チャレンジ"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-09-19",
-   "input_digest": "sha256:7c0b2f519bfb6e63457d67a4610b2b86dbf7e0ed8721990323ecf4e25c5e624c"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10-05",
-  "identity": {
-   "manufacturer_id": "olympia_estate",
-   "official_product_url": "https://p-town.dmm.com/machines/5086",
-   "announced_name": "L 転生王女と天才令嬢の魔法革命",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5086 型式=未掲載 メーカー=オリンピアエステート 導入=2026-10-05 確認日=2026-08-28",
-   "market_release_date": "2026-10-05",
-   "observed_model_code": "L転生王女と天才令嬢の魔法革命S3",
-   "_observed_model_code_sources": [
-    "p-town.dmm.com"
-   ]
-  }
- },
- {
-  "slug": "prskkm",
-  "name": "スマスロパリピ孔明",
-  "seo": {
-   "title": "スマスロパリピ孔明 スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [
-    "cz",
-    "gameplay",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "ceiling",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at:MAIN_AT",
-    "at:UPPER_AT",
-    "cz:石兵八陣",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-09-08",
-   "input_digest": "sha256:985f687afb13b02b6a14d5e5db5e713d0502cd916cecf6a8345cf027c7dde641"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10-05",
-  "identity": {
-   "manufacturer_id": "yamasa_next",
-   "official_product_url": "https://p-town.dmm.com/machines/5057",
-   "announced_name": "スマスロパリピ孔明",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5057 型式=未掲載 メーカー=山佐 導入=2026-10-05 確認日=2026-08-16",
-   "market_release_date": "2026-10-05",
-   "_legacy_official_product_url": "https://yamasa-next.co.jp/slot/prskkm/",
-   "observed_model_code": "Lパチスロパリピ孔明YE05H",
-   "_observed_model_code_sources": [
-    "p-world.co.jp"
-   ]
-  }
- },
- {
-  "slug": "dmm_5095",
-  "name": "スマスロ モンスターハンターライズ：サンブレイク",
-  "seo": {
-   "title": "スマスロ モンスターハンターライズ：サンブレイク スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [
-    "cz",
-    "gameplay",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "ceiling",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at:MAIN_AT",
-    "at_prob",
-    "cz:アイルー福引",
-    "cz:ブレイクゾーン",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-09-29",
-   "input_digest": "sha256:2fbc6b6a1738c8fcdb677218716d28b5158e21156a514177fc85c1271e0dc94e"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10-05",
-  "identity": {
-   "manufacturer_id": "adelion",
-   "official_product_url": "https://p-town.dmm.com/machines/5095",
-   "announced_name": "スマスロ モンスターハンターライズ：サンブレイク",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5095 型式=L MHRサンブレイクXA メーカー=アデリオン 導入=2026-10-05 確認日=2026-09-24",
-   "market_release_date": "2026-10-05",
-   "observed_model_code": "L MHRサンブレイクXA",
-   "_observed_model_code_sources": [
-    "p-town.dmm.com"
-   ]
-  }
  },
  {
   "slug": "dmm_5113",
