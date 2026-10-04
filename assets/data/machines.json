@@ -2412,9 +2412,9 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
+   "indexable": true,
    "machine_profile": "BONUS",
-   "ceiling_state": "UNKNOWN",
+   "ceiling_state": "NONE",
    "confirmed_topics": [
     "setting",
     "spec"
@@ -2426,16 +2426,15 @@
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CLAIMS_LT_3"
-   ],
+   "reason_codes": [],
    "claims": [
     "bonus_prob",
+    "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-27",
-   "input_digest": "sha256:7145ca9e7a0372c57252ddc514d5231da4700f874bc6efb3d30ae59953bafa51"
+   "decided_at": "2026-10-05",
+   "input_digest": "sha256:b903b463996cc285a31aca636df5560b8e7ef795845b11fba87a8cbc7d1edf46"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
