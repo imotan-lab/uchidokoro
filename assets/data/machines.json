@@ -2475,27 +2475,32 @@
    "schema_version": "page-decision/v2",
    "indexable": true,
    "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
+   "ceiling_state": "PRESENT",
    "confirmed_topics": [
+    "ceiling",
     "cz",
-    "setting"
+    "setting",
+    "spec"
    ],
    "pending_topics": [
     "gameplay",
-    "ceiling",
-    "spec",
     "strategy",
     "reset"
    ],
    "reason_codes": [],
    "claims": [
     "at_prob",
+    "ceiling:GAME:CZ間",
+    "ceiling:GAME:ボーナス間",
     "cz:エピソードバトル",
-    "cz:輪廻転天チャレンジ"
+    "cz:輪廻転天チャレンジ",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-19",
-   "input_digest": "sha256:7c0b2f519bfb6e63457d67a4610b2b86dbf7e0ed8721990323ecf4e25c5e624c"
+   "decided_at": "2026-10-06",
+   "input_digest": "sha256:22ba47c08f51f4c7994c01b1ad37df4b3cf9c8761e97f842c82646d557028550"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
@@ -2511,6 +2516,17 @@
    "_observed_model_code_sources": [
     "p-town.dmm.com"
    ]
+  },
+  "checker": {
+   "coinRate": 32.0,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {}
   }
  },
  {
