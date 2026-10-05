@@ -2543,15 +2543,15 @@
    "schema_version": "page-decision/v2",
    "indexable": true,
    "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
+   "ceiling_state": "PRESENT",
    "confirmed_topics": [
+    "ceiling",
     "cz",
     "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "ceiling",
     "strategy",
     "reset"
    ],
@@ -2559,13 +2559,16 @@
    "claims": [
     "at:MAIN_AT",
     "at:UPPER_AT",
+    "ceiling:CYCLE:ステージチェンジ",
+    "ceiling:GAME:ボーナス間",
     "cz:石兵八陣",
+    "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-08",
-   "input_digest": "sha256:985f687afb13b02b6a14d5e5db5e713d0502cd916cecf6a8345cf027c7dde641"
+   "decided_at": "2026-10-06",
+   "input_digest": "sha256:4f39c8038dfbe837e7262b763fb5d7a640ba3032004f2cdc059b6575d3c7aa34"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
@@ -2582,6 +2585,19 @@
    "_observed_model_code_sources": [
     "p-world.co.jp"
    ]
+  },
+  "checker": {
+   "coinRate": 31.0,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "ceiling": 1009
+   }
   }
  },
  {
