@@ -1426,15 +1426,15 @@
    "schema_version": "page-decision/v2",
    "indexable": true,
    "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
+   "ceiling_state": "PRESENT",
    "confirmed_topics": [
+    "ceiling",
     "cz",
     "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "ceiling",
     "strategy",
     "reset"
    ],
@@ -1442,14 +1442,17 @@
    "claims": [
     "at:MAIN_AT",
     "at_prob",
+    "ceiling:GAME:AT間",
+    "ceiling:GAME:CZ間",
+    "ceiling:THROUGH:CZ",
     "cz:アイルー福引",
     "cz:ブレイクゾーン",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-29",
-   "input_digest": "sha256:2fbc6b6a1738c8fcdb677218716d28b5158e21156a514177fc85c1271e0dc94e"
+   "decided_at": "2026-10-06",
+   "input_digest": "sha256:9ce3f4b0997c8b941ae30a4398c0a5d469548664e7fa3ffbcae2345167c7037a"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
