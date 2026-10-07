@@ -6912,6 +6912,38 @@ MUTATIONS = [
         "run": ["scripts/dmm_machine.py"],
     },
     {
+        "why": "★DMMの見出しの種別の括弧より後ろの宣伝語まで機種名として読む"
+               "（★「ボーナストリガー」が加わった日からタコスロの育成が毎朝止まる★）★",
+        "file": "scripts/dmm_machine.py",
+        "before": "        name_part = head[:kinds[0].start()].strip()\n",
+        "after": "        name_part = head\n",
+        "run": ["scripts/dmm_machine.py"],
+    },
+    {
+        "why": "★DMMの見出しの種別がパチンコでも、名前が同じなら同定する"
+               "（★同名のパチンコ版のページを本機として扱う★）★",
+        "file": "scripts/dmm_machine.py",
+        "before": "    if any(p in k.group(0) for k in kinds for p in _DMM_PACHINKO_KINDS):\n",
+        "after": "    if False:\n",
+        "run": ["scripts/dmm_machine.py"],
+    },
+    {
+        "why": "★DMMの見出しの「（新台スマパチ）」をパチンコ側として断らない"
+               "（★スマパチのページを名前だけで本機として扱う★）★",
+        "file": "scripts/dmm_machine.py",
+        "before": '_DMM_PACHINKO_KINDS = ("パチンコ", "スマパチ")\n',
+        "after": '_DMM_PACHINKO_KINDS = ("パチンコ",)\n',
+        "run": ["scripts/dmm_machine.py"],
+    },
+    {
+        "why": "★DMMの見出しに種別の括弧が2つ以上あっても最初で切る"
+               "（★後ろの続編名を見落として別機種を同定する★）★",
+        "file": "scripts/dmm_machine.py",
+        "before": "    if len(kinds) == 1:\n",
+        "after": "    if kinds:\n",
+        "run": ["scripts/dmm_machine.py"],
+    },
+    {
         "why": "★DMMで日まで分かった導入日を待ち行列に残さない"
                "（★10/19導入を10/1と読んで誤って知らせる★）★",
         "file": "scripts/add_machine_run.py",
