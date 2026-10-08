@@ -782,6 +782,217 @@ def withdraw(fid: str, why: str, by) -> dict:
     return rec
 
 
+# ★★別の記録で直り終えた件を、横へよける★★（2026-10-09）
+SUPERSEDABLE = ("DETECTED", "CLAUDE_SEALED", "CODEX_RECEIVED")
+SUPERSEDED = "SUPERSEDED"
+MIN_SUPERSEDE_WHY = 15
+
+
+def _covers(succ: dict, quote: str) -> bool:
+    """★代わりの記録が、よける記録の逐語を含む箇所を扱ったか★
+
+    代わりの記録の目印、または合意した操作の before / text のどれかに
+    よける記録の逐語がそのまま入っていること（★無関係な直しを代わりにさせない★）。
+    """
+    q = str(quote or "").strip()
+    if not q:
+        return False
+    if q in str(succ.get("quote") or ""):
+        return True
+    for o in (succ.get("ops") or []):
+        if not isinstance(o, dict):
+            continue
+        if q in str(o.get("before") or "") or q in str(o.get("text") or ""):
+            return True
+    return False
+
+
+def _identity_problem(rec: dict, fid: str) -> str:
+    """★呼んだ番号・記録の中の番号・中身から作り直した番号が、3つとも同じか★
+
+    保存先は記録の中の番号で決まる（`_save`）ので、食い違ったまま書くと
+    ★別の生きた記録を上書きする★（2026-10-09・Codexの指摘）。
+    """
+    if str(rec.get("finding_id") or "") != str(fid or ""):
+        return f"記録の中の番号 {rec.get('finding_id')!r} が {fid!r} と違います"
+    if finding_id(str(rec.get("slug") or ""), str(rec.get("check") or ""),
+                  str(rec.get("quote") or ""), str(rec.get("where") or "")) != str(fid or ""):
+        return "機種・検査・逐語・場所から作り直した番号が合いません"
+    return ""
+
+
+def supersede(fid: str, by_fid: str, why: str) -> dict:
+    """★別の記録で直り終えた件を、記録を残したまま横へよける★（2026-10-09）
+
+    ★なぜ要るか★＝目印の逐語を「行の一部」で立てると、合意の段で必ず止まる
+    （`agree` は目印＝どれかの before と完全一致を求める）。段階は戻せないので、
+    行まるごとで立て直して直し終えても、★最初の記録は判断待ちのまま残り★、
+    `mark_reviewed` がその機種の点検済みを最大2日止め、毎朝同じ機種が
+    いちばん古い機種として先頭に来る（2026-10-09に6件で実際に起きた）。
+    ★出口が無かった★＝取り下げ（`withdraw`）は AGREED だけ、
+    やり直し（`attempt`）は「決まらなかった回」を数えるもので、
+    ★直し終えた件を終わらせる道はどこにも無かった★（罠⓸）。
+
+    ★機械が確かめること★（どれも言うだけでは通らない）
+      ⓪両方の記録の番号が、呼んだ番号・中身から作り直した番号と一致する
+      ①よける記録は2AIの判断待ちの段階（合意より前）で、壊れていない
+      ②代わりの記録は同じ機種・同じ検査で DONE、壊れていない
+      ③代わりの記録が、よける記録の逐語を含む箇所を扱った（`_covers`）
+      ④代わりの記録のコミットが公開用の枝に入っている
+      ⑤よける記録の逐語が、公開用の枝の先端の中身から消えている
+        （`recheck.closeable` で text_gone をその場でやり直す）
+      ⑥検査のあいだに公開用の枝が進んでいない（`recheck_pass` と同じ）
+    ★2AIの判断は要らない★＝直したかどうかは代わりの記録が2AIで決めて
+    直し終えている。ここで見るのは「その件がもう無い」という事実だけ。
+    ★消さない★＝名前を変えて置いておき、よけた先にだけ SUPERSEDED と書く。
+
+    ★前提＝これを呼んでいる間、対話セッションを含むほかの書き手は同じ記録を更新しない★
+    （2026-10-09・Codexの5回目）。この記録の帳簿は全体として1件ずつのロックを持たず、
+    ここだけにロックを足しても `_step` / `_save` が同じロックを使わなければ防げない。
+    ★呼ぶのは、その記録を立てた本人（同じタスクの同じ回）だけにする★。
+    安く防げる2つだけ入れてある＝一時ファイルは呼び出しごとに別の名前で作る／
+    消す直前に、読んだときから元の記録が書き換わっていないかを見る。
+    """
+    _src_digest0 = _file_digest(_path(fid))
+    rec = load(fid)
+    _id_rec = _identity_problem(rec, fid)
+    if _id_rec:
+        raise JournalError(f"よける記録の番号が合いません: {_id_rec}")
+    if rec.get("state") not in SUPERSEDABLE:
+        raise JournalError(
+            "横へよけられるのは2AIの判断待ちの記録だけです"
+            f"（いま {rec.get('state')}）")
+    if str(by_fid or "") == str(fid or ""):
+        raise JournalError("自分自身を代わりの記録にはできません")
+    _bw_rec = _broken_why(rec)
+    if _bw_rec:
+        raise JournalError(f"壊れた記録は横へよけません: {_bw_rec}")
+    succ = load(by_fid)
+    _id_succ = _identity_problem(succ, by_fid)
+    if _id_succ:
+        raise JournalError(f"代わりの記録の番号が合いません: {_id_succ}")
+    _bw_succ = _broken_why(succ)
+    if _bw_succ:
+        raise JournalError(f"壊れた記録を代わりにはできません: {_bw_succ}")
+    if str(succ.get("slug") or "") != str(rec.get("slug") or ""):
+        raise JournalError(
+            f"代わりの記録が別の機種です（{succ.get('slug')} ／ {rec.get('slug')}）")
+    if str(succ.get("check") or "") != str(rec.get("check") or ""):
+        raise JournalError(
+            f"代わりの記録が別の検査です（{succ.get('check')} ／ {rec.get('check')}）")
+    if succ.get("state") != "DONE":
+        raise JournalError(
+            f"代わりの記録が終わっていません（いま {succ.get('state')}）")
+    if not _covers(succ, rec.get("quote")):
+        raise JournalError(
+            "代わりの記録は、よける記録の逐語を含む箇所を扱っていません"
+            "（★無関係な直しを代わりにはできません★）")
+    why = str(why or "").strip()
+    if len(why) < MIN_SUPERSEDE_WHY:
+        raise JournalError(f"よける理由を {MIN_SUPERSEDE_WHY} 字以上書いてください")
+    ok_push, pwhy, tip = _pushed(str(succ.get("commit") or ""))
+    if not ok_push:
+        raise JournalError(
+            f"代わりの直しが公開用の枝に入っていることを確かめられません: {pwhy}")
+    _r = _recheck_mod()
+    meta = (_r.CHECKS or {}).get("text_gone")
+    if not meta:
+        raise JournalError("text_gone の検査が見つかりません")
+    _gone_ok, _gone_why, _gone = _r.closeable({
+        "check": "text_gone", "version": meta["version"],
+        "args": {"slug": rec["slug"], "text": rec["quote"]},
+        "expected_commit": tip})
+    if not _gone_ok:
+        raise JournalError(
+            f"よける記録の逐語が、消えたと確かめられません: {_gone_why}")
+    # ★★検査のあいだに枝が進んでいないか、もう一度見る★★（recheck_pass と同じ）
+    ok_push2, pwhy2, tip_after = _pushed(str(succ.get("commit") or ""))
+    if not ok_push2 or tip_after != tip:
+        raise JournalError(
+            f"検査のあいだに公開用の枝が変わりました（{tip[:8]} → "
+            f"{(tip_after or '不明')[:8]}）: {pwhy2}")
+    import datetime as _dt
+    # ★生きた記録には何も書かない★＝よけた後の姿は写しにだけ作る
+    #   （途中で止まっても、生きた記録は判断待ちのまま一覧に残る）
+    final = json.loads(json.dumps(rec, ensure_ascii=False))
+    final["state"] = SUPERSEDED
+    final["superseded_by"] = str(by_fid)
+    final["superseded_by_commit"] = str(succ.get("commit") or "")
+    final["superseded_why"] = why
+    final["superseded_check"] = _gone
+    final["superseded_tip"] = tip
+    final["superseded_at"] = _dt.datetime.now().isoformat(timespec="seconds")
+    final.setdefault("history", []).append(
+        {"to": SUPERSEDED, "note": f"{by_fid} で直り終えたので横へよけた: {why}"})
+    _src = _path(fid)
+    # ★一時ファイルは呼び出しごとに別の名前で作る★（同じ名前だと別の呼び出しの中身と取り違える）
+    import tempfile as _tf
+    _fd, _tmp = _tf.mkstemp(dir=os.path.dirname(_src),
+                            prefix=os.path.basename(_src) + ".",
+                            suffix=".supersede.tmp")
+    os.close(_fd)
+    _dst = None
+    try:
+        # ①完成した控えを先に書く（失敗したら何も動かさない）
+        _write_closed(_tmp, final)
+        # ②移動先を排他的に予約する（あとから同じ番号を作られても上書きしない）
+        _dst = _reserve_closed(_src)
+        # ③予約した場所へ置く
+        os.replace(_tmp, _dst)
+    except OSError as e:
+        try:
+            if os.path.exists(_tmp):
+                os.remove(_tmp)
+            # ★自分が予約した空の控えも片づける★（中身があれば触らない）
+            if _dst and os.path.exists(_dst) and os.path.getsize(_dst) == 0:
+                os.remove(_dst)
+        except OSError:                                      # noqa: BLE001
+            pass
+        raise JournalError(f"横へよけられませんでした（生きた記録はそのまま）: {e}")
+    # ④最後に生きた記録を一覧から外す（ここで止まっても、控えと生きた記録の両方が残るだけ）
+    #   ★読んだときから書き換わっていたら消さない★（控えは残す＝両方が残るだけ）
+    if _file_digest(_src) != _src_digest0:
+        raise JournalError(
+            "よける途中で元の記録が書き換わりました。元の記録は消しません"
+            f"（控えは {os.path.basename(_dst)} に残っています）")
+    os.remove(_src)
+    final["superseded_path"] = os.path.basename(_dst)
+    return final
+
+
+def _file_digest(path: str) -> str:
+    """ファイルの中身の指紋（無ければ空）"""
+    try:
+        with io.open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return ""
+
+
+def _write_closed(path: str, rec: dict) -> None:
+    """★控えを書く★（試験で失敗を差し込めるように切り出してある）"""
+    with io.open(path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(rec, f, ensure_ascii=False, indent=1, sort_keys=True)
+        f.write("\n")
+
+
+def _reserve_closed(src: str) -> str:
+    """★空いている最初の番号を、排他的に予約して返す★（`_archive` と同じ採番）
+
+    確かめてから移すと、そのあいだに同じ番号を作られたとき上書きする。
+    作るときに「無いときだけ作る」で予約すれば、先にあったものは決して上書きしない。
+    """
+    n = 1
+    while True:
+        p = src + f".closed{n}"
+        try:
+            fd = os.open(p, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            return p
+        except FileExistsError:
+            n += 1
+
+
 # --- 一覧 -----------------------------------------------------------------
 
 def _broken_why(rec):
@@ -1723,6 +1934,229 @@ def _selftest() -> int:
           _try_fail(lambda: withdraw(f13, _why11, ["claude", "codex"])))
         os.remove(_path(f13))
         os.remove(_path(f12))
+
+        # ⑭★★別の記録で直り終えた件を、横へよける★★（2026-10-09）
+        #   ★代わりの記録は本物の段階を1つずつ通して DONE にする★（自己申告の DONE を使わない）
+        #   差し替えるのは、通信（_pushed）・コミットの読み（_full_sha）・再検査の入口だけ
+        class _FakeGone:
+            CHECKS = {"text_gone": {"version": 7, "closeable": True,
+                                    "args_spec": {"slug": (str, True, ()),
+                                                  "text": (str, True, ())}},
+                      "model_code_gone": {"version": 7, "closeable": True,
+                                          "args_spec": {"slug": (str, True, ())}}}
+            verdict = (True, "", {"result": "PASS"})
+            asked = []
+
+            @classmethod
+            def closeable(cls, cond):
+                cls.asked.append(cond)
+                return cls.verdict
+
+        def _rejects(fn) -> bool:
+            """★意図した拒否（JournalError）だけを合格にする★（実装の不良を緑にしない）"""
+            try:
+                fn()
+                return False
+            except JournalError:
+                return True
+
+        _kp14 = globals()["_pushed"]
+        _km14 = globals()["_recheck_mod"]
+        _kf14 = globals()["_full_sha"]
+
+        def _to_done(_slug, _quote, _sha, _stop=None, _check="text_gone"):
+            _f = detect(_slug, _check, _quote, source_sha256=_sha)["finding_id"]
+            io.open(vp, "w", encoding="utf-8").write(_orig)
+            seal_claude(_f, vp)
+            record_codex(_f, "b" * 64, "Codexの判定です。同じく消してよいと考えます。")
+            agree(_f, _decfile(_f, _slug,
+                               [{"op": "drop", "text": _quote,
+                                 "why": "前の段落と同じ内容"}],
+                               sha=_sha, name="dec_" + _f),
+                  _check, ["Claude", "codex"])
+            applied(_f, "c" * 64)
+            commit_verified(_f, "1" * 40)
+            push_confirmed(_f)
+            if _stop == "PUSH_CONFIRMED":
+                return _f
+            recheck_pass(_f)
+            done(_f)
+            return _f
+
+        def _copy_as(_src_fid, _new_fid, _set_id):
+            """★記録の写しを別の番号のファイルに置く★（番号の食い違いの試験用）"""
+            _x = load(_src_fid)
+            if _set_id:
+                _x["finding_id"] = _new_fid
+            io.open(_path(_new_fid), "w", encoding="utf-8").write(
+                json.dumps(_x, ensure_ascii=False))
+
+        try:
+            globals()["_pushed"] = lambda c: (True, "", "e" * 40)
+            globals()["_recheck_mod"] = lambda: _FakeGone
+            globals()["_full_sha"] = (
+                lambda c: c if re.fullmatch(r"[0-9a-f]{40}", c) else "")
+            f14 = detect("zzz14", "text_gone", "十四番の文の一部",
+                         source_sha256="7" * 64)["finding_id"]
+            io.open(vp, "w", encoding="utf-8").write(_orig)
+            seal_claude(f14, vp)
+            s14 = _to_done("zzz14", "十四番の文の一部を含む、行まるごとの文です。", "7" * 64)
+            u14 = _to_done("zzz14", "同じ機種の、関係の無い別の文です。", "7" * 64)
+            w14 = _to_done("zzz14", "十四番の文の一部を含む、まだ終わっていない直しの文です。",
+                           "7" * 64, _stop="PUSH_CONFIRMED")
+            o14 = _to_done("zzz14b", "十四番の文の一部を含む、別の機種の文です。", "7" * 64)
+            q14 = _to_done("zzz14b", "十四番の文の一部を含む、別の機種の文です。その続きです。", "7" * 64)
+            c14 = _to_done("zzz14", "十四番の文の一部を含む、別の検査の文です。", "7" * 64,
+                           _check="model_code_gone")
+            b14 = _to_done("zzz14", "十四番の文の一部を含む、壊れた記録の文です。", "7" * 64)
+            _bx = load(b14)
+            _bx.pop("ops", None)                   # ★終わった記録に要る欄を欠かせる★
+            _save(_bx)
+            t("　（前提）代わりの記録は、本物の段階を通って壊れずに DONE になっている",
+              load(s14)["state"] == "DONE" and not _broken_why(load(s14))
+              and load(c14)["state"] == "DONE")
+            _why14 = "行まるごとで立て直した記録で直り終えたので、こちらは横へよける"
+            t("★★理由が短ければ横へよけない★★",
+              _rejects(lambda: supersede(f14, s14, "直った")))
+            t("★★自分自身を代わりの記録にできない★★",
+              _rejects(lambda: supersede(f14, f14, _why14)))
+            t("★★代わりの記録が終わっていなければ横へよけない★★"
+              "（★直っていない件を判断待ちの外へ出さない★）",
+              _rejects(lambda: supersede(f14, w14, _why14)))
+            t("★★別の機種の記録を代わりにできない★★",
+              _rejects(lambda: supersede(f14, o14, _why14)))
+            t("★★別の検査の記録を代わりにできない★★",
+              _rejects(lambda: supersede(f14, c14, _why14)))
+            t("★★同じ機種でも、よける逐語を扱っていない直しは代わりにできない★★"
+              "（★無関係な直しで判断待ちを消さない★）",
+              _rejects(lambda: supersede(f14, u14, _why14)))
+            t("★★壊れた記録を代わりにできない★★",
+              _rejects(lambda: supersede(f14, b14, _why14)))
+            # ★よける側が壊れている★（記事の指紋を欠かせる＝番号には関わらない欄）
+            _fx = load(f14)
+            _keep_sha14 = _fx.pop("source_sha256")
+            _save(_fx)
+            t("★★壊れた記録は横へよけない★★（★壊れた事実を一覧から消さない★）",
+              _rejects(lambda: supersede(f14, s14, _why14)))
+            _fx["source_sha256"] = _keep_sha14
+            _save(_fx)
+            # ★番号の食い違い★＝ファイル名と中身の番号が違う写し／中身から作り直した番号が違う写し
+            #   ①f14 のファイルの中の番号だけを別の番号にする（中身から作り直すと f14 に戻る形）
+            #     ＝作り直しの検査には助けられず、中の番号の検査だけが止める（罠④）
+            _fy = load(f14)
+            _fy["finding_id"] = "0" * 15 + "1"
+            io.open(_path(f14), "w", encoding="utf-8").write(
+                json.dumps(_fy, ensure_ascii=False))
+            t("★★ファイル名と記録の中の番号が違えば横へよけない★★"
+              "（★保存先は中身の番号で決まるので、別の生きた記録を上書きする★）",
+              _rejects(lambda: supersede(f14, s14, _why14)))
+            _fy["finding_id"] = f14
+            io.open(_path(f14), "w", encoding="utf-8").write(
+                json.dumps(_fy, ensure_ascii=False))
+            #   ②中の番号はファイル名と同じだが、中身から作り直すと別の番号になる写し
+            _h14 = "0" * 15 + "2"
+            _copy_as(f14, _h14, _set_id=True)
+            t("★★中身から作り直した番号が違えば横へよけない★★",
+              _rejects(lambda: supersede(_h14, s14, _why14)))
+            os.remove(_path(_h14))
+            _FakeGone.verdict = (False, "まだ記事にあります", None)
+            t("★★逐語がまだ記事に残っていれば横へよけない★★"
+              "（★直っていない誤りを点検済みにしない★）",
+              _rejects(lambda: supersede(f14, s14, _why14)))
+            _FakeGone.verdict = (True, "", {"result": "PASS"})
+            # ★2回目は「入っている・先端も同じ」を返す★＝後ろの再確認に助けられず、
+            #   1回目の確認だけが止める形にする（罠④）
+            _tips0 = iter([(False, "まだ出ていません", ""), (True, "", "")])
+            globals()["_pushed"] = lambda c: next(_tips0)
+            t("★★代わりの直しが公開用の枝に入っていなければ横へよけない★★",
+              _rejects(lambda: supersede(f14, s14, _why14)))
+            _tips = iter([(True, "", "e" * 40), (True, "", "9" * 40)])
+            globals()["_pushed"] = lambda c: next(_tips)
+            t("★★検査のあいだに公開用の枝が進んだら横へよけない★★"
+              "（★進んだ先で同じ誤りが戻っていても気づけないため★）",
+              _rejects(lambda: supersede(f14, s14, _why14)))
+            globals()["_pushed"] = lambda c: (True, "", "e" * 40)
+            t("★★判断待ちより後の記録は横へよけない★★",
+              _rejects(lambda: supersede(o14, q14, _why14)))
+            t("　（前提）ここまで、よける記録は判断待ちの一覧に残っている",
+              any(x.get("finding_id") == f14 for x in listing()))
+            # ★控えを書く途中で失敗したら、生きた記録は1文字も変わらず一覧に残る★
+            _kw14 = globals()["_write_closed"]
+            _before_f14 = io.open(_path(f14), encoding="utf-8").read()
+            _closed_before = sorted(n for n in os.listdir(td) if ".closed" in n)
+
+            def _boom(_p, _r):
+                raise OSError("書き込みに失敗しました（試験）")
+            globals()["_write_closed"] = _boom
+            try:
+                t("★★控えを書けなければ横へよけない★★",
+                  _rejects(lambda: supersede(f14, s14, _why14)))
+            finally:
+                globals()["_write_closed"] = _kw14
+            t("★★控えを書けなかったとき、生きた記録は1文字も変わらず一覧に残る★★"
+              "（★未完了の記録を一覧から消さない★）",
+              io.open(_path(f14), encoding="utf-8").read() == _before_f14
+              and any(x.get("finding_id") == f14 for x in listing())
+              and sorted(n for n in os.listdir(td) if ".closed" in n) == _closed_before)
+            # ★よける途中で元の記録が書き換わったら、元の記録は消さない★
+            #   （控えを書くところに「別の処理が元の記録を書き換えた」を差し込む）
+            def _touch_then_write(_p, _r):
+                with io.open(_path(f14), "a", encoding="utf-8") as _fh:
+                    _fh.write(" ")
+                _kw14(_p, _r)
+            globals()["_write_closed"] = _touch_then_write
+            try:
+                t("★★よける途中で元の記録が書き換わったら横へよけない★★",
+                  _rejects(lambda: supersede(f14, s14, _why14)))
+            finally:
+                globals()["_write_closed"] = _kw14
+            t("★★書き換わった元の記録は消さず、一覧に残る★★"
+              "（★別の処理が進めた記録を消さない★）",
+              io.open(_path(f14), encoding="utf-8").read() == _before_f14 + " "
+              and any(x.get("finding_id") == f14 for x in listing()))
+            for _n14 in [n for n in os.listdir(td)
+                         if n.startswith(f14 + ".json.closed")]:
+                os.remove(os.path.join(td, _n14))
+            # ★番号に穴のある控えを先に置く★（1番と3番がある＝2番が空き）
+            _old1 = _path(f14) + ".closed1"
+            _old3 = _path(f14) + ".closed3"
+            io.open(_old1, "w", encoding="utf-8").write('{"keep": "前からある控え1"}')
+            io.open(_old3, "w", encoding="utf-8").write('{"keep": "前からある控え3"}')
+            _FakeGone.asked = []
+            # ★断られても試験は落とさず❌にする★（壊し方の結果を「落ちただけ」にしない）
+            try:
+                _sp = supersede(f14, s14, _why14)
+            except JournalError as _e14:
+                _sp = {"error": str(_e14)}
+            t("★★条件がそろえば横へよけられる★★"
+              "（★直す前は道が無く、直し終えた機種の点検済みが止まった★）",
+              _sp.get("superseded_by") == s14 and _sp.get("state") == SUPERSEDED)
+            t("　再検査は、よける記録の逐語と公開用の枝の先端でやり直している",
+              bool(_FakeGone.asked)
+              and _FakeGone.asked[-1]["args"]["text"] == "十四番の文の一部"
+              and _FakeGone.asked[-1]["expected_commit"] == "e" * 40)
+            t("★★横へよけた記録は、判断待ちの一覧から消える★★"
+              "（★点検済みを止めない★）",
+              not any(x.get("finding_id") == f14 for x in listing()))
+            t("★★前からある控え（1番・3番）は1文字も変わらない★★",
+              io.open(_old1, encoding="utf-8").read() == '{"keep": "前からある控え1"}'
+              and io.open(_old3, encoding="utf-8").read() == '{"keep": "前からある控え3"}')
+            _c2p = _path(f14) + ".closed2"
+            _c2 = (json.load(io.open(_c2p, encoding="utf-8"))
+                   if os.path.exists(_c2p) and os.path.getsize(_c2p) else {})
+            t("★★よけた先（空いていた2番）には SUPERSEDED と、代わりのコミット・日時・履歴が残る★★",
+              _sp.get("superseded_path") == f14 + ".json.closed2"
+              and _c2.get("state") == SUPERSEDED
+              and _c2.get("superseded_by") == s14
+              and _c2.get("superseded_by_commit") == "1" * 40
+              and bool(_c2.get("superseded_at"))
+              and (_c2.get("history") or [{}])[-1].get("to") == SUPERSEDED)
+            t("　途中の一時ファイルは残らない",
+              not any(n.endswith(".supersede.tmp") for n in os.listdir(td)))
+        finally:
+            globals()["_pushed"] = _kp14
+            globals()["_recheck_mod"] = _km14
+            globals()["_full_sha"] = _kf14
     finally:
         globals()["STORE"] = keep
         shutil.rmtree(td, ignore_errors=True)
@@ -1757,6 +2191,10 @@ def main() -> int:
                     help="取り下げの理由を書いたファイル（15字以上）")
     ap.add_argument("--by", default="",
                     help="判断者（claude,codex）")
+    ap.add_argument("--supersede", default=None, metavar="FINDING_ID",
+                    help="別の記録で直り終えた判断待ちの記録を、横へよける")
+    ap.add_argument("--by-finding", default=None, metavar="FINDING_ID",
+                    help="代わりに直し終えた記録（同じ機種で DONE）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
 
@@ -1777,6 +2215,21 @@ def main() -> int:
             return 1
         print(f"取り下げました: {rec['finding_id']} {rec['slug']}"
               f"（判断者 {','.join(rec['withdrawn_by'])}）")
+        return 0
+    if a.supersede:
+        # ★理由はファイルで受け取る★（鉄則1c＝自由文をシェルに書かない）
+        if not a.why_file or not a.by_finding:
+            print("--by-finding と --why-file が要ります")
+            return 1
+        with io.open(a.why_file, encoding="utf-8") as fh:
+            _why = fh.read()
+        try:
+            rec = supersede(a.supersede, a.by_finding, _why)
+        except JournalError as e:
+            print(f"横へよけませんでした: {e}")
+            return 1
+        print(f"横へよけました: {rec['finding_id']} {rec['slug']}"
+              f"（代わり {rec['superseded_by']}）")
         return 0
     if a.show:
         print(json.dumps(load(a.show), ensure_ascii=False, indent=1))
