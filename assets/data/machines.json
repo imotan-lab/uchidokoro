@@ -1468,6 +1468,44 @@
    "_observed_model_code_sources": [
     "p-town.dmm.com"
    ]
+  },
+  "checker": {
+   "unit": "G",
+   "normal": {
+    "caution": 470,
+    "good": 490,
+    "excellent": 580,
+    "ceiling": 999,
+    "target": 490
+   },
+   "cz": {
+    "caution": 210,
+    "good": 210,
+    "excellent": 210,
+    "ceiling": 333,
+    "target": 210
+   },
+   "reset": {
+    "caution": 380,
+    "good": 390,
+    "excellent": 480,
+    "ceiling": 999,
+    "target": 390
+   },
+   "modes": [
+    {
+     "key": "normal",
+     "label": "AT間"
+    },
+    {
+     "key": "cz",
+     "label": "CZ間"
+    },
+    {
+     "key": "reset",
+     "label": "リセット後"
+    }
+   ]
   }
  },
  {
