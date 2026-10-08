@@ -2656,10 +2656,24 @@
     {
      "key": "normal",
      "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "天井短縮時（設定変更・ST駆け抜け後）"
     }
    ],
    "normal": {
-    "ceiling": 1009
+    "ceiling": 1009,
+    "caution": 550,
+    "good": 650,
+    "excellent": 650,
+    "target": 650
+   },
+   "reset": {
+    "caution": 200,
+    "good": 250,
+    "excellent": 250,
+    "target": 250
    }
   }
  },
