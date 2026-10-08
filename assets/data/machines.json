@@ -1570,11 +1570,36 @@
    "modes": [
     {
      "key": "normal",
-     "label": "通常"
+     "label": "非サバ連後"
+    },
+    {
+     "key": "savaren",
+     "label": "サバ連後"
+    },
+    {
+     "key": "reset",
+     "label": "設定変更後"
     }
    ],
    "normal": {
-    "ceiling": 999
+    "ceiling": 999,
+    "caution": 590,
+    "good": 610,
+    "excellent": 650,
+    "target": 610
+   },
+   "savaren": {
+    "caution": 540,
+    "good": 590,
+    "excellent": 660,
+    "ceiling": 999,
+    "target": 590
+   },
+   "reset": {
+    "caution": 250,
+    "good": 250,
+    "excellent": 320,
+    "target": 250
    }
   }
  },
