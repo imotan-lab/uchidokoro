@@ -283,89 +283,9 @@ def recheck_known(mid: str, r: dict, seen: dict, out: dict) -> None:
 #   「まだ戻せる」と読める状態でした（Codex依頼229の指摘）。
 
 
-# ★知らせ済みのメーカーを覚えておく場所★（同じ会社で毎晩鳴らさない）
-#   ★ファイル名は旧入口の名残★＝中身は「名簿に無いメーカー」の控えで、
-#   いまはDMMのカレンダーから来る（置き場を変えると控えが消えるので名前は据え置き）
-UNKNOWN_MAKERS = _lp.doc("pworld_unknown_makers.json")
-
-
-def _tell_unknown_makers(rows: list) -> None:
-    """★名簿に無いメーカーをメールで知らせる★（2026-08-12・運営者の指示）
-
-    名簿は「メーカーの表示名 → 内部の呼び名」の対応表。
-    ここに無い会社の新台は、どのメーカーとして記録するか決まらないので
-    記事を作れない。★推測で結ばない★（別会社の機種になる）。
-
-    ★同じ会社では一度だけ★／★送れなくても新台の処理は止めない★
-    """
-    import json
-    try:
-        known = _sj.read_json(UNKNOWN_MAKERS, expect=dict, allow_missing=True,
-                              default={"makers": {}})
-    except Exception as e:                # noqa: BLE001
-        _log(f"  知らせ済みの控えを読めません（全部知らせます）: {e}")
-        known = {"makers": {}}
-    fresh = [(m, n) for m, n in rows if m not in (known.get("makers") or {})]
-    if not fresh:
-        _log("  名簿に無いメーカーはすべて連絡済みです")
-        return
-    lines = ["DMMぱちタウンの導入カレンダーに、名簿に無いメーカーの新台が出ています。",
-             "このままだと記事を作れません（どのメーカーとして記録するか決まらないため）。",
-             "",
-             "★名簿に足してください★",
-             "  ファイル: assets/data/maker-catalogs.json",
-             "  書き方  : \"<内部の呼び名>\": {\"name\": \"<表示名>\", "
-             "\"status\": \"WATCH_OFF\"}",
-             "  ★推測で既存の会社に結び付けないこと★（別会社の機種になります）",
-             ""]
-    for m, n in fresh:
-        lines.append(f"  ・{m}    （例: {n}）")
-    lines += ["", "足したあとは、翌晩の新台タスクが自動で拾います。"]
-    ops = _lp.OPS
-    try:
-        os.makedirs(ops, exist_ok=True)
-        sub = os.path.join(ops, "unknown_maker_subject.txt")
-        body = os.path.join(ops, "unknown_maker_body.txt")
-        with open(sub, "w", encoding="utf-8") as f:
-            f.write("🟡 うちどころ: 名簿に無いメーカーの新台があります（%d社）"
-                    % len(fresh))
-        with open(body, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines))
-        # ★★時間制限を必ず付ける★★（2026-08-25・Codexの25回目）
-        #   ★直す前は制限が無かった★＝メール送信が固まると
-        #   **例外にも戻り値にもならず**、終了の記録も残らない。
-        #   生存信号だけ動き続けてロックが延び、朝の更新タスクまで止まる。
-        try:
-            r = subprocess.run(
-                [sys.executable, _lp.NOTIFY, "notify",
-                 "--subject-file", sub, "--body-file", body],
-                capture_output=True, text=True, encoding="utf-8",
-                errors="replace", timeout=NET_TIMEOUT,
-                env={**os.environ, "PYTHONIOENCODING": "utf-8"})
-        except subprocess.TimeoutExpired:
-            _log(f"  お知らせを送れませんでした（{NET_TIMEOUT}秒で打ち切り）")
-            return
-        if r.returncode != 0:
-            # ★送れなくても止めない★（次の晩にまた知らせる＝控えを更新しない）
-            _log(f"  ★メールを送れませんでした★: {(r.stderr or r.stdout)[:200]}")
-            return
-    except Exception as e:                # noqa: BLE001
-        _log(f"  ★メールを送れませんでした★: {type(e).__name__}: {e}")
-        return
-    _log("  名簿に無いメーカーを知らせました: "
-         + "／".join(m for m, _ in fresh))
-    # ★送れてから控える★（送信前に控えると、失敗した会社を二度と知らせない）
-    for m, n in fresh:
-        import datetime
-        known.setdefault("makers", {})[m] = {
-            "first_seen": datetime.date.today().isoformat(), "example": n}
-    try:
-        tmp = UNKNOWN_MAKERS + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(known, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, UNKNOWN_MAKERS)
-    except Exception as e:                # noqa: BLE001
-        _log(f"  知らせ済みの控えを書けません（次回また知らせます）: {e}")
+# ★★名簿に無いメーカーを人へ知らせるメールは無くした★★（2026-10-10）
+#   名簿に無い社は DMM の表示名で進む（dmm_discover.maker_conf）ので、
+#   人が名簿へ足すのを待つ場面がもう無い。
 
 
 def discover_calendar(persist: bool = True) -> dict:
@@ -405,14 +325,8 @@ def discover_calendar(persist: bool = True) -> dict:
             "release": {"value": q["release"]}})
         out["first_time"].append(f"{q['name']} / {q['url']}")
         _log(f"  カレンダーから: {q['name']}（{q['maker']}・{q['release']}）")
-    unknown = []
     for h in got.get("held") or []:
         _log(f"  待たせます: {h['name']} ← {h['reason'][:120]}")
-        # ★名簿に無いメーカーは、その都度知らせる★（2026-08-12・運営者の指示）
-        if h.get("maker") and "名簿にありません" in (h.get("reason") or ""):
-            unknown.append((h["maker"], h["name"]))
-    if unknown and persist:
-        _tell_unknown_makers(unknown)
     _log(f"DMMのカレンダー: 候補{got.get('looked', 0)}件 / "
          f"待ち行列へ{len(out['candidates'])}件 / "
          f"待たせた{len(got.get('held') or [])}件 / "
@@ -1062,8 +976,7 @@ def _gather(name: str, maker: str = "", slug: str = "",
     if maker:
         try:
             import dmm_discover as _dd_names
-            _c = (_sj.read_json(_dd_names.MAKER_CATALOG,
-                                expect=dict)["catalogs"].get(maker) or {})
+            _c = _dd_names.maker_conf(maker)
             _maker_names = [str(x) for x in
                             ([_c.get("name")] + list(_c.get("directory_names") or []))
                             if x]
@@ -2028,10 +1941,9 @@ def _verify_dmm(name: str, official_url: str, maker: str,
         return out
 
     try:
-        cats = _sj.read_json(_dd.MAKER_CATALOG, expect=dict)["catalogs"]
+        conf = _dd.maker_conf(maker)
     except Exception as e:                # noqa: BLE001
         return _ng(f"メーカー名簿を読めません: {e}")
-    conf = cats.get(maker) or {}
     allow = [conf.get("name")] + list(conf.get("directory_names") or [])
     allow = [str(x) for x in allow if x]
     if maker and not allow:
@@ -3063,13 +2975,14 @@ def _fill_missing_dmm(work: dict) -> dict:
     if not work.get("maker") and got.get("maker"):
         try:
             import dmm_discover as _dd2
-            _mid = _dd2.maker_index().get(_dd2._norm(got["maker"]))
+            _mid = (_dd2.maker_index().get(_dd2._norm(got["maker"]))
+                    or _dd2.dmm_maker_key(got["maker"]))
         except Exception as e:            # noqa: BLE001
             _mid = ""
             _log(f"  メーカー名簿を読めません（結び直しません）: {e}")
         if _mid:
             work["maker"] = _mid
-            _log(f"  名簿に載ったのでメーカーを結びました: "
+            _log(f"  メーカーを結びました: "
                  f"{got['maker']} → {_mid}")
     if got.get("model_code") and not work.get("dmm_model_code"):
         work["dmm_model_code"] = got["model_code"]
@@ -5441,6 +5354,36 @@ def _selftest_body() -> int:
             t("　（対照）既に入っている値は上書きしない",
               fill_missing(dict(_w_unknown, maker="daitogiken")).get("maker")
               == "daitogiken")
+            # ★★名簿に無い社は DMM の表示名で結ぶ★★（2026-10-10）
+            #   ★直す前★＝L牙狼（サンセイR&D）が12晩「名前かメーカーが取れない」で
+            #   飛ばされ、人が名簿へ足すのを待っていた。
+            _dm_fm.fetch = lambda mid, **_k: {
+                "id": mid, "heading": "L牙狼 闇を照らす者 （新台スマスロ）パチスロ｜天井",
+                "maker": "サンセイR&D", "release_date": "2026-11-04",
+                "release_precision": "day",
+                "model_code": "", "has_model_code": False,
+                "url": f"https://p-town.dmm.com/machines/{mid}"}
+            try:
+                _w_garo = fill_missing(
+                    {"name": "L牙狼 闇を照らす者", "maker": "",
+                     "identity_url": "https://p-town.dmm.com/machines/5121",
+                     "release": "2026-11"})
+                _v_garo = _verify_dmm(
+                    "L牙狼 闇を照らす者", "https://p-town.dmm.com/machines/5121",
+                    "dmm:サンセイR&D", "2026-11", expect_maker="サンセイR&D",
+                    require_recent=False)
+                _v_garo_ng = _verify_dmm(
+                    "L牙狼 闇を照らす者", "https://p-town.dmm.com/machines/5121",
+                    "dmm:サンセイ", "2026-11", require_recent=False)
+            finally:
+                _dm_fm.fetch = _real_dm_fetch
+            t("★★名簿に無い社は、待ち行列で DMM の表示名に結ぶ★★"
+              "（人が名簿へ足すのを待って12晩止まっていた）",
+              _w_garo.get("maker") == "dmm:サンセイR&D")
+            t("　DMMの表示名の呼び名で、機種ページの同定が通る",
+              not _v_garo["problems"])
+            t("　（対照）表示名が違えばメーカーの食い違いで止まる（推測で結ばない）",
+              any("メーカーが食い違います" in x for x in _v_garo_ng["problems"]))
             # ★★DMMで日まで分かった導入日と「未定」を、待ち行列に残す★★
             #   （2026-10-02。日が無いと番兵が月の1日で読んで誤って知らせ、
             #     未定の機種は毎朝「作れていない」と出ていた）

@@ -1235,12 +1235,14 @@ def check_machine(slug: str, machine: dict) -> list:
                 ng.append(f"slug と公式URLが対応していません: {_why}")
         mid = ident.get("manufacturer_id") or ""
         if mid:
+            # ★名簿に無い社は DMM の表示名（dmm:…）で通る★（2026-10-10・dmm_discover.maker_conf）
+            import dmm_discover as _ddz
             try:
-                cats = _sj.read_json(_nwz.CATALOGS, expect=dict)["catalogs"]
+                _cz = _ddz.maker_conf(mid, path=_nwz.CATALOGS)
             except Exception as e:        # noqa: BLE001
                 ng.append(f"メーカー名簿を読めません: {e}")
             else:
-                if mid not in cats or not _nwz.is_catalog(cats[mid]):
+                if not _nwz.is_catalog(_cz):
                     ng.append(f"メーカーが名簿にありません: {mid}")
         ann = ident.get("announced_name")
         if ann and ann != machine.get("name"):

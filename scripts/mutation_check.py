@@ -71,6 +71,70 @@ _AUTO_ACCEPT_LINES = (
     + "            accepted.add(_url)")
 
 MUTATIONS = [
+    # ★★名簿に無いメーカーで新台を止めない（2026-10-10・L牙狼が12晩止まった）★★
+    {
+        "why": "★名簿に無いメーカーの新台を、見つけた段で待たせる"
+               "（★人が名簿へ足すまで止まる＝L牙狼 闇を照らす者が12晩★）★",
+        "file": "scripts/dmm_discover.py",
+        "before": '    mid = index.get(_norm(got["maker"])) or dmm_maker_key(got["maker"])',
+        "after": '    mid = index.get(_norm(got["maker"]))',
+        "run": ["scripts/dmm_discover.py"],
+        "issues": [],
+    },
+    {
+        "why": "★DMMの表示名の呼び名（dmm:…）を名簿の登録として返さない"
+               "（★公開の関所が「名簿にありません」で止める★）★",
+        "file": "scripts/dmm_discover.py",
+        "before": "    if is_dmm_maker_key(maker_id):",
+        "after": "    if False:",
+        "run": ["scripts/dmm_discover.py"],
+        "issues": [],
+    },
+    {
+        "why": "★待ち行列のメーカーが空の新台を、名簿に無い社のとき結ばない"
+               "（★既に控えに入っている機種が毎晩『名前かメーカーが取れない』で飛ばされる★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '                    or _dd2.dmm_maker_key(got["maker"]))',
+        "after": '                    or "")',
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [],
+    },
+    {
+        "why": "★名簿に無い社のメーカー欄を、表示名どおりでも一致にしない"
+               "（★全部の名鑑ページが2AIへの問いになり、夜の枠を食う★）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": "        if _ec and _ec == _core:",
+        "after": "        if False:",
+        "run": ["scripts/model_code_lookup.py"],
+        "issues": [],
+    },
+    {
+        "why": "★名簿に無い社どうしを、名前の一部が重なるだけで一致にする"
+               "（★別会社の名鑑ページが2AIを通らずに材料へ入る＝Codex review223のP1★）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": "        if _ec and _ec == _core:",
+        "after": "        if _ec and _ec in _core:",
+        "run": ["scripts/model_code_lookup.py"],
+        "issues": [],
+    },
+    {
+        "why": "★見えない字・制御文字を含む名前で DMM の呼び名を作る"
+               "（★公開の関所が名簿の社と同じに扱う＝Codex review223のP2★）★",
+        "file": "scripts/dmm_discover.py",
+        "before": "    if not d or not d.isprintable():",
+        "after": "    if not d:",
+        "run": ["scripts/dmm_discover.py"],
+        "issues": [],
+    },
+    {
+        "why": "★名簿に無い社の呼び名（dmm:…）そのものを銘柄の芯にする"
+               "（★題の尾部の照合に内部の呼び名が混ざる★）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": '    if not conf.get("from_dmm"):',
+        "after": "    if True:",
+        "run": ["scripts/model_code_lookup.py"],
+        "issues": [],
+    },
     {
         "why": "★型式接頭辞「LB」をスマスロの印と見なさない"
                "（★info が空の新台経路の LB 機が、DMMの題に『スマスロ』が付いた日から"
@@ -1474,15 +1538,12 @@ MUTATIONS = [
         "after": "        if cat in _INVISIBLE_CATS:",
         "run": ["scripts/publish_new_machine.py"],
     },
-    {
-        "why": "★混ざった方向制御文字を素通りさせる"
-               "（画面上の語順が入れ替わる・普通の文字に混ぜると"
-               "可視の判定もHTMLの判定も通る）★",
-        "file": "scripts/publish_new_machine.py",
-        "before": "            why = (_g.invisible_unsafe(o)",
-        "after": "            why = (None or None",
-        "run": ["scripts/publish_new_machine.py"],
-    },
+    # ★★「混ざった方向制御文字を素通りさせる」（1段目 invisible_unsafe(o) を消す）は外した★★
+    #   （2026-10-10）＝2段目 invisible_unsafe(html.unescape(o)) が1段目を丸ごと含む
+    #   （unescape は生の U+202E を残す）ので、1段目だけ壊しても必ず2段目が止め、
+    #   ★この壊し方は決して赤くならない★（9/3から毎回「守られていません」だった。
+    #   CIは --fast でこのファイルを飛ばすので気づかなかった）。
+    #   2段目の壊し方は上の「文字参照で書いた方向制御を素通りさせる」が見ている。
     {
         "why": "★描き方が違う型を同じ物差しで測る"
                "（settei の「** **」は画面に出るのに空と数える）★",

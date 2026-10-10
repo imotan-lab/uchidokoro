@@ -49,6 +49,64 @@ def _norm(s: str) -> str:
     return re.sub(r"[\s　・（）()＆&,、。.]+", "", s).lower()
 
 
+# ★★名簿に無いメーカーは、DMMの表示名をそのまま使う★★（2026-10-10・運営者の方針）
+#   ＞ 一覧ってやめなかった？ ２AIじゃないの？
+#   ★直す前★＝DMMのメーカー欄が名簿に無いと、新台が待ち行列で止まった
+#   （L牙狼 闇を照らす者＝「サンセイR&D」で12晩）。止まるたびに人が名簿へ足していた
+#   （アデリオン・岡崎産業も同じ形）。名簿で決まらないものは2AIの出番なのに、
+#   ★2AIに渡る前の入口で止めていた★。
+#   ★いま★＝名簿に無ければ「dmm:<DMMの表示名>」を内部の呼び名にする。
+#   記事に出すメーカー名はもともとDMMの値だけなので、読者に出るものは変わらない。
+#   名鑑のメーカー欄がこの表示名と合わなければ UNKNOWN になり、
+#   そのページを材料に使うかは今までどおり2AIが決める（maker_material_decision）。
+#   ★推測で既存の社に結ばない★のは変わらない（別の社の別名として扱わない）。
+#   ★名簿を読むところは全部 maker_conf() を通す★（1か所で決める）。
+DMM_MAKER_PREFIX = "dmm:"
+
+
+def dmm_maker_key(display: str) -> str:
+    """名簿に無いメーカーの内部の呼び名（DMMの表示名そのもの）。"""
+    d = unicodedata.normalize("NFKC", str(display or "")).strip()
+    # ★見えない字を含む名前では作らない★（読めないことを確かめたことにしない）
+    #   isprintable は制御文字・ゼロ幅など（Cc・Cf…）と空白以外の区切りを偽にする
+    if not d or not d.isprintable():
+        return ""
+    return DMM_MAKER_PREFIX + d
+
+
+def is_dmm_maker_key(maker_id) -> bool:
+    """★DMMの表示名の呼び名か★＝dmm_maker_key() が作る形そのものだけ。
+
+    ★空白だけ・前後の空白・見えない字（制御文字・ゼロ幅など）は受け取らない★
+    （Codex review223のP2）＝公開の関所がこの登録を名簿の社と同じに扱うため。
+    """
+    k = str(maker_id or "")
+    if not k.startswith(DMM_MAKER_PREFIX):
+        return False
+    return bool(dmm_maker_key(k[len(DMM_MAKER_PREFIX):])) \
+        and dmm_maker_key(k[len(DMM_MAKER_PREFIX):]) == k
+
+
+def maker_conf(maker_id, cats=None, path: str = MAKER_CATALOG) -> dict:
+    """★メーカーの呼び名から、照合に使う登録を返す唯一の場所★
+
+    名簿の社 … 名簿の登録そのもの
+    dmm:…    … DMMの表示名だけを持つ登録（別名なし・公式の場所なし）
+    どちらでもない … 空（★呼ぶ側は「名簿に無い」と同じ扱い★）
+    名簿が読めなければ例外（★読めないことを「無い」にしない★）。
+    """
+    if is_dmm_maker_key(maker_id):
+        return {"name": str(maker_id)[len(DMM_MAKER_PREFIX):],
+                "status": "WATCH_OFF", "from_dmm": True}
+    if not maker_id:
+        return {}
+    if cats is None:
+        import safe_json as _sj
+        cats = _sj.read_json(path, expect=dict)["catalogs"]
+    c = cats.get(maker_id)
+    return c if isinstance(c, dict) else {}
+
+
 def maker_index(path: str = MAKER_CATALOG) -> dict:
     """メーカーの表示名 → 既存のメーカーID。
 
@@ -135,14 +193,12 @@ def check_one(row: dict, index: dict) -> dict:
     out["model_code"] = got["model_code"]
     out["has_model_code"] = got["has_model_code"]
     out["url"] = got["url"]
-    mid = index.get(_norm(got["maker"]))
+    mid = index.get(_norm(got["maker"])) or dmm_maker_key(got["maker"])
     if not mid:
-        # ★ここで場合分けを足さない★＝名簿で決まらないものは2AIの出番
-        #   （CLAUDE.md「名簿で決まらないメーカー欄は、人を待たずその場で
-        #     2AIへ回す」＝新台SKILL.mdのSTEP 3-B-M）
+        # ★メーカー欄そのものが読めないときだけ待たせる★
+        #   （名簿に無いだけなら DMM の表示名で進む＝maker_conf の説明）
         out["ok"] = False
-        out["reason"] = (f"メーカーが名簿にありません: {got['maker']!r}"
-                         "／★2AIで照合してください（STEP 3-B-M）★")
+        out["reason"] = "機種ページのメーカー欄を読めません"
         return out
     out["maker_id"] = mid
     out["ok"] = True
@@ -301,6 +357,44 @@ def selftest() -> int:
     idx = maker_index()
     t("　メーカー名簿を読める（表示名からメーカーIDが引ける）", len(idx) > 20)
     t("　同じ表示名が2社にぶら下がるものは載せない", all(idx.values()))
+
+    # ★★名簿に無いメーカーでも止めない★★（2026-10-10・L牙狼が12晩止まった）
+    import dmm_machine as _dm0
+    _orig_fetch = _dm0.fetch
+    _row0 = {"id": "5121", "name": "L牙狼 闇を照らす者",
+             "url": "https://p-town.dmm.com/machines/5121",
+             "release_date": "2026-11-04", "kind": "パチスロ"}
+
+    def _fake(maker):
+        return lambda _mid: {"heading": "L牙狼 闇を照らす者", "maker": maker,
+                             "release_date": "2026-11", "model_code": "",
+                             "has_model_code": False,
+                             "url": "https://p-town.dmm.com/machines/5121"}
+    try:
+        _dm0.fetch = _fake("サンセイR&D")
+        g0 = check_one(dict(_row0), {"ミズホ": "mizuho"})
+        _dm0.fetch = _fake("ミズホ")
+        g1 = check_one(dict(_row0), {_norm("ミズホ"): "mizuho"})
+        _dm0.fetch = _fake("")
+        g2 = check_one(dict(_row0), {})
+    finally:
+        _dm0.fetch = _orig_fetch
+    t("★★名簿に無いメーカーは DMM の表示名で進む★★（待ち行列で止めない）",
+      g0["ok"] and g0["maker_id"] == "dmm:サンセイR&D")
+    t("　名簿にある社は今までどおり名簿の呼び名", g1["ok"]
+      and g1["maker_id"] == "mizuho")
+    t("　メーカー欄が読めないときだけ待たせる（読めないことを確かめたことにしない）",
+      not g2["ok"] and "読めません" in g2["reason"])
+    t("　DMMの呼び名は表示名だけを持つ（別名・公式の場所を持たない＝推測で結ばない）",
+      maker_conf("dmm:サンセイR&D") == {"name": "サンセイR&D",
+                                        "status": "WATCH_OFF", "from_dmm": True}
+      and maker_conf("mizuho", {"mizuho": {"name": "ミズホ"}}) == {"name": "ミズホ"}
+      and maker_conf("nosuch", {}) == {} and maker_conf("dmm:", {}) == {})
+    t("　空白だけ・前後の空白・見えない字の呼び名は登録として返さない（Codex review223のP2）",
+      all(maker_conf(k, {}) == {} for k in
+          ("dmm: ", "dmm: サンセイR&D", "dmm:サンセイ​R&D", "dmm:サンセイ\tR&D"))
+      and dmm_maker_key("  サンセイR&D ") == "dmm:サンセイR&D"
+      and dmm_maker_key("サンセイ​R&D") == "")
 
     # ★★待っていた控えを結び直す★★（DMMに遅れて載る機種）
     d = _pm._empty()

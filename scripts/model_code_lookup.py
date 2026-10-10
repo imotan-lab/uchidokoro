@@ -573,11 +573,14 @@ def maker_brand_cores(maker_id: str) -> set:
     """
     out = set()
     try:
-        got = json.load(open(_w.CATALOGS, encoding="utf-8"))
-        conf = (got.get("catalogs") or {}).get(maker_id) or {}
+        import dmm_discover as _ddb
+        conf = _ddb.maker_conf(maker_id, path=_w.CATALOGS)
     except Exception:                     # noqa: BLE001
         return out
-    toks = [str(conf.get("name") or ""), str(maker_id or "")]
+    toks = [str(conf.get("name") or "")]
+    # ★dmm:… は呼び名そのものを芯にしない★（表示名だけで足りる）
+    if not conf.get("from_dmm"):
+        toks.append(str(maker_id or ""))
     # ★名鑑での別名（パオン・ディーピー等）も、その社の銘柄として許す★
     #   （2026-08-02・Codex47回目。メーカー欄にしか効いておらず、
     #     題の括弧（パオン・ディーピー）で正しい票を失っていた）
@@ -994,7 +997,17 @@ def maker_state(seen: str, expected_maker: str) -> dict:
     if not mk:
         return {"state": "UNKNOWN", "seen": "",
                 "expected": expected_maker, "owners": [], "unreadable": True}
-    owners = _maker_core_owners(_ci.normalize_core(mk).replace("株式会社", ""))
+    _core = _ci.normalize_core(mk).replace("株式会社", "")
+    owners = _maker_core_owners(_core)
+    # ★★名簿に無い社（dmm:…）は、DMMの表示名と芯が完全に同じときだけ一致★★
+    #   （2026-10-10）★包含にしない★（Codex review223のP1）＝名簿に無い社どうしは
+    #   「最も具体的な社が勝つ」が効かないので、「架空社」が別会社の「架空社工業」に
+    #   当たって MATCH になり、2AIを通らずに材料へ入る。
+    #   ほかの社に当たったらそちらが勝つ（MISMATCH）。少しでも違えば UNKNOWN＝2AIが決める。
+    if not owners and str(expected_maker or "").startswith("dmm:"):
+        _ec = _ci.normalize_core(str(expected_maker)[4:])
+        if _ec and _ec == _core:
+            owners = {expected_maker}
     if expected_maker in owners:
         st = "MATCH"
     elif owners and _related(expected_maker, owners):
@@ -1387,6 +1400,23 @@ def selftest() -> int:
         print(("✅" if cond else "❌") + " " + name)
 
     nl = chr(10)
+    # ★★名簿に無い社（dmm:…）のメーカー欄★★（2026-10-10・L牙狼が12晩止まった）
+    _sd = maker_state("サンセイR&D", "dmm:サンセイR&D")
+    _sd2 = maker_state("サンセイアールアンドディ", "dmm:サンセイR&D")
+    _sd3 = maker_state("平和", "dmm:サンセイR&D")
+    t("★★名簿に無い社は、DMMの表示名がそのまま書かれていれば一致★★",
+      _sd["state"] == "MATCH")
+    t("　書き方が違えば UNKNOWN（推測で結ばず2AIへ回す）",
+      _sd2["state"] == "UNKNOWN")
+    t("★★名簿に無い社どうしは、名前の一部が重なっても一致にしない★★"
+      "（別会社の名鑑ページが2AIを通らずに材料へ入る・Codex review223のP1）",
+      maker_state("架空社工業", "dmm:架空社")["state"] == "UNKNOWN"
+      and maker_state("架空社", "dmm:架空社工業")["state"] == "UNKNOWN")
+    t("　名簿の別の社に当たれば MISMATCH（そちらが勝つ）",
+      _sd3["state"] == "MISMATCH")
+    t("　名簿に無い社の銘柄の芯は表示名だけ（呼び名の dmm: を芯にしない）",
+      maker_brand_cores("dmm:サンセイR&D")
+      == {_ci.normalize_core("サンセイR&D")})
     t("★『型式名：値』の形から取れる★",
       extract_model_code("<p>型式名：Lびん娘NY1</p>")[0] == "Lびん娘NY1")
     t("★★見出しの次の行に値がある形からも取れる★★（P-WORLDがこの形）",

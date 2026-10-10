@@ -59,7 +59,7 @@
   "scripts/pending_machines.py": "d08ac840e46ac6fb15415f9eb3b84dd6ec8b0790f882823d8ef9de1985963cf2",
   "scripts/prepush_gate.py": "813284dc0373c2471a516c176660961e005f5fc8e8e09b5ad9b181af236ea0be",
   "scripts/preview_site.py": "714a3ffacecbdfdd2ebf690a5b00a2ceed5be0289a8664df2b4b9cfbec0618af",
-  "scripts/publish_new_machine.py": "9eac98e95be1bb6c9f52cf162efe19e0eb552c799cdb6ccf7d540ac5a2c5dfc3",
+  "scripts/publish_new_machine.py": "a6ec955a5d49cc8df34435b33ab052f87d594927d27886430bc37cba654337a0",
   "scripts/safe_json.py": "43f61703cbe7e1ea93ee2602fe9be45662957c8929aef62d649b6fc0493e0006",
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
