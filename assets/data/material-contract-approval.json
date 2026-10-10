@@ -29,7 +29,7 @@
   "scripts/mode_ask.py": "ec2db5bdfeb0aac1b23551e548832d93efc599987ea1c1067f091e925b3451cd",
   "scripts/mode_verdict.py": "bd43e4e05603428591dd525a4b2a85a2089665cd7abfb22bfde1439669e0a6b0",
   "scripts/model_code_lookup.py": "64a5424fbb7aeb91c7bc1b912817359a9a6fa7ea4e3871691dcc752b95c102ad",
-  "scripts/new_machine_watch.py": "b354fe5344243db9a6f14afa5920025b0fd93a52768062caaad4e8643967d0b4",
+  "scripts/new_machine_watch.py": "12e8f8e3efecd61c9f8426bf4663b86a6ca874de80d18edfd90403ac6f73a3ec",
   "scripts/page_corpus.py": "7019d1e19ec774a228111b7f5271324d7d5f7e6c92db8c025998f90642affa02",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/page_reading.py": "d993398c2b658fa06753f45262b5b8795e9591a739d1b1d75d2e35f273642589",
@@ -278,6 +278,5 @@
    "page_reading",
    "read_failure"
   ]
- },
- "_deps_changed_why": "名簿に無いメーカーで新台を止めないようにした（2026-10-10・L牙狼が12晩止まった）。名簿を読む箇所を dmm_discover.maker_conf の1か所にまとめたため、model_code_lookup と publish_new_machine が dmm_discover を取り込むようになった。dmm_discover はもともと材料の契約に入っている。"
+ }
 }

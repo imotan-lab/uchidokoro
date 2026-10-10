@@ -7575,6 +7575,55 @@ MUTATIONS = [
         "after": "    if False:",
         "run": ["scripts/repair_journal.py"],
     },
+    {
+        "why": "★TLSの確かめに Mozilla の信頼の束を足さない（★Windowsの置き場が古いと、証明書を更新した出典が『期限切れ』で1件も読めない・2026-10-10のちょんぼりすた★）★",
+        "file": "scripts/new_machine_watch.py",
+        "before": "            ctx.load_verify_locations(cafile=path)",
+        "after": "            pass",
+        "run": ["scripts/new_machine_watch.py"],
+    },
+    {
+        "why": "★通信口がその確かめ方を使わない（★束を足した確かめ方を作っても、実際の取得は古い置き場のまま★）★",
+        "file": "scripts/new_machine_watch.py",
+        "before": "    _GuardedRedirect(), urllib.request.HTTPSHandler(context=TLS_CONTEXT))",
+        "after": "    _GuardedRedirect())",
+        "run": ["scripts/new_machine_watch.py"],
+    },
+    {
+        "why": "★本物の束の取り出しが常に何も返さない（★certifi が入っていても足されず、Windowsの古い置き場のまま・Codexの指摘4★）★",
+        "file": "scripts/new_machine_watch.py",
+        "before": "    return certifi.where()",
+        "after": "    return None",
+        "run": ["scripts/new_machine_watch.py"],
+    },
+    {
+        "why": "★既定の作り方を検証しないコンテキストにする（★期限切れ・別ホストの証明書まで通る・Codexの指摘5★）★",
+        "file": "scripts/new_machine_watch.py",
+        "before": "def _tls_context(make=ssl.create_default_context, extra=_certifi_bundle):",
+        "after": "def _tls_context(make=ssl._create_unverified_context, extra=_certifi_bundle):",
+        "run": ["scripts/new_machine_watch.py"],
+    },
+    {
+        "why": "★束が読めなかったことを残さない（★黙って元の置き場へ戻り、原因に気づけない・Codexの指摘1★）★",
+        "file": "scripts/new_machine_watch.py",
+        "before": "        TLS_STATE[\"state\"] = \"certifi_load_failed:\" + type(e).__name__",
+        "after": "        pass",
+        "run": ["scripts/new_machine_watch.py"],
+    },
+    {
+        "why": "★証明書の確かめで落ちた理由にTLSの状態を添えない（★『URLError』だけになり原因に気づけない・Codexの指摘1★）★",
+        "file": "scripts/new_machine_watch.py",
+        "before": "        return \"・証明書の確かめに失敗・TLS=\" + str(TLS_STATE.get(\"state\"))",
+        "after": "        return \"\"",
+        "run": ["scripts/new_machine_watch.py"],
+    },
+    {
+        "why": "★壊れた certifi を「入っていない」と取り違える（★where() の失敗が no_certifi と記録され、原因を誤る・Codexの2回目の指摘★）★",
+        "file": "scripts/new_machine_watch.py",
+        "before": "    except ImportError:\n        return None\n    return certifi.where()",
+        "after": "        return certifi.where()\n    except Exception:\n        return None",
+        "run": ["scripts/new_machine_watch.py"],
+    },
 ]
 
 

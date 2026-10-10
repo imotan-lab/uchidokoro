@@ -35,6 +35,7 @@ import argparse
 import json
 import os
 import re
+import ssl
 import sys
 import unicodedata
 import urllib.error
@@ -262,7 +263,58 @@ class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
 #   「他へ影響しない」は嘘だった）。
 #   ★ここだけの通信口にする★＝影響がこのモジュールの中で閉じる。
 #   ★試験はこの通信口を差し替える★（グローバルの urlopen ではなく）。
-OPENER = urllib.request.build_opener(_GuardedRedirect())
+def _certifi_bundle():
+    """Mozilla の信頼の束（certifi）の置き場。入っていなければ None
+
+    ★None にするのは「入っていない」ときだけ★（Codexの2回目の指摘）＝
+    壊れたインストールや where() の失敗は _tls_context まで送り、
+    「読めなかった」として残す（「無い」と取り違えない）。
+    """
+    try:
+        import certifi
+    except ImportError:
+        return None
+    return certifi.where()
+
+
+def _tls_context(make=ssl.create_default_context, extra=_certifi_bundle):
+    """★TLSの確かめ方★（2026-10-11）＝既定の置き場に Mozilla の束を足す
+
+    ★なぜ★＝Windowsの証明書置き場には ISRG Root X2 が
+    「X1が署名した古い版（2025-09-15で期限切れ）」しか無く、
+    証明書を新しい系列（Root YE ← ISRG Root X2）へ更新したサイトが
+    ★『期限切れ』で読めなくなった★（2026-10-10のちょんぼりすた）。
+    ★足すだけ★＝既定の置き場はそのまま使う。束が無い・読めないときは
+    今までどおり既定だけで確かめる（止めない＝以前と同じ動き）。
+    ★黙って戻さない★＝どうなったかを TLS_STATE に残し、証明書の確かめで
+    落ちたときの理由に載せる（束が消えて元へ戻ったことに気づけるように）。
+    ★承知のうえの広がり★＝信頼する根は「Windows の置き場 ∪ Mozilla の束」になる。
+    ホスト名の照合と有効期限の確かめは既定のまま（CERT_REQUIRED・check_hostname）。
+    """
+    ctx = make()
+    try:
+        path = extra()
+        if path:
+            ctx.load_verify_locations(cafile=path)
+            TLS_STATE["state"] = "certifi_added"
+        else:
+            TLS_STATE["state"] = "no_certifi"
+    except Exception as e:                                   # noqa: BLE001
+        TLS_STATE["state"] = "certifi_load_failed:" + type(e).__name__
+    return ctx
+
+
+def _tls_note(e) -> str:
+    """証明書の確かめで落ちたときだけ、TLSの状態を理由に添える"""
+    if "CERTIFICATE_VERIFY_FAILED" in str(e):
+        return "・証明書の確かめに失敗・TLS=" + str(TLS_STATE.get("state"))
+    return ""
+
+
+TLS_STATE = {"state": "unset"}
+TLS_CONTEXT = _tls_context()
+OPENER = urllib.request.build_opener(
+    _GuardedRedirect(), urllib.request.HTTPSHandler(context=TLS_CONTEXT))
 
 
 def guarded_open(req, timeout: int = 20):
@@ -310,7 +362,8 @@ def _get(url: str, timeout: int = 20) -> str:
     except WatchError:
         raise
     except Exception as e:
-        raise WatchError(f"取得できません（{type(e).__name__}）: {url}")
+        raise WatchError(f"取得できません（{type(e).__name__}"
+                         f"{_tls_note(e)}）: {url}")
     if len(body) > MAX_BYTES:
         raise WatchError(f"ページが大きすぎます: {url}")
     text = _decode(body, charset, hdr_charset)
@@ -1373,6 +1426,110 @@ def selftest() -> int:
             results.append((name, bool(cond)))
             print(("✅" if cond else "❌") + " " + name
                   + ((" ← " + str(extra)) if (extra and not cond) else ""))
+
+        # ── ★TLSの確かめに Mozilla の信頼の束（certifi）も足す★（2026-10-11）
+        #   Windowsの証明書置き場に ISRG Root X2 が「X1が署名した古い版
+        #   （2025-09-15で期限切れ）」しか無く、10/10に証明書を新しい系列へ
+        #   更新したちょんぼりすたが★『期限切れ』で1件も読めなくなった★。
+        #   ★束を足すだけ★＝既定の置き場は今までどおり使う。
+        _tls_calls = []
+
+        class _FakeCtx:
+            def load_verify_locations(self, cafile=None, **k):
+                _tls_calls.append(cafile)
+
+        _mk = globals().get("_tls_context")
+        _c1 = (_mk(make=lambda: _FakeCtx(), extra=lambda: "dummy.pem")
+               if _mk else None)
+        t("★★TLSの確かめに Mozilla の信頼の束も足す★★（Windowsの置き場が"
+          "古いと、証明書を更新したサイトが『期限切れ』で読めない）",
+          _c1 is not None and _tls_calls == ["dummy.pem"], _tls_calls)
+        _tls_calls.clear()
+        _c2 = (_mk(make=lambda: _FakeCtx(), extra=lambda: None)
+               if _mk else None)
+        t("　束が無い環境（certifi が入っていない）でも既定のまま動く",
+          _c2 is not None and _tls_calls == [], _tls_calls)
+
+        class _BrokenCtx(_FakeCtx):
+            def load_verify_locations(self, cafile=None, **k):
+                raise OSError("壊れた束")
+
+        _c3 = (_mk(make=lambda: _BrokenCtx(), extra=lambda: "broken.pem")
+               if _mk else None)
+        t("　束が読めなくても止まらず既定のまま動く（足すだけなので今までと同じ）",
+          isinstance(_c3, _BrokenCtx))
+        _https = [h for h in OPENER.handlers
+                  if isinstance(h, urllib.request.HTTPSHandler)]
+        t("★★通信口（OPENER）がその確かめ方を使っている★★",
+          len(_https) == 1
+          and getattr(_https[0], "_context", None) is globals().get("TLS_CONTEXT")
+          and globals().get("TLS_CONTEXT") is not None)
+        # ★黙って元へ戻さない★（Codexの指摘1）＝どうなったかを残す
+        _keep_tls = dict(globals().get("TLS_STATE") or {})
+        _states = []
+        if _mk:
+            _mk(make=lambda: _FakeCtx(), extra=lambda: "dummy.pem")
+            _states.append(TLS_STATE.get("state"))
+            _mk(make=lambda: _FakeCtx(), extra=lambda: None)
+            _states.append(TLS_STATE.get("state"))
+            _mk(make=lambda: _BrokenCtx(), extra=lambda: "broken.pem")
+            _states.append(TLS_STATE.get("state"))
+        t("★★束を足せたか・無いか・読めなかったかを TLS_STATE に残す★★",
+          _states == ["certifi_added", "no_certifi",
+                      "certifi_load_failed:OSError"], _states)
+        TLS_STATE.update({"state": "certifi_load_failed:OSError"})
+        _note = globals().get("_tls_note")
+        t("　証明書の確かめで落ちたときは、理由にTLSの状態を添える",
+          bool(_note) and "TLS=certifi_load_failed:OSError" in _note(
+              Exception("[SSL: CERTIFICATE_VERIFY_FAILED] expired"))
+          and _note(Exception("timed out")) == "")
+        TLS_STATE.clear()
+        TLS_STATE.update(_keep_tls)
+        # ★本物の束の取り出しも試す★（Codexの指摘4）＝差し込みだけだと、
+        #   取り出しを常に None にしても緑のままだった
+        _keep_mod = sys.modules.get("certifi")
+        sys.modules["certifi"] = type(sys)("certifi")
+        sys.modules["certifi"].where = lambda: "fake_certifi.pem"
+        try:
+            _got_where = globals().get("_certifi_bundle", lambda: None)()
+        finally:
+            if _keep_mod is None:
+                sys.modules.pop("certifi", None)
+            else:
+                sys.modules["certifi"] = _keep_mod
+        t("★★本物の _certifi_bundle が certifi の置き場を返す★★",
+          _got_where == "fake_certifi.pem", _got_where)
+        # ★壊れた certifi を「無い」と取り違えない★（Codexの2回目の指摘）
+
+        def _where_broken():
+            raise OSError("壊れたインストール")
+
+        _keep_tls2 = dict(TLS_STATE)
+        sys.modules["certifi"] = type(sys)("certifi")
+        sys.modules["certifi"].where = _where_broken
+        try:
+            _mk(make=lambda: _FakeCtx()) if _mk else None
+            _st_broken = TLS_STATE.get("state")
+        finally:
+            if _keep_mod is None:
+                sys.modules.pop("certifi", None)
+            else:
+                sys.modules["certifi"] = _keep_mod
+            TLS_STATE.clear()
+            TLS_STATE.update(_keep_tls2)
+        t("　certifi の where() が失敗したら『無い』ではなく『読めなかった』と残す",
+          _st_broken == "certifi_load_failed:OSError", _st_broken)
+        _sig = inspect.signature(_mk).parameters if _mk else {}
+        t("　既定の作り方は create_default_context・束は _certifi_bundle",
+          bool(_sig)
+          and _sig["make"].default is ssl.create_default_context
+          and _sig["extra"].default is globals().get("_certifi_bundle"))
+        # ★本物の確かめ方が検証を緩めていない★（Codexの指摘5）
+        _real = globals().get("TLS_CONTEXT")
+        t("★★本物の TLS_CONTEXT は証明書必須・ホスト名照合あり★★",
+          _real is not None
+          and _real.verify_mode == ssl.CERT_REQUIRED
+          and _real.check_hostname is True)
 
         # ── ★同じページを取り直さない★（2026-08-05・取得回数の削減）
         import urllib.request as _ur
