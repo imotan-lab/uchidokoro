@@ -103,7 +103,7 @@ MUTATIONS = [
         "why": "★名簿に無い社のメーカー欄を、表示名どおりでも一致にしない"
                "（★全部の名鑑ページが2AIへの問いになり、夜の枠を食う★）★",
         "file": "scripts/model_code_lookup.py",
-        "before": "        if _ec and _ec == _core:",
+        "before": "        if _ec and _ec in _cores:",
         "after": "        if False:",
         "run": ["scripts/model_code_lookup.py"],
         "issues": [],
@@ -112,8 +112,18 @@ MUTATIONS = [
         "why": "★名簿に無い社どうしを、名前の一部が重なるだけで一致にする"
                "（★別会社の名鑑ページが2AIを通らずに材料へ入る＝Codex review223のP1★）★",
         "file": "scripts/model_code_lookup.py",
-        "before": "        if _ec and _ec == _core:",
-        "after": "        if _ec and _ec in _core:",
+        "before": "        if _ec and _ec in _cores:",
+        "after": "        if _ec and any(_ec in c for c in _cores):",
+        "run": ["scripts/model_code_lookup.py"],
+        "issues": [],
+    },
+    {
+        "why": "★DMMの欄（リンクの案内つき）を、DMMの読み方で社名にせずに比べる"
+               "（★名簿に無い社の新台で、DMMの機種ページそのものが材料から外れる"
+               "＝L牙狼 10/10の夜★）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": "            _cores.add(_ci.normalize_core(_dmm_mk._maker_of(mk)))",
+        "after": "            pass",
         "run": ["scripts/model_code_lookup.py"],
         "issues": [],
     },

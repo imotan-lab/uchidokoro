@@ -1006,7 +1006,18 @@ def maker_state(seen: str, expected_maker: str) -> dict:
     #   ほかの社に当たったらそちらが勝つ（MISMATCH）。少しでも違えば UNKNOWN＝2AIが決める。
     if not owners and str(expected_maker or "").startswith("dmm:"):
         _ec = _ci.normalize_core(str(expected_maker)[4:])
-        if _ec and _ec == _core:
+        # ★★DMMの欄はDMMの読み方で社名だけにしてから比べる★★（2026-10-11）
+        #   ★直す前★＝DMMの欄は「サンセイR&D(メーカー公式サイト)」とリンクの案内が付くので
+        #   完全一致に届かず、L牙狼の材料からDMMのページそのものが外れた（10/10の夜）。
+        #   ★新しい決まりは作らない★＝dmm_machine._maker_of（残りを全部案内として
+        #   説明できたときだけ社名とみなす厳しい読み方）をそのまま使う。読めなければ元のまま。
+        _cores = {_core}
+        try:
+            import dmm_machine as _dmm_mk
+            _cores.add(_ci.normalize_core(_dmm_mk._maker_of(mk)))
+        except Exception:                 # noqa: BLE001
+            pass
+        if _ec and _ec in _cores:
             owners = {expected_maker}
     if expected_maker in owners:
         st = "MATCH"
@@ -1411,7 +1422,17 @@ def selftest() -> int:
     t("★★名簿に無い社どうしは、名前の一部が重なっても一致にしない★★"
       "（別会社の名鑑ページが2AIを通らずに材料へ入る・Codex review223のP1）",
       maker_state("架空社工業", "dmm:架空社")["state"] == "UNKNOWN"
-      and maker_state("架空社", "dmm:架空社工業")["state"] == "UNKNOWN")
+      and maker_state("架空社", "dmm:架空社工業")["state"] == "UNKNOWN"
+      and maker_state("架空社工業(メーカー公式サイト)", "dmm:架空社")["state"]
+      == "UNKNOWN")
+    t("★★DMMの欄（リンクの案内つき）は、DMMの読み方で社名にしてから比べる★★"
+      "（L牙狼の材料からDMMのページそのものが外れた・10/10の夜）",
+      maker_state("サンセイR&D(メーカー公式サイト)", "dmm:サンセイR&D")["state"]
+      == "MATCH"
+      and maker_state("サンセイR&D(メーカー公式サイト) サンセイR&Dの掲載機種一覧",
+                      "dmm:サンセイR&D")["state"] == "MATCH"
+      and maker_state("サンセイR&D(メーカー公式サイト) 別の案内",
+                      "dmm:サンセイR&D")["state"] == "UNKNOWN")
     t("　名簿の別の社に当たれば MISMATCH（そちらが勝つ）",
       _sd3["state"] == "MISMATCH")
     t("　名簿に無い社の銘柄の芯は表示名だけ（呼び名の dmm: を芯にしない）",
