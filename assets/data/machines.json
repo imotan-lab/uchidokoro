@@ -12291,26 +12291,30 @@
    "schema_version": "page-decision/v2",
    "indexable": false,
    "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [],
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "setting",
+    "spec"
+   ],
    "pending_topics": [
     "gameplay",
     "cz",
     "ceiling",
-    "spec",
-    "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
-    "CLAIMS_LT_3",
     "CATEGORIES_LT_2",
     "NO_UNIQUE_GAMEPLAY"
    ],
-   "claims": [],
+   "claims": [
+    "at_prob",
+    "games_per_50",
+    "payout_range"
+   ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-07",
-   "input_digest": "sha256:97d326dfd018051e47b7021ff20604d76ab9cf261d6a4ed26c108b9844bf9b6b"
+   "decided_at": "2026-10-12",
+   "input_digest": "sha256:595f9b54abd597355f7399a7ed61a055828109645f7fcf8d04fdf1a5e96c31d4"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-19",
@@ -12322,10 +12326,21 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5113 型式=L魔法少女にあこがれてNP メーカー=ニューギン 導入=2026-10 確認日=2026-09-24",
    "market_release_date": "2026-10-19",
+   "observed_model_code": "L魔法少女にあこがれてNP",
    "_observed_model_code_sources": [
     "p-town.dmm.com"
+   ]
+  },
+  "checker": {
+   "coinRate": 31.0,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
    ],
-   "observed_model_code": "L魔法少女にあこがれてNP"
+   "normal": {}
   }
  },
  {
