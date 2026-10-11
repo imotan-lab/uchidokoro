@@ -12654,5 +12654,59 @@
     "p-town.dmm.com"
    ]
   }
+ },
+ {
+  "slug": "dmm_5111",
+  "name": "Lウミンチュ",
+  "seo": {
+   "title": "Lウミンチュ スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [
+    "payout_range"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-10-12",
+   "input_digest": "sha256:b57c69a79a963e0d796881fe7f4f06f23049ac94aeb77e09defbad93dcd76930"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-19",
+  "identity": {
+   "manufacturer_id": "okazaki_sangyo",
+   "official_product_url": "https://p-town.dmm.com/machines/5111",
+   "announced_name": "Lウミンチュ",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5111 型式=LウミンチュZA メーカー=岡崎産業 導入=2026-10-19 確認日=2026-10-12",
+   "market_release_date": "2026-10-19",
+   "regulatory_model_code": "LウミンチュZA",
+   "_model_code_sources": [
+    "vote:dmm-ptown"
+   ]
+  }
  }
 ]
