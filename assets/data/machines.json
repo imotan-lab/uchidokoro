@@ -12600,5 +12600,59 @@
    "identity_evidence_ref": "dmm:5100 型式=未掲載 メーカー=アクロス 導入=2026-12 確認日=2026-09-13",
    "market_release_date": "2026-12-21"
   }
+ },
+ {
+  "slug": "dmm_5121",
+  "name": "L牙狼 闇を照らす者",
+  "seo": {
+   "title": "L牙狼 闇を照らす者 スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-10-11",
+   "input_digest": "sha256:21ac7dbe88748e16c59b85912cea034a29dd8aaf439243fcb43fc4f510987b5d"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-11-02",
+  "identity": {
+   "manufacturer_id": "dmm:サンセイR&D",
+   "official_product_url": "https://p-town.dmm.com/machines/5121",
+   "announced_name": "L牙狼 闇を照らす者",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5121 型式=L牙狼闇を照らす者CJ メーカー=サンセイR&D 導入=2026-11-02 確認日=2026-10-11",
+   "market_release_date": "2026-11-02",
+   "observed_model_code": "L牙狼闇を照らす者CJ",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  }
  }
 ]
