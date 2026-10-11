@@ -12708,5 +12708,58 @@
     "vote:dmm-ptown"
    ]
   }
+ },
+ {
+  "slug": "dmm_5096",
+  "name": "Lアカマター",
+  "seo": {
+   "title": "Lアカマター スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "gameplay"
+   ],
+   "pending_topics": [
+    "cz",
+    "ceiling",
+    "spec",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2"
+   ],
+   "claims": [
+    "at:MAIN_AT"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-10-12",
+   "input_digest": "sha256:016089e9484bb27a30de43deb5952154dd4400a376b0320e8a2ad51b77aad5cf"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-12-07",
+  "identity": {
+   "manufacturer_id": "oizumi",
+   "official_product_url": "https://p-town.dmm.com/machines/5096",
+   "announced_name": "Lアカマター",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5096 型式=LアカマターL1 メーカー=オーイズミ 導入=2026-12-07 確認日=2026-10-12",
+   "market_release_date": "2026-12-07",
+   "observed_model_code": "LアカマターL1",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  }
  }
 ]
