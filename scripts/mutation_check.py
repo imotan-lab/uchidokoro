@@ -117,6 +117,43 @@ MUTATIONS = [
         "run": ["scripts/model_code_lookup.py"],
         "issues": [],
     },
+    # ★★読めていない出典がある日は、運営者への3回に数えない（2026-10-12・見える子ちゃん）★★
+    {
+        "why": "★読めていない出典がある日も、運営者へ回す3回に数える"
+               "（★2AIの控えが一時的に切れただけで、古い質問が運営者へ届く★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    if not count:",
+        "after": "    if False:",
+        "run": ["scripts/grow_machine.py"],
+        "issues": [],
+    },
+    {
+        "why": "★読めていない日がいくら続いても、運営者へ回さない"
+               "（★ずっと読めない出典が1つある機種が、永久に届かない＝Codex review226 のP2★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        if u >= STUCK_UNREAD_LIMIT:",
+        "after": "        if False:",
+        "run": ["scripts/grow_machine.py"],
+        "issues": [],
+    },
+    {
+        "why": "★運営者へ回す関数が、読めていない日の数を見ない"
+               "（★7日続いても、回数の控えが3に届かないので黙って届かない★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    if _n < STUCK_ASK_LIMIT and _u < STUCK_UNREAD_LIMIT:",
+        "after": "    if _n < STUCK_ASK_LIMIT:",
+        "run": ["scripts/grow_machine.py"],
+        "issues": [],
+    },
+    {
+        "why": "★内容が消える日の数え方に、出典を全部読めたかを渡さない"
+               "（★数えない道が作られても、本番から一度も使われない★）★",
+        "file": "scripts/grow_machine.py",
+        "before": '                               count=bool(got.get("all_urls_complete")))',
+        "after": "                               count=True)",
+        "run": ["scripts/grow_machine.py"],
+        "issues": [],
+    },
     {
         "why": "★DMMの欄（リンクの案内つき）を、DMMの読み方で社名にせずに比べる"
                "（★名簿に無い社の新台で、DMMの機種ページそのものが材料から外れる"
@@ -5035,7 +5072,7 @@ MUTATIONS = [
                "（★運営者の指示「人に頼らないで・どうしてもの場合だけ報告」が、"
                "書いた人の注意力しだいになる★・2026-09-08）",
         "file": "scripts/grow_machine.py",
-        "before": "    if _n < STUCK_ASK_LIMIT:",
+        "before": "    if _n < STUCK_ASK_LIMIT and _u < STUCK_UNREAD_LIMIT:",
         "after": "    if False:",
         "run": ["scripts/grow_machine.py"],
     },

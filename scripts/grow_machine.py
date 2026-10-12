@@ -1567,11 +1567,35 @@ def _stuck_count(slug: str, add: int = 0, today: str = "") -> int:
         rec = {"n": int(rec or 0), "day": ""}
     today = today or _dt.date.today().isoformat()
     if add and rec.get("day") != today:
-        rec = {"n": int(rec.get("n") or 0) + add, "day": today}
+        # ★ほかの欄（読めていない日の数 u）を消さない★（2026-10-12）
+        rec = dict(rec, n=int(rec.get("n") or 0) + add, day=today)
         book[slug] = rec
         if not _stuck_save(got):
             return min(rec["n"], 1)
     return int(rec.get("n") or 0)
+
+
+# ★★読めていない出典がある日が、これだけ続いたら運営者へ回す★★（2026-10-12）
+#   ★3回に数えない★だけだと、ずっと読めない出典が1つある機種は運営者に永久に届かない
+#   （Codex review226 のP2・実害＝別の出典の訂正で消える場合も黙ったまま）。
+#   控えが一時的に切れた程度なら、2AIが数日のうちに付け直して解ける。
+STUCK_UNREAD_LIMIT = 7
+
+
+def _stuck_unread_days(slug: str, today: str = "") -> int:
+    """読めていない出典があって数えなかった日の数（★同じ日は1回★）。"""
+    got = _stuck_state()
+    book = got.setdefault("grow_stuck", {})
+    rec = book.get(slug)
+    if not isinstance(rec, dict):
+        rec = {"n": int(rec or 0), "day": ""}
+    today = today or _dt.date.today().isoformat()
+    if rec.get("uday") != today:
+        rec = dict(rec, u=int(rec.get("u") or 0) + 1, uday=today)
+        book[slug] = rec
+        if not _stuck_save(got):
+            return min(rec["u"], 1)
+    return int(rec.get("u") or 0)
 
 
 def _stuck_clear(slug: str) -> None:
@@ -1792,7 +1816,7 @@ def pending_questions(cur: dict, mat: dict = None, slug: str = "",
 
 
 def grow_result(slug: str, ok: bool, why: str = "",
-                today: str = "") -> dict:
+                today: str = "", count: bool = True) -> dict:
     """★育てた結果を受けて、次にどうするかを決める★（2026-08-27）
 
     ★ここに切り出した理由★＝判断が処理の中に埋まっていると、
@@ -1805,6 +1829,28 @@ def grow_result(slug: str, ok: bool, why: str = "",
     if ok:
         _stuck_clear(slug)
         return {"do": "ok"}
+    # ★★読めていない出典がある日は、3回に数えない★★（2026-10-12）
+    #   ★直す前★＝名鑑ページの本文が少し変わっただけで2AIの「使ってよい」の控えが
+    #   切れ、材料が減って「前の内容を再現できない」と数えた。3日続いて運営者へ
+    #   質問が届いたが、同じ朝に2AIが控えを付け直して解消していた
+    #   （見える子ちゃん 10/08・モグモグ風林火山 10/05＝どちらも届いた時には古い質問）。
+    #   ★読めていないのは2AIが解ける話★（読み直す・控え直す）なので人へは回さない。
+    #   聞くことは毎日聞く。前の内容を消さない守りはそのまま。
+    if not count:
+        n = _stuck_count(slug)
+        u = _stuck_unread_days(slug, today=today)
+        if u >= STUCK_UNREAD_LIMIT:
+            # ★読めていない日が続いた＝一時的な切れではない★→ 運営者へ
+            return {"do": "ledger", "round": n,
+                    "detail": (why + f"／★読めていない出典がある日が{u}日続き、"
+                               "2AIでも解けませんでした★／旧い内容は公開されたままです。")}
+        return {"do": "ask", "round": n,
+                "text": ("★2AIで決めてください★ " + slug
+                         + " で、前に載せた内容を今夜の材料で再現できません: "
+                         + why
+                         + "／★読めていない出典があります★＝まずその出典を読み直す・"
+                         "使ってよいかを決め直してください（読めていない日は"
+                         "運営者へ回す回数に数えません）")}
     n = _stuck_count(slug, add=1, today=today)
     if n < STUCK_ASK_LIMIT:
         return {"do": "ask", "round": n,
@@ -1834,7 +1880,10 @@ def ledger_once(slug: str, title: str, detail: str,
     （呼ぶ側が「3回目です」と言うだけでは通らない）。
     """
     _n = _stuck_count(slug)
-    if _n < STUCK_ASK_LIMIT:
+    # ★読めていない日が続いた機種も届ける★（2026-10-12・数えるのは機械＝控えの u）
+    _rec_u = ((_stuck_state().get("grow_stuck") or {}).get(slug) or {})
+    _u = int(_rec_u.get("u") or 0) if isinstance(_rec_u, dict) else 0
+    if _n < STUCK_ASK_LIMIT and _u < STUCK_UNREAD_LIMIT:
         try:
             _log(f"  ★運営者へは回しません★（{slug}／控えでは{_n}回目・"
                  f"{STUCK_ASK_LIMIT}回で報告します）")
@@ -2276,7 +2325,8 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
             _why = " / ".join(
                 lost + [p for p in out["problems"] if "消えます" in p])[:900] \
                 + f"／記事の指紋={detail_sha(old_detail)}"
-            _act = grow_result(slug, False, _why)
+            _act = grow_result(slug, False, _why,
+                               count=bool(got.get("all_urls_complete")))
             if _act["do"] == "ask":
                 out.setdefault("questions", []).append({
                     "text": _act["text"], "kind": "grow_stuck",
@@ -3425,6 +3475,9 @@ def selftest() -> int:
       "（★直す前は戻るだけで、毎日おなじ理由で止まり続けた★）",
       '"kind": "grow_demote"' in inspect.getsource(plan_one)
       and inspect.getsource(plan_one).count("grow_result(slug, False") >= 2)
+    t("★★内容が消える日の数え方に、出典を全部読めたかを渡す★★"
+      "（★渡さないと、控えが一時的に切れた日まで運営者への3回に数える★）",
+      'count=bool(got.get("all_urls_complete"))' in inspect.getsource(plan_one))
 
     # ★卒業した形は「判定書の indexable を True に書き換える」では作れない★
     #   ＝`machine_class` は claims から計算し直して突き合わせるので、
@@ -5255,6 +5308,35 @@ def selftest() -> int:
                   and _wrote == ["zzz_g"])
             finally:
                 _oq.add = _keep_add
+            # ★★読めていない出典がある日は数えない★★（2026-10-12）
+            _a3u = grow_result("zzz_s", False, "理由", today="2026-08-03",
+                               count=False)
+            t("★★読めていない出典がある日は、3回に数えず2AIへ聞くだけ★★"
+              "（控えが一時的に切れただけの日に運営者へ届いていた＝見える子ちゃん）",
+              _a3u["do"] == "ask" and _a3u["round"] == 2
+              and "読めていない出典" in _a3u["text"])
+            # ★★ただし読めていない日が続いたら運営者へ★★（Codex review226 のP2）
+            _uu = [grow_result("zzz_u", False, "理由", count=False,
+                               today=f"2026-09-{d:02d}") for d in range(1, 8)]
+            _uu_same = grow_result("zzz_u2", False, "理由", count=False,
+                                   today="2026-09-01")
+            _uu_same = grow_result("zzz_u2", False, "理由", count=False,
+                                   today="2026-09-01")
+            t("★★読めていない日が7日続いたら運営者へ回す★★"
+              "（★ずっと読めない出典が1つある機種が、永久に届かなくなるのを防ぐ★）",
+              [a["do"] for a in _uu] == ["ask"] * 6 + ["ledger"]
+              and "7日続き" in _uu[-1]["detail"])
+            t("　同じ日に何度動いても1日と数える", _uu_same["do"] == "ask")
+            _wrote_u = []
+            _keep_add_u = _oq.add
+            _oq.add = lambda store, title, detail: _wrote_u.append(title)
+            try:
+                ledger_once("zzz_u", "題", "中身")
+            finally:
+                _oq.add = _keep_add_u
+            t("　★運営者へ回す関数も、読めていない日の数で通す★"
+              "（★回数の控えだけを見ると、7日続いても黙って届かない★）",
+              _wrote_u == ["zzz_u: 題"])
             _a3 = grow_result("zzz_s", False, "理由", today="2026-08-03")
             t("★★3回目でだけ人へ報告する★★",
               _a3["do"] == "ledger" and _a3["round"] == STUCK_ASK_LIMIT)
