@@ -219,6 +219,7 @@
    ],
    "reason_codes": [],
    "claims": [
+    "at_prob",
     "ceiling:GAME:AT間",
     "ceiling:GAME:CZ間",
     "cz:オポジットバトル",
@@ -228,8 +229,8 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-08",
-   "input_digest": "sha256:d8cd2e204a418dacd4e9ec4801856ac1bb855da9eadd7c57dd728c63a75a7cd2"
+   "decided_at": "2026-10-14",
+   "input_digest": "sha256:9da2a483149e4f9803fd62ae50c57f3a7b799bfed00ee07fc3c08b8aaf52577b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -262,10 +263,11 @@
     "caution": 300,
     "good": 300,
     "excellent": 400,
-    "ceiling": 850,
-    "target": 300
+    "target": 300,
+    "ceiling": 850
    }
-  }
+  },
+  "targetProjection": "a39769cb5ba2151d"
  },
  {
   "slug": "tokyo_ghoul",
