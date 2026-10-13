@@ -563,7 +563,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-06",
+   "decided_at": "2026-10-14",
    "input_digest": "sha256:4f39c8038dfbe837e7262b763fb5d7a640ba3032004f2cdc059b6575d3c7aa34"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -583,7 +583,7 @@
    ]
   },
   "checker": {
-   "coinRate": 31.0,
+   "coinRate": 31,
    "unit": "G",
    "modes": [
     {
@@ -608,7 +608,8 @@
     "excellent": 250,
     "target": 250
    }
-  }
+  },
+  "targetProjection": "0d04331576a212d4"
  },
  {
   "slug": "sao2",
