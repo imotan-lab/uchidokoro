@@ -1961,6 +1961,23 @@ def ledger_once(slug: str, title: str, detail: str,
         _oq.add(_oq.STORE, f"{slug}: {title}", detail)
     except BaseException as e:            # noqa: BLE001
         _log(f"  運営者への質問を控えられませんでした: {type(e).__name__}: {e}")
+        return
+    # ★★運営者へ回したら、回数を0に戻す★★（2026-10-14）
+    #   ★直す前★＝回数が3以上のまま残り、運営者の答えのあとも詰まるたびに1日目から
+    #   すぐ運営者へ回っていた（見える子ちゃんは5回・転生王女は3回のまま。
+    #   今朝の質問2件は、どちらも同じ朝のうちに2AIが自分で解いていた）。
+    #   ★戻したあとは、また2AIが別の日に3回試してから回す★。
+    _stuck_reset(slug)
+
+
+def _stuck_reset(slug: str) -> None:
+    """運営者へ回したので、その機種の回数（n）と読めていない日数（u）を0に戻す。"""
+    got = _stuck_state()
+    book = got.setdefault("grow_stuck", {})
+    rec = book.get(slug)
+    if isinstance(rec, dict) and (rec.get("n") or rec.get("u")):
+        book[slug] = dict(rec, n=0, u=0)
+        _stuck_save(got)
 
 
 
@@ -5419,6 +5436,42 @@ def selftest() -> int:
             t("　★運営者へ回す関数も、読めていない日の数で通す★"
               "（★回数の控えだけを見ると、7日続いても黙って届かない★）",
               _wrote_u == ["zzz_u: 題"])
+            # ★★運営者へ回したら回数を0に戻す★★（2026-10-14・見える子ちゃん n=5 のまま）
+            _after_u = grow_result("zzz_u", False, "理由", today="2026-09-20")
+            _after_u2 = grow_result("zzz_u", False, "理由", count=False,
+                                    today="2026-09-21")
+            t("★★運営者へ回したら回数を0に戻し、また2AIが3回試してから回す★★"
+              "（★戻さないと、答えのあとも詰まるたびに1日目からすぐ運営者へ届く★）",
+              _after_u["do"] == "ask" and _after_u["round"] == 1
+              and _after_u2["do"] == "ask")
+            # ★実例と同じ形＝回数（n）を3日積んでから回す★（Codex review231：上の試験は n=0 のまま）
+            for _dd in ("2026-09-10", "2026-09-11", "2026-09-12"):
+                grow_result("zzz_n", False, "理由", today=_dd)
+            _wrote_n = []
+            _keep_add_n = _oq.add
+            _oq.add = lambda store, title, detail: _wrote_n.append(title)
+            try:
+                ledger_once("zzz_n", "題", "中身")
+            finally:
+                _oq.add = _keep_add_n
+            _next_n = grow_result("zzz_n", False, "理由", today="2026-09-13")
+            t("★★回数（n）を3日積んで運営者へ回したら、翌日は1回目から数え直す★★",
+              _wrote_n == ["zzz_n: 題"] and _next_n["do"] == "ask"
+              and _next_n["round"] == 1)
+            # ★質問を控えられなかったときは戻さない★（翌日また回す）
+            for _dd in ("2026-09-10", "2026-09-11", "2026-09-12"):
+                grow_result("zzz_f", False, "理由", today=_dd)
+
+            def _fail_add(store, title, detail):
+                raise OSError("書けない")
+            _oq.add = _fail_add
+            try:
+                ledger_once("zzz_f", "題", "中身")
+            finally:
+                _oq.add = _keep_add_n
+            t("　質問を控えられなかったときは回数を戻さない（翌日また運営者へ回す）",
+              _stuck_count("zzz_f") == 3
+              and grow_result("zzz_f", False, "理由", today="2026-09-13")["do"] == "ledger")
             _a3 = grow_result("zzz_s", False, "理由", today="2026-08-03")
             t("★★3回目でだけ人へ報告する★★",
               _a3["do"] == "ledger" and _a3["round"] == STUCK_ASK_LIMIT)

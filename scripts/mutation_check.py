@@ -71,6 +71,24 @@ _AUTO_ACCEPT_LINES = (
     + "            accepted.add(_url)")
 
 MUTATIONS = [
+    {
+        "why": "★運営者へ回したとき、読めていない日数だけ戻して回数（n）を残す"
+               "（★部分的な退行＝見える子ちゃんの n=5 がそのまま残る・Codex review231★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        book[slug] = dict(rec, n=0, u=0)",
+        "after": "        book[slug] = dict(rec, u=0)",
+        "run": ["scripts/grow_machine.py"],
+        "issues": [],
+    },
+    {
+        "why": "★運営者へ回したあとも、回数を0に戻さない"
+               "（★答えのあとも詰まるたびに1日目からすぐ運営者へ届く＝見える子ちゃん n=5・10/14★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    _stuck_reset(slug)\n",
+        "after": "    pass\n",
+        "run": ["scripts/grow_machine.py"],
+        "issues": [],
+    },
     # ★★線を変えたら記事の狙い目も未確認に戻す（2026-10-13・Codex review228）★★
     {
         "why": "★片側だけに指紋がある食い違いを、関所が見逃す"
