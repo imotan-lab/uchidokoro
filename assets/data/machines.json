@@ -133,7 +133,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-06",
+   "decided_at": "2026-10-14",
    "input_digest": "sha256:9ce3f4b0997c8b941ae30a4398c0a5d469548664e7fa3ffbcae2345167c7037a"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -153,6 +153,20 @@
   },
   "checker": {
    "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "AT間"
+    },
+    {
+     "key": "cz",
+     "label": "CZ間"
+    },
+    {
+     "key": "reset",
+     "label": "リセット後"
+    }
+   ],
    "normal": {
     "caution": 470,
     "good": 490,
@@ -173,22 +187,9 @@
     "excellent": 480,
     "ceiling": 999,
     "target": 390
-   },
-   "modes": [
-    {
-     "key": "normal",
-     "label": "AT間"
-    },
-    {
-     "key": "cz",
-     "label": "CZ間"
-    },
-    {
-     "key": "reset",
-     "label": "リセット後"
-    }
-   ]
-  }
+   }
+  },
+  "targetProjection": "cf663efe2b860baa"
  },
  {
   "slug": "pw_10503",
