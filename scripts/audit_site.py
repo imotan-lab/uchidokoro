@@ -1641,6 +1641,33 @@ def check_56_auto_article_contract(machines: list) -> list[str]:
     return ngs + _check_56_selftest()
 
 
+def check_57_auto_target_sync(machines: list) -> list[str]:
+    """★新台の狙い目の指紋と文が、いまのチェッカーの線から作ったものと同じか★（2026-10-04）
+
+    ★なぜ★＝新台ページは「機種行の指紋 == 記事の指紋」のときだけ狙い目の4表示
+    （チェッカー・狙い目早見表・期待値早見表の判定・記事の狙い目の欄）を出す。
+    線を書き換えたのに指紋が古い／記事の文や箱を手で変えた、を公開前に止める。
+    ★判定は target_projection.sync_problems の1か所★（同じ規則を2か所に書かない）。
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    try:
+        import target_projection as _tp57
+    except Exception as e:                # noqa: BLE001
+        return [f"狙い目の照合を読めません: {type(e).__name__}: {e}"]
+    detail_dir = BASE / "assets" / "data" / "machine-details"
+    ngs = []
+    for m in machines:
+        if "publication_policy" not in m:
+            continue
+        p = detail_dir / f"{m['slug']}.json"
+        try:
+            d = load_json(p) if p.is_file() else {}
+        except Exception:                 # noqa: BLE001
+            continue                      # ★項目36が担当★
+        ngs += _tp57.sync_problems(m, d)
+    return ngs
+
+
 def _check_56_selftest() -> list[str]:
     """★この見張り自身が働いているかを、毎回いっしょに確かめる★
 
@@ -4186,6 +4213,7 @@ CHECKS = [
     ("54_どこから採ったかの言い回し", check_54_source_wording),
     ("55_文体（です・ます）の残り", check_55_plain_style),
     ("56_新台記事が空っぽ", check_56_auto_article_contract),
+    ("57_新台の狙い目の指紋", check_57_auto_target_sync),
 ]
 
 

@@ -486,7 +486,12 @@ def expected_toc(machine: dict, detail, pochi_reasons: dict) -> list:
       ポチポチくん … ひな型の名簿（`extract_pochipochi_reasons`）
     """
     cls = _pd.machine_class(machine)          # ★壊れた判定書は例外で止まる★
-    hide_tools = cls in ("AUTO_INDEXABLE", "AUTO_PENDING", "LEGACY_PREVIEW")
+    is_auto = cls in ("AUTO_INDEXABLE", "AUTO_PENDING")
+    # ★★新台は「指紋がそろっているか」で決める★★（2026-10-04・target_projection.synced の1か所）
+    import target_projection as _tp14
+    hide_tools = cls == "LEGACY_PREVIEW" or (is_auto and not _tp14.synced(machine, detail))
+    # ★ポチポチくんは新台経路・preview では使えない★（ひな型が無効化する）
+    hide_pochi = is_auto or cls == "LEGACY_PREVIEW"
     out = []
     if not hide_tools:
         out += ["狙い目チェッカー", "狙い目早見表"]
@@ -497,7 +502,7 @@ def expected_toc(machine: dict, detail, pochi_reasons: dict) -> list:
         title = str(sec.get("title") or "").strip()
         if title:
             out.append(title)
-    if not hide_tools and machine.get("slug") not in pochi_reasons:
+    if not hide_pochi and machine.get("slug") not in pochi_reasons:
         out.append("ポチポチくん")
     return out
 
@@ -755,7 +760,8 @@ def check_one(page, machine: dict) -> list[str]:
     # R17: 新台ページの期待値早見表に、狙い目から作る判定・比較が出ていないか（2026-10-04）
     #   ★早見表のモードを全部切り替えて見る★（最初のモードだけだと2番目以降を見落とす）
     if _is_auto:
-        ngs += judge_auto_ev(True, page.evaluate(EV_VIEWS_JS))
+        import target_projection as _tp17
+        ngs += judge_auto_ev(not _tp17.synced(machine, detail), page.evaluate(EV_VIEWS_JS))
 
 
     # ★★R16: 交換率を実際に切り替えて、狙い目の箱を照合する★★
@@ -1143,6 +1149,20 @@ def selftest() -> int:
       "（ひな型がチェッカー・早見表を隠し、ポチポチくんも使えないため）",
       expected_toc(_auto, _det14, {})
       == ["基本情報", "天井・恩恵", "基本スペック"])
+    # ★★指紋がそろった新台はチェッカーと早見表が出る（ポチポチくんは出ない）★★（2026-10-04）
+    import target_projection as _tpx
+    _ck_line = {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                "normal": {"ceiling": 900, "caution": 300, "good": 400, "excellent": 600}}
+    _auto_l = {**_auto, "checker": _ck_line}
+    _f = _tpx.detail_fields(_auto_l)
+    _det_s = {**_det14, "summaryBoxes": _f["summaryBoxes"], "targetProjection": _f["projection"],
+              "sections": [{"title": _tpx.SECTION_TITLE, "body": _f["body"]}] + _det14["sections"]}
+    _auto_s = {**_auto_l, "targetProjection": _f["projection"]}
+    t("★★指紋がそろった新台は、目次にチェッカーと早見表が並ぶ（ポチポチくんは出ない）★★",
+      expected_toc(_auto_s, _det_s, {})[:3] == ["狙い目チェッカー", "狙い目早見表", "基本情報"]
+      and "ポチポチくん" not in expected_toc(_auto_s, _det_s, {}))
+    t("★★線はあっても指紋が無い（線を書いた直後）新台は出さない★★",
+      expected_toc(_auto_l, _det_s, {})[0] == "基本情報")
     t("　preview も同じ（道具が隠れている）",
       expected_toc(_prev, _det14, {})
       == ["基本情報", "天井・恩恵", "基本スペック"])

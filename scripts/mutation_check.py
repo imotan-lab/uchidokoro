@@ -71,6 +71,53 @@ _AUTO_ACCEPT_LINES = (
     + "            accepted.add(_url)")
 
 MUTATIONS = [
+    # ★★線を変えたら記事の狙い目も未確認に戻す（2026-10-13・Codex review228）★★
+    {
+        "why": "★片側だけに指紋がある食い違いを、関所が見逃す"
+               "（★記事にだけ前の線から作った狙い目の文が残って読者に出る＝review228 のP1★）★",
+        "file": "scripts/target_projection.py",
+        "before": "    if bool(mid) != bool(did):",
+        "after": "    if False:",
+        "run": ["scripts/target_projection.py"],
+        "issues": [],
+    },
+    {
+        "why": "★記事を未確認に戻すとき、狙い目の文を残す"
+               "（★指紋だけ外れて古い値の文が読者に出続ける★）★",
+        "file": "scripts/target_projection.py",
+        "before": '            s["body"] = [PENDING_TEXT]',
+        "after": "            pass",
+        "run": ["scripts/target_projection.py"],
+        "issues": [],
+    },
+    {
+        "why": "★線を書いた道具が、記事の狙い目を未確認に戻さない"
+               "（★チェッカー等は隠れても記事にだけ古い値が出る＝review228 のP1★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": ('    if "publication_policy" in new and not new.get("targetProjection") \\\n'
+                   "            and _unsync_article(slug) != 0:"),
+        "after": "    if False:",
+        "run": ["scripts/checker_verdict.py"],
+        "issues": [],
+    },
+    {
+        "why": "★記事を読んだあとに別の書き手が変えても、古い写しで上書きする"
+               "（★その間に入った確認済みの情報が消える＝review229 のP1★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        if _dg() != d0:",
+        "after": "        if False:",
+        "run": ["scripts/checker_verdict.py"],
+        "issues": [],
+    },
+    {
+        "why": "★同じ線を書き直しただけで、そろった状態を解く"
+               "（★記事がわけもなく隠れ、無駄な書き込みが起きる＝review228 のP2★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        if not (_tpv.renderable(out)",
+        "after": "        if True or not (_tpv.renderable(out)",
+        "run": ["scripts/checker_verdict.py"],
+        "issues": [],
+    },
     # ★★名簿に無いメーカーで新台を止めない（2026-10-10・L牙狼が12晩止まった）★★
     {
         "why": "★名簿に無いメーカーの新台を、見つけた段で待たせる"
@@ -855,7 +902,7 @@ MUTATIONS = [
                "読まない title/body を通していた）★",
         "file": "scripts/publish_new_machine.py",
         "before": ('                if not isinstance(b, dict)'
-                   ' or set(b) - {"label", "value"}:'),
+                   ' or set(b) - {"label", "value", "role"}:'),
         "after": ('                if not isinstance(b, dict)'
                   ' or set(b) - {"title", "body", "type"}:'),
         "run": ["scripts/publish_new_machine.py"],
@@ -5950,8 +5997,7 @@ MUTATIONS = [
         "why": "★新台・preview でも道具が目次に並ぶことにする"
                "（隠れている箱への行が出て、押しても飛べない）★",
         "file": "scripts/audit_render.py",
-        "before": '    hide_tools = cls in ("AUTO_INDEXABLE", "AUTO_PENDING",'
-                  ' "LEGACY_PREVIEW")',
+        "before": '    hide_tools = cls == "LEGACY_PREVIEW" or (is_auto and not _tp14.synced(machine, detail))',
         "after": "    hide_tools = False",
         "run": ["scripts/audit_render.py"],
     },
@@ -7506,6 +7552,77 @@ MUTATIONS = [
         "file": "scripts/audit_render.py",
         "before": "        if bad or int(v.get(\"judged\") or 0) > 0 or \"狙い目比\" in str(v.get(\"notes\") or \"\"):\n",
         "after": "        if bad or \"狙い目比\" in str(v.get(\"notes\") or \"\"):\n",
+        "run": ["scripts/audit_render.py"],
+    },
+    # ─── 2026-10-04・新台の狙い目を4か所で同じ線から出す（target_projection） ───
+    {
+        "why": "★新台の狙い目：線が一部の状態にしか無くても『そろっている』とする（線の無い欄で undefined が出る）★",
+        "file": "scripts/target_projection.py",
+        "before": "    if not all(_good_ok(s[\"good\"]) for s in st):\n",
+        "after": "    if not any(_good_ok(s[\"good\"]) for s in st):\n",
+        "run": ["scripts/target_projection.py"],
+    },
+    {
+        "why": "★新台の狙い目：機種行の指紋がいまの線と合わなくても関所が止めない（古い記事と新しい線が並ぶ）★",
+        "file": "scripts/target_projection.py",
+        "before": "    if mid and mid != want:\n",
+        "after": "    if False:\n",
+        "run": ["scripts/target_projection.py"],
+    },
+    {
+        "why": "★新台の狙い目：記事の狙い目の文を手で変えても関所が止めない★",
+        "file": "scripts/target_projection.py",
+        "before": "        if len(secs) != 1 or secs[0].get(\"body\") != [article_text(m)]:\n",
+        "after": "        if False:\n",
+        "run": ["scripts/target_projection.py"],
+    },
+    {
+        "why": "★新台の線を書いても機種行の指紋を消さない（翌朝まで古い記事の文と新しい線が並ぶ）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        out.pop(\"targetProjection\", None)\n",
+        "after": "        pass\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★生成器が持つ狙い目の欄の書き換えを『消失』として止める（線を直すと育成が止まり続ける）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    old = _drop_generated_target(old, old_detail)\n",
+        "after": "",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★指紋の無い前の記事の狙い目（人や材料が書いたもの）まで消えてよいことにする★",
+        "file": "scripts/grow_machine.py",
+        "before": "    if not str((old_detail or {}).get(_tp.KEY) or \"\"):\n        return units\n",
+        "after": "",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★育成で2AIの注記・回数の行・交換率ごとの値を持ち越さない（毎朝消える）★",
+        "file": "scripts/grow_machine.py",
+        "before": "_VERDICT_EXTRA = (\"note\", \"byRate\", \"suru\", \"cycle\")\n",
+        "after": "_VERDICT_EXTRA = ()\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★本番の入口が build_detail に machine_row を渡し忘れても見つけない（その入口の記事だけ狙い目が永久に未確認）★",
+        "file": "scripts/build_new_article.py",
+        "before": "                        if not any(k.arg == \"machine_row\" for k in c.keywords):\n",
+        "after": "                        if False:\n",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★公開の関所が狙い目以外の印の箱を通す★",
+        "file": "scripts/publish_new_machine.py",
+        "before": "                if \"role\" in b and b.get(\"role\") != \"target\":\n",
+        "after": "                if False:\n",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★指紋がそろった新台でも目次の期待値でチェッカーを隠したままにする（ページと食い違っても気づかない）★",
+        "file": "scripts/audit_render.py",
+        "before": "    hide_tools = cls == \"LEGACY_PREVIEW\" or (is_auto and not _tp14.synced(machine, detail))\n",
+        "after": "    hide_tools = cls == \"LEGACY_PREVIEW\" or is_auto\n",
         "run": ["scripts/audit_render.py"],
     },
     # ─── 2026-10-05・更新タスクの自己修正（書き方の違いの理由を受け取る口）───

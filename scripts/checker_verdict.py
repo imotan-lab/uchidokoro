@@ -757,10 +757,74 @@ def merged(m: dict, dec: dict) -> dict:
             ck[key] = conf
     ck["modes"] = modes
     out["checker"] = ck
+    # ★★新台は機種行の指紋を消す★★（2026-10-04・target_projection）＝線が変わったので、
+    #   翌朝の作り直しで記事の狙い目の欄と指紋がそろうまで、ページは4表示を隠す
+    #   （古い記事の文と新しい線が並ばない）。
+    #   ★★線が実際に変わったときだけ外す★★（2026-10-13・Codex review228 のP2）＝
+    #   同じ線を書き直しただけで外すと、そろっていた記事がわけもなく隠れ、無駄な書き込みも起きる。
+    if "publication_policy" in out and out.get("targetProjection"):
+        import target_projection as _tpv
+        if not (_tpv.renderable(out)
+                and _tpv.projection_id(out) == out.get("targetProjection")):
+            out.pop("targetProjection", None)
     # ★一覧の文も2AIが決めたとき★（交換率の無い機種だけ・検査は decision_problems）
     if isinstance(dec.get("strategy"), str) and dec["strategy"].strip():
         out["strategy"] = dec["strategy"].strip()
     return out
+
+
+# ★試験だけが使う差し込み口★（読んだあと・置き換える前に別の書き手が来た形を作る）
+_UNSYNC_HOOK = {"before_replace": None}
+
+
+def _unsync_article(slug: str) -> int:
+    """★記事に線から作った狙い目の中身が残っていれば「未確認」に戻す★（0=済み・1=書けない）
+
+    （2026-10-13・Codex review228 のP1）★触るのは指紋のある記事だけ★
+    （target_projection.unsync_detail＝人や2AIが書いた文は消さない）。
+    """
+    import hashlib
+    import target_projection as _tpu
+    path = os.path.join(DETAILS, f"{slug}.json")
+    if not os.path.isfile(path):
+        return 0
+
+    def _dg() -> str:
+        with open(path, "rb") as fh:
+            return hashlib.sha256(fh.read()).hexdigest()
+
+    try:
+        d0 = _dg()
+        d = _sj.read_json(path, expect=dict)
+    except Exception as e:                # noqa: BLE001
+        print(f"★記事を読めません（狙い目の欄を未確認に戻せません）: {type(e).__name__}: {e}★")
+        return 1
+    if not _tpu.unsync_detail(d):
+        return 0
+    # ★★読んだあとに別の書き手が記事を変えていたら、上書きせずに止める★★
+    #   （2026-10-13・Codex review229 のP1）＝古い写しで丸ごと置き換えると、
+    #   その間に入った確認済みの情報まで消える。止まっても、同じ決定の再実行で収束する。
+    tmp = f"{path}.{os.getpid()}.unsync.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            f.write(json.dumps(d, ensure_ascii=False, indent=1) + "\n")
+        if _UNSYNC_HOOK["before_replace"]:
+            _UNSYNC_HOOK["before_replace"](path)
+        if _dg() != d0:
+            print("★記事が読んだあとに変わっていました★（上書きしません。"
+                  "同じ決定をもう一度流すと、新しい記事で未確認に戻します）")
+            return 1
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    back = _sj.read_json(path, expect=dict)
+    if back.get(_tpu.KEY):
+        print("★記事の指紋を外せませんでした★（手で確かめてください）")
+        return 1
+    print(f"{slug}: 線が変わったので、記事の「当サイトの狙い目」を未確認に戻しました"
+          "（翌朝の育成が新しい線で作り直します）")
+    return 0
 
 
 def _rebuild_target_text() -> int:
@@ -820,6 +884,10 @@ def apply_decision(path: str, dry_run: bool = False) -> int:
         # ★★交換率を持つ機種は、一覧の作り直しだけは必ず流す★★（Codex review219）＝
         #   前回の作り直しが途中で失敗していると、ここで終わると二度と作り直されず、
         #   push 前の関所が止まり続ける（同じ決定の再実行で収束させる）。
+        # ★前回、記事を未確認に戻す所で止まっていても、同じ決定の再実行で収束させる★
+        if "publication_policy" in new and not new.get("targetProjection") \
+                and not dry_run and _unsync_article(slug) != 0:
+            return 1
         if rate_keys(new) and not dry_run:
             return _rebuild_target_text()
         return 0
@@ -839,6 +907,12 @@ def apply_decision(path: str, dry_run: bool = False) -> int:
     back = _find(_machines(), slug)
     if back != new:
         print("★書いた後の読み直しが合いません★（手で確かめてください）")
+        return 1
+    # ★★機種行の指紋を外したら、記事の狙い目の欄も「未確認」に戻す★★
+    #   （2026-10-13・Codex review228 のP1）＝外したまま記事に前の線から作った文が残ると、
+    #   チェッカー等は隠れても記事にだけ古い値が出る。翌朝の育成が新しい線で作り直す。
+    if "publication_policy" in new and not new.get("targetProjection") \
+            and _unsync_article(slug) != 0:
         return 1
     if rate_keys(new):
         # ★★交換率を持つ機種は、一覧と箱の文を同じ場で作り直す★★（2026-10-02・#428）
@@ -893,6 +967,104 @@ def show(slug: str) -> int:
 ★caution ≦ good ≦ excellent ≦ ceiling★
 """ % slug)
     return 0
+
+
+def _unsync_tests(t) -> None:
+    """★線を変えたら記事の狙い目の欄も未確認に戻す／同じ線なら何もしない★
+    （2026-10-13・Codex review228 のP1・P2）★本物の machines.json と記事には触らない★"""
+    import contextlib
+    import copy
+    import io as _io
+    import shutil
+    import tempfile
+    import target_projection as _tpt
+    from build_new_article import PENDING_TEXT as _PT
+    global MACHINES, DETAILS
+    keep_m, keep_d = MACHINES, DETAILS
+    tmpd = tempfile.mkdtemp(prefix="ckuns_")
+    try:
+        DETAILS = os.path.join(tmpd, "details")
+        os.makedirs(DETAILS)
+        MACHINES = os.path.join(tmpd, "machines.json")
+        # ★本番の線は target（読者に見せる目安＝good）も持つ★（この道具が書く形のまま）
+        line = {"ceiling": 1000, "caution": 300, "good": 400, "excellent": 600, "target": 400}
+        m = {"slug": "zzz_auto", "name": "試験機", "publication_policy": "page-decision/v1",
+             "checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                         "normal": dict(line)}}
+        f = _tpt.detail_fields(m)
+        m[_tpt.KEY] = f["projection"]
+        det = {"sections": [{"title": _tpt.SECTION_TITLE, "body": list(f["body"])},
+                            {"title": "天井・恩恵", "body": ["天井は1000Gです。"]}],
+               "summaryBoxes": list(f["summaryBoxes"]), _tpt.KEY: f["projection"]}
+
+        def put():
+            with open(MACHINES, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(json.dumps([m], ensure_ascii=False, indent=1) + "\n")
+            with open(os.path.join(DETAILS, "zzz_auto.json"), "w", encoding="utf-8") as fh:
+                fh.write(json.dumps(det, ensure_ascii=False, indent=1) + "\n")
+
+        def run(good):
+            dp = os.path.join(tmpd, "dec.json")
+            with open(dp, "w", encoding="utf-8") as fh:
+                json.dump({"slug": "zzz_auto", "judges": ["claude", "codex"],
+                           "why": "天井1000Gで恩恵はAT確定のため",
+                           "modes": [{"key": "normal", "label": "通常", "ceiling": 1000,
+                                      "excellent": 600, "good": good, "caution": 300}]},
+                          fh, ensure_ascii=False)
+            with contextlib.redirect_stdout(_io.StringIO()):
+                rc = apply_decision(dp)
+            mm = json.load(open(MACHINES, encoding="utf-8"))[0]
+            dd = json.load(open(os.path.join(DETAILS, "zzz_auto.json"), encoding="utf-8"))
+            return rc, mm, dd
+
+        put()
+        rc1, m1, d1 = run(400)
+        t("★★同じ線を書き直しただけでは、そろった状態を解かない★★（Codex review228 のP2）",
+          rc1 == 0 and m1.get(_tpt.KEY) == f["projection"] and d1 == det)
+        put()
+        rc2, m2, d2 = run(450)
+        sec = [s for s in d2["sections"] if s["title"] == _tpt.SECTION_TITLE]
+        t("★★線を変えたら、記事の「当サイトの狙い目」も未確認に戻す★★"
+          "（★記事にだけ古い値が出ていた＝Codex review228 のP1★）",
+          rc2 == 0 and not m2.get(_tpt.KEY) and _tpt.KEY not in d2
+          and sec and sec[0]["body"] == [_PT]
+          and not [b for b in d2.get("summaryBoxes") or [] if b.get("role") == "target"]
+          and _tpt.sync_problems(m2, d2) == [])
+        t("　ほかの欄には触らない",
+          [s for s in d2["sections"] if s["title"] == "天井・恩恵"][0]["body"] == ["天井は1000Gです。"])
+        # ★前回ここで止まっていても、同じ決定の再実行で収束する★
+        m_half = copy.deepcopy(m2)
+        with open(MACHINES, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps([m_half], ensure_ascii=False, indent=1) + "\n")
+        with open(os.path.join(DETAILS, "zzz_auto.json"), "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(det, ensure_ascii=False, indent=1) + "\n")
+        rc3, m3, d3 = run(450)
+        t("　途中で止まっていても、同じ決定をもう一度流せば記事も未確認に戻る",
+          rc3 == 0 and _tpt.KEY not in d3 and _tpt.sync_problems(m3, d3) == [])
+        # ★★読んだあとに別の書き手が記事を変えたら、その更新を残して止まる★★（Codex review229 のP1）
+        put()
+        det_other = copy.deepcopy(det)
+        det_other["sections"][1]["body"] = ["天井は1000G。別の書き手が足した一文です。"]
+
+        def _other_writer(p):
+            with open(p, "w", encoding="utf-8") as fh:
+                fh.write(json.dumps(det_other, ensure_ascii=False, indent=1) + "\n")
+        _UNSYNC_HOOK["before_replace"] = _other_writer
+        try:
+            rc4, m4, d4 = run(500)
+        finally:
+            _UNSYNC_HOOK["before_replace"] = None
+        t("★★記事を読んだあとに別の書き手が変えたら、上書きせずに止める★★"
+          "（★古い写しで丸ごと置き換えると、その間の確認済みの情報が消える★）",
+          rc4 == 1 and d4 == det_other
+          and not [x for x in os.listdir(DETAILS) if x.endswith(".tmp")])
+        rc5, m5, d5 = run(500)
+        t("　止まったあと、同じ決定をもう一度流せば、新しい記事のまま未確認に戻る",
+          rc5 == 0 and _tpt.KEY not in d5
+          and d5["sections"][1]["body"] == ["天井は1000G。別の書き手が足した一文です。"])
+    finally:
+        MACHINES, DETAILS = keep_m, keep_d
+        shutil.rmtree(tmpd, ignore_errors=True)
 
 
 def _format_tests(t) -> None:
@@ -1491,8 +1663,16 @@ def selftest() -> int:
     t("　チェッカーに入っている天井は読める（対照）", _wired == {888})
 
     _no_line_tests(t)
+    _unsync_tests(t)
     _format_tests(t)
     _restore_tests(t)
+    _tp_m = {"slug": "zzz_auto", "name": "試験機", "publication_policy": "page-decision/v1",
+             "targetProjection": "aaaa",
+             "checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                         "normal": {"ceiling": 1000, "good": 400}}}
+    _tp_after = merged(_tp_m, {"slug": "zzz_auto", "modes": [{"key": "normal", "good": 450}]})
+    t("★★新台の線を書いたら機種行の指紋を消す★★（翌朝の作り直しまで4表示を隠す・古い記事と新しい線を並べない）",
+      "targetProjection" not in _tp_after and _tp_m.get("targetProjection") == "aaaa")
     print(f"\n{ok[0]}/{ok[1]} 合格")
     return 0 if ok[0] == ok[1] else 1
 

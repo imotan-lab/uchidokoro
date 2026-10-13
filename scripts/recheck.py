@@ -939,6 +939,14 @@ def check_decision_vs_body(args: dict) -> dict:
         if topic is None or topic not in pend:
             continue
         body = [x for x in (sec.get("body") or []) if isinstance(x, str)]
+        # ★★狙い目の欄は、チェッカーの線から作った文と完全一致で指紋がそろっていれば許す★★
+        #   （2026-10-04・Codex review221 の11）＝判定書は狙い目を確定させる claim を持たない
+        #   （狙い目は当サイトの目安で、検索の濃さに数えない）。★一律には免除しない★
+        #   ＝完全一致・指紋一致のときだけ。手で書いた狙い目は今までどおり数える。
+        if topic == "strategy":
+            import target_projection as _tp_rc
+            if _tp_rc.synced(machine, detail) and body == [_tp_rc.article_text(machine)]:
+                continue
         _tbl_bad = []                      # 表の行のうち、控えと合わないもの
         # ★★表の行も中身★★（2026-08-25・Codexの22回目）
         #   ★直す前は body だけ見て、空ならその箱を読み飛ばしていた★ので、

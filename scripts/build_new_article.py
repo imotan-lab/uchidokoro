@@ -1224,8 +1224,14 @@ def ceiling_labels(ceil) -> list:
     return out
 
 
-def build_detail(slug, name, release, material) -> dict:
-    """記事データを作る。★集まった材料だけを表に入れる★"""
+def build_detail(slug, name, release, material, machine_row=None) -> dict:
+    """記事データを作る。★集まった材料だけを表に入れる★
+
+    ★machine_row＝その機種の機種行（machines.json の1機種分）★（2026-10-04）＝
+    チェッカーの線（2AIが checker_verdict で決めたもの）がそろっていれば、
+    「当サイトの狙い目」の欄・狙い目早見表の箱・指紋を target_projection から作る。
+    ★本番の入口は必ず渡す★（`machine_row_wiring_problems` が4か所を見張る）。
+    """
     require_basis(material, slug)    # ★根拠の無い値は記事にしない★
     # ★控えを1回だけ読む★（行ごとに読むと機種の数だけ遅くなる）
     _recs = _2ai_records(slug)
@@ -1540,6 +1546,11 @@ def build_detail(slug, name, release, material) -> dict:
                                   "tables": tables}
 
     # ★箱を必ず全部並べる★（確認できていない項目は「未確認」と書いておく）
+    # ★★狙い目の欄はチェッカーの線から作る★★（2026-10-04・target_projection が唯一の判定）
+    import target_projection as _tp
+    _tf = _tp.detail_fields(machine_row or {})
+    if _tf["body"]:
+        boxes[_tp.SECTION_TITLE] = {"title": _tp.SECTION_TITLE, "body": list(_tf["body"])}
     sections = []
     for title in SECTION_ORDER:
         sections.append(boxes.get(title)
@@ -1560,10 +1571,47 @@ def build_detail(slug, name, release, material) -> dict:
         "lead": (LEAD_TEMPLATE.format(name=name,
                                       release=_fmt_release(release))
                  if release else LEAD_NO_DATE.format(name=name)),
-        "summaryBoxes": [],
+        "summaryBoxes": list(_tf["summaryBoxes"]),
         "factTable": facts,
         "sections": sections,
+        **({_tp.KEY: _tf["projection"]} if _tf["projection"] else {}),
     }
+
+
+# ★★本番の入口は machine_row を必ず渡す★★（2026-10-04・Codex review221 の13）
+#   渡し忘れると、その入口からの記事だけ狙い目が永久に「未確認」のまま（気づけない）。
+MACHINE_ROW_WIRING = (
+    ("scripts/add_machine_run.py", "run_one"),
+    ("scripts/publish_new_machine.py", "publish_from_material"),
+    ("scripts/grow_machine.py", "plan_one"),
+    ("scripts/build_new_article.py", "main"),
+)
+
+
+def machine_row_wiring_problems(base: str | None = None) -> list:
+    """本番の入口4か所の build_detail 呼び出しに machine_row= があるか（ast で見る）。"""
+    import ast
+    root = base or BASE
+    ng = []
+    for rel, fn in MACHINE_ROW_WIRING:
+        try:
+            tree = ast.parse(open(os.path.join(root, rel), encoding="utf-8").read())
+        except Exception as e:            # noqa: BLE001
+            ng.append(f"{rel}: 読めません: {e}")
+            continue
+        found = 0
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == fn:
+                for c in ast.walk(node):
+                    if isinstance(c, ast.Call) and (
+                            getattr(c.func, "attr", None) == "build_detail"
+                            or getattr(c.func, "id", None) == "build_detail"):
+                        found += 1
+                        if not any(k.arg == "machine_row" for k in c.keywords):
+                            ng.append(f"{rel}:{c.lineno} {fn} の build_detail に machine_row がありません")
+        if not found:
+            ng.append(f"{rel}: {fn} の中に build_detail の呼び出しが見つかりません")
+    return ng
 
 
 def can_publish_page(slug: str):
@@ -2921,6 +2969,38 @@ def selftest() -> int:
       "（知らないものを『掲載していません』とは書かない）",
       _note_none and not any("掲載していません" in x for x in _note_none))
 
+    # ★★本番の入口は build_detail に machine_row を渡す★★（2026-10-04・Codex review221 の13）
+    import tempfile as _tf_mr
+    import shutil as _sh_mr
+    _tmp_mr = _tf_mr.mkdtemp(prefix="mrwire_")
+    try:
+        for _rel, _fn in MACHINE_ROW_WIRING:
+            _dst = os.path.join(_tmp_mr, _rel)
+            os.makedirs(os.path.dirname(_dst), exist_ok=True)
+            _src = open(os.path.join(BASE, _rel), encoding="utf-8").read()
+            open(_dst, "w", encoding="utf-8").write(
+                _src.replace("machine_row=machine)", ")").replace("\n                              machine_row=machine)", ")"))
+        _forgot = machine_row_wiring_problems(_tmp_mr)
+    finally:
+        _sh_mr.rmtree(_tmp_mr, ignore_errors=True)
+    t("★★渡し忘れた写しでは、4か所とも見つける★★（見つからない側だけ試すと、探す処理を消しても緑）",
+      len([x for x in _forgot if "machine_row がありません" in x]) == 4)
+    t("★★本番の入口4か所が build_detail に machine_row を渡している★★"
+      "（渡し忘れると、その入口の記事だけ狙い目が永久に未確認）",
+      machine_row_wiring_problems() == [])
+    _mr = {"checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                       "normal": {"ceiling": 900, "caution": 300, "good": 400, "excellent": 600}},
+           "publication_policy": "page-decision/v1"}
+    _dmr = build_detail("zzz_mr", "試験M", "2026-10", {"adopted": {}}, machine_row=_mr)
+    _sec_mr = [x for x in _dmr["sections"] if x["title"] == "当サイトの狙い目"]
+    t("★★線がそろった機種行を渡すと、狙い目の欄・箱・指紋ができる★★",
+      _sec_mr and _sec_mr[0]["body"] == ["狙い目は、通常400G〜です。"]
+      and _dmr["summaryBoxes"] == [{"label": "狙い目", "value": "通常400G〜", "role": "target"}]
+      and bool(_dmr.get("targetProjection")))
+    _dno = build_detail("zzz_mr", "試験M", "2026-10", {"adopted": {}}, machine_row=None)
+    t("　機種行が無ければ今までどおり（未確認・空・指紋なし）",
+      _dno["summaryBoxes"] == [] and "targetProjection" not in _dno
+      and [x for x in _dno["sections"] if x["title"] == "当サイトの狙い目"][0]["body"] == [PENDING_TEXT])
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
@@ -2948,7 +3028,7 @@ def main() -> int:
     material = _sj.read_json(args.material, expect=dict) if args.material else {"adopted": {}}
     machine = build_machine(slug, args.name, args.maker, args.official_url,
                             args.release, material)
-    detail = build_detail(slug, args.name, args.release, material)
+    detail = build_detail(slug, args.name, args.release, material, machine_row=machine)
     print("（下見だけです。この口からは公開しません）")
     print(json.dumps({"machine": machine, "detail": detail},
                      ensure_ascii=False, indent=1)[:2600])

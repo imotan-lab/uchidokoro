@@ -1475,6 +1475,30 @@ def accept_loss(path: str, store: str = "") -> int:
     return 0
 
 
+def _drop_generated_target(units: list, old_detail: dict) -> list:
+    """★生成器が持つ狙い目の欄・箱は、比べる対象から外す★（2026-10-04・Codex review221 の9）
+
+    ★外すのは前の記事に狙い目の指紋があるときだけ★＝そのときの「当サイトの狙い目」の本文と
+    role:target の箱は target_projection が線から作ったもの（関所 audit_site 57 が照合済み）。
+    線が変われば書き換わる・線を取り消せば消えるのが正しいので、消失として止めない。
+    ★ほかの本文・箱は今までどおり★（人や材料が書いたものの消失は止める）。
+    """
+    import target_projection as _tp
+    if not str((old_detail or {}).get(_tp.KEY) or ""):
+        return units
+    gen_boxes = {(str(b.get("label")), str(b.get("value")))
+                 for b in ((old_detail or {}).get("summaryBoxes") or [])
+                 if isinstance(b, dict) and b.get("role") == "target"}
+    out = []
+    for u in units:
+        if u[0] == "body" and len(u) >= 3 and u[1] == _tp.SECTION_TITLE:
+            continue
+        if u[0] == "box" and len(u) >= 3 and (str(u[1]), str(u[2])) in gen_boxes:
+            continue
+        out.append(u)
+    return out
+
+
 def text_kept(old_detail: dict, new_detail: dict, accepted=frozenset()) -> list:
     """★前に載っていた文が、そのまま残っているか★（値の書き換えを止める）
 
@@ -1490,6 +1514,7 @@ def text_kept(old_detail: dict, new_detail: dict, accepted=frozenset()) -> list:
     if _ceiling_note_may_go(old_detail, new_detail):
         note = _ba.CEILING_PARTIAL_NOTE
         old = [u for u in old if not (u[0] == "body" and u[-1] == note)]
+    old = _drop_generated_target(old, old_detail)
     rest = list(new)
     gone = []
     # ★認めた内容は、認めた件数だけ消えてよい★（同じ文が2つあれば2つ書く）
@@ -1517,6 +1542,48 @@ def text_kept(old_detail: dict, new_detail: dict, accepted=frozenset()) -> list:
     if not gone:
         return []
     return [f"前に載っていた内容が消える/変わる更新です: {' ／ '.join(gone[:10])}"]
+
+
+def _carry_full_tests(t) -> None:
+    """★材料側に同じ欄があっても、2AIの注記・回数の行・交換率ごとの値を持ち越す★"""
+    old = {"slug": "zzz", "checker": {"unit": "G",
+           "modes": [{"key": "normal", "label": "通常"}, {"key": "suru", "label": "スルー", "hasSuru": True}],
+           "normal": {"ceiling": 900, "good": 400, "note": "2AIの注記です。", "byRate": {"eq56": {"good": 380}}},
+           "suru": {"suru": [{"count": 0, "good": 500}, {"count": 1, "good": 300}]}}}
+    new = {"slug": "zzz", "checker": {"unit": "G",
+           "modes": [{"key": "normal", "label": "通常"}, {"key": "suru", "label": "スルー"}],
+           "normal": {"ceiling": 900, "coinRate": 32}, "suru": {"ceiling": 5}}}
+    carry_checker(old, new, [])
+    nc = new["checker"]
+    t("★★材料側に同じ欄があっても、2AIの注記・交換率ごとの値を持ち越す★★（直す前は毎朝消えた）",
+      nc["normal"].get("note") == "2AIの注記です。"
+      and nc["normal"].get("byRate") == {"eq56": {"good": 380}}
+      and nc["normal"].get("good") == 400)
+    t("★★回数の行と回数の印も持ち越す★★",
+      nc["suru"].get("suru") == [{"count": 0, "good": 500}, {"count": 1, "good": 300}]
+      and [m for m in nc["modes"] if m["key"] == "suru"][0].get("hasSuru") is True)
+
+
+def _generated_target_tests(t) -> None:
+    """★生成器が持つ狙い目の欄は書き換え・取り消しを許し、ほかは今までどおり止める★"""
+    import target_projection as _tp
+    def _d(body, boxes, pid):
+        return {"sections": [{"title": _tp.SECTION_TITLE, "body": body},
+                             {"title": "天井・恩恵", "body": ["天井は900Gです。"]}],
+                "summaryBoxes": boxes, **({_tp.KEY: pid} if pid else {})}
+    b1 = [{"label": "狙い目", "value": "通常400G〜", "role": "target"}]
+    old = _d(["狙い目は、通常400G〜です。"], b1, "aaaa")
+    new = _d(["狙い目は、通常450G〜です。"],
+             [{"label": "狙い目", "value": "通常450G〜", "role": "target"}], "bbbb")
+    t("★★線が変わって狙い目の欄・箱が書き換わるのは止めない★★", text_kept(old, new) == [])
+    gone = _d([_ba.PENDING_TEXT], [], "")
+    t("★★線を取り消して未確認・箱なしに戻るのも止めない★★", text_kept(old, gone) == [])
+    t("★★指紋の無い前の記事（人や材料が書いた狙い目）が消えるのは今までどおり止める★★",
+      bool(text_kept(_d(["狙い目は、通常400G〜です。"], b1, ""), gone)))
+    lost = _d(["狙い目は、通常450G〜です。"],
+              [{"label": "狙い目", "value": "通常450G〜", "role": "target"}], "bbbb")
+    lost["sections"][1]["body"] = ["天井は999Gです。"]
+    t("　狙い目の欄以外の文が変わるのは今までどおり止める", bool(text_kept(old, lost)))
 
 
 # ★★2AIで何回まで粘るか★★（2026-08-27・運営者の指示）
@@ -2265,7 +2332,16 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     out["problems"] += _carry_identity(ident, machine.get("identity"))
     # ★2AIが決めた狙い目の線も持ち越す★（2026-09-26・台帳#716）
     out["problems"] += carry_checker(cur, machine, out["questions"])
-    detail = _ba.build_detail(slug, vo.get("identity_name") or name, release, mat)
+    detail = _ba.build_detail(slug, vo.get("identity_name") or name, release, mat,
+                              machine_row=machine)
+    # ★★記事と機種行の両方に同じ指紋を書く★★（2026-10-04・target_projection）＝
+    #   ページは2つが等しいときだけ狙い目の4表示を出す。そろっていなければ両方から消す。
+    import target_projection as _tp
+    if detail.get(_tp.KEY):
+        machine[_tp.KEY] = detail[_tp.KEY]
+    else:
+        machine.pop(_tp.KEY, None)
+    out["problems"] += _tp.sync_problems(machine, detail)
     # ③ 本人性が変わっていないか
     out["problems"] += identity_same(ident, machine.get("identity") or {})
     # ④ 材料は増えるだけか（IDの増減と、載っている文の両方で見る）
@@ -2463,6 +2539,10 @@ def refine_release_date(slug: str, old: str, new: str,
 
 # ★2AIだけが決める欄★＝`checker_verdict` が書く（材料からは作れない）
 _VERDICT_LINES = ("caution", "good", "excellent", "target")
+# ★★線と一緒に持ち越すもの★★（2026-10-04・Codex review221 の10）＝材料側に同じ欄があると
+#   直す前は線の4つしか持ち越さず、2AIが書いた注記・回数の行・交換率ごとの値が毎朝消えた。
+_VERDICT_EXTRA = ("note", "byRate", "suru", "cycle")
+_MODE_FLAGS = ("hasSuru", "hasCycle")
 
 
 def carry_checker(old: dict, new: dict, ask: list = None) -> list:
@@ -2499,16 +2579,17 @@ def carry_checker(old: dict, new: dict, ask: list = None) -> list:
     if not isinstance(ock, dict):
         return ng
     omd = ock.get("modeData") if isinstance(ock.get("modeData"), dict) else {}
-    olabel, lines, whole = {}, {}, {}
+    olabel, lines, whole, oflags = {}, {}, {}, {}
     for m in (ock.get("modes") or []):
         if not isinstance(m, dict) or not m.get("key"):
             continue
         k = str(m["key"])
         olabel[k] = str(m.get("label") or "")
+        oflags[k] = {f: m[f] for f in _MODE_FLAGS if f in m}
         conf = omd.get(k) if isinstance(omd.get(k), dict) else ock.get(k)
         if not isinstance(conf, dict):
             continue
-        got = {x: conf[x] for x in _VERDICT_LINES if x in conf}
+        got = {x: conf[x] for x in _VERDICT_LINES + _VERDICT_EXTRA if x in conf}
         if got:
             lines[k], whole[k] = got, conf
     if not lines:
@@ -2523,15 +2604,16 @@ def carry_checker(old: dict, new: dict, ask: list = None) -> list:
     for k in lines:
         if k not in have:
             # ★2AIが足した欄は丸ごと持ち越す★（材料からは作れない）
-            nmodes.append({"key": k, "label": olabel.get(k, "")})
+            nmodes.append({"key": k, "label": olabel.get(k, ""), **oflags.get(k, {})})
             have.add(k)
             nck[k] = dict(whole[k])
             continue
         # ★欄の呼び名も2AIの側を使う★（材料の「通常」で上書きしない）
         for m in nmodes:
-            if isinstance(m, dict) and str(m.get("key") or "") == k \
-                    and olabel.get(k):
-                m["label"] = olabel[k]
+            if isinstance(m, dict) and str(m.get("key") or "") == k:
+                if olabel.get(k):
+                    m["label"] = olabel[k]
+                m.update(oflags.get(k, {}))     # ★回数の印も2AIの側★
         # ★★書き込み先は読む側と同じ順で決める★★（`modeData` が先）
         nmd = nck.get("modeData") if isinstance(nck.get("modeData"), dict) else None
         in_md = nmd is not None and isinstance(nmd.get(k), dict)
@@ -5432,6 +5514,8 @@ def selftest() -> int:
       retired_boilerplate_problems(["def build_detail("]) != [])
     t("　どこにも無い文なら何も言わない",
       retired_boilerplate_problems(["この文はどこにもありませんZZZ"]) == [])
+    _generated_target_tests(t)
+    _carry_full_tests(t)
 
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1

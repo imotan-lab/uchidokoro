@@ -940,7 +940,7 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
     return problems
 
 
-ALLOWED_DETAIL_KEYS = {"lead", "summaryBoxes", "factTable", "sections"}
+ALLOWED_DETAIL_KEYS = {"lead", "summaryBoxes", "factTable", "sections", "targetProjection"}
 
 
 def _table_body_problems(slug: str, i: int, sec: dict) -> list:

@@ -2105,7 +2105,7 @@ def _project_detail(detail, gates: dict, ctx: _Ctx) -> dict:
     # ★記事直下の未知フィールドを黙って捨てない★
     #   slug/name/updated は同定・更新日の管理用、evTable はJS側が実行時に組み立てる作業用。
     #   いずれも公開射影には含めないが、authoring 上は正当なので既知として扱う。
-    if not _only_keys(detail, {"lead", "summaryBoxes", "factTable", "sections",
+    if not _only_keys(detail, {"lead", "summaryBoxes", "factTable", "sections", "targetProjection",
                                "slug", "name", "updated", "evTable"}):
         ctx.reject("detail", "記事直下に未知フィールド")
         return out

@@ -3702,7 +3702,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
     if apply_it:
         _ledger_questions(out, name)
     machine = _ba.build_machine(out["slug"], name, maker, official_url, release, mat)
-    detail = _ba.build_detail(out["slug"], name, release, mat)
+    detail = _ba.build_detail(out["slug"], name, release, mat, machine_row=machine)
     out["preview"] = {"machine": machine, "detail": detail,
                       # ★下見と本番で出るものを揃える★（Codex93回目の指摘9）
                       "identity_binding": vo.get("identity_binding")

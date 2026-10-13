@@ -304,6 +304,14 @@ function resolveMachineSlug() {
   //     書いてあるので、ページ冒頭で繰り返す必要がない）
   //   旧preview（既存7機種）は従来どおりバナーを出す。
   const _isAuto = (machine.publication_policy !== undefined);
+  // ★★新台で狙い目の4表示を出すのは、機種行と記事の指紋が等しいときだけ★★（2026-10-04）
+  //   （チェッカー・狙い目早見表・期待値早見表の判定・記事の狙い目の欄）。
+  //   指紋は Python の target_projection が作り、押し出しの関所（監査57）が中身まで照合する。
+  //   ★ページは判定しない★（文字が等しいかを見るだけ＝規則を2か所に書かない）。
+  const _targetSynced = _isAuto && typeof machine.targetProjection === "string"
+    && machine.targetProjection !== "" && !!detail
+    && detail.targetProjection === machine.targetProjection;
+  const _autoNoSync = _isAuto && !_targetSynced;
   if (machine.status === "preview" || _isAuto) {
     if (!_isAuto) {
       const banner = document.getElementById("previewBanner");
@@ -322,13 +330,15 @@ function resolveMachineSlug() {
         && Number.isFinite(_ck[k].ceiling));
     const evBlock = document.getElementById("evTableBlock");
     if (evBlock && !_hasCeiling) evBlock.classList.add("is-hidden");
-    const checkerBlockLabel = document.querySelectorAll(".article-block");
-    checkerBlockLabel.forEach(block => {
-      const label = block.querySelector(".block-label");
-      if (label && (label.textContent.includes("狙い目チェッカー") || label.textContent.includes("狙い目早見表"))) {
-        block.classList.add("is-hidden");
-      }
-    });
+    if (!_targetSynced) {
+      const checkerBlockLabel = document.querySelectorAll(".article-block");
+      checkerBlockLabel.forEach(block => {
+        const label = block.querySelector(".block-label");
+        if (label && (label.textContent.includes("狙い目チェッカー") || label.textContent.includes("狙い目早見表"))) {
+          block.classList.add("is-hidden");
+        }
+      });
+    }
     // 小役カウンター導線は下のpochipochiStatusで「解析データ判明後に対応」と無効化表示される
   }
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
@@ -545,7 +555,7 @@ function resolveMachineSlug() {
     if (stepHtml) { evTable.innerHTML = stepHtml; return; }
     // ★★新台ページでは帯の表（判定だけの表）も作らない★★（2026-10-04）＝天井が無い欄に
     //   2AIの線だけがあると、記事の「当サイトの狙い目：未確認」と食い違う判定が出ていた。
-    if (machine.publication_policy !== undefined) rows.length = 0;
+    if (_autoNoSync) rows.length = 0;
     // ★中身の無い表を出さない★（2026-08-12）
     //   新台は狙い目ラインがまだ無いので、帯の表は行が1つも作れない。
     //   見出しだけの空の表が出ると「情報が抜けている」ように見える。
@@ -615,7 +625,7 @@ function resolveMachineSlug() {
     //   同じページで「未確認」と「○ 目安以上」が並んで食い違っていた（Codex review221）。
     //   天井までの残りと直行の投入額は事実から言えるので残す。
     //   ★記事の欄・早見表・チェッカーを同じ線からそろえる仕組みができるまで★の止血。
-    const _evAuto = (machine.publication_policy !== undefined);
+    const _evAuto = _autoNoSync;     // ★指紋がそろった新台は出す★（2026-10-04）
     const hasEv = !_evAuto && evFromTarget(0, ceiling, config) !== null;
     // ★狙い目ラインがまだ無い機種では判定の列を出さない★（2026-08-12）
     //   新台は当サイトの狙い目が未確認なので、全行を「× 未達」と書くと
@@ -735,7 +745,7 @@ function resolveMachineSlug() {
       }
       // ★狙い目比の断り★ 絶対額の期待値ではないことを必ず書く
       if (Number.isFinite(checker.coinRate) && Number.isFinite(checker.hitRate)
-          && machine.publication_policy === undefined) {
+          && !_autoNoSync) {
         notes.push("「狙い目比」は、当サイトの狙い目ラインを±0円としたときの増減です（深いぶん投資が減る分を、初当たり1/"
           + checker.hitRate + "で計算）。金額そのものの期待値とは別のものです。");
       }

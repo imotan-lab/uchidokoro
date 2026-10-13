@@ -836,7 +836,9 @@ def check_only_allowed_values(slug: str, machine: dict, detail: dict,
 #   新台: slug / lead / sections / factTable / summaryBoxes / updated
 #   既存: それに name / evTable が加わる
 _DETAIL_KEYS = {"slug", "name", "lead", "sections", "factTable",
-                "summaryBoxes", "evTable", "updated"}
+                "summaryBoxes", "evTable", "updated",
+                # ★狙い目の指紋★（2026-10-04・target_projection。中身の照合は audit_site の57）
+                "targetProjection"}
 _SECTION_KEYS = {"title", "type", "body", "tables", "rows"}
 # ★記事データへ入ってはいけない鍵★（採用しなかったものの置き場）
 _FORBIDDEN = ("need_third", "unresolved", "candidates", "thin", "disputed")
@@ -851,7 +853,9 @@ _MACHINE_KEYS = {"slug", "name", "seo", "info", "strategy", "aliases",
                  # ★新台経路の判定書★（2026-08-04・Codex71〜72回目）
                  "publication_policy", "page_decision",
                  # ★早見表の材料（2026-08-12）★天井・50枚あたりG数
-                 "checker"}
+                 "checker",
+                 # ★狙い目の指紋★（2026-10-04・target_projection）
+                 "targetProjection"}
 
 
 def _is_text(x) -> bool:
@@ -1090,6 +1094,8 @@ def check_detail(slug: str, detail: dict) -> list:
         if not isinstance(boxes, list):
             ng.append("summaryBoxes が配列ではありません")
         else:
+            if sum(1 for b in boxes if isinstance(b, dict) and b.get("role") == "target") > 1:
+                ng.append("summaryBoxes に狙い目の印（role:target）が2つ以上あります")
             for b in boxes:
                 # ★★描画側が読む形にそろえる★★
                 #   （2026-09-03・Codexの8回目の指摘1。★自分で確かめた★＝
@@ -1097,8 +1103,12 @@ def check_detail(slug: str, detail: dict) -> list:
                 #     ★直す前の契約は `title/body/type` を許していた★ので、
                 #     **描画側が読む正しい形のほうが拒否され、
                 #       読まない形が通っていた**）
-                if not isinstance(b, dict) or set(b) - {"label", "value"}:
+                if not isinstance(b, dict) or set(b) - {"label", "value", "role"}:
                     ng.append(f"summaryBoxes に知らない形があります: {b!r}"[:120])
+                    continue
+                # ★印は「狙い目」だけ★（2026-10-04・生成器が持つ箱。中身の照合は audit_site の57）
+                if "role" in b and b.get("role") != "target":
+                    ng.append(f"summaryBoxes の印が知らない値です: {b.get('role')!r}"[:120])
                     continue
                 # ★読者に文字が出るか★（型だけでは足りない）
                 for _k in ("label", "value"):
@@ -1749,7 +1759,7 @@ def publish_from_material(slug: str, name: str, maker: str, official_url: str,
     machine = _ba.build_machine(slug, name, maker, official_url, release, material,
                                 identity_binding=identity_binding,
                                 identity_evidence_ref=identity_evidence_ref)
-    detail = _ba.build_detail(slug, name, release, material)
+    detail = _ba.build_detail(slug, name, release, material, machine_row=machine)
     return _publish_prebuilt(slug, machine, detail, apply_it=apply_it,
                              before_write=before_write, on_written=on_written)
 
@@ -3107,6 +3117,14 @@ def selftest() -> int:
                                     "games": "20G",
                                     "games_basis": _IM["basis"]}]}}
     _det_ok = _ba.build_detail("zzz_test", "試験機", "2026-09", _mat_ok)
+    _tbox = {"label": "狙い目", "value": "通常400G〜", "role": "target"}
+    t("★狙い目の印（role:target）の箱は受け取る★（2026-10-04・生成器が持つ箱）",
+      not any("summaryBoxes" in x for x in check_detail("zzz_test", {**_det_ok, "summaryBoxes": [_tbox]})))
+    t("★★狙い目以外の印・2つ目の狙い目の箱は断る★★",
+      any("印が知らない値" in x for x in check_detail(
+          "zzz_test", {**_det_ok, "summaryBoxes": [{**_tbox, "role": "other"}]}))
+      and any("2つ以上" in x for x in check_detail(
+          "zzz_test", {**_det_ok, "summaryBoxes": [_tbox, dict(_tbox)]})))
     _inner = "".join(_bmp.render_section(x) for x in _det_ok["sections"])
     _html_ok = ("<html><head></head><body>"
                 + '<div id="articleSections">' + _inner + "</div>"
