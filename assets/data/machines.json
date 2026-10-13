@@ -1132,7 +1132,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-26",
+   "decided_at": "2026-10-14",
    "input_digest": "sha256:d6b39fcb62b8652bf328319490213a02d1764175d1f71b8f32c525bee03e8277"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -1192,7 +1192,8 @@
     "ceiling": 600,
     "target": 180
    }
-  }
+  },
+  "targetProjection": "386efba623ff3b07"
  },
  {
   "slug": "mhrise",
