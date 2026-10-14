@@ -3457,13 +3457,6 @@ MUTATIONS = [
         "run": ["scripts/adoption_basis.py", "scripts/page_decision.py"],
     },
     {
-        "why": "記事が根拠を名乗らなくなる",
-        "file": "scripts/build_new_article.py",
-        "before": "    return _basis_tag((row or {}).get(key))",
-        "after": '    return ""',
-        "run": ["scripts/build_new_article.py", "scripts/adoption_basis.py"],
-    },
-    {
         "why": "検索の数え方を白名簿から黒名簿へ戻す",
         "file": "scripts/page_decision.py",
         "before": '    return str((v or {}).get("basis") or "") '
@@ -3509,15 +3502,8 @@ MUTATIONS = [
         "after": "",
         "run": ["scripts/page_decision.py"],
     },
-    {
-        "why": "設定別の表が根拠を名乗らない（前回の見落とし）",
-        "file": "scripts/build_new_article.py",
-        "before": '        rows = [[f"設定{k}", f"{got[\'value\'][k]}{_mark}"]\n'
-                  '                for k in sorted(got["value"])]',
-        "after": '        rows = [[f"設定{k}", got["value"][k]]\n'
-                 '                for k in sorted(got["value"])]',
-        "run": ["scripts/build_new_article.py"],
-    },
+    # ★「記事が根拠を名乗らなくなる」「設定別の表が根拠を名乗らない」は外した★（2026-10-14）＝
+    #   運営者の判断で読者向けの名乗りそのものを空にしたので、壊しても何も変わらない。
     {
         "why": "根拠のない値を空で流す（読者に断りなしで出る・Codex3回目P0）",
         "file": "scripts/build_new_article.py",
