@@ -35,7 +35,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-06",
+   "decided_at": "2026-10-15",
    "input_digest": "sha256:86b831056449691b89bf9ceaa38e34428616bfa19a8232ee0fd69dca9c5d4546"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -92,7 +92,8 @@
     "excellent": 320,
     "target": 250
    }
-  }
+  },
+  "targetProjection": "abeb0676d126baa8"
  },
  {
   "slug": "dmm_5095",
