@@ -3950,17 +3950,8 @@ MUTATIONS = [
         "after": "            encoding=\"utf-8\", errors=\"replace\")",
         "run": ["scripts/add_machine_run.py"],
     },
-    {
-        # ★2026-08-29に方針が変わった★＝名乗りだけの免除は消した。
-        #   ★壊し方は逆向き★＝「名乗りだけで通す」に戻す形で試す。
-        "why": "設定表を、名乗りだけで根拠ありと認める（控えと違う値が通る）",
-        "file": "scripts/recheck.py",
-        "before": "            _field = _TBL_FIELD.get(",
-        "after": ("            if any(_v.endswith(_b) for _b in _BASIS_MARKS):"
-                  "\n                return True"
-                  "\n            _field = _TBL_FIELD.get("),
-        "run": ["scripts/recheck.py"],
-    },
+    # ★「設定表を、名乗りだけで根拠ありと認める」は外した★（2026-10-14）＝名乗りが空になったので、
+    #   壊しても何も変わらない（値の完全一致の判定は次の「名乗りを完全一致で見ない」が見ている）。
     {
         "why": "名乗りを完全一致で見ない（1/300（実際は1/3000）のような別の断定が通る・Codex24回目）",
         "file": "scripts/recheck.py",
