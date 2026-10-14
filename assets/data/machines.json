@@ -12318,11 +12318,12 @@
    "claims": [
     "at_prob",
     "games_per_50",
-    "payout_range"
+    "payout_range",
+    "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-12",
-   "input_digest": "sha256:595f9b54abd597355f7399a7ed61a055828109645f7fcf8d04fdf1a5e96c31d4"
+   "decided_at": "2026-10-15",
+   "input_digest": "sha256:2b81271e9a6a4cf9f278f8c210410c365b3e2c147d4d36e713978a1991e63816"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-19",
@@ -12340,7 +12341,7 @@
    ]
   },
   "checker": {
-   "coinRate": 31.0,
+   "coinRate": 31.4,
    "unit": "G",
    "modes": [
     {
