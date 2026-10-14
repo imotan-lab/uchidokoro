@@ -556,9 +556,11 @@ def _end_to_end_tests(t) -> None:
     solo = classify_support([D], CTX, DAY)
     m_solo = _mat(solo)
     d_solo = _ba.build_detail("zzz", "試験機", "2026-08-20", m_solo)
-    t("★★通し：DMM単独→採用され、記事に名乗りが付き、検索にも数える★★",
-      solo["accepted"]
-      and any(_MARK_ART in x for x in _texts(d_solo))
+    # ★2026-10-14から読者向けの名乗りは付けない★（運営者の判断「印を消して数値だけ出す」）
+    t("★★通し：DMM単独→採用され、記事に名乗りは出さず、検索にも数える★★",
+      solo["accepted"] and _MARK_ART == ""
+      and not any("1件" in x for x in _texts(d_solo))
+      and any("999G" in x for x in _texts(d_solo))
       and len(_pd.index_claims_from_material(m_solo)) == 3
       and len(_pd.regression_claims_from_material(m_solo)) == 3)
 
@@ -568,7 +570,7 @@ def _end_to_end_tests(t) -> None:
     d_multi = _ba.build_detail("zzz", "試験機", "2026-08-20", m_multi)
     t("★★通し：独立2出典→名乗りは出ず、検索の濃さに数える★★",
       multi["accepted"]
-      and not any(_MARK_ART in x for x in _texts(d_multi))
+      and not any("1件" in x for x in _texts(d_multi))
       and len(_pd.index_claims_from_material(m_multi)) == 3)
 
     # ③★採否と表示と検索がそろっているか★（片方だけ直したら落ちる）
@@ -683,10 +685,22 @@ def _end_to_end_tests(t) -> None:
               _pd.regression_claims_from_material(_mat_real) != [])
             _txt = str(_ba_mod.build_detail("zzz", "試験機", "2026-08-24",
                                             _mat_real))
-            # ★文言は正本から取る★（2026-08-26。直に書くと、正本を変えても
-            #   古い文言のまま期待し続ける＝この日それで16件が確かめられなかった）
-            t(f"　{_name}：記事にすると裏付けの弱さの断りが付く",
-              _ba_mod.BASIS_SUFFIX[SINGLE_NEAR_RELEASE] in _txt)
+            # ★2026-10-14から読者向けの名乗りは付けない★（運営者の判断）＝
+            #   ★採用した値そのものが記事まで届き、件数の名乗りは出ないことを見る★
+            #   （空の名乗りで `"" in _txt` を見ると常に真＝何も確かめない・Codex review232）
+            def _leaves(x):
+                if isinstance(x, dict):
+                    for k, v in x.items():
+                        if k not in ("basis", "sources", "source", "_from"):
+                            yield from _leaves(v)
+                elif isinstance(x, (list, tuple)):
+                    for v in x:
+                        yield from _leaves(v)
+                elif isinstance(x, (int, float, str)) and len(str(x)) >= 2:
+                    yield str(x)
+            _vals = [v for r in _rows for v in _leaves(r)]
+            t(f"　{_name}：採用した値が記事に届き、件数の名乗りは出ない",
+              any(v in _txt for v in _vals) and "1件" not in _txt)
             _mat_bare = _strip(_mat_real, _box)
             t(f"★★{_name}：根拠を落とした材料は公開を断る★★"
               "／★空で流すと断りなしの普通の値として読者に出る★",

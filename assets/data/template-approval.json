@@ -4,7 +4,7 @@
  "templates": {
   "404.html": "4757679897f8f0f286a1b54ab58d8da1cc5481bc12b90760ae6e849a472cae5d",
   "CNAME": "327a46d0a9fe00ef4a85721fec20aa84af66049b4a2e27029773bc1927b502fa",
-  "about.html": "94271a2609aab8f91aa8cd4a6a7917467a8ffbc146fcc666035cfa8649ca7132",
+  "about.html": "f505b246854915100c67adbddbe354c847d82421389d2d423cdc7cd6910628d2",
   "ads.txt": "e652db9bd62edb46d3cb65ec2822cd510b7c1e76becce15c7e60575ddb693a52",
   "assets/css/practical.css": "a8e53ec0de1b33abcf89a08253d6c94bdc06ba87b58cf007926861ef92b40c01",
   "assets/data/claim-allowlist.json": "a9aa01b940b4f61925d176072290772e76911ae43b1cb7f39b112bdda65a8a01",
@@ -36,7 +36,7 @@
   "scripts/build_hub_pages.py": "47d44b18905934899829e3111eff2bed2d8ab3a1b14f66162654f16f21f3024d",
   "scripts/build_ledger.py": "c51b84e0a7a6dc9b97faf29003ab617291f9c93fe0378d2c9b19dd664f783e7d",
   "scripts/build_machine_pages.py": "1dff997ad0ed769aa3fd2491411b4762413114dbe8519413232d5ca40db7a9a8",
-  "scripts/build_new_article.py": "8d12fbe040b7045cbf339850a0ec506f5bac9af9da811530025b258106bb4a72",
+  "scripts/build_new_article.py": "809909adb875260fe427fe9f8851623c892c9d767c7e97e5346e4911a9d3ba0c",
   "scripts/build_pages_artifact.py": "caf001946d187d4a1e88f7366573a15e2f8c9b9c2453b47de18dd188dcbbb95c",
   "scripts/check_duplicate.py": "d5c8221444105553cca1894ff8d44eb255ad6534cafcd0e0af8a5a8e23c16c36",
   "scripts/checker_verdict.py": "87b7dd88d1ba1c6356fcc7d9c8cb3302e1ea88743ca86d564ade479e2bb682b3",
@@ -52,7 +52,7 @@
   "scripts/fix_plain_style.py": "b8af9b83920fa38aea0210f9bcaa5ddadbc742dca902b39eb0762746743c6d56",
   "scripts/gates.py": "689124c6e8bfd101848c1fca7ab418765d23b1cf02df676d21d1fec9947e3d21",
   "scripts/grow_legacy.py": "e4d9bd2939367f92b5fd6167c19f53eb0baefd6d4ef87732250f21aba2c70094",
-  "scripts/grow_machine.py": "68e9aca317d3d014312fbc43771870651c68bad874fb6dbcbdafc86f8577f676",
+  "scripts/grow_machine.py": "d25d466169d906f4339ef81175d15fd9894e7b73ff2538fc10f6743bcd8a0245",
   "scripts/hub_prose.json": "64a009136a554be1c7d9b13638f02c29928c383e9021e3e9449e464d2e2cce27",
   "scripts/note_text.py": "a2b48bed0a3c49514a100432dc759ea7700ce6c3559289583375a33977671ca6",
   "scripts/page_decision.py": "6fd6bddc85b898fdd83a4056ea7e733f3139c2b71e7f230ac069a1523dc44151",
@@ -64,7 +64,7 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "ecc07863430476c152cdd79dc300b6387d68b1b466deeb2e80f1a3449ce51b1a",
-  "service-worker.js": "bc03c1e83942a9d0272c10c1a869b3ccee628189d5fcd44221f13fed6bbbbaa5",
+  "service-worker.js": "6a48e16e0a6b99ce074f8990f5c26bcaacdd0b07e72f8a37732549543482ee5a",
   "setting.html": "8c857e73f40e13c296f67010ba902550408d2543495ff08784c20f7501f9072d"
  }
 }

@@ -72,6 +72,15 @@ _AUTO_ACCEPT_LINES = (
 
 MUTATIONS = [
     {
+        "why": "★見張り54が「確認が◯件」の形を見ない"
+               "（★「確認1件のみ」「確認が1件のみのため未確定」が素通りして読者に出る＝2026-10-14★）★",
+        "file": "scripts/audit_site.py",
+        "before": '    r"確認\\s*(?:が|は)?\\s*[0-9０-９一二三四五六七八九十百]+\\s*件",',
+        "after": '    r"(?!)",',
+        "run": ["scripts/audit_site.py"],
+        "issues": [],
+    },
+    {
         "why": "★運営者へ回したとき、読めていない日数だけ戻して回数（n）を残す"
                "（★部分的な退行＝見える子ちゃんの n=5 がそのまま残る・Codex review231★）★",
         "file": "scripts/grow_machine.py",
@@ -3930,8 +3939,8 @@ MUTATIONS = [
     {
         "why": "記事にサイト名を出す（ほかサイトのコピーに見える・2026-08-26の運営者の指示）",
         "file": "scripts/build_new_article.py",
-        "before": "    \"SINGLE_NEAR_RELEASE\": \"（確認1件のみ）\",",
-        "after": "    \"SINGLE_NEAR_RELEASE\": \"（DMMぱちタウン単独確認）\",",
+        "before": "    \"SINGLE_NEAR_RELEASE\": \"\",",
+        "after": "    \"SINGLE_NEAR_RELEASE\": \"（確認1件のみ）\",",
         "run": ["scripts/build_new_article.py"],
     },
     {
@@ -6934,15 +6943,6 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     # ─── 2026-09-27・更新タスクの自己修正（CZ注記の単独確認の断り）───
-    {
-        "why": "★CZの注記に「確認1件のみ」の断りが足されただけで「前の注記が消えた」と"
-               "判定する（★元の断り書きは一字も欠けないのに、その機種が育たなくなる★）★",
-        "file": "scripts/grow_machine.py",
-        "before": "               or _note_grew(old_u, n)\n",
-        "after": "               or False\n",
-        "run": ["scripts/grow_machine.py"],
-        "issues": [718],
-    },
     # ─── 2026-10-01・更新タスクの自己修正（育成に新台の範囲を当てない）───
     {
         "why": "★育成が本人性の確認に新台の範囲（導入月）を当てる"
@@ -6968,103 +6968,6 @@ MUTATIONS = [
                    "                           require_recent=require_recent)\n"),
         "after": "                           release_is_cache=release_is_cache)\n",
         "run": ["scripts/add_machine_run.py"],
-    },
-    # ─── 2026-10-02・更新タスクの自己修正（裏付けが強まって名乗りが外れた表）───
-    {
-        "why": "★欄の（確認1件のみ）が外れただけで「前の値が消えた」と判定する"
-               "（★2社で確定させるほど、その表を持つ機種が育たなくなる★）★",
-        "file": "scripts/grow_machine.py",
-        "before": "            if core is not None and have[core] > 0:\n",
-        "after": "            if False:\n",
-        "run": ["scripts/grow_machine.py"],
-    },
-    {
-        "why": "★裏付けが強まって注記の断りが外れただけで「前の注記が消えた」と判定する"
-               "（★欄が全部2社になっても、注記のせいで育たない★）★",
-        "file": "scripts/grow_machine.py",
-        "before": "               or (context is not None and _note_shrank(old_u, n, ctx))\n",
-        "after": "               or False\n",
-        "run": ["scripts/grow_machine.py"],
-    },
-    {
-        "why": "★注記の判定に、新しい側の表の欄を渡さない"
-               "（★断りが外れてよいかを決められず、強まった表が育たない★）★",
-        "file": "scripts/grow_machine.py",
-        "before": "        hit = next((n for n in rest if _match(u, [n], new)), None)\n",
-        "after": "        hit = next((n for n in rest if _match(u, [n])), None)\n",
-        "run": ["scripts/grow_machine.py"],
-    },
-    {
-        "why": "★基本情報表・基本スペック・本文の値から名乗りが外れただけで「消えた」と判定する"
-               "（★表の欄だけ直っても、ほかの箱を持つ機種が育たない★）★",
-        "file": "scripts/grow_machine.py",
-        "before": "        if i == slot and _tags_dropped(x, y):\n",
-        "after": "        if False:\n",
-        "run": ["scripts/grow_machine.py"],
-    },
-    {
-        "why": "★名乗りが全部外れたのに注記の断りが残っても止めない"
-               "（★単独確認の値が確定値と同じ顔で読者に出る★）★",
-        "file": "scripts/grow_machine.py",
-        "before": "        gone.append(f\"名乗りが全部外れたのに断りが残っています: {_t} {_l}\")\n",
-        "after": "        pass\n",
-        "run": ["scripts/grow_machine.py"],
-    },
-    {
-        "why": "★断りが残っているかを、比べる単位だけで見る（未掲載の設定の文を含む注記を見落とす）"
-               "（★1表だけの設定表で、単独確認の値が確定値の顔で出る★）★",
-        "file": "scripts/grow_machine.py",
-        "before": "            out[(sec.get(\"title\"), _lb)] = (cells, str(tb.get(\"note\") or \"\"))\n",
-        "after": "            out[(sec.get(\"title\"), _lb)] = (cells, \"\" if \"確認できていない\" in str(tb.get(\"note\") or \"\") else str(tb.get(\"note\") or \"\"))\n",
-        "run": ["scripts/grow_machine.py"],
-    },
-    {
-        "why": "★まとめ箱の値から名乗りが外れただけで「消えた」と判定する"
-               "（★まとめ箱を持つ機種が、2社で確定させても育たない★）★",
-        "file": "scripts/grow_machine.py",
-        "before": "_VALUE_SLOT = {\"body\": 2, \"spec-row\": 2, \"box\": 2, \"fact\": -1}\n",
-        "after": "_VALUE_SLOT = {\"body\": 2, \"spec-row\": 2, \"fact\": -1}\n",
-        "run": ["scripts/grow_machine.py"],
-    },
-    {
-        "why": "★欄に名乗りが残ったまま、注記の断りだけ消えても止めない（未掲載の文を含む注記）"
-               "（★弱い値の断り書きが黙って消える★）★",
-        "file": "scripts/grow_machine.py",
-        "before": "              and any(_has_basis_tag(c) for c in cells)):\n",
-        "after": "              and False):\n",
-        "run": ["scripts/grow_machine.py"],
-    },
-    {
-        "why": "★注記が丸ごと消えた（空）ときは逆向きの検査をしない"
-               "（★名乗りが残ったまま断り書きごと消せる★）★",
-        "file": "scripts/grow_machine.py",
-        "before": "        elif (was and sn in was[1] and sn not in note\n",
-        "after": "        elif (was and sn in was[1] and note and sn not in note\n",
-        "run": ["scripts/grow_machine.py"],
-    },
-    {
-        "why": "★名乗りの「移動」を削除と見誤る（名乗り以外の文字を飛ばしても一致とみなす）"
-               "（★強かった値を1件確認へ弱める更新が通る★）★",
-        "file": "scripts/grow_machine.py",
-        "before": "            return b.startswith(p, j) and can(i + 1, j + len(p))\n",
-        "after": "            return can(i + 1, j + len(p))\n",
-        "run": ["scripts/grow_machine.py"],
-    },
-    {
-        "why": "★生の表の検査で、言い換えた表題を同じ表として扱わない"
-               "（★表題が変わる日に、断りが残る生成不具合を見落とす★）★",
-        "file": "scripts/grow_machine.py",
-        "before": "            _lb = RENAMED_TABLE_LABELS.get(_lb, _lb)\n",
-        "after": "            pass\n",
-        "run": ["scripts/grow_machine.py"],
-    },
-    {
-        "why": "★生の表の検査で、辞書の欄（バッジ付き）の文字を読まない"
-               "（★名乗りが残ったまま断りだけ消えても気づかない★）★",
-        "file": "scripts/grow_machine.py",
-        "before": "            cells = [str(c.get(\"text\") or \"\") if isinstance(c, dict) else str(c)\n",
-        "after": "            cells = [\"\" if isinstance(c, dict) else str(c)\n",
-        "run": ["scripts/grow_machine.py"],
     },
     # ─── 2026-10-02・導入日から数える打ち切り／未定／3日前の🔴 ──────────
     {
