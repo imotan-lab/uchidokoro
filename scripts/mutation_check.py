@@ -72,6 +72,24 @@ _AUTO_ACCEPT_LINES = (
 
 MUTATIONS = [
     {
+        "why": "★見張り54がポチポチくんの画面に出る注記を読まない"
+               "（★「外部の実戦値」などが setting.html の注記に入っても気づかない＝2026-10-14★）★",
+        "file": "scripts/audit_site.py",
+        "before": '        for h in _judge_54_wording(" ".join(_notes)):',
+        "after": "        for h in []:",
+        "run": ["scripts/audit_site.py"],
+        "issues": [],
+    },
+    {
+        "why": "★見張り54が「実戦値」などの語を見ない"
+               "（★外の解析・データを参照したと読める言い回しが記事に戻る＝2026-10-14★）★",
+        "file": "scripts/audit_site.py",
+        "before": '    "実戦報告", "実戦データ", "実戦値", "解析情報", "公式解析", "各解析",',
+        "after": '    "実戦報告", "実戦データ", "解析情報", "公式解析", "各解析",',
+        "run": ["scripts/audit_site.py"],
+        "issues": [],
+    },
+    {
         "why": "★見張り54が「確認が◯件」の形を見ない"
                "（★「確認1件のみ」「確認が1件のみのため未確定」が素通りして読者に出る＝2026-10-14★）★",
         "file": "scripts/audit_site.py",
