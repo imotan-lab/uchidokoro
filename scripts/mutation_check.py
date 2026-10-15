@@ -4499,6 +4499,43 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★ゲームの流れを、また「へ進みます」と言い切る結びで書く★"
+               "（★出典が「チャンス」と書く確率的な流れまで、必ず進むように読める★）",
+        "file": "scripts/build_new_article.py",
+        "before": '                     + GAMEPLAY_VERB)',
+        "after": '                     + GAMEPLAY_VERB_OLD)',
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★太字の直後に結ぶ手書きの文まで、古い定型文として書き換える★"
+               "（★人が書いた文が育成のたびに書き換え対象になり、止まる原因になる★）",
+        "file": "scripts/build_new_article.py",
+        "before": '    if "**から**" not in s[:s.find(old)]:\n'
+                  "        return s",
+        "after": "    if False:\n"
+                 "        return s",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★古い結びの行を、比べる前にいまの結びへ直さない★"
+               "（★言い回しが変わっただけで「内容が消えた」と育成が止まり、3回目で運営者へメールが飛ぶ★）",
+        "file": "scripts/grow_machine.py",
+        "before": "    old_detail = _upgrade_gameplay(old_detail)\n"
+                  "    old, new = _units(old_detail), _units(new_detail)",
+        "after": "    old, new = _units(old_detail), _units(new_detail)",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★古い結びの行が残っていても、ひな型のずれに数えない★"
+               "（★言い切りの行が既存の記事に永久に残る★）",
+        "file": "scripts/grow_machine.py",
+        "before": "    if _old_gameplay_lines(old_detail):\n"
+                  '        return ["ゲームの流れの言い回しが、いまのひな型と違います"]',
+        "after": "    if False:\n"
+                 '        return ["ゲームの流れの言い回しが、いまのひな型と違います"]',
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★毎回変わる日付も差として数える★"
                "（毎日ぜんぶ書き直しになる）",
         "file": "scripts/grow_machine.py",

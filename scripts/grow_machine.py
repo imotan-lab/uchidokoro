@@ -793,6 +793,10 @@ def template_drift(machine: dict, old_detail: dict) -> list:
     """
     if not isinstance(old_detail, dict) or not old_detail:
         return []
+    # ★ゲームの流れの結びが古い行も、ひな型のずれとして数える★（2026-10-15）
+    #   数えないと、言い切りの行（「へ進みます」）が永久に残る。
+    if _old_gameplay_lines(old_detail):
+        return ["ゲームの流れの言い回しが、いまのひな型と違います"]
     got = str(old_detail.get("lead") or "")
     if not got:
         return []
@@ -1341,6 +1345,34 @@ def _drop_generated_target(units: list, old_detail: dict) -> list:
     return out
 
 
+def _old_gameplay_lines(detail: dict) -> list:
+    """★古い結びのまま残っているゲームの流れの行★（ゲーム性の節の本文だけ）"""
+    out = []
+    for sec in (detail or {}).get("sections") or []:
+        if not isinstance(sec, dict) or sec.get("title") != "ゲーム性":
+            continue
+        for x in sec.get("body") or []:
+            if isinstance(x, str) and _ba.upgrade_gameplay_line(x) != x:
+                out.append(x)
+    return out
+
+
+def _upgrade_gameplay(detail: dict) -> dict:
+    """★比べる前に、古い結びの行をいまの結びへ直した写し★（元は変えない）
+
+    ★言い回しが変わっただけで「前に載っていた内容が消えた」と止めないため★。
+    直すのは結びだけなので、流れの中身（何から何へ）が変われば今までどおり止まる。
+    """
+    if not _old_gameplay_lines(detail):
+        return detail
+    d = json.loads(json.dumps(detail, ensure_ascii=False))
+    for sec in d.get("sections") or []:
+        if isinstance(sec, dict) and sec.get("title") == "ゲーム性":
+            sec["body"] = [_ba.upgrade_gameplay_line(x) if isinstance(x, str) else x
+                           for x in sec.get("body") or []]
+    return d
+
+
 def text_kept(old_detail: dict, new_detail: dict, accepted=frozenset()) -> list:
     """★前に載っていた文が、そのまま残っているか★（値の書き換えを止める）
 
@@ -1349,6 +1381,7 @@ def text_kept(old_detail: dict, new_detail: dict, accepted=frozenset()) -> list:
     そこで**確認済みとして既に出ている文**を1つでも失う更新は拒否する
     （足すのは自由・消す/変えるのは不可＝本当の意味での単調追加）。
     """
+    old_detail = _upgrade_gameplay(old_detail)
     old, new = _units(old_detail), _units(new_detail)
     # ★天井の断り書きは「天井が実際に増えたとき」だけ消えてよい★
     #   （2026-08-12・依頼161。無条件に比較から外すと、
@@ -1417,6 +1450,16 @@ def _generated_target_tests(t) -> None:
               [{"label": "狙い目", "value": "通常450G〜", "role": "target"}], "bbbb")
     lost["sections"][1]["body"] = ["天井は999Gです。"]
     t("　狙い目の欄以外の文が変わるのは今までどおり止める", bool(text_kept(old, lost)))
+    _gp = lambda body: {"sections": [{"title": "ゲーム性", "body": body}]}
+    t("★★ゲームの流れの結びが変わっただけなら止めない★★（2026-10-15）",
+      text_kept(_gp(["通常時は**周期抽選**から**CZ**へ進みます"]),
+                _gp(["通常時は**周期抽選**から**CZ**へ進む流れがあります"])) == [])
+    t("　流れの中身（何から何へ）が変われば今までどおり止める",
+      bool(text_kept(_gp(["通常時は**周期抽選**から**CZ**へ進みます"]),
+                     _gp(["通常時は**周期抽選**から**AT**へ進む流れがあります"]))))
+    t("★★古い結びの行が残っていれば、ひな型のずれとして書く理由になる★★",
+      bool(template_drift({}, _gp(["**A**から**B**へ進みます"])))
+      and not template_drift({}, _gp(["**A**から**B**へ進む流れがあります"])))
 
 
 # ★★2AIで何回まで粘るか★★（2026-08-27・運営者の指示）
