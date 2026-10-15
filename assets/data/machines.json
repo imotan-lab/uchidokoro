@@ -12301,29 +12301,29 @@
    "machine_profile": "AT_CZ",
    "ceiling_state": "PRESENT",
    "confirmed_topics": [
+    "ceiling",
     "setting",
     "spec"
    ],
    "pending_topics": [
     "gameplay",
     "cz",
-    "ceiling",
     "strategy",
     "reset"
    ],
    "reason_codes": [
-    "CATEGORIES_LT_2",
     "NO_UNIQUE_GAMEPLAY"
    ],
    "claims": [
     "at_prob",
+    "ceiling:GAME:AT間",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
    "decided_at": "2026-10-15",
-   "input_digest": "sha256:2b81271e9a6a4cf9f278f8c210410c365b3e2c147d4d36e713978a1991e63816"
+   "input_digest": "sha256:f4ed3fb93674fdd1be4ff55203a633975edbb814bd4dbdde3225c170fec29176"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-19",
@@ -12349,7 +12349,9 @@
      "label": "通常"
     }
    ],
-   "normal": {}
+   "normal": {
+    "ceiling": 999
+   }
   }
  },
  {
