@@ -842,6 +842,12 @@ def machine_row_drift(old_row: dict, new_machine: dict) -> list:
     for _k, _why in (("checker", "早見表の材料"), ("identity", "機種の身元")):
         if (old_row or {}).get(_k) != new_machine.get(_k):
             out.append(f"{_why}が変わります")
+    # ★★狙い目の表示の指紋も書く理由に数える★★（2026-10-15）＝
+    #   数えないと、2AIが線を決めたあと「ほかに増えた中身が無い」機種は
+    #   ★狙い目が永久に記事へ出ない★（pw_10523 で実際に起きた）。
+    import target_projection as _tp
+    if str((old_row or {}).get(_tp.KEY) or "") != str(new_machine.get(_tp.KEY) or ""):
+        out.append("狙い目の表示が変わります")
     return out
 
 
@@ -4993,6 +4999,15 @@ def selftest() -> int:
               any("早見表" in x for x in machine_row_drift(_row_old, _row_ck)))
             t("　機種の身元が変わっても書く理由になる",
               any("身元" in x for x in machine_row_drift(_row_old, _row_id)))
+            t("★★狙い目の表示の指紋が付く・外れるときも書く理由になる★★"
+              "（2026-10-15・ほかに増えた中身が無い機種で狙い目が出なかった）",
+              any("狙い目の表示" in x for x in machine_row_drift(
+                  _row_old, dict(_row_same, targetProjection="tp-x")))
+              and any("狙い目の表示" in x for x in machine_row_drift(
+                  dict(_row_old, targetProjection="tp-x"), _row_same))
+              and not any("狙い目の表示" in x for x in machine_row_drift(
+                  dict(_row_old, targetProjection="tp-x"),
+                  dict(_row_same, targetProjection="tp-x"))))
             t("　新しい行が作れていないときは何も言わない",
               machine_row_drift(_row_old, None) == []
               and machine_row_drift(_row_old, {}) == [])

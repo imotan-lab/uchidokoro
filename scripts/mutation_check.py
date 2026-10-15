@@ -4490,6 +4490,15 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★狙い目の表示の指紋の付け外しを『書く理由』に数えない★"
+               "（★2AIが線を決めても、ほかに増えた中身が無い機種は"
+               "狙い目が永久に記事へ出ない★）",
+        "file": "scripts/grow_machine.py",
+        "before": '        out.append("狙い目の表示が変わります")',
+        "after": "        pass",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★毎回変わる日付も差として数える★"
                "（毎日ぜんぶ書き直しになる）",
         "file": "scripts/grow_machine.py",
