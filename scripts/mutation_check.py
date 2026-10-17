@@ -7750,6 +7750,56 @@ MUTATIONS = [
         "after": "        return certifi.where()\n    except Exception:\n        return None",
         "run": ["scripts/new_machine_watch.py"],
     },
+    # ─── 2026-10-18・設定1の値が無い表から機械割の幅を作っていた（ssb1）───
+    {
+        "why": "★表の端より外に値の無い設定があっても機械割の幅を作る（★設定2〜6だけで『98.1%〜110.3%』と全体の幅に見せる・ssb1★）★",
+        "file": "scripts/page_decision.py",
+        "before": "    if _outer_gap(got[\"value\"], seen):\n        return None\n    return min(nums), max(nums), got",
+        "after": "    return min(nums), max(nums), got",
+        "run": ["scripts/page_decision.py"],
+    },
+    {
+        "why": "★端の内側だけの欠け（設定3だけ無い等）でも幅を作らない（★中の値は端の間に入るのに、正しい幅まで消して育成が止まる★）★",
+        "file": "scripts/page_decision.py",
+        "before": "        if s not in value and (int(s) < lo or int(s) > hi):",
+        "after": "        if s not in value:",
+        "run": ["scripts/page_decision.py"],
+    },
+    {
+        "why": "★下側の欠けだけを見て、上側（設定6の値が無い）を見落とす（★設定1〜5だけで全体の幅に見せる・Codexの指摘★）★",
+        "file": "scripts/page_decision.py",
+        "before": "        if s not in value and (int(s) < lo or int(s) > hi):",
+        "after": "        if s not in value and int(s) < lo:",
+        "run": ["scripts/page_decision.py"],
+    },
+    {
+        "why": "★設定1〜6の外の数字（読み違いの7など）も外側の欠けに数える（★読み違い1つで正しい機種の幅が消え、育成が止まる・Codexの指摘★）★",
+        "file": "scripts/page_decision.py",
+        "before": "        if not s.isdigit() or not 1 <= int(s) <= 6:",
+        "after": "        if not s.isdigit():",
+        "run": ["scripts/page_decision.py"],
+    },
+    {
+        "why": "★消失の判定（知っているか）に設定の名簿を渡さない（★記事に出せない幅を『知っている』と数え、記事と判定書が食い違う★）★",
+        "file": "scripts/page_decision.py",
+        "before": "        if derived_payout_range(adopted, countable_only=False,\n                                seen=(material or {}).get(\"setting_labels_seen\")):",
+        "after": "        if derived_payout_range(adopted, countable_only=False):",
+        "run": ["scripts/page_decision.py"],
+    },
+    {
+        "why": "★記事の基本スペックの表を作るときに設定の名簿を渡さない（★本番の入口だけ守りが外れ、ssb1 の幅がそのまま出る★）★",
+        "file": "scripts/build_new_article.py",
+        "before": "    _pr2 = payout_range_view(adopted, material.get(\"setting_labels_seen\"))",
+        "after": "    _pr2 = payout_range_view(adopted)",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★基本情報表を作るときに設定の名簿を渡さない（★表の片方だけ幅が出て、基本スペックと食い違う★）★",
+        "file": "scripts/build_new_article.py",
+        "before": "    if (_pr := payout_range_view(adopted, material.get(\"setting_labels_seen\"))):",
+        "after": "    if (_pr := payout_range_view(adopted)):",
+        "run": ["scripts/build_new_article.py"],
+    },
 ]
 
 

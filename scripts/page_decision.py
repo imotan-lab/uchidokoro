@@ -278,7 +278,30 @@ def _skip_for_index(v, count_confirmed: bool) -> bool:
 _RATE_PCT = re.compile(r"\s*([0-9]+(?:\.[0-9]+)?)\s*%\s*")
 
 
-def derived_payout_range(adopted: dict, countable_only: bool = True):
+def _outer_gap(value: dict, seen) -> bool:
+    """★表の端（最小・最大の設定）より外に、値の無い設定があるか★（2026-10-18・ssb1）
+
+    ★なぜ要るか★＝設定2〜6だけの表から「機械割98.1%〜110.3%」を作ると、
+    読者には設定1を含む全体の幅に見える（注記に「設定1もあります」と書いていても）。
+    ★端の内側の欠け（設定3だけ無い等）は見ない★＝中の値は端の間に入るので幅は変わらない。
+    ★数字でない名前は見ない★＝名簿には読み違いの「L」などが混ざる（獣王で実測）。
+    ★設定1〜6の外の数字（0・7・10 など）も見ない★＝読み違いで正しい機種を止めない（Codexの指摘）。
+    """
+    keys = [int(k) for k in (value or {}) if str(k).isdigit()]
+    if not keys:
+        return False
+    lo, hi = min(keys), max(keys)
+    for x in seen or []:
+        s = str(x)
+        if not s.isdigit() or not 1 <= int(s) <= 6:
+            continue
+        if s not in value and (int(s) < lo or int(s) > hi):
+            return True
+    return False
+
+
+def derived_payout_range(adopted: dict, countable_only: bool = True,
+                         seen=None):
     """★確認済みの設定別の値から「機械割の範囲」を作る★（2026-08-27）
 
     ★運営者の判断★＝確認済みの設定別の値から、その最小と最大を
@@ -322,6 +345,9 @@ def derived_payout_range(adopted: dict, countable_only: bool = True):
         nums.append(float(m.group(1)))
     if len(nums) < 2:
         return None                   # ★設定が1つだけなら「範囲」ではない★
+    # ★表の端より外に値の無い設定があれば作らない★（`seen`＝出典に出てきた設定の名前）
+    if _outer_gap(got["value"], seen):
+        return None
     return min(nums), max(nums), got
 
 
@@ -371,7 +397,8 @@ def _claims(material: dict, *, count_confirmed: bool) -> list:
     #     その事実は失われていない。入れないと育成が永久に止まる。
     if count_confirmed and "payout_range" not in got:
         # ★ここは「知っているか」を見る側★＝裏付けの強さは問わない
-        if derived_payout_range(adopted, countable_only=False):
+        if derived_payout_range(adopted, countable_only=False,
+                                seen=(material or {}).get("setting_labels_seen")):
             got.add("payout_range")
     for c in ((material or {}).get("ceilings") or {}).get("adopted") or []:
         # ★★壊れていないかを先に見る★★（2026-08-23）
@@ -1361,6 +1388,34 @@ def selftest() -> int:
                                             "value": {"1": "調査中",
                                                       "6": "109.4%"}}})
       is None)
+    # ★★表の端より外に、値の無い設定があれば範囲を作らない★★（2026-10-18・ssb1）
+    #   ★実害の寸前★＝設定2〜6だけの表から「機械割98.1%〜110.3%」を作り、
+    #   注記には「この機種には設定1もありますが…」と書いていた
+    #   ＝読者には設定1を含む全体の幅に見える（設定1の値は98.1%より低いのが普通）。
+    _GAP = {"payout_rate": {**IM, "value": {"2": "98.1%", "6": "110.3%"}}}
+    t("★★表に無い設定1が端より外にあれば、機械割の範囲を作らない★★",
+      derived_payout_range(_GAP, seen=["1", "2", "6"]) is None)
+    # ★None でも例外にしない★（落ちただけを「捕まえた」と数えないため）
+    t("　（対照）表の端の内側だけが欠けているなら作る（中の値は端の間に入る）",
+      (derived_payout_range(
+          {"payout_rate": {**IM, "value": {"1": "97.0%", "6": "109.4%"}}},
+          seen=["1", "3", "6"]) or (None, None))[:2] == (97.0, 109.4))
+    t("★★上側の欠け（設定6の値が無い）でも範囲を作らない★★",
+      derived_payout_range(
+          {"payout_rate": {**IM, "value": {"1": "97.0%", "5": "105.0%"}}},
+          seen=["1", "5", "6"]) is None)
+    t("　（対照）設定1〜6の外の数字（読み違いの7など）は端の判定に使わない",
+      (derived_payout_range(
+          {"payout_rate": {**IM, "value": {"1": "97.0%", "6": "109.4%"}}},
+          seen=["1", "6", "7"]) or (None, None))[:2] == (97.0, 109.4))
+    t("　（対照）数字でない設定名（読み違いの『L』など）は端の判定に使わない",
+      (derived_payout_range(
+          {"payout_rate": {**IM, "value": {"1": "97.0%", "6": "109.4%"}}},
+          seen=["1", "6", "L"]) or (None, None))[:2] == (97.0, 109.4))
+    t("★★知っているかの側（消失の判定）も同じ線で見る★★"
+      "（記事に出せない範囲を『知っている』と数えない）",
+      "payout_range" not in regression_claims_from_material(
+          {"adopted": dict(_GAP), "setting_labels_seen": ["1", "2", "6"]}))
 
     print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")
     return 0 if ok_all else 1

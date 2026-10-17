@@ -1160,7 +1160,7 @@ def _missing_labels(material: dict, value: dict, key: str) -> list:
     return _sl_ml.unconfirmed_labels(seen, {key: {"value": value}})
 
 
-def payout_range_view(adopted: dict):
+def payout_range_view(adopted: dict, seen=None):
     """★記事に出す「機械割の範囲」★（2026-08-27・運営者の判断）
 
     ①`payout_range` が採れていればそれを使う（今までどおり）
@@ -1175,7 +1175,9 @@ def payout_range_view(adopted: dict):
         v = rng["value"]
         return v["low"], v["high"], rng
     # ★決めるのは page_decision の1か所だけ★（判定書と記事が同じものを見る）
-    return _pd.derived_payout_range(adopted)
+    # ★seen＝出典に出てきた設定の名前★（2026-10-18・ssb1）＝表の端より外に
+    #   値の無い設定があれば作らない（設定2〜6だけで「全体の幅」に見せない）
+    return _pd.derived_payout_range(adopted, seen=seen)
 
 
 def _ceiling_base(c) -> str:
@@ -1265,7 +1267,7 @@ def build_detail(slug, name, release, material, machine_row=None) -> dict:
     #   載せているのが P-WORLD だけ（実測）なので、記事に出すと
     #   「出典2件で一致した値だけ」という約束も守れない。
     #   同定に使う値は identity.regulatory_model_code に残す（読者には出ない）。
-    if (_pr := payout_range_view(adopted)):
+    if (_pr := payout_range_view(adopted, material.get("setting_labels_seen"))):
         _lo, _hi, _row = _pr
         facts.append(["機械割", f"{_lo}%〜{_hi}%{_t(_row)}"])
     if (g50 := adopted.get("games_per_50")):
@@ -1492,7 +1494,7 @@ def build_detail(slug, name, release, material, machine_row=None) -> dict:
     spec_rows.append(["登場時期", _fmt_release(release) if release
                       else PENDING_ITEM])
     # ★型式名は書かない★（2026-08-09・運営者決定。同定専用にした）
-    _pr2 = payout_range_view(adopted)
+    _pr2 = payout_range_view(adopted, material.get("setting_labels_seen"))
     spec_rows.append(["機械割",
                       f"{_pr2[0]}%〜{_pr2[1]}%{_t(_pr2[2])}" if _pr2
                       else PENDING_ITEM])
@@ -2918,6 +2920,24 @@ def selftest() -> int:
       == ["項目", "内容"])
     t("　機種名と登場時期も表の行として出る",
       [r[0] for r in _rows_rate][:2] == ["機種名", "登場時期"])
+    # ★★表の端より外に値の無い設定があれば、幅を書かない★★（2026-10-18・ssb1）
+    #   ★本番の入口（build_detail）を通す★＝基本スペックの表と基本情報表の両方。
+    _mat_gap = {"adopted": dict(_mat_rate["adopted"]),
+                "setting_labels_seen": ["1", "2", "6"]}
+    _mat_gap["adopted"]["payout_rate"] = {
+        **IM, "value": {"2": "98.1%", "6": "110.3%"}, "sources": ["a", "b"]}
+    _det_gap = build_detail("zzz_gap", "試験G", "2026-09-01", _mat_gap)
+    t("★★設定1の値が無い表から『98.1%〜110.3%』の幅を書かない（基本スペック）★★",
+      any(r[0] == "機械割" and PENDING_ITEM in r[1]
+          for r in _spec_rows(_det_gap))
+      and not any("98.1%〜110.3%" in r[1] for r in _spec_rows(_det_gap)))
+    t("★★同じく基本情報表にも書かない★★",
+      not any(r[0] == "機械割" for r in (_det_gap.get("factTable") or [])))
+    t("　（対照）設定1も表にあれば幅を書く",
+      any(r[0] == "機械割" and "97.0%〜109.4%" in r[1] for r in _spec_rows(
+          build_detail("zzz_gap2", "試験G2", "2026-09-01",
+                       {"adopted": dict(_mat_rate["adopted"]),
+                        "setting_labels_seen": ["1", "2", "5", "6"]}))))
 
     # ★★載せているものを「載せていない」と書かない★★
     #   （2026-08-28・本番で発生／L転生王女と天才令嬢の魔法革命）
