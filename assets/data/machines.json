@@ -2597,7 +2597,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-02",
+   "decided_at": "2026-10-17",
    "input_digest": "sha256:f267946610230403394fdbb5756a95b69be46e5c7e9a0dea20fe67bdf4c9f592"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -2634,7 +2634,8 @@
     "excellent": 500,
     "target": 400
    }
-  }
+  },
+  "targetProjection": "b70c7eededc19d63"
  },
  {
   "slug": "pw_10501",
