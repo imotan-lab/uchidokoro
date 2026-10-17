@@ -731,11 +731,11 @@
    "confirmed_topics": [
     "ceiling",
     "cz",
-    "gameplay"
+    "gameplay",
+    "setting",
+    "spec"
    ],
    "pending_topics": [
-    "spec",
-    "setting",
     "strategy",
     "reset"
    ],
@@ -745,11 +745,13 @@
     "ceiling:GAME:CZ間",
     "ceiling:GAME:ボーナス間",
     "ceiling:POINT:思春期ポイント",
-    "cz:エピソードチャンス"
+    "cz:エピソードチャンス",
+    "payout_range",
+    "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-09",
-   "input_digest": "sha256:ac49a5778c930e9982e96b2f53c8531ce704da3e16ff82836c12c92215b5ca2d"
+   "decided_at": "2026-10-18",
+   "input_digest": "sha256:45f6a74ba62edd94348f5dce5429a1c637624ce5317136247a450cd00ae9f68c"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -761,12 +763,12 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5064 型式=L青春ブタ野郎L1 メーカー=オリンピア 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
-   "_legacy_official_product_url": "https://www.heiwanet.co.jp/products/pachislot/ssb1/",
-   "regulatory_model_code": "L青春ブタ野郎L1",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_official_product_url": "https://www.heiwanet.co.jp/products/pachislot/ssb1/",
+   "regulatory_model_code": "L青春ブタ野郎L1"
   }
  },
  {
