@@ -2527,33 +2527,34 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
+   "indexable": true,
    "machine_profile": "AT_CZ",
    "ceiling_state": "PRESENT",
    "confirmed_topics": [
     "ceiling",
+    "cz",
+    "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "gameplay",
-    "cz",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "NO_UNIQUE_GAMEPLAY"
-   ],
+   "reason_codes": [],
    "claims": [
+    "at:MAIN_AT",
+    "at:UPPER_AT",
     "at_prob",
     "ceiling:GAME:AT間",
+    "cz:まほあこチャレンジ",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-15",
-   "input_digest": "sha256:f4ed3fb93674fdd1be4ff55203a633975edbb814bd4dbdde3225c170fec29176"
+   "decided_at": "2026-10-19",
+   "input_digest": "sha256:08769fbb2292f237b9b19f5175ad2c3da8c746995f61d0373ea74c01e347c795"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-19",
@@ -2577,12 +2578,27 @@
     {
      "key": "normal",
      "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "設定変更後"
     }
    ],
    "normal": {
-    "ceiling": 999
+    "ceiling": 999,
+    "caution": 400,
+    "good": 450,
+    "excellent": 600,
+    "target": 450
+   },
+   "reset": {
+    "caution": 200,
+    "good": 250,
+    "excellent": 400,
+    "target": 250
    }
-  }
+  },
+  "targetProjection": "b77bbafa7eaa787d"
  },
  {
   "slug": "dmm_5111",
