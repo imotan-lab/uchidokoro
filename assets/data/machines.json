@@ -29,6 +29,7 @@
    "claims": [
     "at:MAIN_AT",
     "at_prob",
+    "ceiling:CYCLE:リプレイ20回（オトモ潜水艇）",
     "ceiling:GAME:AT間",
     "ceiling:GAME:CZ間",
     "ceiling:THROUGH:CZ",
@@ -38,8 +39,8 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-17",
-   "input_digest": "sha256:9ce3f4b0997c8b941ae30a4398c0a5d469548664e7fa3ffbcae2345167c7037a"
+   "decided_at": "2026-10-19",
+   "input_digest": "sha256:d1de1742fbd6f2d9bf8d9e6fb279f1172bc0bd79169746f5e16188bc605840b1"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
