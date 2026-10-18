@@ -3011,25 +3011,28 @@
     "ceiling",
     "cz",
     "gameplay",
+    "setting",
     "spec"
    ],
    "pending_topics": [
-    "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [],
    "claims": [
     "at:MAIN_AT",
+    "bonus_prob",
     "ceiling:GAME:",
+    "cz:殺生石チャレンジ",
     "cz:解放の刻",
     "cz:超自然災害モード",
     "games_per_50",
-    "payout_range"
+    "payout_range",
+    "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-06",
-   "input_digest": "sha256:d16ef68bb3e9db289fd0c1e0aa2efec82d33353ebb592960f67672db14dd4e1e"
+   "decided_at": "2026-10-19",
+   "input_digest": "sha256:4f28ecd7655ec3c2c4589206cc2fc347617cda42d0b1e59bcf224c26f23075de"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-08-17",
@@ -3041,13 +3044,13 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5028 型式=Lパチスロ喰霊零Re/L3 メーカー=オーイズミ 導入=2026-08-17 確認日=2026-08-16",
    "market_release_date": "2026-08-17",
-   "_legacy_evidence_ref": "identity_evidence/13674f64333e5765e7fd009beb11fe73c52ed2f5c2b4498532d06218adf767fb.html #card0",
-   "_legacy_official_product_url": "https://www.oizumi.co.jp/machine/garei-zero-re/",
-   "regulatory_model_code": "Lパチスロ喰霊零Re/L3",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_evidence_ref": "identity_evidence/13674f64333e5765e7fd009beb11fe73c52ed2f5c2b4498532d06218adf767fb.html #card0",
+   "_legacy_official_product_url": "https://www.oizumi.co.jp/machine/garei-zero-re/",
+   "regulatory_model_code": "Lパチスロ喰霊零Re/L3"
   },
   "checker": {
    "coinRate": 36.1,
