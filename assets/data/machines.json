@@ -12614,7 +12614,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-29",
+   "decided_at": "2026-10-18",
    "input_digest": "sha256:4b5fa9ec7e467c8f195584fdb2eb9a9f3f3bfb3c6dd4ad054ec567064cc7f933"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
