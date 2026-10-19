@@ -649,6 +649,8 @@ def main() -> int:
     ap.add_argument("--build", action="store_true")
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--status", nargs="+", metavar="SLUG",
+                    help="その機種のポチポチくんが使えるか・STEP 1-P の対象かを出す")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -669,6 +671,22 @@ def main() -> int:
             print("★" + x + "★")
         print("そろっています" if not p else "")
         return 1 if p else 0
+    if a.status:
+        # ★判定は記事ページと同じ関数★（build_machine_pages.pochipochi_state）
+        import build_machine_pages as _b
+        reasons = _b.extract_pochipochi_reasons(io.open(
+            os.path.join(BASE, "machine.html"), encoding="utf-8").read())
+        rows = _rows()
+        for slug in a.status:
+            if slug not in rows:
+                print(f"{slug}: 機種一覧にありません")
+                continue
+            ok, why = _b.pochipochi_state(rows[slug], reasons)
+            # ★対象＝使えない、かつ「設定差なし」と決まっていない★
+            target = (not ok) and why != NO_DIFF_REASON
+            print(f"{slug}: {'使える' if ok else '使えない（' + why + '）'}"
+                  f" → STEP 1-P {'対象' if target else '対象外'}")
+        return 0
     if a.list:
         d = load()
         print(f"対応（自動）: {len(d['configs'])} 機種 {sorted(d['configs'])}")
