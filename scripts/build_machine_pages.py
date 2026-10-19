@@ -81,7 +81,42 @@ def extract_pochipochi_reasons(template: str) -> dict:
         reason = rm.group(1) if rm else "非対応"
         for slug in re.findall(r"'([^']+)'", m.group(1)):
             reasons.setdefault(slug, reason)
+    # ★★2AIが決めたポチポチくんの対応は、手作りの名簿より先に効かせる★★（2026-10-19）
+    #   控え（assets/data/pochipochi.json）に表がある機種は「使える」（値は空文字）、
+    #   「設定差なし」と決めた機種はその理由。どれが控え由来かは POCHI_DATA_KEY に残す
+    #   （記事ページは machine.html も同じ控えを読む・判定は pochipochi_state の1か所）。
+    import pochipochi as _pp
+    store = _pp.load()                     # ★読めなければ止める（黙って空にしない）★
+    data = set()
+    for slug in store["configs"]:
+        reasons[slug] = ""
+        data.add(slug)
+    for slug in store["no_diff"]:
+        reasons[slug] = _pp.NO_DIFF_REASON
+        data.add(slug)
+    reasons[POCHI_DATA_KEY] = frozenset(data)
     return reasons
+
+
+POCHI_DATA_KEY = "\x00pochipochi-data"
+
+
+def pochipochi_state(machine: dict, pochipochi_reasons: dict) -> tuple:
+    """★ポチポチくんを使えるか（使える, 理由）を決める唯一の場所★（2026-10-19）
+
+    ①2AIの控え（表がある＝使える／設定差なし）②新台経路・preview は解析待ち
+    ③手作りの名簿（設定差なし・未判明）④それ以外は使える。machine.html の
+    pochipochiStatus と同じ順番（ブラウザ側も同じ控えを先に見る）。
+    """
+    slug = machine["slug"]
+    if slug in pochipochi_reasons.get(POCHI_DATA_KEY, ()):
+        r = pochipochi_reasons[slug]
+        return (r == "", r)
+    if _pd.machine_class(machine) != "LEGACY_COMPLETE":
+        return (False, "解析データ判明後に対応")
+    if slug in pochipochi_reasons:
+        return (False, pochipochi_reasons[slug])
+    return (True, "")
 
 
 def build_title_desc(machine: dict, pochipochi_available: bool = True) -> tuple[str, str]:
@@ -360,13 +395,9 @@ def render_page(template: str, machine: dict, detail: dict | None,
     #   対応と書けばSEO文言もリンクも実態と食い違う。
     if not pochipochi_public:
         pp_available, pp_reason = False, "準備中"
-    elif _pd.machine_class(machine) != "LEGACY_COMPLETE":
-        # preview と新台経路(AUTO_*)は設定判別データが無い＝対応と名乗らない
-        pp_available, pp_reason = False, "解析データ判明後に対応"
-    elif slug in pochipochi_reasons:
-        pp_available, pp_reason = False, pochipochi_reasons[slug]
     else:
-        pp_available, pp_reason = True, ""
+        # ★判定は pochipochi_state の1か所★（2AIの控え→解析待ち→名簿の順）
+        pp_available, pp_reason = pochipochi_state(machine, pochipochi_reasons)
     title, desc = build_title_desc(machine, pp_available)
     html_out = replace_once(html_out, "<title>機種ページ | うちどころ。</title>",
                                 f"<title>{esc(title)}</title>")

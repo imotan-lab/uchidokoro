@@ -277,6 +277,9 @@ function resolveMachineSlug() {
   }
 
   const detail = await loadJson(`assets/data/machine-details/${slug}.json`);
+  // ★ポチポチくんの対応は2AIの控えを先に見る★（2026-10-19・scripts/pochipochi.py が書く）
+  //   読めないときは今までどおり（手作りの名簿）で決める。
+  const pochiData = await loadJson("assets/data/pochipochi.json").catch(() => null) || {};
 
   // タイトル（document.titleはmeta-auto.jsが担当）
   document.getElementById("machineTitle").textContent = machine.name;
@@ -342,6 +345,9 @@ function resolveMachineSlug() {
   }
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
   const pochipochiStatus = (function() {
+    // ★2AIの控え（表がある＝使える／設定差なし）を最初に見る★＝build_machine_pages.pochipochi_state と同じ順
+    if (pochiData.configs && Object.prototype.hasOwnProperty.call(pochiData.configs, slug)) return { available: true, reason: "" };
+    if (pochiData.no_diff && Object.prototype.hasOwnProperty.call(pochiData.no_diff, slug)) return { available: false, reason: "小役による設定差なし" };
     // 解析待ち（preview / 新台経路）
     if (machine.status === "preview" || (machine.publication_policy !== undefined)) return { available: false, reason: "解析データ判明後に対応" };
     // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）

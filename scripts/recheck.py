@@ -512,6 +512,16 @@ def page_disables_pochipochi(mh: str, row: dict) -> bool:
             or "publication_policy" in row)
 
 
+def page_reads_pochi_data(mh: str, kind: str) -> bool:
+    """★記事ページ（machine.html）が、ポチポチくんの控えのその分岐を持っているか★
+
+    ★実装を読んで判断する★（page_disables_pochipochi と同じ考え方）。
+    """
+    s = str(mh or "")
+    return ("loadJson(\"assets/data/pochipochi.json\")" in s
+            and ("hasOwnProperty.call(pochiData." + kind + ", slug)") in s)
+
+
 def check_pochipochi_reachable(args: dict) -> dict:
     slug = args.get("slug")
     if not valid_slug(slug):
@@ -541,11 +551,25 @@ def check_pochipochi_reachable(args: dict) -> dict:
     #   ★実装を読んで判断する★＝ページからその分岐が消えたら、また落ちる。
     _by_page = page_disables_pochipochi(mh, _machine(slug) or {})
 
+    # ★2AIの控えで「設定差なし」と決めた機種も、ページが無効にしている★（2026-10-19）
+    #   ★控えが読めなければ止める★（黙って「無い」にすると食い違いを見逃す）
+    try:
+        import pochipochi as _pp
+        _st = _pp.load()
+    except Exception as e:                                   # noqa: BLE001
+        return _result(ERROR, f"ポチポチくんの控えを読めません: {type(e).__name__}", args)
+    # ★★ページが本当に控えを読んでいるときだけ、控えを理由に合格にする★★（Codex review239）
+    #   ＝machine.html から控えの分岐を消すと、ブラウザでは名簿の答えが出るのに検査は通った。
+    _nd = slug in _st["no_diff"] and page_reads_pochi_data(mh, "no_diff")
+    if slug in _st["configs"] and not page_reads_pochi_data(mh, "configs"):
+        return _result(FAIL, "ポチポチくんの控えに表があるのに、記事ページが控えを読んでいません",
+                       args)
     observed = {"has_config": bool(has_config),
                 "no_setting_diff": _listed("noSettingDiff"),
                 "no_analysis": _listed("noAnalysis"),
+                "no_diff_data": _nd,
                 "disabled_by_page": _by_page}
-    if (has_config or observed["no_setting_diff"]
+    if (has_config or observed["no_setting_diff"] or _nd
             or observed["no_analysis"] or _by_page):
         return _result(PASS, "ポチポチくんの案内と飛び先が食い違っていません",
                        args, observed=observed)

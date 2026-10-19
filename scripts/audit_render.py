@@ -490,8 +490,10 @@ def expected_toc(machine: dict, detail, pochi_reasons: dict) -> list:
     # ★★新台は「指紋がそろっているか」で決める★★（2026-10-04・target_projection.synced の1か所）
     import target_projection as _tp14
     hide_tools = cls == "LEGACY_PREVIEW" or (is_auto and not _tp14.synced(machine, detail))
-    # ★ポチポチくんは新台経路・preview では使えない★（ひな型が無効化する）
-    hide_pochi = is_auto or cls == "LEGACY_PREVIEW"
+    # ★ポチポチくんを使えるかは build_machine_pages.pochipochi_state の1か所★
+    #   （2AIの控えに表があれば新台でも使える／無ければ新台・preview は無効）
+    import build_machine_pages as _bmp_ps
+    hide_pochi = not _bmp_ps.pochipochi_state(machine, pochi_reasons)[0]
     out = []
     if not hide_tools:
         out += ["狙い目チェッカー", "狙い目早見表"]
@@ -502,7 +504,7 @@ def expected_toc(machine: dict, detail, pochi_reasons: dict) -> list:
         title = str(sec.get("title") or "").strip()
         if title:
             out.append(title)
-    if not hide_pochi and machine.get("slug") not in pochi_reasons:
+    if not hide_pochi:
         out.append("ポチポチくん")
     return out
 

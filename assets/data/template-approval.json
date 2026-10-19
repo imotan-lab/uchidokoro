@@ -26,7 +26,7 @@
   "guide-reset.html": "35306aa6985262aa80fff77fed4753e141857239c0c44da02a5b8d817374d0d2",
   "guide-yamedoki.html": "90464c266c841fbb9e332da2b874047997c6730beccc8d2a83a5b9a031781819",
   "index.html": "cfd7088efb16afa404a99c2263ab38c7dbf6760dbc8e3aed127375501a8802f1",
-  "machine.html": "958964fa7261b780ad68d4fc2527c9a652a64b84a7f1be278e9d4ad4d7a6d463",
+  "machine.html": "652386ceb6c8c26bec109e6692165b132c149ddf651e3092d98c71085236895c",
   "manifest.json": "23be5d18069cfeb2c331b135f8976478e36543b3213006b991ed91e53a9bb90e",
   "meta-auto.js": "d99aab6119e4f465d6ca6cddeeea3339d9b0954297513507a8b4042943370032",
   "privacy.html": "5c53483dfaf0f543aa641561a711503153e224216dadba3971fd89bc05e4908d",
@@ -35,7 +35,7 @@
   "scripts/audit_public.py": "149324b3b09e074679058bd6bdfe9c3c27c794298b116aa799b20a738e0b4a26",
   "scripts/build_hub_pages.py": "47d44b18905934899829e3111eff2bed2d8ab3a1b14f66162654f16f21f3024d",
   "scripts/build_ledger.py": "c51b84e0a7a6dc9b97faf29003ab617291f9c93fe0378d2c9b19dd664f783e7d",
-  "scripts/build_machine_pages.py": "1dff997ad0ed769aa3fd2491411b4762413114dbe8519413232d5ca40db7a9a8",
+  "scripts/build_machine_pages.py": "0e6481700bf17ec600850aca9e6c4162c7e8775fdd5e4a7f6a1035094ba09f4b",
   "scripts/build_new_article.py": "198f7878f8eccc745fe0bd88b3167bb301a569a8018d3b29b3afc0f701e8ecd6",
   "scripts/build_pages_artifact.py": "caf001946d187d4a1e88f7366573a15e2f8c9b9c2453b47de18dd188dcbbb95c",
   "scripts/check_duplicate.py": "d5c8221444105553cca1894ff8d44eb255ad6534cafcd0e0af8a5a8e23c16c36",
@@ -64,7 +64,7 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "ecc07863430476c152cdd79dc300b6387d68b1b466deeb2e80f1a3449ce51b1a",
-  "service-worker.js": "60f4517ed7242adbb509276ab286e12270c2566d720644ff3436f8b000588495",
-  "setting.html": "66f9e6dce157774c9d1a246625b09f52d859dcd41a2b31c0451a8281a6e9493b"
+  "service-worker.js": "044c2e9182376763221b6deda02bd507e5a2414eb1aecaeb2f0cbc7d3269c946",
+  "setting.html": "9465b66719da1030cd4fdd5c2a3e51f9eea0bd36806c42f45700fe114ddc64b7"
  }
 }

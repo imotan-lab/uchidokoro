@@ -1641,6 +1641,21 @@ def check_56_auto_article_contract(machines: list) -> list[str]:
     return ngs + _check_56_selftest()
 
 
+def check_58_pochipochi_store(machines: list) -> list[str]:
+    """★ポチポチくんの控えと setting.html の自動の区画がそろっているか★（2026-10-19）
+
+    ★なぜ★＝記事ページは控え（assets/data/pochipochi.json）を見て「使える」と案内し、
+    飛んだ先の setting.html は自動の区画の表で数える。片方だけ直すと、案内が出るのに
+    数えられない（または古い表で数える）。★判定は pochipochi.check_problems の1か所★。
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    try:
+        import pochipochi as _pp58
+    except Exception as e:                # noqa: BLE001
+        return [f"ポチポチくんの控えの道具を読めません: {type(e).__name__}: {e}"]
+    return _pp58.check_problems()
+
+
 def check_57_auto_target_sync(machines: list) -> list[str]:
     """★新台の狙い目の指紋と文が、いまのチェッカーの線から作ったものと同じか★（2026-10-04）
 
@@ -4251,6 +4266,7 @@ CHECKS = [
     ("55_文体（です・ます）の残り", check_55_plain_style),
     ("56_新台記事が空っぽ", check_56_auto_article_contract),
     ("57_新台の狙い目の指紋", check_57_auto_target_sync),
+    ("58_ポチポチくんの控え", check_58_pochipochi_store),
 ]
 
 
