@@ -12915,5 +12915,67 @@
     "p-town.dmm.com"
    ]
   }
+ },
+ {
+  "slug": "dmm_5131",
+  "name": "Ｌブルーリフレクション帝",
+  "seo": {
+   "title": "Ｌブルーリフレクション帝 スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "ceiling"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "spec",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [
+    "ceiling:GAME:"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-10-20",
+   "input_digest": "sha256:c4cc370f8d163e941ee3f3fda3d6f64673605576f599114c76a277831f97dd7a"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-12-21",
+  "identity": {
+   "manufacturer_id": "heiwa",
+   "official_product_url": "https://p-town.dmm.com/machines/5131",
+   "announced_name": "Ｌブルーリフレクション帝",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5131 型式=未掲載 メーカー=オリンピア 導入=2026-12-21 確認日=2026-10-20",
+   "market_release_date": "2026-12-21"
+  },
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "ceiling": 300
+   }
+  }
  }
 ]
