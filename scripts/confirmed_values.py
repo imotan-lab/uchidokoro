@@ -824,10 +824,10 @@ def parse_source(spec: str) -> dict:
 def _num_edge(q: str, i: int, step: int) -> bool:
     """★位置 i の字が「数の続き」か★（step=-1 なら左へ、+1 なら右へ）
 
-    ★全角も見る★（2026-09-16・Codexの指摘）＝数の字は `isnumeric` が
-    全角も漢数字も拾うのに、区切りだけ半角を並べていたので
-    「１，６００」の中の「６００」が通っていた。
-    ★名簿を並べずに、同じ字へそろえてから比べる★（NFKC）。
+    ★全角の区切りは、呼ぶ側でそろえてある★（2026-10-19）＝唯一の呼び手
+    `token_in_quote` が引用を `page_form`（NFKC）でそろえてから渡すので、
+    「１，６００」はここに来る時点で「1,600」になっている（2026-09-16に
+    ここで1字ずつ NFKC していたのは、引用をそろえていなかったため）。
 
     ★★区切りは「その向こうにも数がある」ときだけ数の続き★★
       （2026-09-16・Codexの指摘）
@@ -842,8 +842,7 @@ def _num_edge(q: str, i: int, step: int) -> bool:
     c = q[i]
     if c.isnumeric():
         return True
-    import unicodedata
-    if unicodedata.normalize("NFKC", c) not in ".,":
+    if c not in ".,":
         return False
     j = i + step
     return 0 <= j < len(q) and q[j].isnumeric()
@@ -879,8 +878,13 @@ def token_in_quote(token: str, quote: str) -> bool:
       先頭が数の字なら手前が、末尾が数の字なら後ろが、数でないこと。
       ★漢数字も数★（`isnumeric`。二千の「二」で止める）。
     """
-    t = str(token or "").strip()
-    q = " ".join(str(quote or "").split())
+    # ★★値も引用も NFKC でそろえてから比べる★★（2026-10-19・Codex review236）
+    #   ★直す前は引用をそろえていなかった★ので「天井は９９９Ｇです」に値 999 が
+    #   見つからず、ページに実在する引用でも記録の時点で断っていた。
+    #   境目の判定（`_num_edge`）はそろえたあとの文字で見る＝１，６００ は 1,600 になり
+    #   今までどおり 600 とは一致しない。
+    t = unicodedata.normalize("NFKC", str(token or "")).strip()
+    q = page_form(quote)
     if not t:
         return False
     for m in _re.finditer(_re.escape(t), q):
@@ -1069,6 +1073,18 @@ def check_sources(sources: list, field: str = "") -> list:
     return sorted(keys)
 
 
+def page_form(s) -> str:
+    """★引用・根拠を、ページの本文と同じ形にそろえる★（2026-10-19）
+
+    ★なぜ要るか★＝本文（`page_text`）は画面の文字を NFKC でそろえてから作る
+    （全角の「：」は半角の「:」、全角の数字は半角）。引用と根拠はそろえずに
+    照合していたので、★ページに実在する文でも全角の記号や数字を含むと
+    「見当たりません」で断っていた★（モンハンライズ：サンブレイクで表に出た）。
+    ★保存する値は変えない★＝比べるときだけ使う。
+    """
+    return " ".join(unicodedata.normalize("NFKC", str(s or "")).split())
+
+
 def page_text(html: str, url: str) -> str:
     """★出典として読んでよい本文★（★ここだけが作る★）
 
@@ -1179,7 +1195,9 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
         #   ただし**言うだけでは通さない**＝本文は必ず機械が取ってきたもので、
         #   判断者と理由を必ず残す（あとで取り消す範囲を決められるように）。
         why_same = str(src.get("identity_why") or "").strip()
-        proof = " ".join(str(src.get("identity_proof") or "").split())
+        # ★保存するのは書かれたまま★（比べるときだけ page_form でそろえる・Codex review236）
+        proof_raw = " ".join(str(src.get("identity_proof") or "").split())
+        proof = page_form(proof_raw)
         if not why_same or not proof:
             raise ConfirmedError(
                 f"そのページは「{name}」のページだと確かめられません（{why}）: "
@@ -1219,7 +1237,7 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
                 f"{proof[:40]}")
         src["identity_override"] = {
             "why": why_same[:300],
-            "proof": proof[:300],
+            "proof": proof_raw[:300],
             "machine_said": why,
             # ★どの本文を読んで判断したか★（あとで同じものを見たか確かめられる）
             "text_sha256": hashlib.sha256(
@@ -1229,14 +1247,14 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
         _built_override = True
     # ★同じ本文を使う★（2026-08-24・Codexの12回目＝ここが直っていなかった）
     text = text_of(html)
-    quote = " ".join(str(src["quote"]).split())
+    quote = page_form(src["quote"])
     if quote not in text:
         raise ConfirmedError(
             f"引用がそのページに見当たりません（{src['url']}）: {quote[:40]}")
     if _built_override:
         # ★★引用と根拠の「周り」の指紋を控える★★（2026-09-08・台帳#585）
         #   ここが後の再確認の物差しになる。全文ではなくこちらを比べる。
-        _ovp = " ".join(str(src["identity_override"].get("proof") or "").split())
+        _ovp = page_form(src["identity_override"].get("proof"))
         src["identity_override"]["context"] = {
             "window": CTX_WINDOW,
             "quote": context_fingerprint(text, quote),
@@ -1575,8 +1593,8 @@ def reverify(slug: str, fetch=None, name: str = "",
                     # ★★全文ではなく「引用と根拠の周り」を比べる★★
                     #   （2026-09-08・台帳#585・運営者の承認）
                     ctx = old.get("context") or {}
-                    _q = " ".join(str((src or {}).get("quote") or "").split())
-                    _p = " ".join(str(old.get("proof") or "").split())
+                    _q = page_form((src or {}).get("quote"))
+                    _p = page_form(old.get("proof"))
                     _w = int(ctx.get("window") or CTX_WINDOW)
                     # ★★根拠が今もページに在るかを、ここでも必ず見る★★
                     #   （2026-09-08・Codexの指摘1・自分で再現して確かめた）
@@ -3129,6 +3147,67 @@ def selftest() -> int:
                     "decided_at": "2026-08-24",
                     "official_url": ""}}}},
                 open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
+            # ★★全角の記号・数字を含む引用と根拠も、実在すれば通る★★（2026-10-19）
+            #   ★一覧の並びに頼らない★＝先頭の機種が変わるだけで結果が変わっていた。
+            _fw = "試験機ライズ：サンブレイク"
+            _fw_q = _fw + "の天井は９９９Ｇです。"
+            _fw_html = ("<html><head><title>解析まとめ</title></head><body>"
+                        "<p>" + _fw + " の解析です。</p><p>" + _fw_q + "</p></body></html>")
+            _fw_ok = True
+            try:
+                verify_source({"url": "https://chonborista.com/slot/fw",
+                               "quote": _fw_q,
+                               "identity_why": "2AIで機種名と導入日を突き合わせました",
+                               "identity_proof": _fw + " の解析です。"},
+                              _fw, lambda u: _fw_html)
+            except ConfirmedError:
+                _fw_ok = False
+            t("★★全角の「：」や全角数字を含む引用・根拠も、ページに実在すれば通る★★"
+              "（本文は NFKC でそろえてあるので、こちらもそろえて比べる）", _fw_ok)
+            t("★★記録の手前の値の照合も、全角の数字・単位を見つける★★／"
+              "★そろえても別の数の一部には一致しない★（Codex review236）",
+              token_in_quote("999", "天井は９９９Ｇです")
+              and token_in_quote("G", "天井は９９９Ｇです")
+              and not token_in_quote("600", "天井は１，６００Gです")
+              and not token_in_quote("99", "天井は９９９Ｇです"))
+            # ★★公開前の取り直しも、一覧の並びに頼らず全角入りで確かめる★★
+            _fw_ov = verify_source({"url": "https://chonborista.com/slot/fw",
+                                    "quote": _fw_q,
+                                    "identity_why": "2AIで機種名と導入日を突き合わせました",
+                                    "identity_proof": _fw + " の解析です。"},
+                                   _fw, lambda u: _fw_html)
+            t("　根拠は書かれたままの形で控える（比べるときだけそろえる）",
+              (_fw_ov.get("identity_override") or {}).get("proof")
+              == _fw + " の解析です。")
+            _store_rv = STORE                # ★上の試験の控えを壊さない★
+            STORE = os.path.join(os.path.dirname(_store_rv), "cv_fw.json")
+            json.dump({"schema_version": SCHEMA, "machines": {"zzz_fw": {
+                "ceiling": {
+                    "value": {"kind": "GAME", "amount": "999", "unit": "G",
+                              "benefit": "AT当選"},
+                    "sources": [
+                        _fw_ov,
+                        verify_source({"url": "https://nana-press.com/kaiseki/fw",
+                                       "quote": _fw_q,
+                                       "identity_why": "2AIで機種名と導入日を突き合わせました",
+                                       "identity_proof": _fw + " の解析です。"},
+                                      _fw, lambda u: _fw_html)],
+                    "lineages": ["vote:chonborista", "vote:nana-press"],
+                    "agreed_by": ["claude", "codex"],
+                    "why": "2AIで突き合わせました",
+                    "decided_at": "2026-10-19",
+                    "official_url": ""}}}},
+                open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
+            try:
+                _fw_rv = reverify("zzz_fw", fetch=lambda u: _fw_html, name=_fw,
+                                  detail=True)
+            finally:
+                STORE = _store_rv
+            if _fw_rv.get("invalid") or _fw_rv.get("review"):
+                print("    （全角入りの取り直し）", _fw_rv)
+            t("★★全角入りの控えを取り直しても、引用も根拠も周りも同じと分かる★★"
+              "（★reverify の照合も本文と同じ形でそろえる★）",
+              _fw_rv.get("invalid") == [] and _fw_rv.get("review") == [])
             t("★★取り直して引用が実在すれば通る★★",
               reverify(_rv_slug, fetch=_fetch_ok) == [])
             t("　同じURLは1回しか取りに行かない（出典2件で2回）",

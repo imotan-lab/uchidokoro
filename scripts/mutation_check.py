@@ -3018,16 +3018,6 @@ MUTATIONS = [
         "issues": [691],
     },
     {
-        "why": "★数の境目に、全角の区切りを見ない"
-               "（★値 ６００ が引用「天井は１，６００G」に一致する＝"
-               "天井の形は全角も入口を通るので実在しうる★＝Codexの指摘）★",
-        "file": "scripts/confirmed_values.py",
-        "before": '    if unicodedata.normalize("NFKC", c) not in ".,":',
-        "after": '    if c not in ".,":',
-        "run": ["scripts/confirmed_values.py"],
-        "issues": [691],
-    },
-    {
         "why": "★境目を見るのを「まるごと数の形の字」だけに戻す"
                "（★1000G が 11000G に、千ゲーム消化 が 二千ゲーム消化 に"
                "一致する＝出典と違う数を書ける・読者に出る数が変わる★"
@@ -4067,8 +4057,8 @@ MUTATIONS = [
         "why": "けた区切りのカンマを数の境界と見ない"
                "（600 が 1,600G に一致する・Codex21回目）",
         "file": "scripts/confirmed_values.py",
-        "before": '    if unicodedata.normalize("NFKC", c) not in ".,":',
-        "after": '    if unicodedata.normalize("NFKC", c) not in ".":',
+        "before": '    if c not in ".,":',
+        "after": '    if c not in ".":',
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -4488,6 +4478,34 @@ MUTATIONS = [
                   "        return []",
         "after": "    if False:\n        return []",
         "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★引用・根拠をページの本文と同じ形（NFKC）にそろえずに比べる★"
+               "（★全角の記号や数字を含む実在の引用を「見当たりません」で断る★）",
+        "file": "scripts/confirmed_values.py",
+        "before": '    return " ".join(unicodedata.normalize("NFKC", str(s or "")).split())',
+        "after": '    return " ".join(str(s or "").split())',
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★値の照合（記録の手前）で、値と引用を NFKC でそろえない★"
+               "（★全角の数字の引用が、ページに実在しても記録できない★）",
+        "file": "scripts/confirmed_values.py",
+        "before": '    t = unicodedata.normalize("NFKC", str(token or "")).strip()\n'
+                  "    q = page_form(quote)",
+        "after": '    t = str(token or "").strip()\n'
+                 '    q = " ".join(str(quote or "").split())',
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★公開前の取り直しで、引用と根拠を本文と同じ形にそろえない★"
+               "（★全角入りの控えが、毎回「根拠が消えた」で止まる★）",
+        "file": "scripts/confirmed_values.py",
+        "before": "                    _q = page_form((src or {}).get(\"quote\"))\n"
+                  "                    _p = page_form(old.get(\"proof\"))",
+        "after": "                    _q = \" \".join(str((src or {}).get(\"quote\") or \"\").split())\n"
+                 "                    _p = \" \".join(str(old.get(\"proof\") or \"\").split())",
+        "run": ["scripts/confirmed_values.py"],
     },
     {
         "why": "★狙い目の表示の指紋の付け外しを『書く理由』に数えない★"
