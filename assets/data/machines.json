@@ -12602,6 +12602,60 @@
   }
  },
  {
+  "slug": "dmm_5104",
+  "name": "L聖闘士星矢 黄金十二宮",
+  "seo": {
+   "title": "L聖闘士星矢 黄金十二宮 スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "gameplay"
+   ],
+   "pending_topics": [
+    "cz",
+    "ceiling",
+    "spec",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2"
+   ],
+   "claims": [
+    "at:MAIN_AT",
+    "at:UPPER_AT"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-10-20",
+   "input_digest": "sha256:af8c9e05faf4cb71eeb91cf649fc27b5666ca7bef7b7c4eb3d7deaf026753cff"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-11-02",
+  "identity": {
+   "manufacturer_id": "sanslay",
+   "official_product_url": "https://p-town.dmm.com/machines/5104",
+   "announced_name": "L聖闘士星矢 黄金十二宮",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5104 型式=L聖闘士星矢黄金十二宮TG メーカー=サンスリー 導入=2026-11-02 確認日=2026-10-20",
+   "market_release_date": "2026-11-02",
+   "observed_model_code": "L聖闘士星矢黄金十二宮TG",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  }
+ },
+ {
   "slug": "dmm_5090",
   "name": "スマート沖スロ ハイハイシオサイRe",
   "seo": {
@@ -12860,60 +12914,6 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5100 型式=未掲載 メーカー=アクロス 導入=2026-12 確認日=2026-09-13",
    "market_release_date": "2026-12-21"
-  }
- },
- {
-  "slug": "dmm_5104",
-  "name": "L聖闘士星矢 黄金十二宮",
-  "seo": {
-   "title": "L聖闘士星矢 黄金十二宮 スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [
-    "gameplay"
-   ],
-   "pending_topics": [
-    "cz",
-    "ceiling",
-    "spec",
-    "setting",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2"
-   ],
-   "claims": [
-    "at:MAIN_AT",
-    "at:UPPER_AT"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-10-20",
-   "input_digest": "sha256:af8c9e05faf4cb71eeb91cf649fc27b5666ca7bef7b7c4eb3d7deaf026753cff"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-11-02",
-  "identity": {
-   "manufacturer_id": "sanslay",
-   "official_product_url": "https://p-town.dmm.com/machines/5104",
-   "announced_name": "L聖闘士星矢 黄金十二宮",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5104 型式=L聖闘士星矢黄金十二宮TG メーカー=サンスリー 導入=2026-11-02 確認日=2026-10-20",
-   "market_release_date": "2026-11-02",
-   "observed_model_code": "L聖闘士星矢黄金十二宮TG",
-   "_observed_model_code_sources": [
-    "p-town.dmm.com"
-   ]
   }
  },
  {
