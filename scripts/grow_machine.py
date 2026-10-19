@@ -639,7 +639,7 @@ def identity_same(old: dict, new: dict) -> list:
     return ng
 
 
-def claims_grew(old_decision: dict, material: dict) -> list:
+def claims_grew(old_decision: dict, material: dict, accepted=()) -> list:
     """材料が「増えるだけ」か（★減る・変わるのは中止★）。
 
     ★これだけでは足りない★（2026-08-05・Codex102回目）
@@ -667,6 +667,19 @@ def claims_grew(old_decision: dict, material: dict) -> list:
            if c not in _pdz.RETIRED_CLAIMS]
     new = _pdz.regression_claims_from_material(material)
     lost = [c for c in old if c not in new]
+    # ★★2AIが「落としてよい」と決めた事実は、消えても止めない★★（2026-10-19）
+    #   ★1件の承認で1件だけ★（text_kept と同じ数え方）。控えの照合は
+    #   accepted_lost_claims（記事の指紋・判断者・理由）が済ませてから渡す。
+    _ok = {}
+    for _x in (accepted or ()):
+        _ok[_x] = _ok.get(_x, 0) + 1
+    _rest = []
+    for c in lost:
+        if _ok.get(c, 0) > 0:
+            _ok[c] -= 1
+            continue
+        _rest.append(c)
+    lost = _rest
     # ★★書けるものは「消えた」ことにしない★★（2026-08-27・運営者の判断）
     #   ★ここには何も書かない★＝設定別の値から範囲を作れるかどうかは
     #   page_decision.derived_payout_range が決め、その結果は上の
@@ -1267,6 +1280,26 @@ def accepted_losses(slug: str, old_detail: dict, store: str = "") -> frozenset:
     return tuple(str(x) for x in (rec.get("lose") or []) if str(x).strip())
 
 
+def accepted_lost_claims(slug: str, old_detail: dict, store: str = "") -> tuple:
+    """★2AIが落としてよいと決めた「確認済みの事実」★（2026-10-19）
+
+    `accepted_losses` と同じ控え・同じ検査を通ったときだけ、`lose_claims` を返す。
+    ★記事が変われば無効／読めない・壊れているときは何も認めない★
+    """
+    try:
+        with open(store or LOSS_STORE, encoding="utf-8") as f:
+            got = json.load(f)
+    except Exception:                     # noqa: BLE001
+        return ()
+    rec = got.get(slug) if isinstance(got, dict) else None
+    if not isinstance(rec, dict):
+        return ()
+    _ng = accept_loss_problems(dict(rec, slug=slug), old_detail)
+    if _ng:
+        return ()
+    return tuple(str(x) for x in (rec.get("lose_claims") or []) if str(x).strip())
+
+
 def accept_loss_problems(dec, old_detail) -> list:
     """★落としてよいという決定を受け取れるか★（言うだけでは通さない）。"""
     if not isinstance(dec, dict):
@@ -1278,6 +1311,11 @@ def accept_loss_problems(dec, old_detail) -> list:
     if not isinstance(lose, list) or not lose or not all(
             isinstance(x, str) and x.strip() for x in lose):
         ng.append("lose（消えてよい内容の逐語）が空です")
+    # ★確認済みの事実の名前は、問いに出た名前をそのまま★（任意・あれば形を見る）
+    lc = dec.get("lose_claims")
+    if lc is not None and (not isinstance(lc, list) or not all(
+            isinstance(x, str) and re.fullmatch(r"[^\s,]+", x) for x in lc)):
+        ng.append("lose_claims は『確認済みだった事実が消えます』に並んだ名前の配列です")
     if not _cv.judges_exact(dec.get("by")):
         ng.append("判断者は claude,codex（代役なら claude-agent-a,claude-agent-b）の組だけです")
     if len(str(dec.get("why") or "").strip()) < MIN_LOSS_WHY:
@@ -1310,6 +1348,7 @@ def accept_loss(path: str, store: str = "") -> int:
     except FileNotFoundError:
         got = {}
     got[slug] = {"old_sha256": dec["old_sha256"], "lose": list(dec["lose"]),
+                 "lose_claims": list(dec.get("lose_claims") or []),
                  "by": dec["by"], "why": dec["why"],
                  "at": _dt.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}
     tmp = st + ".tmp"
@@ -1803,7 +1842,8 @@ def grow_result(slug: str, ok: bool, why: str = "",
                          + "／出典を取り直すか、別の出典を当たるか、"
                          "その内容を落とすかを決めてください。"
                          "★落とすなら★決定ファイル（slug・lose＝上の『消える/変わる』に並んだ文を"
-                         "そのまま・by＝claude,codex・why＝15字以上・old_sha256＝上の記事の指紋）を書き、"
+                         "そのまま・『確認済みだった事実が消えます』が出ていれば lose_claims＝そこに並んだ名前・"
+                         "by＝claude,codex・why＝15字以上・old_sha256＝上の記事の指紋）を書き、"
                          "python scripts/grow_machine.py --accept-loss <そのファイル> で控える"
                          f"（{n}回目・{STUCK_ASK_LIMIT}回で報告します）")}
     return {"do": "ledger", "round": n,
@@ -2239,9 +2279,10 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     out["problems"] += identity_same(ident, machine.get("identity") or {})
     # ④ 材料は増えるだけか（IDの増減と、載っている文の両方で見る）
     #   ★右は「今夜の判定書」ではなく「今夜の材料」★（2026-08-23・台帳#461）
-    out["problems"] += claims_grew(cur.get("page_decision"), mat)
     dp = _detail_path(slug)
     old_detail = _sj.read_json(dp, expect=dict) if os.path.isfile(dp) else {}
+    out["problems"] += claims_grew(cur.get("page_decision"), mat,
+                                   accepted_lost_claims(slug, old_detail))
     lost = text_kept(old_detail, detail, accepted_losses(slug, old_detail))
     out["problems"] += lost
     # ★ここまで問題ゼロなら「最後まで読み比べられた」★（依頼190のP1④）
@@ -2789,6 +2830,20 @@ def selftest() -> int:
     t("　書けないとき（値が1つだけ）は、いままでどおり止める",
       claims_grew({"claims": ["payout_range"]},
                   {"adopted": {"payout_rate": {"value": {"1": "97.0%"}}}}))
+    # ★★2AIが「落としてよい」と決めた事実は、消えても止めない★★（2026-10-19）
+    #   ★直す前★＝控えは記事の文（text_kept）にしか効かず、同じ消失を見るもう1つの
+    #   関所（ここ）には答える口が無かった。出典の書き方が割れて2AIが「載せない」と
+    #   決めても毎朝止まり、3回目で運営者へ質問が飛んでいた（dmm_5086 の 50枚あたり）。
+    def _cg(old, mat, acc=()):
+        try:
+            return claims_grew(old, mat, acc)
+        except TypeError:                 # ★受け取る口が無い＝直す前の姿★
+            return ["受け取る口がありません"]
+    t("★★2AIが落としてよいと決めた事実は、消えても止めない★★",
+      not _cg({"claims": ["payout_range", "games_per_50"]}, _MAT_A, ("games_per_50",)))
+    t("　決めていない事実が消えたら、今までどおり止める",
+      bool(_cg({"claims": ["payout_range", "games_per_50"]}, {"adopted": {}},
+               ("games_per_50",))))
     # ── 前に載っていた内容が消える/変わる更新を止める（Codex102/103回目）
     OLD = {"lead": "この機種の紹介です。",
            "factTable": [["型式名", "L機/1"], ["機械割", "97.0%〜110.0%"]],
@@ -2833,6 +2888,33 @@ def selftest() -> int:
         json.dump({"x_machine": {"old_sha256": detail_sha(OLD), "lose": ["A文"]}}, _f)
     t("★★控えを直接書いて判断者や理由を抜いても効かない★★（読むたびに同じ検査・Codex review210）",
       accepted_losses("x_machine", OLD, _ls) == frozenset())
+    # ★★事実の名前（lose_claims）も同じ控え・同じ検査で効く★★（2026-10-19）
+    with open(_ls, "w", encoding="utf-8") as _f:
+        json.dump({"x_machine": {"old_sha256": detail_sha(OLD), "lose": ["A文"],
+                                 "lose_claims": ["games_per_50"],
+                                 "by": "claude,codex", "why": "出典の書き方が割れたので載せない"}}, _f)
+    t("★★控えの事実の名前は、記事が決めたときと同じときだけ効く★★",
+      accepted_lost_claims("x_machine", OLD, _ls) == ("games_per_50",)
+      and accepted_lost_claims("x_machine", _NEW_L, _ls) == ()
+      and not claims_grew({"claims": ["payout_range", "games_per_50"]}, _MAT_A,
+                          accepted_lost_claims("x_machine", OLD, _ls)))
+    with open(_ls, "w", encoding="utf-8") as _f:
+        json.dump({"x_machine": {"old_sha256": detail_sha(OLD), "lose": ["A文"],
+                                 "lose_claims": ["games_per_50"]}}, _f)
+    t("　判断者や理由の無い控えでは、事実の消失も通さない",
+      accepted_lost_claims("x_machine", OLD, _ls) == ())
+    # ★★本番の入口が控えを渡しているか★★（Codex selfrepair 2026-10-19 の指摘2）＝
+    #   単体の試験だけだと、plan_one の第3引数を外しても緑のまま（罠③）。
+    import ast as _ast_lc
+    import inspect as _insp_lc
+    _calls_lc = [n for n in _ast_lc.walk(_ast_lc.parse(_insp_lc.getsource(plan_one)))
+                 if isinstance(n, _ast_lc.Call)
+                 and getattr(n.func, "id", "") == "claims_grew"]
+    t("★★本番の入口（plan_one）が、2AIの控えを事実の消失の関所へ渡している★★",
+      bool(_calls_lc) and all(
+          len(c.args) >= 3 and isinstance(c.args[2], _ast_lc.Call)
+          and getattr(c.args[2].func, "id", "") == "accepted_lost_claims"
+          for c in _calls_lc))
     _lab = [_unit_label(u) for u in _units(OLD)]
     t("★★照合の文字は切らない★★（先頭が同じ長文を取り違えない・Codex review210）",
       all((lambda x, u: (lambda v: v == [str(y).replace(ANY, "（未確定）") for y in u])(

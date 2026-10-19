@@ -3094,7 +3094,14 @@ def selftest() -> int:
                        else _rows_m)
             _rv_slug = str(_rows_m[0]["slug"])
             _rv_name = str(_rows_m[0]["name"])
-            _quote = f"{_rv_name}の解析 999 G AT当選 と確認できました。"
+            # ★★引用は「機械が揃えた本文」の逐語で書く★★（2026-10-19）＝本文は NFKC で
+            #   揃えてから照合する（全角「：」は半角になる）。生の名前で引用を作ると、
+            #   一覧の先頭が「：」入りの機種になった日だけこの試験が赤くなった（罠㉙）。
+            _rv_said = unicodedata.normalize("NFKC", _rv_name)
+            # ★生のページには揃える前の字を置き、保存する逐語だけ揃える★（Codex 2026-10-19）
+            #   ＝「全角のページ → 機械が揃える → 揃えた逐語と一致」を直接試す。
+            _raw_quote = f"{_rv_name}の解析 999 G AT当選 と確認できました。"
+            _quote = unicodedata.normalize("NFKC", _raw_quote)
 
             def _page(_q):
                 return ("<html><head><title>" + _rv_name
@@ -3105,7 +3112,7 @@ def selftest() -> int:
 
             def _fetch_ok(u):
                 _hits.append(u)
-                return _page(_quote)
+                return _page(_raw_quote)
 
             json.dump({"schema_version": SCHEMA, "machines": {_rv_slug: {
                 "ceiling": {
@@ -3144,7 +3151,7 @@ def selftest() -> int:
                         f"<p>{_rv_name} の解析です。</p><p>{_body}</p>"
                         "</body></html>")
 
-            _proof = f"{_rv_name} の解析です。"
+            _proof = f"{_rv_said} の解析です。"
             _src_ov = {"url": "https://chonborista.com/slot/y",
                        "quote": _quote,
                        "identity_why": "2AIで機種名と導入日を突き合わせました",

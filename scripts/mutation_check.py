@@ -7800,6 +7800,27 @@ MUTATIONS = [
         "after": "    if (_pr := payout_range_view(adopted)):",
         "run": ["scripts/build_new_article.py"],
     },
+    {
+        "why": "★2AIが落としてよいと決めた事実を数えずに止め続ける（★答える口が無く、3回目で運営者へ質問が飛ぶ★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        if _ok.get(c, 0) > 0:\n            _ok[c] -= 1\n            continue\n        _rest.append(c)\n",
+        "after": "        _rest.append(c)\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★落としてよいの控えを、判断者・理由・記事の指紋を確かめずに事実の消失へ効かせる★",
+        "file": "scripts/grow_machine.py",
+        "before": "    _ng = accept_loss_problems(dict(rec, slug=slug), old_detail)\n    if _ng:\n        return ()\n",
+        "after": "    _ng = []\n    if _ng:\n        return ()\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★本番の入口が、2AIの落としてよいの控えを事実の消失の関所へ渡し忘れる（★試験の上だけで直った姿になる★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    out[\"problems\"] += claims_grew(cur.get(\"page_decision\"), mat,\n                                   accepted_lost_claims(slug, old_detail))\n",
+        "after": "    out[\"problems\"] += claims_grew(cur.get(\"page_decision\"), mat)\n",
+        "run": ["scripts/grow_machine.py"],
+    },
 ]
 
 
