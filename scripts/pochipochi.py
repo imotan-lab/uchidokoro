@@ -326,10 +326,23 @@ def support_problems(d: dict, sources: list) -> list:
     import confirmed_values as _cv
     p = []
     label = {f.get("rateKey"): str(f.get("label") or "") for f in (d.get("fields") or [])}
+    # ★出典ごとの呼び名★（2026-10-20・一字一句の決まりを2AI判断へ）＝サイトによって
+    #   「初当り」「初当たり」のように書き方が違うと、画面の名前が両方の引用にそのまま在る
+    #   ことは満たせず、2AIが値まで一致させても通せなかった。sources[].labels に
+    #   {rateKey: そのサイトでの呼び名} を書けば、その呼び名で探す。
+    #   ★言うだけでは通さない★＝その呼び名は、その出典の引用にそのまま在ること。
+    for s in sources:
+        for rk, nm in (s.get("labels") or {}).items():
+            if rk not in label:
+                p.append(f"出典の呼び名に、表に無い項目があります: {rk!r}")
+            p += _text_problems("出典の呼び名", nm, 20)
+
+    def _name_in(s, rk):
+        nm = _cv.page_form(str((s.get("labels") or {}).get(rk) or label.get(rk, "")))
+        return bool(nm) and nm in _cv.page_form(s.get("quote") or "")
     for rk, tab in (d.get("rates") or {}).items():
-        want_label = _cv.page_form(label.get(rk, ""))
         sup = [s for s in sources
-               if want_label and want_label in _cv.page_form(s.get("quote") or "")
+               if _name_in(s, rk)
                and all(_cv.token_in_quote(str(v), s.get("quote") or "")
                        for v in tab.values())]
         try:
@@ -351,6 +364,10 @@ def _parse_sources(raw: list) -> list:
             for k in ("identity_why", "identity_proof"):
                 if s.get(k):
                     ps[k] = s[k]
+            if "labels" in s:
+                if not isinstance(s["labels"], dict):
+                    raise PochiError("出典の labels は {rateKey: 呼び名} の組で書きます")
+                ps["labels"] = {str(k): v for k, v in s["labels"].items()}
             out.append(ps)
         else:
             raise PochiError("出典は 'URL|逐語' か {url, quote} で書きます")
@@ -381,7 +398,7 @@ def plan(d: dict, fetch=None, store: dict = None, html: str = None,
             return {"ok": False, "problems": p}
     name = rows[d["slug"]].get("name") or d["slug"]
     try:
-        verified = [_cv.verify_source(dict(s), name, fetch) for s in sources]
+        verified = [_cv.verify_source(dict(s), name, fetch, judged_by=d["by"]) for s in sources]
     except _cv.ConfirmedError as e:
         return {"ok": False, "problems": [f"出典を確かめられません: {e}"]}
     new = json.loads(json.dumps(store))
@@ -627,6 +644,42 @@ def selftest() -> int:
               "★同じ rateKey を2回使えない（同じ表を2回掛ける）★", "重なっています")
     bad(lambda d: d["fields"][0].update(label="弱スイカ"),
         "★★逐語にその小役の名前が無ければ断る（表の取り違え）★★")
+    # ★★出典ごとの呼び名★★（2026-10-20・一字一句の決まりを2AI判断へ）
+    q3 = "試験機Aの中段のチェリーは設定1が1/210.1、設定6が1/190.5です。"
+    page3 = page.replace("</body>", "<p>%s</p></body>" % q3)
+
+    def lab(srcs):
+        d = json.loads(json.dumps(good))
+        d["sources"] = srcs
+        return plan(d, fetch=lambda u: page3, store=empty(), html=html, rows=rows)
+    _s1 = {"url": "https://chonborista.com/slot/zzz/", "quote": q1}
+    _s3 = {"url": "https://nana-press.com/kaiseki/zzz/", "quote": q3}
+    t("　（対照）呼び名が違う出典は、呼び名を書かなければ通らない",
+      not lab([_s1, _s3])["ok"])
+    t("★★出典ごとの呼び名を書けば、書き方の違う2サイトでも通る★★",
+      lab([_s1, dict(_s3, labels={"cherry": "中段のチェリー"})])["ok"])
+    t("　その呼び名が、その出典の引用に無ければ通らない（言うだけでは通さない）",
+      not lab([_s1, dict(_s3, labels={"cherry": "弱スイカ"})])["ok"])
+    t("　表に無い項目の呼び名は断る",
+      not lab([_s1, dict(_s3, labels={"cherry": "中段のチェリー", "bell": "ベル"})])["ok"])
+    # ★記号の検査だけが断る形にする★（引用にも同じ記号を入れる＝呼び名は引用に在る・罠④）
+    _q5 = '試験機Aの中段の"チェリーは設定1が1/210.1、設定6が1/190.5です。'
+    t("　呼び名に記号は使えない（引用に在っても断る）",
+      any("使えない文字" in x for x in support_problems(
+          good, _parse_sources([_s1, {"url": _s3["url"], "quote": _q5,
+                                      "labels": {"cherry": '中段の"チェリー'}}]))))
+    # ★★正式名を書かないページは、判断者の組がそろえば2AIの判断として受け取る★★
+    #   （confirmed_values.verify_source の judged_by。ここでは決定の by を渡す）
+    page4 = ("<html><head><title>【試験A】解析まとめ</title></head><body><h1>【試験A】解析まとめ</h1>"
+             "<p>%s</p><p>%s</p></body></html>" % (q1, q2))
+    _d4 = json.loads(json.dumps(good))
+    for s in _d4["sources"]:
+        s.update(identity_proof="【試験A】解析まとめ",
+                 identity_why="導入日とメーカーを2AIで突き合わせて同じ機種と判断した")
+    _r4 = plan(_d4, fetch=lambda u: page4, store=empty(), html=html, rows=rows)
+    t("★★正式名を書かないページでも、判断者の組がそろえば通る★★",
+      _r4["ok"] and all((s.get("identity_override") or {}).get("core_in_proof") is False
+                        for s in _r4["basis"]["sources"]))
     shape_bad(lambda d: d.update(settingLabels={"3": "設定3"}),
               "　settingLabels は settings の段階だけ", "settingLabels")
     _dl = json.loads(json.dumps(good))

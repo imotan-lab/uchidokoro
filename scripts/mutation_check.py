@@ -3707,12 +3707,12 @@ MUTATIONS = [
         "why": "同じURLの2件目の引用を照合しない（Codex9回目）",
         "file": "scripts/confirmed_values.py",
         "before": "                got = verify_source(dict(src), name or slug,\n"
-                  "                                    lambda _u, _h=html: _h)",
+                  "                                    lambda _u, _h=html: _h,\n",
         "after": "                if url in globals().setdefault('_RVSEEN', set()):\n"
                  "                    continue\n"
                  "                globals()['_RVSEEN'].add(url)\n"
                  "                got = verify_source(dict(src), name or slug,\n"
-                 "                                    lambda _u, _h=html: _h)",
+                 "                                    lambda _u, _h=html: _h,\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -4538,7 +4538,7 @@ MUTATIONS = [
     {
         "why": "★ポチポチくん：引用をページで取り直して確かめない★（言うだけで通る）",
         "file": "scripts/pochipochi.py",
-        "before": "        verified = [_cv.verify_source(dict(s), name, fetch) for s in sources]",
+        "before": "        verified = [_cv.verify_source(dict(s), name, fetch, judged_by=d[\"by\"]) for s in sources]",
         "after": "        verified = [dict(s) for s in sources]",
         "run": ["scripts/pochipochi.py"],
     },
@@ -4594,9 +4594,72 @@ MUTATIONS = [
     {
         "why": "★ポチポチくん：逐語に小役の名前が在るかを見ない★（表の取り違えが通る）",
         "file": "scripts/pochipochi.py",
-        "before": "               if want_label and want_label in _cv.page_form(s.get(\"quote\") or \"\")",
-        "after": "               if True",
+        "before": "        return bool(nm) and nm in _cv.page_form(s.get(\"quote\") or \"\")",
+        "after": "        return True",
         "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★ポチポチくん：出典ごとの呼び名を読み込みで落とす★（書き方の違う2サイトが永久に通らない・2026-10-20）",
+        "file": "scripts/pochipochi.py",
+        "before": "                ps[\"labels\"] = {str(k): v for k, v in s[\"labels\"].items()}",
+        "after": "                pass",
+        "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★ポチポチくん：表に無い項目の呼び名を受け取る★",
+        "file": "scripts/pochipochi.py",
+        "before": "            if rk not in label:\n                p.append(f\"出典の呼び名に、表に無い項目があります: {rk!r}\")",
+        "after": "            if False:\n                p.append(f\"出典の呼び名に、表に無い項目があります: {rk!r}\")",
+        "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★ポチポチくん：出典の呼び名の文字を確かめない★（記号で画面の属性を足せる）",
+        "file": "scripts/pochipochi.py",
+        "before": "            p += _text_problems(\"出典の呼び名\", nm, 20)",
+        "after": "            pass",
+        "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★ポチポチくん：決定の判断者を出典の同定に渡さない★（正式名を書かないページが2AIで一致しても通らない・2026-10-20）",
+        "file": "scripts/pochipochi.py",
+        "before": "        verified = [_cv.verify_source(dict(s), name, fetch, judged_by=d[\"by\"]) for s in sources]",
+        "after": "        verified = [_cv.verify_source(dict(s), name, fetch, judged_by=None) for s in sources]",
+        "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★確定値：判断者の組がそろっても、正式名の芯が無い根拠を断る★（2AIの同定を受け取れない・2026-10-20）",
+        "file": "scripts/confirmed_values.py",
+        "before": "        if not core_in_proof and judges is None:\n",
+        "after": "        if not core_in_proof:\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：判断者を渡さなくても、芯の無い根拠を通す★（別機種のページの文を写せば通る・依頼150）",
+        "file": "scripts/confirmed_values.py",
+        "before": "        if not core_in_proof and judges is None:\n",
+        "after": "        if False:\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：判断者が1人でも組として認める★（2AIの判断になっていない）",
+        "file": "scripts/confirmed_values.py",
+        "before": "        judges = judges_pair(judged_by or []) if judged_by else None\n",
+        "after": "        judges = judged_by or None\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：記録するときに判断者を同定へ渡さない★",
+        "file": "scripts/confirmed_values.py",
+        "before": "    sources = [verify_source(dict(s), name, fetch, judged_by=by) for s in sources]",
+        "after": "    sources = [verify_source(dict(s), name, fetch, judged_by=None) for s in sources]",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：取り直しで判断者を渡さない★（2AIで通した記録が翌朝の公開前の確かめで必ず止まる）",
+        "file": "scripts/confirmed_values.py",
+        "before": "                                    judged_by=r.get(\"agreed_by\"))",
+        "after": "                                    judged_by=None)",
+        "run": ["scripts/confirmed_values.py"],
     },
     {
         "why": "★ポチポチくん：通称のページの同定の根拠を落とす★（2AIが同定しても必ず断られる）",

@@ -1150,13 +1150,21 @@ def context_fingerprint(text: str, needle: str,
     return _hl.sha256("\x1f".join(out).encode("utf-8")).hexdigest()
 
 
-def verify_source(src: dict, name: str, fetch=None) -> dict:
+def verify_source(src: dict, name: str, fetch=None, judged_by=None) -> dict:
     """★出典のページを実際に取ってきて確かめる★（2026-08-09・依頼130 P0-2）
 
     以前は URL も引用も**言うだけ**で通った。そのため
     「機種Aについての本物の引用」を機種Bとして記録できた。
     ①そのページが本当にその機種のページか ②引用が本当にそこにあるか
     の2つを機械が確かめる。
+
+    ★judged_by＝その記録の判断者★（2026-10-20・運営者「一字一句の決まりを2AI判断へ」）
+      機械同定が落ちたページで、判断者の組（claude と codex／代役の2人）がそろっているときは、
+      ★「同じ機種か」は2AIの判断として受け取る★＝根拠の一文に正式名の芯がそのまま入って
+      いることを求めない（なな徹は正式名をどのページにも書かない：「ゴジラvsエヴァンゲリオン」
+      を「ゴジラ対エヴァンゲリオン」「ゴジエヴァ」と書く。2AIが一致しても永久に記録できなかった）。
+      ★言うだけでは通さないものは残す★＝根拠の一文がそのページに実在する／理由の長さ／
+      本文と周りの指紋。判断者が渡されない呼び出しは今までどおり芯を求める。
     """
     if fetch is None:
         # ★取り直しの道は1本★（2026-08-24・Codexの9回目）
@@ -1218,10 +1226,13 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
             #   飾りだけだと**検査ごと素通り**した（fail-open）。
             raise ConfirmedError(
                 f"正式名称から機種の芯を取れません（{name!r}）＝同定を確かめられません")
-        if core not in _cid.normalize_core(proof):
+        core_in_proof = core in _cid.normalize_core(proof)
+        judges = judges_pair(judged_by or []) if judged_by else None
+        if not core_in_proof and judges is None:
             raise ConfirmedError(
                 f"同定の根拠に機種名が含まれていません（{src['url']}）: "
-                f"{proof[:40]}／「{name}」だと分かる文を根拠にします")
+                f"{proof[:40]}／「{name}」だと分かる文を根拠にします"
+                "（判断者の組がそろった記録なら、2AIの判断として受け取れます）")
         if len(why_same) < MIN_WHY:
             # ★受け取る側でも確かめる★（2026-08-11・依頼148の指摘3）
             #   CLIでしか見ていなかったので、別の呼び出し口を足すと素通りする。
@@ -1239,6 +1250,9 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
             "why": why_same[:300],
             "proof": proof_raw[:300],
             "machine_said": why,
+            # ★正式名の芯が根拠に入っていたか／入っていなければ誰の判断で通したか★
+            "core_in_proof": core_in_proof,
+            "judged_by": (sorted(_judge_names(judged_by)) if not core_in_proof else []),
             # ★どの本文を読んで判断したか★（あとで同じものを見たか確かめられる）
             "text_sha256": hashlib.sha256(
                 text_of(html).encode("utf-8")).hexdigest(),
@@ -1361,7 +1375,7 @@ def record(slug: str, field: str, value, sources: list, by: list,
     if _wng:
         raise ConfirmedError("／".join(_wng[:3]))
     # ★引用が本当にそのページにあるか・そのページがその機種かを確かめる★
-    sources = [verify_source(dict(s), name, fetch) for s in sources]
+    sources = [verify_source(dict(s), name, fetch, judged_by=by) for s in sources]
     # ★控えが無いときは作らない★（2026-08-24・Codexの9回目）
     #   初回は `--init`、消失は復旧。ここで黙って作ると両者を区別できない。
     data = load(strict=False, require_exists=True)
@@ -1566,7 +1580,8 @@ def reverify(slug: str, fetch=None, name: str = "",
             try:
                 # ★引用ごとに必ず照合する★（取得はしない＝上で1回だけ）
                 got = verify_source(dict(src), name or slug,
-                                    lambda _u, _h=html: _h)
+                                    lambda _u, _h=html: _h,
+                                    judged_by=r.get("agreed_by"))
             except Exception as e:                           # noqa: BLE001
                 ng.append(f"{slug} / {field}: 出典を確かめ直せません"
                           f"（{url}／{str(e)[:60]}）")
@@ -2547,9 +2562,22 @@ def selftest() -> int:
                      dict(parse_source("https://nana-press.com/1|" + Q2),
                           identity_why="題は通称だが同じ機種だと判断した",
                           identity_proof=Q2)]   # 実在するが機種名を含まない
-        stops("★★根拠に機種名が入っていなければ通らない★★"
+        # ★2026-10-20から：判断者を渡さない呼び出しでだけ、芯を求める★
+        #   （判断者の組がそろった記録は「同じ機種か」を2AIの判断として受け取る＝下の試験）
+        stops("★★判断者を渡さなければ、根拠に機種名が入っていないと通らない★★"
               "（別機種のページにある文を写しても越えられない）",
-              lambda: rec(fetch=nickname, sources=src_other))
+              lambda: verify_source(dict(src_other[1]), NAME, nickname))
+        try:
+            _r_other = rec(fetch=nickname, sources=src_other)
+            _st_other = json.load(open(STORE, encoding="utf-8"))["machines"]["x"]["ceiling"]
+        except ConfirmedError:
+            _r_other, _st_other = {"state": "REFUSED"}, {}
+        _ov_other = [s for s in _st_other.get("sources") or [] if s.get("identity_override")]
+        t("★★判断者の組がそろった記録は、芯が無い根拠でも2AIの判断として受け取る★★"
+          "（なな徹は正式名をどのページにも書かない・2026-10-20）",
+          _r_other["state"] == "RECORDED" and len(_ov_other) == 1
+          and _ov_other[0]["identity_override"]["core_in_proof"] is False
+          and _ov_other[0]["identity_override"]["judged_by"] == ["claude", "codex"])
         src_short = [parse_source("https://chonborista.com/1|" + Q1),
                      dict(parse_source("https://nana-press.com/1|" + Q2),
                           identity_why="題は通称だが同じ機種だと判断した",
@@ -3208,6 +3236,67 @@ def selftest() -> int:
             t("★★全角入りの控えを取り直しても、引用も根拠も周りも同じと分かる★★"
               "（★reverify の照合も本文と同じ形でそろえる★）",
               _fw_rv.get("invalid") == [] and _fw_rv.get("review") == [])
+            # ★★正式名を書かないページを、2AIの判断で通した記録も取り直せる★★
+            #   （2026-10-20・一字一句の決まりを2AI判断へ）＝記録するときに判断者で通したのに、
+            #   取り直す側が判断者を渡さないと、翌朝の公開前の確かめで必ず止まる。
+            _al = "Lためし丸ファイナルテスト"
+            _al_html = ("<title>【ためし丸F】解析まとめ</title><body><h1>【ためし丸F】解析まとめ</h1>"
+                        "<p>天井は999Gです。" + ("説明。" * 30) + "</p></body>")
+            try:
+                _al_src = verify_source({"url": "https://nana-press.com/kaiseki/al",
+                                         "quote": "天井は999Gです。",
+                                         "identity_why": "2AIで導入日とメーカーを突き合わせました",
+                                         "identity_proof": "【ためし丸F】解析まとめ"},
+                                        _al, lambda u: _al_html, judged_by=["claude", "codex"])
+            except ConfirmedError:
+                _al_src = {"url": "https://nana-press.com/kaiseki/al", "quote": "天井は999Gです。"}
+            _al_ov = _al_src.get("identity_override") or {}
+            t("★★判断者の組がそろえば、正式名の芯が無い根拠でも受け取り、誰の判断かを残す★★",
+              _al_ov.get("core_in_proof") is False
+              and _al_ov.get("judged_by") == ["claude", "codex"])
+            stops("　判断者を渡さなければ、今までどおり芯の無い根拠は断る",
+                  lambda: verify_source({"url": "https://nana-press.com/kaiseki/al",
+                                         "quote": "天井は999Gです。",
+                                         "identity_why": "2AIで導入日とメーカーを突き合わせました",
+                                         "identity_proof": "【ためし丸F】解析まとめ"},
+                                        _al, lambda u: _al_html))
+            stops("　判断者が1人だけなら、芯の無い根拠は断る",
+                  lambda: verify_source({"url": "https://nana-press.com/kaiseki/al",
+                                         "quote": "天井は999Gです。",
+                                         "identity_why": "2AIで導入日とメーカーを突き合わせました",
+                                         "identity_proof": "【ためし丸F】解析まとめ"},
+                                        _al, lambda u: _al_html, judged_by=["claude"]))
+            stops("　判断者がそろっていても、根拠の一文がページに無ければ断る",
+                  lambda: verify_source({"url": "https://nana-press.com/kaiseki/al",
+                                         "quote": "天井は999Gです。",
+                                         "identity_why": "2AIで導入日とメーカーを突き合わせました",
+                                         "identity_proof": "【ためし丸G】解析まとめ"},
+                                        _al, lambda u: _al_html, judged_by=["claude", "codex"]))
+            _al_ch_html = ("<title>" + _al + " 解析まとめ</title><body><h1>" + _al
+                           + " 解析まとめ</h1><p>天井は999Gです。" + ("説明。" * 30) + "</p></body>")
+            _store_al = STORE
+            STORE = os.path.join(os.path.dirname(_store_al), "cv_al.json")
+            json.dump({"schema_version": SCHEMA, "machines": {"zzz_al": {
+                "ceiling": {
+                    "value": {"kind": "GAME", "amount": "999", "unit": "G", "benefit": "AT当選"},
+                    "sources": [verify_source({"url": "https://chonborista.com/slot/al",
+                                               "quote": "天井は999Gです。"},
+                                              _al, lambda u: _al_ch_html), _al_src],
+                    "lineages": ["vote:chonborista", "vote:nana-press"],
+                    "agreed_by": ["claude", "codex"],
+                    "why": "2AIで突き合わせました",
+                    "decided_at": "2026-10-20",
+                    "official_url": ""}}}},
+                open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
+            try:
+                _al_rv = reverify("zzz_al", name=_al, detail=True,
+                                  fetch=lambda u: _al_ch_html if "chonborista" in u else _al_html)
+            except ConfirmedError as _e_al:
+                _al_rv = {"invalid": [str(_e_al)], "review": []}
+            finally:
+                STORE = _store_al
+            t("★★2AIの判断で通した出典は、取り直しでも判断者を渡して通る★★",
+              _al_rv.get("invalid") == [] and _al_rv.get("review") == [])
             t("★★取り直して引用が実在すれば通る★★",
               reverify(_rv_slug, fetch=_fetch_ok) == [])
             t("　同じURLは1回しか取りに行かない（出典2件で2回）",
