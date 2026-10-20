@@ -4635,11 +4635,19 @@ MUTATIONS = [
         "run": ["scripts/pochipochi.py"],
     },
     {
-        "why": "★ポチポチくん：書き込みの印が新しくても奪って書く★"
-               "（2つの --apply が同時に走り、片方の対応が消える・Codex review240）",
+        "why": "★ポチポチくん：ほかの書き込みがロックを持っていても書く★"
+               "（2つの --apply が同時に走り、片方の対応が消える・Codex review240/241）",
         "file": "scripts/pochipochi.py",
-        "before": "                if not old:\n                    break",
-        "after": "                if False:\n                    break",
+        "before": "        if not _os_lock(fd):\n",
+        "after": "        if False:\n",
+        "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★ポチポチくん：書いたあとに読み直した中身を『自分が書いたもの』として控える★"
+               "（その一瞬に他人が書いた分を戻して消す・Codex review241）",
+        "file": "scripts/pochipochi.py",
+        "before": "        wrote[SETTING] = _write_bytes(SETTING, r[\"html\"].encode(\"utf-8\"))",
+        "after": "        wrote[SETTING] = _write_bytes(SETTING, r[\"html\"].encode(\"utf-8\")) and _snap(SETTING)",
         "run": ["scripts/pochipochi.py"],
     },
     {

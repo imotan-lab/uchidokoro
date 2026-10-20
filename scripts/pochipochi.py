@@ -41,7 +41,6 @@ import json
 import os
 import re
 import sys
-import time
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
@@ -102,13 +101,22 @@ def load(path: str = None) -> dict:
     return d
 
 
-def _write_json(path: str, obj) -> None:
+def _json_bytes(obj) -> bytes:
+    return (json.dumps(obj, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def _write_bytes(path: str, data: bytes) -> bytes:
+    """一時ファイルに書いて置き換える。★書いたバイト列そのものを返す★（読み直さない）"""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
-    with io.open(tmp, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2, sort_keys=True)
-        f.write("\n")
+    with io.open(tmp, "wb") as f:
+        f.write(data)
     os.replace(tmp, path)
+    return data
+
+
+def _write_json(path: str, obj) -> bytes:
+    return _write_bytes(path, _json_bytes(obj))
 
 
 def status_override(slug: str, store: dict = None):
@@ -398,46 +406,59 @@ def plan(d: dict, fetch=None, store: dict = None, html: str = None,
             "basis": basis}
 
 
-LOCK_STALE_SEC = 1800
+def _os_lock(fd: int) -> bool:
+    """★OSのファイルロック★（持ち主の処理が終われば OS が外す＝残骸が残らない）"""
+    try:
+        if os.name == "nt":
+            import msvcrt
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+
+
+def _os_unlock(fd: int) -> None:
+    try:
+        if os.name == "nt":
+            import msvcrt
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    except OSError:
+        pass
 
 
 class _ApplyLock:
     """★書き込みを1つずつにする★（Codex review240）＝2つの --apply が同時に走ると、
     どちらも同じ控えを読んでから書くので、片方の対応が黙って消える。
-    ★30分より古い印は残骸とみなして取り直す★（落ちた処理の印で永久に止めない）。"""
+    ★OSのファイルロックを使う★（Codex review241）＝印のファイルの有無で決める形だと、
+    古い印を2つが同時に取り直して両方とも書けた。OSのロックは持ち主の処理が終われば外れるので、
+    「古い印」を見分ける必要そのものが無い（ファイルは消さずに残してよい）。"""
 
     def __init__(self):
         self.path = LOCK
-        self.held = False
+        self.fd = None
 
     def __enter__(self):
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        for _ in range(2):
-            try:
-                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.write(fd, f"{os.getpid()} {datetime.datetime.now().isoformat()}".encode())
-                os.close(fd)
-                self.held = True
-                return self
-            except FileExistsError:
-                try:
-                    old = time.time() - os.path.getmtime(self.path) > LOCK_STALE_SEC
-                except OSError:
-                    old = False
-                if not old:
-                    break
-                try:
-                    os.remove(self.path)
-                except OSError:
-                    break
-        raise PochiError("ほかの書き込みが進行中です（印: " + self.path + "）。終わってからやり直します")
+        fd = os.open(self.path, os.O_CREAT | os.O_RDWR)
+        if not _os_lock(fd):
+            os.close(fd)
+            raise PochiError("ほかの書き込みが進行中です（印: " + self.path + "）。終わってからやり直します")
+        self.fd = fd
+        return self
 
     def __exit__(self, *exc):
-        if self.held:
-            try:
-                os.remove(self.path)
-            except OSError:
-                pass
+        if self.fd is not None:
+            _os_unlock(self.fd)
+            os.close(self.fd)
+            self.fd = None
         return False
 
 
@@ -476,15 +497,11 @@ def _apply_locked(d: dict, fetch) -> dict:
     try:
         b = _sj.read_json(BASIS, expect=dict, allow_missing=True, default={}) or {}
         b.setdefault(d["slug"], []).append(r["basis"])
-        _write_json(BASIS, b)
-        wrote[BASIS] = _snap(BASIS)
-        _write_json(STORE, r["store"])
-        wrote[STORE] = _snap(STORE)
-        tmp = SETTING + ".tmp"
-        with io.open(tmp, "w", encoding="utf-8", newline="") as f:
-            f.write(r["html"])
-        os.replace(tmp, SETTING)
-        wrote[SETTING] = _snap(SETTING)
+        # ★書いたバイト列そのものを控える★（Codex review241）＝書いたあとに読み直すと、
+        #   その一瞬に他人が書いた中身を「自分が書いたもの」と取り違えて、戻すときに消す。
+        wrote[BASIS] = _write_json(BASIS, b)
+        wrote[STORE] = _write_json(STORE, r["store"])
+        wrote[SETTING] = _write_bytes(SETTING, r["html"].encode("utf-8"))
         # ★★その機種の記事ページも作り直す★★＝ページは案内の有効・無効を焼き込んでいるので、
         #   控えだけ書くと、次に作り直されるまで古い案内のまま（書き忘れを道具の側で防ぐ）。
         ok = rebuild_page(d["slug"])
@@ -675,7 +692,7 @@ def selftest() -> int:
     t("　（対照）正しい控えは読める", load(_bp)["configs"].get("zzz_a") is not None)
     # ★★記事ページを作り直せなかったら、書いたものを全部戻す★★（本物の apply を写しの上で通す）
     g = globals()
-    _keep = {k: g[k] for k in ("BASE", "STORE", "SETTING", "BASIS", "LOCK", "_rows",
+    _keep = {k: g[k] for k in ("BASE", "STORE", "SETTING", "BASIS", "LOCK", "_rows", "_write_bytes",
                                "rebuild_page")}
     _tmp = _tf.mkdtemp(prefix="pochi_tx_")
     try:
@@ -697,8 +714,7 @@ def selftest() -> int:
         t("★★記事ページを作り直せなければ、控え・setting.html・根拠を全部元に戻す★★",
           not _ra["ok"] and io.open(g["SETTING"], encoding="utf-8").read() == html
           and load(g["STORE"]) == empty() and not os.path.isfile(g["BASIS"])
-          and io.open(_pg, encoding="utf-8").read() == "元のページ"
-          and not os.path.isfile(g["LOCK"]))
+          and io.open(_pg, encoding="utf-8").read() == "元のページ")
 
         # ★★書いたあとに別の処理が書き換えたものは戻さない★★（Codex review240）
         def _other_writes(slug):
@@ -718,19 +734,40 @@ def selftest() -> int:
         io.open(g["SETTING"], "w", encoding="utf-8", newline="").write(html)
         io.open(_pg, "w", encoding="utf-8").write("元のページ")
 
+        # ★★書いた直後に別の処理が書いても、その中身を「自分が書いたもの」と取り違えない★★
+        #   （Codex review241＝書いたあとに読み直して控えると、他人の更新を戻して消した）
+        _wb = g["_write_bytes"]
+
+        def _wb_then_other(path, data):
+            _wb(path, data)
+            if path == g["SETTING"]:
+                io.open(path, "w", encoding="utf-8", newline="").write(html + "//直後の他人")
+            return data
+        g["_write_bytes"] = _wb_then_other
+        g["rebuild_page"] = lambda slug: False
+        _rd = apply(_df, fetch=lambda u: page)
+        g["_write_bytes"] = _wb
+        t("★★書いた直後に他人が書いた setting.html は、自分の分と取り違えずに残す★★",
+          not _rd["ok"]
+          and io.open(g["SETTING"], encoding="utf-8").read() == html + "//直後の他人"
+          and load(g["STORE"]) == empty())
+        io.open(g["SETTING"], "w", encoding="utf-8", newline="").write(html)
+
         # ★★ほかの書き込みが進行中なら、読む前に断る★★（2つの --apply が同時に走らない）
-        io.open(g["LOCK"], "w").write("x")
         g["rebuild_page"] = lambda slug: True
-        _rl = apply(_df, fetch=lambda u: page)
-        t("★★書き込みの印が新しいうちは、何も書かずに断る★★",
-          not _rl["ok"] and load(g["STORE"]) == empty() and os.path.isfile(g["LOCK"])
+        _held = _ApplyLock().__enter__()
+        try:
+            _rl = apply(_df, fetch=lambda u: page)
+        finally:
+            _held.__exit__(None, None, None)
+        t("★★ほかの書き込みがロックを持っている間は、何も書かずに断る★★",
+          not _rl["ok"] and load(g["STORE"]) == empty()
           and any("進行中" in x for x in _rl["problems"]))
-        _old = time.time() - LOCK_STALE_SEC - 60
-        os.utime(g["LOCK"], (_old, _old))
+        t("　ロックのファイルが残っていても、持ち主がいなければ止まらない（残骸で止めない）",
+          os.path.isfile(g["LOCK"]))
         _rb = apply(_df, fetch=lambda u: page)
-        t("　（対照）古い印は残骸として取り直し、作り直せたら全部残る・印は外れる",
-          _rb["ok"] and "zzz_a" in load(g["STORE"])["configs"] and os.path.isfile(g["BASIS"])
-          and not os.path.isfile(g["LOCK"]))
+        t("　（対照）持ち主がいなくなれば書け、作り直せたら全部残る",
+          _rb["ok"] and "zzz_a" in load(g["STORE"])["configs"] and os.path.isfile(g["BASIS"]))
     finally:
         g.update(_keep)
     # ★記事ページが控えを読んでいるかは、ページの実装で見る★（recheck の監査46）
