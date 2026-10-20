@@ -41,6 +41,7 @@ import json
 import os
 import re
 import sys
+import time
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
@@ -50,6 +51,7 @@ import safe_json as _sj                  # noqa: E402
 
 STORE = os.path.join(BASE, "assets", "data", "pochipochi.json")
 BASIS = _lp.doc("pochipochi_basis.json")
+LOCK = _lp.doc("pochipochi_apply.lock")   # ★リポジトリの外★（公開される場所に印を置かない）
 SETTING = os.path.join(BASE, "setting.html")
 MACHINES = os.path.join(BASE, "assets", "data", "machines.json")
 SCHEMA = 1
@@ -396,26 +398,93 @@ def plan(d: dict, fetch=None, store: dict = None, html: str = None,
             "basis": basis}
 
 
+LOCK_STALE_SEC = 1800
+
+
+class _ApplyLock:
+    """★書き込みを1つずつにする★（Codex review240）＝2つの --apply が同時に走ると、
+    どちらも同じ控えを読んでから書くので、片方の対応が黙って消える。
+    ★30分より古い印は残骸とみなして取り直す★（落ちた処理の印で永久に止めない）。"""
+
+    def __init__(self):
+        self.path = LOCK
+        self.held = False
+
+    def __enter__(self):
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        for _ in range(2):
+            try:
+                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(fd, f"{os.getpid()} {datetime.datetime.now().isoformat()}".encode())
+                os.close(fd)
+                self.held = True
+                return self
+            except FileExistsError:
+                try:
+                    old = time.time() - os.path.getmtime(self.path) > LOCK_STALE_SEC
+                except OSError:
+                    old = False
+                if not old:
+                    break
+                try:
+                    os.remove(self.path)
+                except OSError:
+                    break
+        raise PochiError("ほかの書き込みが進行中です（印: " + self.path + "）。終わってからやり直します")
+
+    def __exit__(self, *exc):
+        if self.held:
+            try:
+                os.remove(self.path)
+            except OSError:
+                pass
+        return False
+
+
 def apply(path: str, dry: bool = False, fetch=None) -> dict:
     d = _sj.read_json(path, expect=dict)
+    if dry:
+        return plan(d, fetch=fetch)
+    try:
+        lock = _ApplyLock().__enter__()
+    except PochiError as e:
+        return {"ok": False, "problems": [str(e)], "written": False, "rebuilt": False}
+    try:
+        return _apply_locked(d, fetch)
+    finally:
+        lock.__exit__(None, None, None)
+
+
+def _apply_locked(d: dict, fetch) -> dict:
+    # ★控えと setting.html は印を取ってから読む★（取る前に読むと、待っている間の更新を消す）
     r = plan(d, fetch=fetch)
-    if not r["ok"] or dry:
+    if not r["ok"]:
         return r
     # ★★全部書けたときだけ残す★★（Codex review239）＝記事ページの作り直しが失敗したら、
-    #   控え・setting.html・根拠の控え・ページを書く前の姿へ戻す（中途半端な状態を残さない）。
+    #   控え・setting.html・根拠の控えを書く前の姿へ戻す（中途半端な状態を残さない）。
+    # ★★戻すのは「自分が書いたまま」のものだけ★★（Codex review240）＝書いたあとに
+    #   別の処理（人の手・ほかのセッション）が書き換えていたら、戻さずに知らせる。
+    #   ★記事ページは戻さない★＝作り直しは最後に1回だけ置き換える作りなので、失敗した回は
+    #   ページに触れていない。変わっていたら、それは別の処理の更新（消さずに知らせる）。
     page = os.path.join(BASE, "machines", d["slug"], "index.html")
-    keep = {}
-    for f in (BASIS, STORE, SETTING, page):
-        keep[f] = io.open(f, "rb").read() if os.path.isfile(f) else None
+
+    def _snap(f):
+        return io.open(f, "rb").read() if os.path.isfile(f) else None
+    keep = {f: _snap(f) for f in (BASIS, STORE, SETTING)}
+    page_before = _snap(page)
+    wrote = {}
     try:
         b = _sj.read_json(BASIS, expect=dict, allow_missing=True, default={}) or {}
         b.setdefault(d["slug"], []).append(r["basis"])
         _write_json(BASIS, b)
+        wrote[BASIS] = _snap(BASIS)
         _write_json(STORE, r["store"])
+        wrote[STORE] = _snap(STORE)
         tmp = SETTING + ".tmp"
         with io.open(tmp, "w", encoding="utf-8", newline="") as f:
             f.write(r["html"])
         os.replace(tmp, SETTING)
+        wrote[SETTING] = _snap(SETTING)
         # ★★その機種の記事ページも作り直す★★＝ページは案内の有効・無効を焼き込んでいるので、
         #   控えだけ書くと、次に作り直されるまで古い案内のまま（書き忘れを道具の側で防ぐ）。
         ok = rebuild_page(d["slug"])
@@ -423,24 +492,36 @@ def apply(path: str, dry: bool = False, fetch=None) -> dict:
         ok = False
         r["problems"] = [f"書く途中で失敗しました: {type(e).__name__}: {e}"]
     if not ok:
-        _restore(keep)
+        left = _restore(keep, wrote)
         r["ok"] = False
         r.setdefault("problems", []).append(
-            "記事ページを作り直せなかったので、書いたものを全部元に戻しました")
+            "記事ページを作り直せなかったので、書いたものを元に戻しました")
+        for f in left:
+            r["problems"].append(f"★別の処理が書き換えていたので戻していません: {f}★")
+        if _snap(page) != page_before:
+            r["problems"].append(f"★記事ページが途中で別の処理に書き換えられています（触っていません）: {page}★")
         r["written"] = r["rebuilt"] = False
         return r
     r["written"] = r["rebuilt"] = True
     return r
 
 
-def _restore(keep: dict) -> None:
+def _restore(keep: dict, wrote: dict) -> list:
+    """★自分が書いたままのものだけを戻す★。戻さなかったファイルの一覧を返す"""
+    left = []
     for f, data in keep.items():
+        if f not in wrote:
+            continue                       # ★書いていないものには触らない★
+        now = io.open(f, "rb").read() if os.path.isfile(f) else None
+        if now != wrote[f]:
+            left.append(f)
+            continue
         if data is None:
-            if os.path.isfile(f):
-                os.remove(f)
+            os.remove(f)
         else:
             with io.open(f, "wb") as fh:
                 fh.write(data)
+    return left
 
 
 def rebuild_page(slug: str) -> bool:
@@ -594,7 +675,8 @@ def selftest() -> int:
     t("　（対照）正しい控えは読める", load(_bp)["configs"].get("zzz_a") is not None)
     # ★★記事ページを作り直せなかったら、書いたものを全部戻す★★（本物の apply を写しの上で通す）
     g = globals()
-    _keep = {k: g[k] for k in ("BASE", "STORE", "SETTING", "BASIS", "_rows", "rebuild_page")}
+    _keep = {k: g[k] for k in ("BASE", "STORE", "SETTING", "BASIS", "LOCK", "_rows",
+                               "rebuild_page")}
     _tmp = _tf.mkdtemp(prefix="pochi_tx_")
     try:
         os.makedirs(os.path.join(_tmp, "machines", "zzz_a"))
@@ -604,25 +686,51 @@ def selftest() -> int:
         g["STORE"] = os.path.join(_tmp, "p.json")
         g["SETTING"] = os.path.join(_tmp, "setting.html")
         g["BASIS"] = os.path.join(_tmp, "basis.json")
+        g["LOCK"] = os.path.join(_tmp, "apply.lock")
         _write_json(g["STORE"], empty())
         io.open(g["SETTING"], "w", encoding="utf-8", newline="").write(html)
         g["_rows"] = lambda: rows
-
-        def _fail_rebuild(slug):
-            io.open(_pg, "w", encoding="utf-8").write("書きかけ")
-            return False
-        g["rebuild_page"] = _fail_rebuild
+        g["rebuild_page"] = lambda slug: False
         _df = os.path.join(_tmp, "d.json")
         _write_json(_df, good)
         _ra = apply(_df, fetch=lambda u: page)
-        t("★★記事ページを作り直せなければ、控え・setting.html・根拠・ページを全部元に戻す★★",
+        t("★★記事ページを作り直せなければ、控え・setting.html・根拠を全部元に戻す★★",
           not _ra["ok"] and io.open(g["SETTING"], encoding="utf-8").read() == html
           and load(g["STORE"]) == empty() and not os.path.isfile(g["BASIS"])
-          and io.open(_pg, encoding="utf-8").read() == "元のページ")
+          and io.open(_pg, encoding="utf-8").read() == "元のページ"
+          and not os.path.isfile(g["LOCK"]))
+
+        # ★★書いたあとに別の処理が書き換えたものは戻さない★★（Codex review240）
+        def _other_writes(slug):
+            io.open(g["SETTING"], "w", encoding="utf-8", newline="").write(html + "//他人の更新")
+            io.open(_pg, "w", encoding="utf-8").write("他人のページ")
+            return False
+        g["rebuild_page"] = _other_writes
+        _rc2 = apply(_df, fetch=lambda u: page)
+        t("★★失敗しても、別の処理が書いた setting.html と記事ページは消さずに知らせる★★",
+          not _rc2["ok"]
+          and io.open(g["SETTING"], encoding="utf-8").read() == html + "//他人の更新"
+          and io.open(_pg, encoding="utf-8").read() == "他人のページ"
+          and any("戻していません" in x for x in _rc2["problems"])
+          and any("記事ページが途中で" in x for x in _rc2["problems"]))
+        t("　自分だけが書いた控えと根拠は戻っている",
+          load(g["STORE"]) == empty() and not os.path.isfile(g["BASIS"]))
+        io.open(g["SETTING"], "w", encoding="utf-8", newline="").write(html)
+        io.open(_pg, "w", encoding="utf-8").write("元のページ")
+
+        # ★★ほかの書き込みが進行中なら、読む前に断る★★（2つの --apply が同時に走らない）
+        io.open(g["LOCK"], "w").write("x")
         g["rebuild_page"] = lambda slug: True
+        _rl = apply(_df, fetch=lambda u: page)
+        t("★★書き込みの印が新しいうちは、何も書かずに断る★★",
+          not _rl["ok"] and load(g["STORE"]) == empty() and os.path.isfile(g["LOCK"])
+          and any("進行中" in x for x in _rl["problems"]))
+        _old = time.time() - LOCK_STALE_SEC - 60
+        os.utime(g["LOCK"], (_old, _old))
         _rb = apply(_df, fetch=lambda u: page)
-        t("　（対照）作り直せたら全部残る",
-          _rb["ok"] and "zzz_a" in load(g["STORE"])["configs"] and os.path.isfile(g["BASIS"]))
+        t("　（対照）古い印は残骸として取り直し、作り直せたら全部残る・印は外れる",
+          _rb["ok"] and "zzz_a" in load(g["STORE"])["configs"] and os.path.isfile(g["BASIS"])
+          and not os.path.isfile(g["LOCK"]))
     finally:
         g.update(_keep)
     # ★記事ページが控えを読んでいるかは、ページの実装で見る★（recheck の監査46）

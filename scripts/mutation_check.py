@@ -4622,8 +4622,31 @@ MUTATIONS = [
     {
         "why": "★ポチポチくん：記事ページを作り直せなくても、書いたものを戻さない★（中途半端な状態が残る）",
         "file": "scripts/pochipochi.py",
-        "before": "    if not ok:\n        _restore(keep)",
-        "after": "    if False:\n        _restore(keep)",
+        "before": "    if not ok:\n        left = _restore(keep, wrote)",
+        "after": "    if False:\n        left = _restore(keep, wrote)",
+        "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★ポチポチくん：戻すときに、書いたあと別の処理が書き換えたものまで戻す★"
+               "（人やほかのセッションの更新が黙って消える・Codex review240）",
+        "file": "scripts/pochipochi.py",
+        "before": "        if now != wrote[f]:\n            left.append(f)",
+        "after": "        if False:\n            left.append(f)",
+        "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★ポチポチくん：書き込みの印が新しくても奪って書く★"
+               "（2つの --apply が同時に走り、片方の対応が消える・Codex review240）",
+        "file": "scripts/pochipochi.py",
+        "before": "                if not old:\n                    break",
+        "after": "                if False:\n                    break",
+        "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★ポチポチくん：失敗した回に記事ページが別の処理に書き換えられていても知らせない★",
+        "file": "scripts/pochipochi.py",
+        "before": "        if _snap(page) != page_before:",
+        "after": "        if False:",
         "run": ["scripts/pochipochi.py"],
     },
     {
