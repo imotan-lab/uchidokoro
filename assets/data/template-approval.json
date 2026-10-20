@@ -64,7 +64,7 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "ecc07863430476c152cdd79dc300b6387d68b1b466deeb2e80f1a3449ce51b1a",
-  "service-worker.js": "8eb762da274d39a3346b82778d08025c26cc840f08414cb5e9f15febf2b9d0c4",
-  "setting.html": "9465b66719da1030cd4fdd5c2a3e51f9eea0bd36806c42f45700fe114ddc64b7"
+  "service-worker.js": "2e541dca5c0b8765f406e5e1e98d47e7fba685373383a6b7d8dd75505687dbd5",
+  "setting.html": "0040ea01a96f003d4305b878fa5f33b32e7b463a65578e7c1cff0a7efc45ea83"
  }
 }
