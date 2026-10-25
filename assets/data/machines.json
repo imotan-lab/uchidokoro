@@ -2959,7 +2959,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-04",
+   "decided_at": "2026-10-25",
    "input_digest": "sha256:829351ac53180e525c28347d16749871ae6e7f71f32518d010d2ddc7634f0687"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -2981,7 +2981,7 @@
    "regulatory_model_code": "L見える子ちゃんSC"
   },
   "checker": {
-   "coinRate": 30.8,
+   "coinRate": 30.0,
    "unit": "G",
    "modes": [
     {
