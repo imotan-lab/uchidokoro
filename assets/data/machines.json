@@ -2978,7 +2978,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-19",
+   "decided_at": "2026-10-26",
    "input_digest": "sha256:4f28ecd7655ec3c2c4589206cc2fc347617cda42d0b1e59bcf224c26f23075de"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -3009,9 +3009,14 @@
     }
    ],
    "normal": {
-    "ceiling": 999
+    "ceiling": 999,
+    "caution": 500,
+    "good": 600,
+    "excellent": 700,
+    "target": 600
    }
-  }
+  },
+  "targetProjection": "04cfa54c42f29c03"
  },
  {
   "slug": "yajikita_mairu",
