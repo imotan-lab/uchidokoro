@@ -64,7 +64,6 @@ EXPECTED_NEEDS_EDIT = {
     "kizumonogatari",
     "koukaku",
     "madomagi_forte",
-    "monkeyv",
     "neoplanet",
     "okidoki_gorgeous",
     "rotis",
@@ -107,7 +106,8 @@ EXPECTED_PUBLIC = EXPECTED_LEGACY_TOTAL - len(EXPECTED_NEEDS_EDIT) - len(EXPECTE
 #   2026-10-01: 禁止語を2AIで消し、6機種（azurlane/birdie_wing/iza_bancho/okidoki_black/okidoki_encore/railgun2）が公開できるようになり 76 → 82
 #   2026-10-01: gineiden_dnt の誤記（56枚）と禁止語を2AIで直して公開できるようになり 82 → 83
 #   2026-10-11: my_juggler_v の根拠の無い閾値と「設定1〜2濃厚」を2AIで消して公開できるようになり 83 → 84
-EXPECTED_CHECKER_MACHINES = 84
+#   2026-10-26: monkeyv の注記「確実な利益ゾーン」等を出典に合わせて2AIで直して公開できるようになり 84 → 85
+EXPECTED_CHECKER_MACHINES = 85
 #   2026-07-27（25巡目）: 表示整合の要修正を止めたため 71機種131mode → 67機種123mode
 #     （当初10機種→UIが交換率別の狙い目をチェッカーから組み立てるようにして5機種解消）
 #   2026-07-27（24巡目）: 原稿に「公開できない表現」が残る41機種を編集待ちとして
@@ -124,10 +124,11 @@ EXPECTED_CHECKER_MACHINES = 84
 #   2026-10-01: 同じ6機種が公開できるようになり 142 → 151
 #   2026-10-01: gineiden_dnt が公開できるようになり 151 → 153
 #   2026-10-11: my_juggler_v が公開できるようになり 153 → 154（normal の1mode）
+#   2026-10-26: monkeyv が公開できるようになり 154 → 157（normal / reset / cycle の3mode）
 #   ★2026-10-25から★ 2AIが checker_verdict で欄を消したときは、ここを直さない
 #   ＝消した欄の一覧（assets/data/checker-mode-drops.json）の分だけ、想定を自動で減らす
 #   （無人タスクが見張りのスクリプトに触らずに済むように）。dumbbell の suru・reset が最初の2件。
-EXPECTED_CHECKER_MODES = 154
+EXPECTED_CHECKER_MODES = 157
 
 # ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
 #   集合そのものを持つ。機種を増減したら意図した変更として更新すること。
