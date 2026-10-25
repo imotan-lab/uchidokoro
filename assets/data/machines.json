@@ -1,5 +1,83 @@
 [
  {
+  "slug": "pw_10503",
+  "name": "スマスロ リコリス・リコイル",
+  "seo": {
+   "title": "スマスロ リコリス・リコイル スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "ceiling",
+    "cz",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at_prob",
+    "ceiling:GAME:AT間",
+    "ceiling:GAME:CZ間",
+    "cz:オポジットバトル",
+    "cz:ファーストリコリス",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-10-14",
+   "input_digest": "sha256:9da2a483149e4f9803fd62ae50c57f3a7b799bfed00ee07fc3c08b8aaf52577b"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-09-07",
+  "identity": {
+   "manufacturer_id": "sammy",
+   "official_product_url": "https://p-town.dmm.com/machines/5033",
+   "announced_name": "スマスロ リコリス・リコイル",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5033 型式=L スマスロ リコリス・リコイル KX メーカー=サミー 導入=2026-09-07 確認日=2026-08-16",
+   "market_release_date": "2026-09-07",
+   "_model_code_sources": [
+    "p-town.dmm.com",
+    "p-world.co.jp"
+   ],
+   "_legacy_evidence_ref": "pworld:10503 型式=L スマスロ リコリス・リコイル KX 検定=6S0400 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10503",
+   "regulatory_model_code": "L スマスロ リコリス・リコイル KX"
+  },
+  "checker": {
+   "coinRate": 31.8,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "caution": 300,
+    "good": 300,
+    "excellent": 400,
+    "target": 300,
+    "ceiling": 850
+   }
+  },
+  "targetProjection": "a39769cb5ba2151d"
+ },
+ {
   "slug": "dmm_5095",
   "name": "スマスロ モンスターハンターライズ：サンブレイク",
   "seo": {
@@ -192,84 +270,6 @@
    }
   },
   "targetProjection": "abeb0676d126baa8"
- },
- {
-  "slug": "pw_10503",
-  "name": "スマスロ リコリス・リコイル",
-  "seo": {
-   "title": "スマスロ リコリス・リコイル スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [
-    "ceiling",
-    "cz",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at_prob",
-    "ceiling:GAME:AT間",
-    "ceiling:GAME:CZ間",
-    "cz:オポジットバトル",
-    "cz:ファーストリコリス",
-    "games_per_50",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-10-14",
-   "input_digest": "sha256:9da2a483149e4f9803fd62ae50c57f3a7b799bfed00ee07fc3c08b8aaf52577b"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-09-07",
-  "identity": {
-   "manufacturer_id": "sammy",
-   "official_product_url": "https://p-town.dmm.com/machines/5033",
-   "announced_name": "スマスロ リコリス・リコイル",
-   "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5033 型式=L スマスロ リコリス・リコイル KX メーカー=サミー 導入=2026-09-07 確認日=2026-08-16",
-   "market_release_date": "2026-09-07",
-   "_model_code_sources": [
-    "p-town.dmm.com",
-    "p-world.co.jp"
-   ],
-   "_legacy_evidence_ref": "pworld:10503 型式=L スマスロ リコリス・リコイル KX 検定=6S0400 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10503",
-   "regulatory_model_code": "L スマスロ リコリス・リコイル KX"
-  },
-  "checker": {
-   "coinRate": 31.8,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "caution": 300,
-    "good": 300,
-    "excellent": 400,
-    "target": 300,
-    "ceiling": 850
-   }
-  },
-  "targetProjection": "a39769cb5ba2151d"
  },
  {
   "slug": "tokyo_ghoul",
@@ -530,6 +530,91 @@
   }
  },
  {
+  "slug": "dmm_5113",
+  "name": "L魔法少女にあこがれて",
+  "seo": {
+   "title": "L魔法少女にあこがれて スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "ceiling",
+    "cz",
+    "gameplay",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "at:UPPER_AT",
+    "at_prob",
+    "ceiling:GAME:AT間",
+    "cz:まほあこチャレンジ",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-10-19",
+   "input_digest": "sha256:08769fbb2292f237b9b19f5175ad2c3da8c746995f61d0373ea74c01e347c795"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-19",
+  "identity": {
+   "manufacturer_id": "newgin",
+   "official_product_url": "https://p-town.dmm.com/machines/5113",
+   "announced_name": "L魔法少女にあこがれて",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5113 型式=L魔法少女にあこがれてNP メーカー=ニューギン 導入=2026-10 確認日=2026-09-24",
+   "market_release_date": "2026-10-19",
+   "observed_model_code": "L魔法少女にあこがれてNP",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  },
+  "checker": {
+   "coinRate": 31.4,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "設定変更後"
+    }
+   ],
+   "normal": {
+    "ceiling": 999,
+    "caution": 400,
+    "good": 450,
+    "excellent": 600,
+    "target": 450
+   },
+   "reset": {
+    "caution": 200,
+    "good": 250,
+    "excellent": 400,
+    "target": 250
+   }
+  },
+  "targetProjection": "b77bbafa7eaa787d"
+ },
+ {
   "slug": "sao2",
   "name": "スマスロ ソードアート・オンラインⅡ",
   "release_date": "2026-06-08",
@@ -630,64 +715,6 @@
    "rate55": "通常（CZ間）340G〜 / リセット120G〜",
    "rate50": "通常（CZ間）350G〜 / リセット120G〜",
    "rate45": "通常（CZ間）360G〜 / リセット120G〜"
-  }
- },
- {
-  "slug": "ssb1",
-  "name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
-  "seo": {
-   "title": "L青春ブタ野郎はバニーガール先輩の夢を見ない スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [
-    "ceiling",
-    "cz",
-    "gameplay",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at:MAIN_AT",
-    "ceiling:GAME:CZ間",
-    "ceiling:GAME:ボーナス間",
-    "ceiling:POINT:思春期ポイント",
-    "cz:エピソードチャンス",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-10-18",
-   "input_digest": "sha256:45f6a74ba62edd94348f5dce5429a1c637624ce5317136247a450cd00ae9f68c"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-09-07",
-  "identity": {
-   "manufacturer_id": "heiwa",
-   "official_product_url": "https://p-town.dmm.com/machines/5064",
-   "announced_name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
-   "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5064 型式=L青春ブタ野郎L1 メーカー=オリンピア 導入=2026-09-07 確認日=2026-08-16",
-   "market_release_date": "2026-09-07",
-   "_model_code_sources": [
-    "p-town.dmm.com",
-    "p-world.co.jp"
-   ],
-   "_legacy_official_product_url": "https://www.heiwanet.co.jp/products/pachislot/ssb1/",
-   "regulatory_model_code": "L青春ブタ野郎L1"
   }
  },
  {
@@ -817,10 +844,10 @@
   }
  },
  {
-  "slug": "prskkm",
-  "name": "スマスロパリピ孔明",
+  "slug": "ssb1",
+  "name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
   "seo": {
-   "title": "スマスロパリピ孔明 スペック・基本情報"
+   "title": "L青春ブタ野郎はバニーガール先輩の夢を見ない スペック・基本情報"
   },
   "info": "",
   "strategy": "",
@@ -845,92 +872,33 @@
    "reason_codes": [],
    "claims": [
     "at:MAIN_AT",
-    "at:UPPER_AT",
-    "ceiling:CYCLE:ステージチェンジ",
+    "ceiling:GAME:CZ間",
     "ceiling:GAME:ボーナス間",
-    "cz:石兵八陣",
-    "games_per_50",
+    "ceiling:POINT:思春期ポイント",
+    "cz:エピソードチャンス",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-14",
-   "input_digest": "sha256:4f39c8038dfbe837e7262b763fb5d7a640ba3032004f2cdc059b6575d3c7aa34"
+   "decided_at": "2026-10-18",
+   "input_digest": "sha256:45f6a74ba62edd94348f5dce5429a1c637624ce5317136247a450cd00ae9f68c"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10-05",
+  "release_date": "2026-09-07",
   "identity": {
-   "manufacturer_id": "yamasa_next",
-   "official_product_url": "https://p-town.dmm.com/machines/5057",
-   "announced_name": "スマスロパリピ孔明",
-   "identity_tier": "CATALOG_BOUND",
+   "manufacturer_id": "heiwa",
+   "official_product_url": "https://p-town.dmm.com/machines/5064",
+   "announced_name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
+   "identity_tier": "CATALOG_CODE_MATCHED",
    "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5057 型式=未掲載 メーカー=山佐 導入=2026-10-05 確認日=2026-08-16",
-   "market_release_date": "2026-10-05",
-   "_legacy_official_product_url": "https://yamasa-next.co.jp/slot/prskkm/",
-   "observed_model_code": "Lパチスロパリピ孔明YE05H",
-   "_observed_model_code_sources": [
+   "identity_evidence_ref": "dmm:5064 型式=L青春ブタ野郎L1 メーカー=オリンピア 導入=2026-09-07 確認日=2026-08-16",
+   "market_release_date": "2026-09-07",
+   "_model_code_sources": [
+    "p-town.dmm.com",
     "p-world.co.jp"
-   ]
-  },
-  "checker": {
-   "coinRate": 31,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "天井短縮時（設定変更・ST駆け抜け後）"
-    }
    ],
-   "normal": {
-    "ceiling": 1009,
-    "caution": 550,
-    "good": 650,
-    "excellent": 650,
-    "target": 650
-   },
-   "reset": {
-    "caution": 200,
-    "good": 250,
-    "excellent": 250,
-    "target": 250
-   }
-  },
-  "targetProjection": "0d04331576a212d4"
- },
- {
-  "slug": "toaru_index2",
-  "name": "スマスロ とある魔術の禁書目録2",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "スマスロ とある魔術の禁書目録2 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（AT間1200G／CZ間800G+α）",
-  "aliases": [
-   "禁書目録2",
-   "とある魔術の禁書目録2",
-   "インデックス2",
-   "きんしょもくろく2",
-   "とある2",
-   "とあるまじゅつのきんしょもくろく2"
-  ],
-  "limit": null,
-  "tenjo_display": "AT間1200G／CZ間800G+α",
-  "tenjo_games": 800,
-  "original": {
-   "title": "とある魔術の禁書目録",
-   "kind": "ライトノベル",
-   "search": "とある魔術の禁書目録 小説"
-  },
-  "identity": {
-   "manufacturer_id": "fujishoji",
-   "regulatory_model_code": "Lとある魔術の禁書目録2FA",
-   "market_release_date": "2026-08-03"
+   "_legacy_official_product_url": "https://www.heiwanet.co.jp/products/pachislot/ssb1/",
+   "regulatory_model_code": "L青春ブタ野郎L1"
   }
  },
  {
@@ -1057,6 +1025,37 @@
   }
  },
  {
+  "slug": "toaru_index2",
+  "name": "スマスロ とある魔術の禁書目録2",
+  "release_date": "2026-08-03",
+  "seo": {
+   "title": "スマスロ とある魔術の禁書目録2 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "算定中（AT間1200G／CZ間800G+α）",
+  "aliases": [
+   "禁書目録2",
+   "とある魔術の禁書目録2",
+   "インデックス2",
+   "きんしょもくろく2",
+   "とある2",
+   "とあるまじゅつのきんしょもくろく2"
+  ],
+  "limit": null,
+  "tenjo_display": "AT間1200G／CZ間800G+α",
+  "tenjo_games": 800,
+  "original": {
+   "title": "とある魔術の禁書目録",
+   "kind": "ライトノベル",
+   "search": "とある魔術の禁書目録 小説"
+  },
+  "identity": {
+   "manufacturer_id": "fujishoji",
+   "regulatory_model_code": "Lとある魔術の禁書目録2FA",
+   "market_release_date": "2026-08-03"
+  }
+ },
+ {
   "slug": "enen2",
   "name": "Lパチスロ炎炎ノ消防隊2",
   "seo": {
@@ -1104,107 +1103,6 @@
    "kind": "漫画",
    "search": "炎炎ノ消防隊 漫画"
   }
- },
- {
-  "slug": "pw_10543",
-  "name": "Lパチスロ 彼女、お借りします",
-  "seo": {
-   "title": "Lパチスロ 彼女、お借りします スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [
-    "ceiling",
-    "cz",
-    "gameplay",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at:MAIN_AT",
-    "ceiling:GAME:BIG後",
-    "ceiling:GAME:REG後",
-    "ceiling:THROUGH:レンチャンス",
-    "cz:レンカノチャレンジ",
-    "games_per_50",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-10-21",
-   "input_digest": "sha256:14f29339a0d8bf76fb56f1aa608481937cb09e924f1795232593b6ebc4de6a4a"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-09-07",
-  "identity": {
-   "manufacturer_id": "sankyo",
-   "official_product_url": "https://p-town.dmm.com/machines/5065",
-   "announced_name": "Lパチスロ 彼女、お借りします",
-   "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5065 型式=Lレンタル彼女bK メーカー=SANKYO 導入=2026-09-07 確認日=2026-08-16",
-   "market_release_date": "2026-09-07",
-   "_model_code_sources": [
-    "chonborista.com",
-    "p-town.dmm.com",
-    "p-world.co.jp"
-   ],
-   "_legacy_evidence_ref": "pworld:10543 型式=Lレンタル彼女bK 検定=630270 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10543",
-   "regulatory_model_code": "Lレンタル彼女bK"
-  },
-  "checker": {
-   "coinRate": 31.0,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "BIG後"
-    },
-    {
-     "key": "reg",
-     "label": "REG後"
-    },
-    {
-     "key": "reset",
-     "label": "設定変更後"
-    }
-   ],
-   "normal": {
-    "caution": 700,
-    "good": 700,
-    "excellent": 770,
-    "target": 700,
-    "ceiling": 1000
-   },
-   "reg": {
-    "caution": 360,
-    "good": 360,
-    "excellent": 500,
-    "ceiling": 800,
-    "target": 360
-   },
-   "reset": {
-    "caution": 180,
-    "good": 180,
-    "excellent": 350,
-    "ceiling": 600,
-    "target": 180
-   }
-  },
-  "targetProjection": "386efba623ff3b07"
  },
  {
   "slug": "monkeyv",
@@ -1538,6 +1436,193 @@
    "kind": "漫画",
    "search": "モンキーターン 漫画"
   }
+ },
+ {
+  "slug": "pw_10543",
+  "name": "Lパチスロ 彼女、お借りします",
+  "seo": {
+   "title": "Lパチスロ 彼女、お借りします スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "ceiling",
+    "cz",
+    "gameplay",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "ceiling:GAME:BIG後",
+    "ceiling:GAME:REG後",
+    "ceiling:THROUGH:レンチャンス",
+    "cz:レンカノチャレンジ",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-10-21",
+   "input_digest": "sha256:14f29339a0d8bf76fb56f1aa608481937cb09e924f1795232593b6ebc4de6a4a"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-09-07",
+  "identity": {
+   "manufacturer_id": "sankyo",
+   "official_product_url": "https://p-town.dmm.com/machines/5065",
+   "announced_name": "Lパチスロ 彼女、お借りします",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5065 型式=Lレンタル彼女bK メーカー=SANKYO 導入=2026-09-07 確認日=2026-08-16",
+   "market_release_date": "2026-09-07",
+   "_model_code_sources": [
+    "chonborista.com",
+    "p-town.dmm.com",
+    "p-world.co.jp"
+   ],
+   "_legacy_evidence_ref": "pworld:10543 型式=Lレンタル彼女bK 検定=630270 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10543",
+   "regulatory_model_code": "Lレンタル彼女bK"
+  },
+  "checker": {
+   "coinRate": 31.0,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "BIG後"
+    },
+    {
+     "key": "reg",
+     "label": "REG後"
+    },
+    {
+     "key": "reset",
+     "label": "設定変更後"
+    }
+   ],
+   "normal": {
+    "caution": 700,
+    "good": 700,
+    "excellent": 770,
+    "target": 700,
+    "ceiling": 1000
+   },
+   "reg": {
+    "caution": 360,
+    "good": 360,
+    "excellent": 500,
+    "ceiling": 800,
+    "target": 360
+   },
+   "reset": {
+    "caution": 180,
+    "good": 180,
+    "excellent": 350,
+    "ceiling": 600,
+    "target": 180
+   }
+  },
+  "targetProjection": "386efba623ff3b07"
+ },
+ {
+  "slug": "prskkm",
+  "name": "スマスロパリピ孔明",
+  "seo": {
+   "title": "スマスロパリピ孔明 スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "ceiling",
+    "cz",
+    "gameplay",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "at:UPPER_AT",
+    "ceiling:CYCLE:ステージチェンジ",
+    "ceiling:GAME:ボーナス間",
+    "cz:石兵八陣",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-10-14",
+   "input_digest": "sha256:4f39c8038dfbe837e7262b763fb5d7a640ba3032004f2cdc059b6575d3c7aa34"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-05",
+  "identity": {
+   "manufacturer_id": "yamasa_next",
+   "official_product_url": "https://p-town.dmm.com/machines/5057",
+   "announced_name": "スマスロパリピ孔明",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5057 型式=未掲載 メーカー=山佐 導入=2026-10-05 確認日=2026-08-16",
+   "market_release_date": "2026-10-05",
+   "_legacy_official_product_url": "https://yamasa-next.co.jp/slot/prskkm/",
+   "observed_model_code": "Lパチスロパリピ孔明YE05H",
+   "_observed_model_code_sources": [
+    "p-world.co.jp"
+   ]
+  },
+  "checker": {
+   "coinRate": 31,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "天井短縮時（設定変更・ST駆け抜け後）"
+    }
+   ],
+   "normal": {
+    "ceiling": 1009,
+    "caution": 550,
+    "good": 650,
+    "excellent": 650,
+    "target": 650
+   },
+   "reset": {
+    "caution": 200,
+    "good": 250,
+    "excellent": 250,
+    "target": 250
+   }
+  },
+  "targetProjection": "0d04331576a212d4"
  },
  {
   "slug": "shinuchi_yoshimune",
@@ -2207,104 +2292,6 @@
   }
  },
  {
-  "slug": "mhrise",
-  "name": "スマスロ モンスターハンターライズ",
-  "seo": {
-   "title": "スマスロ モンスターハンターライズ 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常670G〜",
-  "aliases": [
-   "モンハンライズ",
-   "もんはんらいず",
-   "MHRise",
-   "モンハン",
-   "モンスターハンターライズ",
-   "もんはん",
-   "MHR"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "excellent": 850,
-    "good": 660,
-    "caution": 500,
-    "byRate": {
-     "eq56": {
-      "excellent": 850,
-      "good": 670,
-      "caution": 520,
-      "note": "5.6枚交換なら670Gから狙い目。天井999G+前兆で赤7以上確定。"
-     },
-     "rate55": {
-      "excellent": 850,
-      "good": 690,
-      "caution": 540,
-      "note": "6.0枚交換なら690Gから。"
-     },
-     "rate50": {
-      "excellent": 900,
-      "good": 720,
-      "caution": 560,
-      "note": "6.5枚交換なら720Gから。"
-     },
-     "rate45": {
-      "excellent": 900,
-      "good": 740,
-      "caution": 580,
-      "note": "7.0枚交換なら740Gから。"
-     }
-    },
-    "note": "天井999G+前兆で赤7ボーナス以上確定。AT終了後1G回してヤメ。"
-   },
-   "suru": {
-    "excellent": 6,
-    "good": 5,
-    "caution": 4,
-    "suruMax": 6,
-    "note": "クエスト6スルー後の7回目で赤7ボーナス以上確定。5スルーから狙い目。",
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   }
-  },
-  "limit": 999,
-  "original": {
-   "title": "モンスターハンターライズ",
-   "kind": "ゲーム",
-   "search": "モンスターハンターライズ"
-  },
-  "strategyByRate": {
-   "eq56": "通常670G〜",
-   "rate55": "通常690G〜",
-   "rate50": "通常720G〜",
-   "rate45": "通常740G〜"
-  }
- },
- {
   "slug": "karakuri2",
   "name": "Lからくりサーカス2",
   "release_date": "2026-07-06",
@@ -2384,6 +2371,54 @@
    "title": "戦国コレクション",
    "kind": "ゲーム",
    "search": "戦国コレクション ゲーム"
+  }
+ },
+ {
+  "slug": "milliongod_kiseki",
+  "name": "スマスロ ミリオンゴッド-神々の軌跡-",
+  "seo": {
+   "title": "スマスロ ミリオンゴッド-神々の軌跡- 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 通常670G〜 / リセット380G〜",
+  "aliases": [
+   "ミリオンゴッド",
+   "神々の軌跡",
+   "みりおんごっど",
+   "ゴッド",
+   "god",
+   "milliongod"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 1480,
+    "good": 670,
+    "caution": 670,
+    "note": "GG間天井1480G。"
+   },
+   "reset": {
+    "excellent": 1480,
+    "good": 380,
+    "caution": 380,
+    "note": "設定変更後は510G / 1000G / 1480G から抽選（15.2% / 20.3% / 64.5%）。"
+   }
+  },
+  "limit": 1480,
+  "original": {
+   "title": "ミリオンゴッド",
+   "kind": "シリーズ",
+   "search": "ミリオンゴッド"
   }
  },
  {
@@ -2510,112 +2545,6 @@
    "kind": "ゲーム",
    "search": "マギアレコード"
   }
- },
- {
-  "slug": "yajikita_mairu",
-  "name": "スマスロ やじきた道中記参る！",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "スマスロ やじきた道中記参る！ 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（天井は999まいる／6スルー）",
-  "aliases": [
-   "やじきた道中記参る",
-   "やじきた",
-   "やじきた道中記",
-   "やじきた参る",
-   "やじきたどうちゅうき",
-   "参る"
-  ],
-  "limit": null,
-  "tenjo_display": "999まいる",
-  "tenjo_games": null
- },
- {
-  "slug": "dmm_5113",
-  "name": "L魔法少女にあこがれて",
-  "seo": {
-   "title": "L魔法少女にあこがれて スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [
-    "ceiling",
-    "cz",
-    "gameplay",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at:MAIN_AT",
-    "at:UPPER_AT",
-    "at_prob",
-    "ceiling:GAME:AT間",
-    "cz:まほあこチャレンジ",
-    "games_per_50",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-10-19",
-   "input_digest": "sha256:08769fbb2292f237b9b19f5175ad2c3da8c746995f61d0373ea74c01e347c795"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10-19",
-  "identity": {
-   "manufacturer_id": "newgin",
-   "official_product_url": "https://p-town.dmm.com/machines/5113",
-   "announced_name": "L魔法少女にあこがれて",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5113 型式=L魔法少女にあこがれてNP メーカー=ニューギン 導入=2026-10 確認日=2026-09-24",
-   "market_release_date": "2026-10-19",
-   "observed_model_code": "L魔法少女にあこがれてNP",
-   "_observed_model_code_sources": [
-    "p-town.dmm.com"
-   ]
-  },
-  "checker": {
-   "coinRate": 31.4,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "設定変更後"
-    }
-   ],
-   "normal": {
-    "ceiling": 999,
-    "caution": 400,
-    "good": 450,
-    "excellent": 600,
-    "target": 450
-   },
-   "reset": {
-    "caution": 200,
-    "good": 250,
-    "excellent": 400,
-    "target": 250
-   }
-  },
-  "targetProjection": "b77bbafa7eaa787d"
  },
  {
   "slug": "dmm_5111",
@@ -3083,6 +3012,27 @@
     "ceiling": 999
    }
   }
+ },
+ {
+  "slug": "yajikita_mairu",
+  "name": "スマスロ やじきた道中記参る！",
+  "release_date": "2026-08-03",
+  "seo": {
+   "title": "スマスロ やじきた道中記参る！ 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "算定中（天井は999まいる／6スルー）",
+  "aliases": [
+   "やじきた道中記参る",
+   "やじきた",
+   "やじきた道中記",
+   "やじきた参る",
+   "やじきたどうちゅうき",
+   "参る"
+  ],
+  "limit": null,
+  "tenjo_display": "999まいる",
+  "tenjo_games": null
  },
  {
   "slug": "world_dai_star",
@@ -3796,51 +3746,101 @@
   }
  },
  {
-  "slug": "milliongod_kiseki",
-  "name": "スマスロ ミリオンゴッド-神々の軌跡-",
+  "slug": "mhrise",
+  "name": "スマスロ モンスターハンターライズ",
   "seo": {
-   "title": "スマスロ ミリオンゴッド-神々の軌跡- 狙い目・天井・期待値まとめ"
+   "title": "スマスロ モンスターハンターライズ 狙い目・天井・期待値まとめ"
   },
   "info": "スマスロAT",
-  "strategy": "チェッカー基準 通常670G〜 / リセット380G〜",
+  "strategy": "5.6枚 通常670G〜",
   "aliases": [
-   "ミリオンゴッド",
-   "神々の軌跡",
-   "みりおんごっど",
-   "ゴッド",
-   "god",
-   "milliongod"
+   "モンハンライズ",
+   "もんはんらいず",
+   "MHRise",
+   "モンハン",
+   "モンスターハンターライズ",
+   "もんはん",
+   "MHR"
   ],
   "checker": {
    "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
    "modes": [
     {
      "key": "normal",
      "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
     }
    ],
    "normal": {
-    "excellent": 1480,
-    "good": 670,
-    "caution": 670,
-    "note": "GG間天井1480G。"
+    "excellent": 850,
+    "good": 660,
+    "caution": 500,
+    "byRate": {
+     "eq56": {
+      "excellent": 850,
+      "good": 670,
+      "caution": 520,
+      "note": "5.6枚交換なら670Gから狙い目。天井999G+前兆で赤7以上確定。"
+     },
+     "rate55": {
+      "excellent": 850,
+      "good": 690,
+      "caution": 540,
+      "note": "6.0枚交換なら690Gから。"
+     },
+     "rate50": {
+      "excellent": 900,
+      "good": 720,
+      "caution": 560,
+      "note": "6.5枚交換なら720Gから。"
+     },
+     "rate45": {
+      "excellent": 900,
+      "good": 740,
+      "caution": 580,
+      "note": "7.0枚交換なら740Gから。"
+     }
+    },
+    "note": "天井999G+前兆で赤7ボーナス以上確定。AT終了後1G回してヤメ。"
    },
-   "reset": {
-    "excellent": 1480,
-    "good": 380,
-    "caution": 380,
-    "note": "設定変更後は510G / 1000G / 1480G から抽選（15.2% / 20.3% / 64.5%）。"
+   "suru": {
+    "excellent": 6,
+    "good": 5,
+    "caution": 4,
+    "suruMax": 6,
+    "note": "クエスト6スルー後の7回目で赤7ボーナス以上確定。5スルーから狙い目。",
+    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
    }
   },
-  "limit": 1480,
+  "limit": 999,
   "original": {
-   "title": "ミリオンゴッド",
-   "kind": "シリーズ",
-   "search": "ミリオンゴッド"
+   "title": "モンスターハンターライズ",
+   "kind": "ゲーム",
+   "search": "モンスターハンターライズ"
+  },
+  "strategyByRate": {
+   "eq56": "通常670G〜",
+   "rate55": "通常690G〜",
+   "rate50": "通常720G〜",
+   "rate45": "通常740G〜"
   }
  },
  {
