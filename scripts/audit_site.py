@@ -1201,25 +1201,29 @@ def check_27_hub_counts(machines: list) -> list[str]:
             if isinstance(k, str) and _mode_conf(c, k) is None:
                 ngs.append(f"{m['slug']}: modes宣言 '{k}' に対応する設定がchecker直下にもmodeDataにも無い（集計から漏れる・データ形式の確認要）")
         # 基準モード: normal優先→modes宣言順のreset系以外→直下キー走査
-        ncau = None
-        v = _mode_conf(c, "normal")
-        if isinstance(v, dict) and isinstance(v.get("caution"), (int, float)):
-            ncau = v["caution"]
-        if not isinstance(ncau, (int, float)):
+        # ★数えるのは狙い目の線（good・既定の交換率）★（2026-10-25・build_hub_pages.mode_line と同じ）
+        #   直す前は caution（様子見の入口）で数えていた。
+        import target_display as _td
+
+        def _line(conf):
+            if not isinstance(conf, dict) or _td.is_off(conf):
+                return None
+            return _td.effective_good(conf, _td.default_rate(c))
+
+        ncau = _line(_mode_conf(c, "normal"))
+        if ncau is None:
             for k in modes:
                 if not isinstance(k, str) or "reset" in k.lower():
                     continue
-                v = _mode_conf(c, k)
-                if isinstance(v, dict) and isinstance(v.get("caution"), (int, float)):
-                    ncau = v["caution"]
+                ncau = _line(_mode_conf(c, k))
+                if ncau is not None:
                     break
-        if not isinstance(ncau, (int, float)):
+        if ncau is None:
             for k, v in c.items():
                 if k in ("reset", "modeData") or "reset" in str(k).lower() or not isinstance(v, dict):
                     continue
-                cv = v.get("caution")
-                if isinstance(cv, (int, float)):
-                    ncau = cv
+                ncau = _line(v)
+                if ncau is not None:
                     break
         _lim = m.get("limit")
         if isinstance(_lim, dict):  # mode別limit(2026-07-23〜)はnormalを代表値に（build_hub_pagesと同一ロジック）
@@ -1234,7 +1238,7 @@ def check_27_hub_counts(machines: list) -> list[str]:
             has_suru=bool(c.get("hasSuru") or "suru" in modes or "through" in modes),
             has_cycle=bool(c.get("hasCycle") or "cycle" in modes),
             ncau=ncau,
-            rcau=(_mode_conf(c, "reset") or {}).get("caution"),
+            rcau=_line(_mode_conf(c, "reset")),
         ))
     # ★先行記事も早見表には載る（build_hub_pages と揃える）★（Codex 17巡目 (b)-1）
     #   分類の断定は yome() 側で避ける。sitemap にだけ載せない。
@@ -1250,7 +1254,8 @@ def check_27_hub_counts(machines: list) -> list[str]:
          and not r["has_cycle"] and r["limit"] < 1000
          and isinstance(r["ncau"], (int, float))]
     C = [r for r in rows
-         if isinstance(r["rcau"], (int, float)) and isinstance(r["ncau"], (int, float))
+         if r["unit"] == "G"  # ★ゲーム数で数える機種だけ★（build_hub_pages.dataset_C と同じ・2026-10-25）
+         and isinstance(r["rcau"], (int, float)) and isinstance(r["ncau"], (int, float))
          and r["ncau"] - r["rcau"] > 0]
     D = [r for r in rows if r["has_suru"]]
     # ★全機種一覧は件数ではなく「載っている機種の集合」で見る★

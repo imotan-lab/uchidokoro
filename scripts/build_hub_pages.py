@@ -32,6 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import page_decision as _pd  # noqa: E402  ★区分の唯一の判定箇所★
+import target_display as _td  # noqa: E402  ★狙い目の線の読み方の唯一の場所★
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -101,29 +102,76 @@ def mode_conf(c, key):
     return None
 
 
-def base_caution(m):
-    """リセット比較の基準となる通常時系モードのcaution値。
+def mode_line(c, conf):
+    """★その欄で読者が見る狙い目の線★（2026-10-25）
+
+    ★記事の狙い目と同じ数字を出す★＝`target_display.effective_good` を
+    既定の交換率（読者が最初に見る交換率）で読む。
+    ★直す前は `caution`（様子見の入口＝手前の線）を「狙い目」として出していた★＝
+    カバネリはランキングで430G、記事とチェッカーは5.6枚でST間590G。
+    読者に「430って何？」と言われて分かった（全機種が手前の低い数字で出ていた）。
+    ★画面から外した欄（`_disabled`）は使わない★（読者が選べない）。
+    """
+    if not isinstance(conf, dict) or _td.is_off(conf):
+        return None
+    return _td.effective_good(conf, _td.default_rate(c))
+
+
+def base_pick(m):
+    """リセット比較の基準となる通常時系モード（鍵, 狙い目の線）。
     normalを優先し、無ければmodes宣言順にreset系以外のモード（cz等）を使う
     （基準モードがnormalでない機種＝東京喰種/攻殻/ヴヴヴ2/ダンベル/バキが
     リセットランキングから漏れていた事故の修正・2026-07-13）。"""
     c = m.get("checker") or {}
     if not isinstance(c, dict):
-        return None
-    v = mode_conf(c, "normal")
-    if isinstance(v, dict) and isinstance(v.get("caution"), (int, float)):
-        return v["caution"]
+        return None, None
+    v = mode_line(c, mode_conf(c, "normal"))
+    if v is not None:
+        return "normal", v
     for x in (c.get("modes") or []):
         k = mode_key(x)
         if not isinstance(k, str) or "reset" in k.lower():
             continue
-        v = mode_conf(c, k)
-        if isinstance(v, dict) and isinstance(v.get("caution"), (int, float)):
-            return v["caution"]
+        v = mode_line(c, mode_conf(c, k))
+        if v is not None:
+            return k, v
     for k, v in c.items():
         if k in ("reset", "modeData") or "reset" in str(k).lower() or not isinstance(v, dict):
             continue
-        cv = v.get("caution")
-        if isinstance(cv, (int, float)):
+        cv = mode_line(c, v)
+        if cv is not None:
+            return k, cv
+    return None, None
+
+
+def base_line(m):
+    return base_pick(m)[1]
+
+
+def mode_label(c, key, fallback):
+    """★記事の狙い目の文と同じ欄の呼び名★（target_display.parts と同じ＝modes の label）
+
+    ★なぜ★＝カバネリは記事で「ST間590G〜」なのに、ランキングだけ「通常」と出ていた。
+    """
+    for x in (c.get("modes") or []) if isinstance(c, dict) else []:
+        if isinstance(x, dict) and x.get("key") == key and x.get("label"):
+            return str(x["label"])
+    return fallback
+    v = mode_line(c, mode_conf(c, "normal"))
+    if v is not None:
+        return v
+    for x in (c.get("modes") or []):
+        k = mode_key(x)
+        if not isinstance(k, str) or "reset" in k.lower():
+            continue
+        v = mode_line(c, mode_conf(c, k))
+        if v is not None:
+            return v
+    for k, v in c.items():
+        if k in ("reset", "modeData") or "reset" in str(k).lower() or not isinstance(v, dict):
+            continue
+        cv = mode_line(c, v)
+        if cv is not None:
             return cv
     return None
 
@@ -364,8 +412,10 @@ def load_rows(source: "Path | None" = None):
                 # （バジ天膳/からくり/まどマギフォルテ/沖ドキDUOアンコールが漏れていた・2026-07-13修正）
                 has_suru=bool(c.get("hasSuru") or "suru" in modes or "through" in modes),
                 has_cycle=bool(c.get("hasCycle") or "cycle" in modes),
-                ncau=base_caution(m),
-                rcau=(mode_conf(c, "reset") or {}).get("caution"),
+                nline=base_line(m),
+                nlabel=mode_label(c, base_pick(m)[0], "通常"),
+                rlabel=mode_label(c, "reset", "リセット後"),
+                rline=mode_line(c, mode_conf(c, "reset")),
             )
         )
     return rows
@@ -412,17 +462,21 @@ def dataset_A(rows):
         r for r in rows
         if r["unit"] == "G" and isinstance(r["limit"], (int, float))
         and not r["has_cycle"] and r["limit"] < SHALLOW_TENJO_LIMIT
-        and isinstance(r["ncau"], (int, float))
+        and isinstance(r["nline"], (int, float))
     ]
-    a.sort(key=lambda r: (r["limit"], r["ncau"]))
+    a.sort(key=lambda r: (r["limit"], r["nline"]))
     return a
 
 
 def dataset_C(rows):
     c = []
     for r in rows:
-        if isinstance(r["rcau"], (int, float)) and isinstance(r["ncau"], (int, float)) and r["ncau"] - r["rcau"] > 0:
-            c.append(dict(diff=r["ncau"] - r["rcau"], **r))
+        # ★ゲーム数で数える機種だけ★（2026-10-25）＝ゴジラ（pt）が「570G」と出ていた。
+        #   ptとGは比べられないので並べない（天井ランキングと同じ扱い）。
+        if r["unit"] != "G":
+            continue
+        if isinstance(r["rline"], (int, float)) and isinstance(r["nline"], (int, float)) and r["nline"] - r["rline"] > 0:
+            c.append(dict(diff=r["nline"] - r["rline"], **r))
     c.sort(key=lambda r: -r["diff"])
     return c
 
@@ -660,10 +714,13 @@ def _build_pages(rows: list, prose_all: dict) -> tuple:
     C_top = C[:30]
     reset_list = render_rank_list(
         C_top,
-        lambda r: f'通常 <strong>{r["ncau"]}G〜</strong> → リセット後 <strong>{r["rcau"]}G〜</strong>（短縮 {r["diff"]}G）',
+        # ★差（短縮幅）は書かない★（2026-10-25・運営者「リセット後の狙い目ゲーム数があるのに要る？」）
+        #   並び順の説明は表の下の注記だけ。
+        lambda r: f'{esc(r["nlabel"])} <strong>{r["nline"]}G〜</strong> → {esc(r["rlabel"])} <strong>{r["rline"]}G〜</strong>',
     )
     reset_note = (
-        "※短縮幅（通常時の狙い目ライン − リセット後の狙い目ライン）が大きい順。比較の基準は各機種の主要カウンターモード（通常時またはCZ間）です。"
+        "※リセット後に浅くから狙える幅（通常時の狙い目 − リセット後の狙い目）が大きい順。比較の基準は各機種の主要カウンターモード（通常時・CZ間・ST間など）です。"
+        "狙い目は各機種の記事と同じ線で、交換率を選べる機種は記事で最初に表示される交換率の線です。"
         f"チェッカーのデータで短縮を確認できる機種は全<span class=\"list-count\">{len(C)}</span>機種で、上位{len(C_top)}機種を掲載しています。"
     )
 
@@ -1036,6 +1093,34 @@ def selftest() -> int:
       == ["guide-a.html（ありません）"])
     t("早見表：中身が空同士なら古くない",
       stale_pages({"guide-a.html": ""}, lambda r: "") == [])
+
+    # ★★ランキングの数字は記事の狙い目と同じ線★★（2026-10-25）＝
+    #   直す前は caution（様子見の入口）を「狙い目」として出していた（カバネリ430G）。
+    _ck = {"unit": "G", "exchangeRates": [{"key": "eq56", "label": "5.6枚"},
+                                          {"key": "rate50", "label": "5.0枚"}],
+           "defaultRate": "eq56",
+           "normal": {"caution": 430, "good": 580,
+                      "byRate": {"eq56": {"good": 590}, "rate50": {"good": 670}}},
+           "reset": {"caution": 0, "good": 100}}
+    t("★ランキング：様子見の入口ではなく狙い目の線を出す★",
+      base_line({"checker": _ck}) == 590)
+    t("★ランキング：リセット後も狙い目の線を出す★",
+      mode_line(_ck, mode_conf(_ck, "reset")) == 100)
+    _ck2 = {"unit": "G", "normal": {"caution": 500, "good": 630}}
+    t("ランキング：交換率の無い機種は直下の狙い目",
+      base_line({"checker": _ck2}) == 630)
+    _ck3 = {"unit": "G", "normal": {"caution": 500, "good": 630, "_disabled": True},
+            "cz": {"caution": 300, "good": 400}}
+    t("★ランキング：画面から外した欄は使わない★",
+      base_line({"checker": _ck3}) == 400)
+    _ck4 = dict(_ck, modes=[{"key": "normal", "label": "ST間"}, {"key": "reset", "label": "リセット"}])
+    t("★ランキング：欄の呼び名は記事と同じ（ST間）★",
+      mode_label(_ck4, base_pick({"checker": _ck4})[0], "通常") == "ST間")
+    _rows_u = [dict(unit="pt", nline=570, rline=150), dict(unit="G", nline=590, rline=100)]
+    t("★リセットランキング：ゲーム数で数える機種だけ並べる★",
+      [r["unit"] for r in dataset_C(_rows_u)] == ["G"])
+    t("ランキング：呼び名が無ければ既定の言い方",
+      mode_label(_ck, "reset", "リセット後") == "リセット後")
 
     print(f"\n{ok}/{len(cases)} 合格")
     return 0 if ok == len(cases) else 1

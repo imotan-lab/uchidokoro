@@ -1887,6 +1887,43 @@ MUTATIONS = [
         "after": "            pass",
         "run": ["scripts/build_hub_pages.py"],
     },
+    # ─── 2026-10-25・ランキングの数字を記事の狙い目にそろえる ─────────────
+    {
+        "why": "★ランキングが様子見の入口（caution）を狙い目として出す"
+               "（カバネリ430G・記事はST間590G）★",
+        "file": "scripts/build_hub_pages.py",
+        "before": "    return _td.effective_good(conf, _td.default_rate(c))",
+        "after": '    return conf.get("caution")',
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
+        "why": "★ランキングが画面から外した欄の数字を出す★",
+        "file": "scripts/build_hub_pages.py",
+        "before": "    if not isinstance(conf, dict) or _td.is_off(conf):",
+        "after": "    if not isinstance(conf, dict):",
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
+        "why": "★リセットランキングにpt（ポイント）の機種をGとして並べる（ゴジラ570G）★",
+        "file": "scripts/build_hub_pages.py",
+        "before": '        if r["unit"] != "G":',
+        "after": "        if False:",
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
+        "why": "★ランキングの欄の呼び名が記事と違う（カバネリのST間が通常と出る）★",
+        "file": "scripts/build_hub_pages.py",
+        "before": '            return str(x["label"])',
+        "after": "            return fallback",
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
+        "why": "★狙い目の線の読み方を変えても早見表を見に行かない★",
+        "file": "scripts/pre_push_check.py",
+        "before": '            "scripts/safe_json.py", "scripts/target_display.py", "guide-")',
+        "after": '            "scripts/safe_json.py", "guide-")',
+        "run": ["scripts/pre_push_check.py"],
+    },
     {
         "why": "★並べ替えても早見表を見に行かない"
                "（関所が引き金を引かず、昨日と同じことが起きる）★",

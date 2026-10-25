@@ -209,13 +209,14 @@ def _warn_unreported() -> None:
 #   build_hub_pages.py … 作る側そのもの
 #   page_decision.py   … machine_class() を使うので出力が変わる
 #   safe_json.py       … 材料の読み取り
+#   target_display.py … ランキングの狙い目の線の読み方（2026-10-25〜）
 #   guide-*            … 手で書き換えたのを捕まえる
 #
 #   ★machine-details/ は入れない★＝この生成器は読んでいない
 #   （直す前のコメントは事実と違っていた）。
 _HUB_SRC = ("assets/data/machines.json", "scripts/hub_prose.json",
             "scripts/build_hub_pages.py", "scripts/page_decision.py",
-            "scripts/safe_json.py", "guide-")
+            "scripts/safe_json.py", "scripts/target_display.py", "guide-")
 
 
 def _touches(paths, srcs) -> bool:
@@ -1203,6 +1204,9 @@ def _selftest() -> int:
       touches_hub(["scripts/page_decision.py"]) is True)
     t("　材料の読み取りを変えたときも見る",
       touches_hub(["scripts/safe_json.py"]) is True)
+    # ★ランキングの狙い目の線は target_display で読む★（2026-10-25）
+    t("★早見表：狙い目の線の読み方を変えたら見る★",
+      touches_hub(["scripts/target_display.py"]) is True)
     # ★この生成器は機種の記事データを読んでいない★（実装で確認）
     t("★早見表：記事データは材料ではないので見ない★",
       touches_hub(["assets/data/machine-details/hokuto.json"]) is False)
