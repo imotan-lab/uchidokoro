@@ -124,7 +124,8 @@ EXPECTED_CHECKER_MACHINES = 84
 #   2026-10-01: 同じ6機種が公開できるようになり 142 → 151
 #   2026-10-01: gineiden_dnt が公開できるようになり 151 → 153
 #   2026-10-11: my_juggler_v が公開できるようになり 153 → 154（normal の1mode）
-EXPECTED_CHECKER_MODES = 154
+#   2026-10-25: dumbbell の suru・reset を消した（出典に無いスルー天井の仕組みから作られていた・2AI review256）154 → 152
+EXPECTED_CHECKER_MODES = 152
 
 # ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
 #   集合そのものを持つ。機種を増減したら意図した変更として更新すること。
@@ -171,7 +172,7 @@ EXPECTED_AXIS_STOPPED = {
 EXPECTED_AXIS_PASSED = {
     ("tokyo_ghoul", "at"), ("valvrave2", "suru"), ("valvrave2", "cycle"),
     ("monkeyv", "cycle"), ("tekken6", "suru"), ("kaguya", "suru"), ("banchou4", "suru"),
-    ("dumbbell", "suru"), ("baki", "suru"), ("sao", "suru"), ("bandori", "suru"),
+    ("baki", "suru"), ("sao", "suru"), ("bandori", "suru"),
     ("hanma_baki", "suru"), ("gundam_seed", "suru"), ("youjitsu", "suru"),
     ("kengan_ashura", "suru"), ("goji_eva", "suru"),
 }

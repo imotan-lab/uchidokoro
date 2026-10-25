@@ -8231,12 +8231,12 @@
    "title": "Lパチスロ ダンベル何キロ持てる? 狙い目"
   },
   "info": "スマスロAT",
-  "strategy": "5.6枚 CZ間350G〜 / スルー天井 0スルー350G〜／4スルー0G〜 / リセット50G〜",
+  "strategy": "5.6枚 CZ間350G〜",
   "strategyByRate": {
-   "eq56": "CZ間350G〜 / スルー天井 0スルー350G〜／4スルー0G〜 / リセット50G〜",
-   "rate55": "CZ間400G〜 / スルー天井 0スルー400G〜／5スルー0G〜 / リセット80G〜",
-   "rate50": "CZ間450G〜 / スルー天井 0スルー450G〜／5スルー0G〜 / リセット120G〜",
-   "rate45": "CZ間500G〜 / スルー天井 0スルー500G〜／5スルー0G〜 / リセット160G〜"
+   "eq56": "CZ間350G〜",
+   "rate55": "CZ間400G〜",
+   "rate50": "CZ間450G〜",
+   "rate45": "CZ間500G〜"
   },
   "checker": {
    "unit": "G",
@@ -8263,15 +8263,6 @@
     {
      "key": "cz",
      "label": "CZ間"
-    },
-    {
-     "key": "suru",
-     "label": "スルー天井",
-     "hasSuru": true
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
     }
    ],
    "cz": {
@@ -8283,13 +8274,13 @@
       "excellent": 500,
       "good": 350,
       "caution": 250,
-      "note": "5.6枚交換ならCZ間350Gから狙い目、250Gから候補です。スルー回数が進んでいる台とは分けて、CZ間台として見てください。"
+      "note": "5.6枚交換ならCZ間350Gから狙い目、250Gから候補です。"
      },
      "rate55": {
       "excellent": 550,
       "good": 400,
       "caution": 300,
-      "note": "6.0枚交換はCZ間400G基準です。スルー回数が読める台とは入口差があるので、前提を固定した方が使いやすいです。"
+      "note": "6.0枚交換はCZ間400G基準です。"
      },
      "rate50": {
       "excellent": 600,
@@ -8301,273 +8292,14 @@
       "excellent": 650,
       "good": 500,
       "caution": 400,
-      "note": "7.0枚交換はCZ間500G基準です。スルー天井やリセットの浅いラインとは切り分けて使う方が安全です。"
+      "note": "7.0枚交換はCZ間500G基準です。"
      }
     },
-    "note": "CZ間天井750G+α。液晶のG数カウンタで確認。"
-   },
-   "suru": {
-    "suruMax": 5,
-    "suru": [
-     {
-      "count": 0,
-      "excellent": 550,
-      "good": 400,
-      "caution": 300,
-      "note": "0スルー。CZ間と同じ400G〜が目安です。回数が見えない台はCZ間台として扱う方が安全です。",
-      "byRate": {
-       "eq56": {
-        "excellent": 500,
-        "target": 350,
-        "good": 350,
-        "caution": 250,
-        "note": "5.6枚交換の0スルーはCZ間と同じ350G基準です。"
-       },
-       "rate55": {
-        "excellent": 550,
-        "target": 400,
-        "good": 400,
-        "caution": 300,
-        "note": "6.0枚交換の0スルーは400G基準です。"
-       },
-       "rate50": {
-        "excellent": 600,
-        "target": 450,
-        "good": 450,
-        "caution": 350,
-        "note": "6.5枚交換の0スルーは450G前後からを目安にしてください。"
-       },
-       "rate45": {
-        "excellent": 650,
-        "target": 500,
-        "good": 500,
-        "caution": 400,
-        "note": "7.0枚交換の0スルーは500G近辺からが実戦ラインです。"
-       }
-      }
-     },
-     {
-      "count": 1,
-      "excellent": 400,
-      "good": 200,
-      "caution": 100,
-      "note": "1スルー。200G〜で積極的に狙えます。前兆や引き戻しより、まず回数が合っているかを優先してください。",
-      "byRate": {
-       "eq56": {
-        "excellent": 350,
-        "target": 150,
-        "good": 150,
-        "caution": 50,
-        "note": "5.6枚交換の1スルーは150Gから積極的に見られます。"
-       },
-       "rate55": {
-        "excellent": 400,
-        "target": 200,
-        "good": 200,
-        "caution": 100,
-        "note": "6.0枚交換の1スルーは200G基準です。"
-       },
-       "rate50": {
-        "excellent": 450,
-        "target": 250,
-        "good": 250,
-        "caution": 150,
-        "note": "6.5枚交換の1スルーは250G前後からを目安にしてください。"
-       },
-       "rate45": {
-        "excellent": 500,
-        "target": 300,
-        "good": 300,
-        "caution": 200,
-        "note": "7.0枚交換の1スルーは300G近辺からが実戦ラインです。"
-       }
-      }
-     },
-     {
-      "count": 2,
-      "excellent": 300,
-      "good": 150,
-      "caution": 50,
-      "note": "2スルー。",
-      "byRate": {
-       "eq56": {
-        "excellent": 250,
-        "target": 100,
-        "good": 100,
-        "caution": 0,
-        "note": "5.6枚交換の2スルーは100Gから見られます。"
-       },
-       "rate55": {
-        "excellent": 300,
-        "target": 150,
-        "good": 150,
-        "caution": 50,
-        "note": "6.0枚交換の2スルーは150G基準です。"
-       },
-       "rate50": {
-        "excellent": 350,
-        "target": 200,
-        "good": 200,
-        "caution": 100,
-        "note": "6.5枚交換の2スルーは200G前後からを目安にしてください。"
-       },
-       "rate45": {
-        "excellent": 400,
-        "target": 250,
-        "good": 250,
-        "caution": 150,
-        "note": "7.0枚交換の2スルーは250G近辺からが実戦ラインです。"
-       }
-      }
-     },
-     {
-      "count": 3,
-      "excellent": 200,
-      "good": 100,
-      "caution": 0,
-      "note": "3スルー。",
-      "byRate": {
-       "eq56": {
-        "excellent": 180,
-        "target": 50,
-        "good": 50,
-        "caution": 0,
-        "note": "5.6枚交換の3スルーは50G前後から見られます。"
-       },
-       "rate55": {
-        "excellent": 200,
-        "target": 100,
-        "good": 100,
-        "caution": 0,
-        "note": "6.0枚交換の3スルーは100G基準です。"
-       },
-       "rate50": {
-        "excellent": 250,
-        "target": 150,
-        "good": 150,
-        "caution": 50,
-        "note": "6.5枚交換の3スルーは150G前後からを目安にしてください。"
-       },
-       "rate45": {
-        "excellent": 300,
-        "target": 200,
-        "good": 200,
-        "caution": 100,
-        "note": "7.0枚交換の3スルーは200G近辺からが実戦ラインです。"
-       }
-      }
-     },
-     {
-      "count": 4,
-      "excellent": 100,
-      "good": 50,
-      "caution": 0,
-      "note": "4スルー。かなり浅いG数から狙えます。履歴で4回分見えている台なら優先度高めです。",
-      "byRate": {
-       "eq56": {
-        "excellent": 100,
-        "target": 0,
-        "good": 0,
-        "caution": 0,
-        "note": "5.6枚交換の4スルーは0Gから候補です。"
-       },
-       "rate55": {
-        "excellent": 100,
-        "target": 50,
-        "good": 50,
-        "caution": 0,
-        "note": "6.0枚交換の4スルーは50G基準です。"
-       },
-       "rate50": {
-        "excellent": 150,
-        "target": 100,
-        "good": 100,
-        "caution": 0,
-        "note": "6.5枚交換の4スルーは100G前後からを目安にしてください。"
-       },
-       "rate45": {
-        "excellent": 200,
-        "target": 150,
-        "good": 150,
-        "caution": 50,
-        "note": "7.0枚交換の4スルーは150G近辺からが実戦ラインです。"
-       }
-      }
-     },
-     {
-      "count": 5,
-      "excellent": 50,
-      "good": 0,
-      "caution": 0,
-      "note": "5スルー。次回CZでAT確定。0G〜で着席OK。",
-      "byRate": {
-       "eq56": {
-        "excellent": 50,
-        "target": 0,
-        "good": 0,
-        "caution": 0,
-        "note": "5スルーは交換率不問で0Gから着席OKです。"
-       },
-       "rate55": {
-        "excellent": 50,
-        "target": 0,
-        "good": 0,
-        "caution": 0,
-        "note": "5スルーは交換率不問で0Gから着席OKです。"
-       },
-       "rate50": {
-        "excellent": 50,
-        "target": 0,
-        "good": 0,
-        "caution": 0,
-        "note": "5スルーは交換率不問で0Gから着席OKです。"
-       },
-       "rate45": {
-        "excellent": 50,
-        "target": 0,
-        "good": 0,
-        "caution": 0,
-        "note": "5スルーは交換率不問で0Gから着席OKです。"
-       }
-      }
-     }
-    ]
-   },
-   "reset": {
-    "excellent": 200,
-    "good": 80,
-    "caution": 30,
-    "byRate": {
-     "eq56": {
-      "excellent": 180,
-      "good": 50,
-      "caution": 0,
-      "note": "5.6枚交換のリセット台は50Gから候補です。かなり浅いので、朝一台として見てよい根拠がある台に絞ってください。"
-     },
-     "rate55": {
-      "excellent": 200,
-      "good": 80,
-      "caution": 30,
-      "note": "6.0枚交換はリセット80G基準です。CZ間やスルー回数と混ぜず、朝一短縮台として別で見る方が使いやすいです。"
-     },
-     "rate50": {
-      "excellent": 240,
-      "good": 120,
-      "caution": 50,
-      "note": "6.5枚交換ではリセット120Gからが本線です。浅い朝一台に広げすぎず、前提確認を先にしてください。"
-     },
-     "rate45": {
-      "excellent": 280,
-      "good": 160,
-      "caution": 80,
-      "note": "7.0枚交換のリセット台は160G基準です。通常CZ間やスルー狙いより浅く見えやすいので、朝一の根拠が弱い台は見送る方が安全です。"
-     }
-    },
-    "note": "設定変更後は天井短縮。"
+    "note": "CZ間750G消化または摂取カロリー10万kcal到達でCZ当選。液晶のG数カウンタで確認。"
    }
   },
   "limit": 999,
-  "tenjo_display": "CZ間750G+α／AT間1500G",
+  "tenjo_display": "CZ間750G／AT間1500G",
   "tenjo_games": 750,
   "aliases": [
    "ダンベル",
