@@ -114,7 +114,11 @@ def mode_line(c, conf):
     """
     if not isinstance(conf, dict) or _td.is_off(conf):
         return None
-    return _td.effective_good(conf, _td.default_rate(c))
+    g = _td.effective_good(conf, _td.default_rate(c))
+    # ★「狙い目なし」の番兵（設定狙いの99999）は数値として出さない★（2026-10-25・Codex review247）
+    if g is None or g >= _td.NO_TARGET:
+        return None
+    return g
 
 
 def base_pick(m):
@@ -402,6 +406,11 @@ def load_rows(source: "Path | None" = None):
                 info=m.get("info", ""),
                 strategy=m.get("strategy", ""),
                 limit=_scalar_limit(m.get("limit")),
+                # ★天井ランキングの並びと対象は tenjo_games で決める★（2026-10-25・Codex review246）＝
+                #   limit はチェッカーの入力の上限で、天井とは限らなかった（番長4 700／記事699G+α、
+                #   マギアレコード 633／記事950pt）。鍵が在って null なら G数で数えない天井＝対象外。
+                rank_limit=(m["tenjo_games"] if "tenjo_games" in m
+                            else _scalar_limit(m.get("limit"))),
                 tenjo_display=m.get("tenjo_display"),
                 status=m.get("status", "complete"),
                 # ★新台経路(AUTO_*)の区分★（2026-08-04・Codex72回目。
@@ -415,6 +424,9 @@ def load_rows(source: "Path | None" = None):
                 nline=base_line(m),
                 nlabel=mode_label(c, base_pick(m)[0], "通常"),
                 rlabel=mode_label(c, "reset", "リセット後"),
+                # ★行ごとに交換率を出す★（2026-10-25・Codex review246）＝北斗は5.6枚・バンドリは等価の線で、
+                #   表だけでは交換条件の違う数字を並べていると分からなかった。
+                ratelabel=(_td.rate_label(c, _td.default_rate(c)) or _td.NORATE_PREFIX),
                 rline=mode_line(c, mode_conf(c, "reset")),
             )
         )
@@ -460,11 +472,11 @@ def dataset_A(rows):
     # 周期天井の機種と、G数天井の構造化データが無い機種（スルー専用チェッカー等）は対象外。
     a = [
         r for r in rows
-        if r["unit"] == "G" and isinstance(r["limit"], (int, float))
-        and not r["has_cycle"] and r["limit"] < SHALLOW_TENJO_LIMIT
+        if r["unit"] == "G" and isinstance(r["rank_limit"], (int, float))
+        and not r["has_cycle"] and r["rank_limit"] < SHALLOW_TENJO_LIMIT
         and isinstance(r["nline"], (int, float))
     ]
-    a.sort(key=lambda r: (r["limit"], r["nline"]))
+    a.sort(key=lambda r: (r["rank_limit"], r["nline"]))
     return a
 
 
@@ -716,7 +728,7 @@ def _build_pages(rows: list, prose_all: dict) -> tuple:
         C_top,
         # ★差（短縮幅）は書かない★（2026-10-25・運営者「リセット後の狙い目ゲーム数があるのに要る？」）
         #   並び順の説明は表の下の注記だけ。
-        lambda r: f'{esc(r["nlabel"])} <strong>{r["nline"]}G〜</strong> → {esc(r["rlabel"])} <strong>{r["rline"]}G〜</strong>',
+        lambda r: f'{esc(r["ratelabel"])} ／ {esc(r["nlabel"])} <strong>{r["nline"]}G〜</strong> → {esc(r["rlabel"])} <strong>{r["rline"]}G〜</strong>',
     )
     reset_note = (
         "※リセット後に浅くから狙える幅（通常時の狙い目 − リセット後の狙い目）が大きい順。比較の基準は各機種の主要カウンターモード（通常時・CZ間・ST間など）です。"
@@ -804,6 +816,7 @@ def _build_legacy() -> int:
         rows = load_rows()
         prose = _sj2.read_json(PROSE, expect=dict)
         built, _data_html, _allowed = _build_pages(rows, prose)
+        marked = build_marked_pages()      # ★手書きページの印も、全部読めてから書く★
     except Exception as e:                                   # noqa: BLE001
         print(f"★描けませんでした: {type(e).__name__}: {e} → 何も書きません")
         return 1
@@ -813,15 +826,96 @@ def _build_legacy() -> int:
         return 1
 
     n = 0
-    for rel, html in built.items():
+    for rel, html in list(built.items()) + list(marked.items()):
         p = BASE / rel
         if p.is_file() and p.read_text(encoding="utf-8") == html:
             continue
         p.write_text(html, encoding="utf-8", newline="\n")
         print(f"  書きました: {rel}")
         n += 1
-    print(f"★ハブ4ページを作り直しました★（変わったのは {n} ページ）")
+    print(f"★ハブ4ページと印のあるページを作り直しました★（変わったのは {n} ページ）")
     return 0
+
+
+# ★★手書きのページに埋める「データの印」★★（2026-10-25）
+#   ★なぜ★＝ガイドに手書きした機種の狙い目が記事と食い違っていた
+#   （北斗「等価550／5.6枚現金680」、ToLOVEる「リセット後70G〜」など）。
+#   ★狙い目の数字は手で書かず、印を置いてここで埋める★：
+#     <span data-dv="target:hokuto:eq56:normal">570G〜</span>  … その交換率・その欄の狙い目
+#     <span data-dv="ratelabel:hokuto:eq56">5.6枚</span>         … 交換率の呼び名
+#     <span data-dv="modelabel:hokuto:reset">リセット</span>      … 欄の呼び名
+#     交換率を持たない機種は交換率に「-」を書く（target:slug:-:normal）。
+#   ★4ページの生成（_build_pages）には混ぜない★＝新台公開が4ページの集合を要求している（Codex review247）。
+#   ★読めない印は例外で止める★（無い機種・選べない交換率・無い欄・画面から外した欄・狙い目なし）。
+MARK_PAGES = ("index.html", "guide-haena.html", "guide-rate.html", "guide-reset.html",
+              "guide-yamedoki.html", "guide-pochipochi.html")
+_MARK_RE = re.compile(r'(<span data-dv="([^"]+)">)(.*?)(</span>)', re.S)
+
+
+def _mark_text(key: str, by_slug: dict) -> str:
+    parts = key.split(":")
+    kind = parts[0]
+    if kind not in ("target", "ratelabel", "modelabel"):
+        raise ValueError(f"知らない印です: {key}")
+    if len(parts) < 2 or parts[1] not in by_slug:
+        raise ValueError(f"機種がありません: {key}")
+    c = by_slug[parts[1]].get("checker") or {}
+    rates = {str(r.get("key")): str(r.get("label") or "")
+             for r in (c.get("exchangeRates") or []) if isinstance(r, dict)}
+    modes = {mode_key(x): (x.get("label") if isinstance(x, dict) else None)
+             for x in (c.get("modes") or [])}
+
+    def _rate(rk):
+        if rk == "-":
+            if rates:
+                raise ValueError(f"交換率を選べる機種です（交換率を書いてください）: {key}")
+            return ""
+        if rk not in rates:
+            raise ValueError(f"その交換率は選べません: {key}")
+        return rk
+
+    if kind == "ratelabel":
+        if len(parts) != 3:
+            raise ValueError(f"印の形が違います: {key}")
+        return rates[_rate(parts[2])] if parts[2] != "-" else ""
+    if kind == "modelabel":
+        if len(parts) != 3 or parts[2] not in modes:
+            raise ValueError(f"その欄はありません: {key}")
+        return str(modes[parts[2]] or parts[2])
+    if len(parts) != 4:
+        raise ValueError(f"印の形が違います: {key}")
+    rk = _rate(parts[2])
+    if parts[3] not in modes:
+        raise ValueError(f"その欄はありません: {key}")
+    conf = mode_conf(c, parts[3])
+    if not isinstance(conf, dict) or _td.is_off(conf):
+        raise ValueError(f"画面に出ていない欄です: {key}")
+    g = _td.effective_good(conf, rk)
+    if g is None or g >= _td.NO_TARGET:
+        raise ValueError(f"狙い目がありません: {key}")
+    return f"{g}{c.get('unit') or 'G'}〜"
+
+
+def fill_marks(html: str, by_slug: dict) -> str:
+    """★印の中身をデータから作り直す★（読めない印があれば例外）"""
+    return _MARK_RE.sub(lambda m: m.group(1) + esc(_mark_text(m.group(2), by_slug)) + m.group(4), html)
+
+
+def check_set(built: dict, marked: dict) -> dict:
+    """★--check が比べるページ＝4ページ＋印のあるページ★（片方だけにしない）"""
+    return dict(built, **marked)
+
+
+def build_marked_pages() -> dict:
+    """{置き場: 印を埋めた中身}（全部そろってから返す＝1つでも読めなければ例外）"""
+    import safe_json as _sjm
+    ms = _sjm.read_rows(MACHINES)
+    by_slug = {m.get("slug"): m for m in ms if isinstance(m, dict)}
+    out = {}
+    for rel in MARK_PAGES:
+        p = BASE / rel
+        out[rel] = fill_marks(p.read_text(encoding="utf-8"), by_slug)
+    return out
 
 
 # ★このスクリプトが作り直す4ページ★（2026-09-01）
@@ -866,6 +960,7 @@ def _check_legacy() -> int:
         rows = load_rows()
         prose = _sj2.read_json(PROSE, expect=dict)
         built, _d, _a = _build_pages(rows, prose)
+        marked = build_marked_pages()
     except Exception as e:                                   # noqa: BLE001
         print(f"★早見表を描けません: {type(e).__name__}: {e}★")
         return 1
@@ -882,12 +977,12 @@ def _check_legacy() -> int:
         p = BASE / rel
         return p.read_text(encoding="utf-8") if p.is_file() else None
 
-    stale = stale_pages(built, _read)
+    stale = stale_pages(check_set(built, marked), _read)
     if stale:
         print("★早見表が古いままです★ → " + " / ".join(stale))
         print("  直し方: python scripts/build_hub_pages.py --legacy")
         return 1
-    print("早見表4ページ: いまのデータと一致しています")
+    print("早見表4ページと印のあるページ: いまのデータと一致しています")
     return 0
 
 
@@ -1119,6 +1214,43 @@ def selftest() -> int:
     _rows_u = [dict(unit="pt", nline=570, rline=150), dict(unit="G", nline=590, rline=100)]
     t("★リセットランキング：ゲーム数で数える機種だけ並べる★",
       [r["unit"] for r in dataset_C(_rows_u)] == ["G"])
+    _bs = {"h": {"checker": dict(_ck, modes=[{"key": "normal", "label": "通常"},
+                                             {"key": "reset", "label": "リセット"}])},
+           "n": {"checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                             "normal": {"good": 630}}},
+           "s": {"checker": {"unit": "G", "modes": [{"key": "normal", "label": "設定狙い"}],
+                             "normal": {"good": 99999}}}}
+    t("★印：その交換率・その欄の狙い目を埋める★",
+      fill_marks('<span data-dv="target:h:rate50:normal">x</span>', _bs)
+      == '<span data-dv="target:h:rate50:normal">670G〜</span>')
+    t("印：交換率と欄の呼び名を埋める",
+      fill_marks('<span data-dv="ratelabel:h:eq56">x</span><span data-dv="modelabel:h:reset">y</span>', _bs)
+      == '<span data-dv="ratelabel:h:eq56">5.6枚</span><span data-dv="modelabel:h:reset">リセット</span>')
+    t("印：交換率の無い機種は「-」",
+      fill_marks('<span data-dv="target:n:-:normal">x</span>', _bs)
+      == '<span data-dv="target:n:-:normal">630G〜</span>')
+
+    def _raises(h):
+        try:
+            fill_marks(h, _bs)
+            return False
+        except ValueError:
+            return True
+    t("★印：選べない交換率は止める（共通の値へ黙って戻さない）★",
+      _raises('<span data-dv="target:h:equal:normal">x</span>'))
+    t("★印：狙い目なし（99999）を数字として出さない★",
+      _raises('<span data-dv="target:s:-:normal">x</span>'))
+    t("印：無い欄・無い機種・知らない印は止める",
+      _raises('<span data-dv="target:h:eq56:cz">x</span>')
+      and _raises('<span data-dv="target:zz:eq56:normal">x</span>')
+      and _raises('<span data-dv="price:h">x</span>'))
+    t("★点検：印のあるページも比べる★",
+      check_set({"guide-a.html": "A"}, {"index.html": "B"}) == {"guide-a.html": "A", "index.html": "B"})
+    t("★ランキング：狙い目なし（99999）を数字として出さない★",
+      mode_line(_bs["s"]["checker"], _bs["s"]["checker"]["normal"]) is None)
+    t("★ランキング：行ごとに交換率の呼び名を出す★",
+      _td.rate_label(_ck, _td.default_rate(_ck)) == "5.6枚"
+      and (_td.rate_label(_ck2, _td.default_rate(_ck2)) or _td.NORATE_PREFIX) == "チェッカー基準")
     t("ランキング：呼び名が無ければ既定の言い方",
       mode_label(_ck, "reset", "リセット後") == "リセット後")
 

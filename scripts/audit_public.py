@@ -78,6 +78,9 @@ BEHAVIOR_NEG_RE = re.compile(r"設定\s*" + _SET1 + r"\s*で\s*は")
 ALLOWED_MACHINE_KEYS = {
     "slug", "name", "manufacturer", "info", "release_date", "confirmed_at", "sources",
     "seo", "strategy", "strategyByRate", "aliases", "limit", "tenjo_display",
+    # ★天井ランキングに使うG数（G数で数えない天井は null）★（2026-10-25）
+    #   limit はチェッカーの入力の上限なので、天井とは限らない（番長4 limit=700・天井699G+α）。
+    "tenjo_games",
     "original", "checker", "disclaimer", "display_requirements",
     # ★status は公開物に必要★（2026-07-30・Codex 14巡目 (a)-2）
     #   落としていたため、受け取る側が「先行記事（解析待ち）」を判別できず、
@@ -775,6 +778,10 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
     for k in ("release_date", "confirmed_at"):
         if k in pub and not _valid_date(pub[k]):
             problems.append(f"{slug}: {k} の日付が不正（実在しない日付を含む）")
+    if "tenjo_games" in pub:
+        tg = pub["tenjo_games"]
+        if tg is not None and (type(tg) is not int or tg <= 0):
+            problems.append(f"{slug}: tenjo_games は正の整数か null")
     lim = pub.get("limit")
     if "limit" in pub:
         if isinstance(lim, dict):

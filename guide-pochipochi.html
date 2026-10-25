@@ -58,12 +58,12 @@
     <article class="article-block">
       <h2 class="block-label">▶ ポチポチくんとは？</h2>
       <p class="hint-text">ポチポチくんは、パチスロの実戦中に小役（ベル・チェリー・スイカなど）をタップでカウントするだけで、いま打っている台がどの設定っぽいかをリアルタイムで表示する無料ツールです。</p>
-      <p class="hint-text spacing-sm">内部ではベイズ推定という統計手法を使っており、カウント数が増えるほど判定の精度が上がります。2000G〜3000G以上のデータがあると、かなり信頼できる結果が出ます。</p>
+      <p class="hint-text spacing-sm">内部ではベイズ推定という統計手法を使っており、カウント数が増えるほど判定の精度が上がります。ゲーム数が少ないうちは判定が大きくぶれます。機種によっては数千ゲームでも絞り込めないことがあります。</p>
     </article>
     <article class="article-block">
       <h2 class="block-label">▶ 基本的な使い方</h2>
       <p class="hint-text"><strong>1. 機種ページからポチポチくんを開く</strong><br><a href="index.html">トップページ</a>で機種を検索し、「小役カウンター ポチポチくん →」のボタンをタップします。</p>
-      <p class="hint-text spacing-sm"><strong>2. 総ゲーム数を入力</strong><br>通常時に消化したゲーム数を入力します。AT中やボーナス中のゲーム数は含めません。</p>
+      <p class="hint-text spacing-sm"><strong>2. 総ゲーム数を入力</strong><br>通常時に消化したゲーム数を入力します。AT中やボーナス中のゲーム数は含めないのが基本です。機種ごとの数え方は、各機種のポチポチくんの画面に表示されます。</p>
       <p class="hint-text spacing-sm"><strong>3. 小役をカウント</strong><br>各小役の出現回数を入力します。「＋」ボタンをタップするか、直接数値を入力できます。実戦中はレバーONのたびにスマホをポチポチするイメージです。</p>
       <p class="hint-text spacing-sm"><strong>4. 結果を確認</strong><br>設定ごとの期待度がグラフで表示されます。高設定の期待度が高いほど、続行する価値があります。</p>
     </article>
@@ -83,7 +83,7 @@
     <article class="article-block">
       <h2 class="block-label">▶ 精度を上げるコツ</h2>
       <p class="hint-text"><strong>ゲーム数は正確に</strong><br>総ゲーム数がズレると確率の計算が狂います。台のデータカウンターや液晶表示を参考に、できるだけ正確に入力してください。</p>
-      <p class="hint-text spacing-sm"><strong>通常時のみカウントする</strong><br>AT中やボーナス中はナビで小役が揃うため、通常時とは確率が異なります。必ず通常時のみのカウントにしてください。</p>
+      <p class="hint-text spacing-sm"><strong>通常時のみカウントする</strong><br>AT中やボーナス中はナビで小役が揃うため、通常時とは確率が異なります。原則は通常時のみのカウントです。機種によって数え方が違うので、各機種のポチポチくんの画面の説明に従ってください。</p>
       <p class="hint-text spacing-sm"><strong>最低2000Gは回す</strong><br>500G程度のデータでは確率の偏りが大きく、判定がブレやすいです。2000G以上、できれば3000G以上のデータで判断するのが理想です。</p>
       <p class="hint-text spacing-sm"><strong>複数の小役を組み合わせる</strong><br>1つの小役だけでなく、複数の小役を同時にカウントすることで精度が上がります。ポチポチくんは複数の小役を総合的に判定しています。</p>
     </article>
@@ -101,15 +101,15 @@
     </article>
     <article class="article-block">
       <h2 class="block-label">▶ 対応機種と非対応機種</h2>
-      <p class="hint-text">ポチポチくんは、小役確率に設定差がある機種のみ対応しています。以下のような機種は非対応です。</p>
+      <p class="hint-text">ポチポチくんは、小役やCZ・ATの初当たり回数など、数えることで設定差が分かる要素がある機種に対応しています。以下のような機種は非対応です。</p>
       <table class="info-table spacing-sm">
         <tbody>
-          <tr><th>小役に設定差がない機種</th><td>小役確率が全設定共通の機種では、小役をカウントしても設定は判別できません。</td></tr>
-          <tr><th>カウント対象の小役がない機種</th><td>ゲーム数やボーナス回数だけで設定を推測する機種は、台のデータカウンターで確認できるためポチポチくん不要です。</td></tr>
+          <tr><th>数えても設定差が分からない機種</th><td>小役・ボーナス・初当たり回数など、数えられる要素のどれにも設定差が無い機種では、カウントしても設定は判別できません。</td></tr>
+          <tr><th>数える要素が無い機種</th><td>数えて設定差が分かる要素（小役・初当たり回数など）が確認できていない機種は対応していません。</td></tr>
           <tr><th>小役確率が未解析の機種</th><td>新しい機種で解析データがまだ出ていない場合、対応を見送っています。解析が出次第、順次対応します。</td></tr>
         </tbody>
       </table>
-      <p class="hint-text spacing-sm">各機種の対応状況は<a href="index.html">トップページ</a>で確認できます。</p>
+      <p class="hint-text spacing-sm">各機種の対応状況は、<a href="index.html">トップページ</a>から開く各機種のページで確認できます。</p>
     </article>
     <article class="article-block">
       <h2 class="block-label">▶ データの保存について</h2>

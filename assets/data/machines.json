@@ -1519,6 +1519,8 @@
    "limit": 795
   },
   "limit": 800,
+  "tenjo_display": "AT間795G+α",
+  "tenjo_games": 795,
   "aliases": [
    "モンキーターン",
    "モンキー",
@@ -2491,6 +2493,8 @@
    "limit": 700
   },
   "limit": 633,
+  "tenjo_display": "950pt+α（約633G相当）",
+  "tenjo_games": null,
   "original": {
    "title": "マギアレコード",
    "kind": "ゲーム",
@@ -3625,6 +3629,8 @@
    }
   },
   "limit": 1100,
+  "tenjo_display": "AT間1000G+α",
+  "tenjo_games": 1000,
   "original": {
    "title": "バイオハザード RE:3",
    "kind": "ゲーム",
@@ -3727,7 +3733,9 @@
     "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
    }
   },
-  "limit": 800
+  "limit": 800,
+  "tenjo_display": "ボーナス間750G+α",
+  "tenjo_games": 750
  },
  {
   "slug": "gogo_juggler3",
@@ -5017,6 +5025,8 @@
    ]
   },
   "limit": 1500,
+  "tenjo_display": "鉄拳ポイント最大900pt+α（実G数約747G）",
+  "tenjo_games": null,
   "strategyByRate": {
    "eq56": "通常450G〜 / スルー天井 0スルー450G〜／3スルー0G〜 / リセット120G〜",
    "rate55": "通常450G〜 / スルー天井 0スルー450G〜／3スルー0G〜 / リセット200G〜",
@@ -7422,6 +7432,8 @@
    ]
   },
   "limit": 700,
+  "tenjo_display": "ボーナス間699G+α",
+  "tenjo_games": 699,
   "strategyByRate": {
    "eq56": "通常420G〜 / スルー天井 0スルー420G〜／2スルー0G〜 / リセット80G〜",
    "rate55": "通常460G〜 / スルー天井 0スルー460G〜／2スルー0G〜 / リセット100G〜",
@@ -8519,6 +8531,8 @@
    }
   },
   "limit": 999,
+  "tenjo_display": "CZ間750G+α／AT間1500G",
+  "tenjo_games": 750,
   "aliases": [
    "ダンベル",
    "だんべる",
@@ -8673,6 +8687,8 @@
    ]
   },
   "limit": 1200,
+  "tenjo_display": "1200pt到達または1000G消化の早い方",
+  "tenjo_games": 1000,
   "strategyByRate": {
    "eq56": "通常400G〜 / リセット0G〜",
    "rate55": "通常450G〜 / リセット0G〜",
@@ -9248,6 +9264,8 @@
    ]
   },
   "limit": 999,
+  "tenjo_display": "CZ間600G+α",
+  "tenjo_games": 600,
   "strategyByRate": {
    "eq56": "CZ間300G〜 / スルー天井 0スルー300G〜／3スルー0G〜 / リセット40G〜",
    "rate55": "CZ間340G〜 / スルー天井 0スルー340G〜／3スルー0G〜 / リセット50G〜",
@@ -9622,6 +9640,8 @@
    "baseRateKey": "equal"
   },
   "limit": 900,
+  "tenjo_display": "最大10周期",
+  "tenjo_games": null,
   "original": {
    "title": "BanG Dream!",
    "kind": "アニメ",
@@ -11278,6 +11298,8 @@
    "スマスロ防振り"
   ],
   "limit": 1000,
+  "tenjo_display": "ボーナス間950G+α",
+  "tenjo_games": 950,
   "original": {
    "title": "痛いのは嫌なので防御力に極振りしたいと思います。",
    "kind": "ライトノベル",
@@ -11405,6 +11427,8 @@
    "スタイリッシュトライブ"
   ],
   "limit": 1050,
+  "tenjo_display": "通常時1000G+α（液晶表示）",
+  "tenjo_games": 1000,
   "original": {
    "title": "デビル メイ クライ5",
    "kind": "ゲーム",
@@ -11565,6 +11589,8 @@
    "フランキス"
   ],
   "limit": 700,
+  "tenjo_display": "ボーナス間666G+α",
+  "tenjo_games": 666,
   "original": {
    "title": "ダーリン・イン・ザ・フランキス",
    "kind": "アニメ",
@@ -11691,6 +11717,8 @@
    "七つの魔剣が支配する"
   ],
   "limit": 1050,
+  "tenjo_display": "ST間1000G+α",
+  "tenjo_games": 1000,
   "original": {
    "title": "七つの魔剣が支配する",
    "kind": "ライトノベル",
@@ -11843,6 +11871,8 @@
    }
   },
   "limit": 900,
+  "tenjo_display": "ボーナス間800G+α",
+  "tenjo_games": 800,
   "original": {
    "title": "シャーマンキング",
    "kind": "漫画",
@@ -12003,6 +12033,8 @@
    }
   },
   "limit": 1400,
+  "tenjo_display": "AT間970G+α／ボーナス間1280G+α",
+  "tenjo_games": 970,
   "original": {
    "title": "転生したら剣でした",
    "kind": "ライトノベル",
@@ -12161,6 +12193,8 @@
    }
   },
   "limit": 1600,
+  "tenjo_display": "AT&ボーナス間1500G+α／CZ間1000G+α",
+  "tenjo_games": 1000,
   "original": {
    "title": "革命機ヴァルヴレイヴ",
    "kind": "アニメ",
@@ -12263,6 +12297,8 @@
    }
   },
   "limit": 800,
+  "tenjo_display": "ボーナス&ST間777G（超高確へ移行）",
+  "tenjo_games": 777,
   "original": {
    "title": "ゾンビランドサガ",
    "kind": "アニメ",
@@ -12310,7 +12346,9 @@
     "note": "設定変更後は最大5周期（約400G相当）に短縮。250G〜が狙い目。"
    }
   },
-  "limit": 720
+  "limit": 720,
+  "tenjo_display": "最大9周期（約720G相当）",
+  "tenjo_games": null
  },
  {
   "slug": "babel",

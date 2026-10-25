@@ -1228,6 +1228,8 @@ def check_27_hub_counts(machines: list) -> list[str]:
         _lim = m.get("limit")
         if isinstance(_lim, dict):  # mode別limit(2026-07-23〜)はnormalを代表値に（build_hub_pagesと同一ロジック）
             _lim = _lim["normal"] if _lim.get("normal") is not None else next(iter(_lim.values()), None)
+        if "tenjo_games" in m:  # ★天井ランキングは tenjo_games で数える（build_hub_pages と同じ・2026-10-25）★
+            _lim = m["tenjo_games"]
         rows.append(dict(
             unit=c.get("unit"),
             limit=_lim,

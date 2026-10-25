@@ -115,11 +115,11 @@
     </div>
     <div class="article-item">
       <h2 class="article-title">天井・狙い目情報の見方</h2>
-      <p class="article-body">機種ページでは、現在のゲーム数・交換率・リセット状況をもとに打ち始めの目安を判断できます。まず台のデータカウンターで現在ゲーム数を確認し、機種ページの狙い目ライン（例：等価550G〜）と見比べてください。朝一の台はリセット（設定変更）の有無で天井や狙い目が変わる機種が多いため、「朝一・リセット情報」のセクションもあわせて確認するのがおすすめです。打ち終わりの判断は各機種の「ヤメ時の判断」を参考にしてください。</p>
+      <p class="article-body">機種ページでは、現在のゲーム数・交換率・リセット状況をもとに打ち始めの目安を判断できます。まず台のデータカウンターで現在ゲーム数を確認し、機種ページの狙い目ライン（例：スマスロ北斗の拳は<span data-dv="ratelabel:hokuto:eq56">5.6枚</span>交換で<span data-dv="target:hokuto:eq56:normal">570G〜</span>）と見比べてください。朝一の台はリセット（設定変更）の有無で天井や狙い目が変わる機種が多いため、「朝一・リセット情報」のセクションもあわせて確認するのがおすすめです。打ち終わりの判断は各機種の「ヤメ時の判断」を参考にしてください。</p>
     </div>
     <div class="article-item">
       <h2 class="article-title">交換率別の見方</h2>
-      <p class="article-body">同じ台でも、等価交換のホールと非等価（5.6枚・6.0枚交換など）のホールでは、打ち始めに必要なゲーム数が変わります。非等価では換金時に目減りする分、等価よりも深いゲーム数からが狙い目になります。機種ページの狙い目は交換率別に記載しているので、普段打つホールの交換率に合わせて読み替えてください。詳しくは「交換率と期待値の考え方」のガイドで解説しています。</p>
+      <p class="article-body">同じ台でも、等価交換のホールと非等価（5.6枚・6.0枚交換など）のホールでは、打ち始めに必要なゲーム数が変わります。非等価では換金時に目減りする分、等価よりも深いゲーム数からが狙い目になります。交換率を切り替えられる機種では狙い目を交換率別に表示しているので、普段打つホールの交換率に合わせて読み替えてください。詳しくは「交換率と期待値の考え方」のガイドで解説しています。</p>
     </div>
     <div class="article-item">
       <h2 class="article-title">小役カウンター「ポチポチくん」の使い方</h2>
@@ -268,11 +268,14 @@ function formatReleaseDate(dateStr){
       const upcoming = prepared
         .filter(isUpcoming)
         .sort((a, b) => String(a.release_date).localeCompare(String(b.release_date)));
+      // ★見せる・隠すは is-hidden で切り替える★（2026-10-25）＝2026-05-15に隠す指定を
+      //   クラス（display:none !important）へ移したのに、ここは style.display のままで、
+      //   ★近日導入の一覧が5か月間一度も出ていなかった★（Codex review246）。
       if (!upcoming.length) {
-        section.style.display = "none";
+        section.classList.add("is-hidden");
         return;
       }
-      section.style.display = "";
+      section.classList.remove("is-hidden");
       listEl.innerHTML = "";
       upcoming.forEach(machine => {
         const row = document.createElement("article");

@@ -1909,6 +1909,8 @@ _MACHINE_TYPES = {
 #   status/limit … 旧形式の状態と入力上限
 _MACHINE_KNOWN = set(_MACHINE_TYPES) | {
     "limit", "status", "lifecycle", "checker_modes",
+    # ★天井ランキング用のG数（authoring だけ・公開射影には出さない）★（2026-10-25）
+    "tenjo_games",
     # ★緊急停止スイッチ（Codex 23巡目 #12）★
     #   ゲート算出では正式に見ているのに allowlist に無く、立てた途端に
     #   GateError で「止めた版がデプロイできない」状態になっていた。
