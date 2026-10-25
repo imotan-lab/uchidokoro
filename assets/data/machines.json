@@ -12992,7 +12992,7 @@
   "page_decision": {
    "schema_version": "page-decision/v2",
    "indexable": false,
-   "machine_profile": "UNKNOWN",
+   "machine_profile": "AT_CZ",
    "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
     "setting",
@@ -13008,14 +13008,14 @@
    "reason_codes": [
     "CLAIMS_LT_3",
     "CATEGORIES_LT_2",
-    "MACHINE_PROFILE_UNKNOWN"
+    "NO_UNIQUE_GAMEPLAY"
    ],
    "claims": [
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-22",
-   "input_digest": "sha256:58c1167bb17f6aa0c7200f3ce3a0ded2ba020a68164d67b50679e034d5e68d0e"
+   "decided_at": "2026-10-25",
+   "input_digest": "sha256:21ac7dbe88748e16c59b85912cea034a29dd8aaf439243fcb43fc4f510987b5d"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2027-01",
