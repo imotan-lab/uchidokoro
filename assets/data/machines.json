@@ -12406,25 +12406,30 @@
    "indexable": false,
    "machine_profile": "AT_CZ",
    "ceiling_state": "PRESENT",
-   "confirmed_topics": [],
+   "confirmed_topics": [
+    "ceiling",
+    "setting",
+    "spec"
+   ],
    "pending_topics": [
     "gameplay",
     "cz",
-    "ceiling",
-    "spec",
-    "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
     "NO_UNIQUE_GAMEPLAY"
    ],
-   "claims": [],
+   "claims": [
+    "at_prob",
+    "ceiling:GAME:AT間",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
+   ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-15",
-   "input_digest": "sha256:0f7d4ad6f4d35f11b7d97f83fbcf8cc288878da4bbbce9f6f7a2e5533f685f98"
+   "decided_at": "2026-10-26",
+   "input_digest": "sha256:f4ed3fb93674fdd1be4ff55203a633975edbb814bd4dbdde3225c170fec29176"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
@@ -12440,6 +12445,19 @@
    "_observed_model_code_sources": [
     "p-town.dmm.com"
    ]
+  },
+  "checker": {
+   "coinRate": 31.0,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "ceiling": 800
+   }
   }
  },
  {
