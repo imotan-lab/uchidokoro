@@ -2807,11 +2807,12 @@
    "claims": [
     "bonus_prob",
     "games_per_50",
-    "payout_range"
+    "payout_range",
+    "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-10",
-   "input_digest": "sha256:45abfffa62972fc46dfbbfd52b630daa25351b82b5a23315a7f5e11f8c3b29f4"
+   "decided_at": "2026-10-25",
+   "input_digest": "sha256:09886fabd66fb80b4de8fcad0226e44db797f889bc163f92bec096b2880f72cd"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -2823,13 +2824,13 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5049 型式=LB/タコスロBD メーカー=ユニバーサルブロス 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
-   "_legacy_evidence_ref": "pworld:10510 型式=LB／タコスロBD 検定=6S0085 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10510",
-   "regulatory_model_code": "LB/タコスロBD",
    "_model_code_sources": [
     "1geki.jp",
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_evidence_ref": "pworld:10510 型式=LB／タコスロBD 検定=6S0085 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10510",
+   "regulatory_model_code": "LB/タコスロBD"
   },
   "checker": {
    "coinRate": 36.6,
