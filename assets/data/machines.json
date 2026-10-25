@@ -3198,7 +3198,7 @@
   "page_decision": {
    "schema_version": "page-decision/v2",
    "indexable": false,
-   "machine_profile": "UNKNOWN",
+   "machine_profile": "BONUS",
    "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
     "spec"
@@ -3214,14 +3214,14 @@
    "reason_codes": [
     "CLAIMS_LT_3",
     "CATEGORIES_LT_2",
-    "MACHINE_PROFILE_UNKNOWN"
+    "NO_BONUS_PROB"
    ],
    "claims": [
     "payout_range"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-04",
-   "input_digest": "sha256:30e99f7519a9860faa804dc25ca4b98423ee110c814c4e9a42851407927bbd8e"
+   "decided_at": "2026-10-25",
+   "input_digest": "sha256:66e8b01583163f80c5998d050baab629c628e0fdf2cd77f1b419b76b0bcd77ef"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-08-03",
