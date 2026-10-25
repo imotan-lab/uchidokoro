@@ -255,7 +255,9 @@ function formatReleaseDate(dateStr){
       // ★ここにも件数を入れない★（2026-08-12・決定事項表「全体件数は表示しない」）
       listHeader.querySelector(".list-header-title").textContent = "全機種一覧";
       listHeader.querySelector(".list-header-sub").textContent = "";
-      render(search.value);
+      // ★検索語を消してから全件を出す★（2026-10-26・Codex）＝検索中に押すと検索結果のままだった
+      search.value = "";
+      render("");
     }
 
     showAllBtn.addEventListener("click", activateShowAll);
@@ -312,6 +314,10 @@ function formatReleaseDate(dateStr){
         listHeader.querySelector(".list-header-title").textContent = "人気機種 TOP10";
         listHeader.querySelector(".list-header-sub").textContent = "人気の高い順に毎週自動更新";
         showAllWrap.style.display = allFiltered.length > TOP_COUNT ? "block" : "none";
+      } else {
+        // ★全件表示中に検索を消したら見出しを戻す★（2026-10-26・Codex）＝検索結果の見出しと件数が残っていた
+        listHeader.querySelector(".list-header-title").textContent = "全機種一覧";
+        listHeader.querySelector(".list-header-sub").textContent = "";
       }
       list.innerHTML = "";
       if (!filtered.length) {
