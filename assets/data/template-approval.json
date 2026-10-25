@@ -6,7 +6,7 @@
   "CNAME": "327a46d0a9fe00ef4a85721fec20aa84af66049b4a2e27029773bc1927b502fa",
   "about.html": "1f33f1478eceeed728f2dcc062cb72c502456550dd674f0c5515411a8a1d4849",
   "ads.txt": "e652db9bd62edb46d3cb65ec2822cd510b7c1e76becce15c7e60575ddb693a52",
-  "assets/css/practical.css": "cca2bd351a69e08184abd29a2f782a8494295cb8444e589e80b9e211cf5aae19",
+  "assets/css/practical.css": "7adfda66f017e8d21fc1056a99b79a0d1cb940a3e29438f33ef17f1f3fc2e1ac",
   "assets/data/claim-allowlist.json": "a9aa01b940b4f61925d176072290772e76911ae43b1cb7f39b112bdda65a8a01",
   "assets/data/ledger.json": "1d496682cc43b0c44b98b4a314f9286d50093c425568cec21d1bbf8d7dc6b886",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
@@ -25,8 +25,8 @@
   "guide-rate.html": "8ce168a7a09b43561208411ee4d9f778c778a304a5a992b02485c6668a017f2e",
   "guide-reset.html": "370a82390c5313ffab8329119e9978952ae77f9753fd6dbadc28ca683ebce8b0",
   "guide-yamedoki.html": "bb5a055750fffdbba2ebf6eb5e451f378d4d6f883f6edeb786f416872670a116",
-  "index.html": "f1db7d97aba9ee82832cc26937e62040d154de1397716953d8a8bea1a7462414",
-  "machine.html": "de18a9c439adde1516d884aa35a58002ac1931a40cde9ee3e9bb7070624e25ec",
+  "index.html": "82f1a6b10ab55847f170a1e4ecf023daac07c47cef718f50f65db7f8abdb10d8",
+  "machine.html": "184f944330f676c09e286f3648e55c5a7a67e59f74566b33b17a7cf978d7c7e8",
   "manifest.json": "e6fb79284404b5f9f68898a473d65c2efb6156cdbc2d60941cc2534a5b9ff856",
   "meta-auto.js": "d99aab6119e4f465d6ca6cddeeea3339d9b0954297513507a8b4042943370032",
   "privacy.html": "f6c2f25891a8ab6d83e45dc5f7f6dd9bb84d267f756548e770ae369d96e2a1ee",
@@ -64,7 +64,7 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "ecc07863430476c152cdd79dc300b6387d68b1b466deeb2e80f1a3449ce51b1a",
-  "service-worker.js": "3e364dd56a4e29cd31a82b58205f20fef28a67844c1422e02780cdd55c710fb5",
+  "service-worker.js": "60b06cd247b0d18bc86dc002b453a899dfd010e2e0e279bfdb029a48982401f3",
   "setting.html": "28e9fd623fe0dac838ebdefbb5c8b08563a61617a509ebb4f136bfa0d4e85691"
  }
 }
