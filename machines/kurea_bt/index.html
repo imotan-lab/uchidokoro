@@ -75,24 +75,7 @@
 
   <section class="article-section-wrap">
 
-    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
-         ページの上で「どこに何があるか」を一目で分かるようにする。
-         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
-         静的な行を先に置くと「押しても飛べないリンク」になる。
-         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
-    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
-      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
-      <div id="tocList" class="toc-list"></div>
-    </nav>
-
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
-
-    <div class="article-block" id="evTableBlock">
-      <h2 class="block-label">▶ 期待値早見表</h2>
-      <div id="evModeToggle" class="mode-toggle ev-mode-toggle"></div>
-      <table id="evTable" class="ev-table"></table>
-      <p class="hint-text" id="evTableNote"></p>
-    </div>
 
     <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
@@ -126,6 +109,23 @@
     <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">天井</span><span class="s-value">非搭載</span></td><td><span class="s-label">基本方針</span><span class="s-value">設定狙い主体</span></td></tr><tr><td><span class="s-label">BIG獲得枚数</span><span class="s-value">約356枚（BT含む）</span></td><td><span class="s-label">設定段階</span><span class="s-value">6段階（設定1〜6）</span></td></tr></table>
+    </div>
+
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
+    <div class="article-block" id="evTableBlock">
+      <h2 class="block-label">▶ 期待値早見表</h2>
+      <div id="evModeToggle" class="mode-toggle ev-mode-toggle"></div>
+      <table id="evTable" class="ev-table"></table>
+      <p class="hint-text" id="evTableNote"></p>
     </div>
 
     <div class="article-block" id="infoBlock">

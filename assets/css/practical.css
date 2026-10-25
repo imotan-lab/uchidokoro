@@ -484,6 +484,8 @@ button, input, select { font: inherit; }
   outline: none;
 }
 .search-input::placeholder { color: var(--muted2); }
+.search-label { display: block; font-size: 13px; font-weight: 800; color: var(--text); margin: 0 0 6px; }
+.hero-panel--about { margin-top: 18px; }
 .search-input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-bg-strong); }
 
 /* LIST HEADER */
