@@ -12291,11 +12291,12 @@
     "at_prob",
     "cz:ラグナドールバトル",
     "games_per_50",
+    "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-30",
-   "input_digest": "sha256:8ce5a1c75899864306733ecf4e51b4baca3d0e1413defacb5268aa5e833ff82a"
+   "decided_at": "2026-10-26",
+   "input_digest": "sha256:d75e5b09afd0650dfb79f2462a543bd46a05c5c0a2dc36b8b342f74bc1e14ad4"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
