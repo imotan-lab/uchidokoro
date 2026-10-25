@@ -1,0 +1,25 @@
+{
+ "schema_version": "checker-mode-drops/v1",
+ "drops": [
+  {
+   "slug": "dumbbell",
+   "mode": "suru",
+   "why": "出典2社（ちょんぼりすた・ナナプレス）に回数ごとのスルー天井が無く、この欄の線は裏付けの無い仕組みから作られていた（Claude・Codex review256）",
+   "judges": [
+    "claude",
+    "codex"
+   ],
+   "at": "2026-10-25"
+  },
+  {
+   "slug": "dumbbell",
+   "mode": "reset",
+   "why": "確かめられるのは設定変更後のAT間天井1000Gまでで、リセット後50G〜などの線の裏付けが無い（出典の期待値表では5.6枚交換のプラスは450Gから・Claude・Codex review256）",
+   "judges": [
+    "claude",
+    "codex"
+   ],
+   "at": "2026-10-25"
+  }
+ ]
+}

@@ -124,8 +124,10 @@ EXPECTED_CHECKER_MACHINES = 84
 #   2026-10-01: 同じ6機種が公開できるようになり 142 → 151
 #   2026-10-01: gineiden_dnt が公開できるようになり 151 → 153
 #   2026-10-11: my_juggler_v が公開できるようになり 153 → 154（normal の1mode）
-#   2026-10-25: dumbbell の suru・reset を消した（出典に無いスルー天井の仕組みから作られていた・2AI review256）154 → 152
-EXPECTED_CHECKER_MODES = 152
+#   ★2026-10-25から★ 2AIが checker_verdict で欄を消したときは、ここを直さない
+#   ＝消した欄の一覧（assets/data/checker-mode-drops.json）の分だけ、想定を自動で減らす
+#   （無人タスクが見張りのスクリプトに触らずに済むように）。dumbbell の suru・reset が最初の2件。
+EXPECTED_CHECKER_MODES = 154
 
 # ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
 #   集合そのものを持つ。機種を増減したら意図した変更として更新すること。
@@ -172,10 +174,16 @@ EXPECTED_AXIS_STOPPED = {
 EXPECTED_AXIS_PASSED = {
     ("tokyo_ghoul", "at"), ("valvrave2", "suru"), ("valvrave2", "cycle"),
     ("monkeyv", "cycle"), ("tekken6", "suru"), ("kaguya", "suru"), ("banchou4", "suru"),
-    ("baki", "suru"), ("sao", "suru"), ("bandori", "suru"),
+    ("dumbbell", "suru"), ("baki", "suru"), ("sao", "suru"), ("bandori", "suru"),
     ("hanma_baki", "suru"), ("gundam_seed", "suru"), ("youjitsu", "suru"),
     ("kengan_ashura", "suru"), ("goji_eva", "suru"),
 }
+
+
+def _mode_drops() -> set:
+    """★2AIが消した欄★（checker_verdict が書く一覧・壊れていたら例外＝黙って0件と読まない）"""
+    import checker_verdict as _cvd
+    return {(x["slug"], x["mode"]) for x in _cvd.drops_all()}
 
 
 def _all_allow_ledger(sim: dict, detail: dict, g: dict, slug: str) -> dict:
@@ -205,6 +213,20 @@ def run() -> int:
 
     needs_edit: set = set()
     needs_display_fix: set = set()
+    drops = _mode_drops()
+    dropped_live = 0
+    # ★★記録した欄が、本当に機種行から消えていること★★（2026-10-25・Codex review258 の1）＝
+    #   件数だけを差し引くと、記録した欄を残したまま別の欄を消しても数が合って緑になる
+    _by_slug = {m.get("slug"): m for m in machines}
+    for (s_, k_) in sorted(drops):
+        _ck = (_by_slug.get(s_) or {}).get("checker") or {}
+        _left = (k_ in {str(x.get("key")) for x in (_ck.get("modes") or []) if isinstance(x, dict)}
+                 or k_ in _ck or k_ in (_ck.get("modeData") or {}))
+        if s_ not in _by_slug:
+            problems.append(f"消した欄の一覧に、機種一覧に無い機種があります: {s_}.{k_}")
+        elif _left:
+            problems.append(f"消した欄の一覧にあるのに、欄が残っています: {s_}.{k_}"
+                            "（同じ決定をもう一度流すと消します）")
     for m in machines:
         # ★新台経路（page-decision/v1）は gates 経路に載せない★（Codex72回目）
         #   build_public_data と同じ「明示的に除外」。壊れた判定書はここで止まる。
@@ -237,6 +259,7 @@ def run() -> int:
                 problems.append(f"{m['slug']}: 公開が止まった（{e}）")
             continue
         published += 1
+        dropped_live += sum(1 for (s_, _k) in drops if s_ == m["slug"])
         # ★宣言ではなく「実際に公開データへ入った mode」を数える★
         #   （宣言だけ残って中身が無い状態を「監査済み」と誤認しないため）
         pub_ck = view["machine"].get("checker")
@@ -291,9 +314,10 @@ def run() -> int:
     if checker_machines != EXPECTED_CHECKER_MACHINES:
         problems.append(f"checkerを公開した機種数が想定と違う: "
                         f"{checker_machines} != {EXPECTED_CHECKER_MACHINES}")
-    if checker_modes != EXPECTED_CHECKER_MODES:
+    if checker_modes != EXPECTED_CHECKER_MODES - dropped_live:
         problems.append(f"公開したcheckerモード数が想定と違う: "
-                        f"{checker_modes} != {EXPECTED_CHECKER_MODES}")
+                        f"{checker_modes} != {EXPECTED_CHECKER_MODES - dropped_live}"
+                        f"（2AIが消した欄 {dropped_live} 件を差し引いた想定）")
     if checker_machines == 0:
         problems.append("checkerが1件も監査されていない（検査が素通りしている）")
 
@@ -333,14 +357,16 @@ def axis_regression() -> list[str]:
                 (m["slug"], k))
 
     # ★件数ではなく固定集合と突き合わせる（入れ替わりも検出する）★
-    for label, got, want in (("止まるべきmode", stopped, EXPECTED_AXIS_STOPPED),
-                             ("通るべきmode", passed, EXPECTED_AXIS_PASSED)):
+    #   ★2AIが消した欄は想定から外す★（checker-mode-drops.json）
+    _dr = _mode_drops()
+    for label, got, want in (("止まるべきmode", stopped, EXPECTED_AXIS_STOPPED - _dr),
+                             ("通るべきmode", passed, EXPECTED_AXIS_PASSED - _dr)):
         for x in sorted(want - got):
             ng.append(f"軸回帰: {label}が{'止まらなくなった' if want is EXPECTED_AXIS_STOPPED else '止まるようになった'}: {x[0]}.{x[1]}")
         for x in sorted(got - want):
             ng.append(f"軸回帰: 想定外に{'止まった' if want is EXPECTED_AXIS_STOPPED else '通った'}: {x[0]}.{x[1]}")
-    print(f"軸契約の回帰: 止まる {len(stopped)} 件（想定 {len(EXPECTED_AXIS_STOPPED)}）/ "
-          f"通る {len(passed)} 件（想定 {len(EXPECTED_AXIS_PASSED)}）")
+    print(f"軸契約の回帰: 止まる {len(stopped)} 件（想定 {len(EXPECTED_AXIS_STOPPED - _dr)}）/ "
+          f"通る {len(passed)} 件（想定 {len(EXPECTED_AXIS_PASSED - _dr)}）")
     return ng
 
 

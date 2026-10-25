@@ -847,9 +847,403 @@ def _rebuild_target_text() -> int:
     return rc
 
 
+# ★★欄を消す・注記を書き換える★★（2026-10-25・運営者「至急直して」）
+#   ★なぜ要るか★＝ダンベルのチェッカーに、出典に無い「スルー回数で天井が短くなる」仕組みから
+#   作られた欄（スルー天井・リセット）があり、5.6枚交換で「4スルー0G〜」と出ていた。
+#   この道具は線を書くだけで、★欄を消す道も、欄の注記を書き換える道も無かった★
+#   （注記を直す note_text は文字を消すことしかできない）＝自動タスクは直せず先送りしていた。
+#   ★機械が見ること★＝判断者の組・理由（共通の検査）／消す欄が在る・1つは残る／
+#   注記の置き場が在る・★数字を作らない★（公開データ＝記事と機種行に在る数字だけ）／
+#   書いたあとに注記と線が新しく食い違わない（note_text の点検）。
+#   ★消した欄は一覧（checker-mode-drops.json）に残す★＝突き合わせの検査（crosscheck_gates）が
+#   この一覧で想定値を合わせるので、★無人タスクが見張りのスクリプトに触らずに済む★。
+REVISE = "REVISE_MODES"
+DROPS_STORE = os.path.join(BASE, "assets", "data", "checker-mode-drops.json")
+
+
+def drops_all() -> list:
+    """★消した欄の一覧★（無ければ空・壊れていれば例外＝黙って0件と読まない）"""
+    if not os.path.exists(DROPS_STORE):
+        return []
+    got = _sj.read_json(DROPS_STORE, expect=dict)
+    rows = got.get("drops")
+    if not isinstance(rows, list) or not all(
+            isinstance(x, dict) and x.get("slug") and x.get("mode") for x in rows):
+        raise ValueError("checker-mode-drops.json の中身が壊れています")
+    return rows
+
+
+def _note_places(m: dict, key: str, rate: str = "", count=None) -> list:
+    """★その注記の置き場（辞書そのもの）★ modeData と直下に同じ欄があれば両方返す"""
+    ck = (m or {}).get("checker") or {}
+    confs = []
+    if isinstance(ck.get("modeData"), dict) and isinstance(ck["modeData"].get(key), dict):
+        confs.append(ck["modeData"][key])
+    if isinstance(ck.get(key), dict):
+        confs.append(ck[key])
+    out = []
+    for conf in confs:
+        node = conf
+        if count is not None:
+            node = next((r for kind in ("suru", "cycle") for r in (conf.get(kind) or [])
+                         if isinstance(r, dict) and r.get("count") == count), None)
+            if node is None:
+                continue
+        if rate:
+            br = node.get("byRate") if isinstance(node.get("byRate"), dict) else {}
+            node = br.get(rate) if isinstance(br.get(rate), dict) else None
+            if node is None:
+                continue
+        out.append(node)
+    return out
+
+
+def _published_numbers(slug: str, m: dict) -> set:
+    """★数字を作らない★の物差し＝この機種の公開データ（記事＋機種行）に在る数字"""
+    import decide_now as _dn_num
+    blob = json.dumps(m, ensure_ascii=False)
+    p = os.path.join(DETAILS, f"{slug}.json")
+    if os.path.isfile(p):
+        with io.open(p, encoding="utf-8") as f:
+            blob += "\n" + f.read()
+    return set(_dn_num.numbers_with_unit(blob))
+
+
+def revised(m: dict, dec: dict) -> dict:
+    """★決定を当てたあとの機種行★（書かずに作るだけ）"""
+    out = json.loads(json.dumps(m, ensure_ascii=False))
+    ck = out.get("checker") or {}
+    drops = {str(x) for x in (dec.get("drop_modes") or [])}
+    ck["modes"] = [x for x in (ck.get("modes") or [])
+                   if not (isinstance(x, dict) and str(x.get("key") or "") in drops)]
+    for k in drops:
+        ck.pop(k, None)
+        if isinstance(ck.get("modeData"), dict):
+            ck["modeData"].pop(k, None)
+    for nt in dec.get("notes") or []:
+        for node in _note_places(out, str(nt.get("key") or ""), str(nt.get("rate") or ""),
+                                 nt.get("count")):
+            node["note"] = str(nt.get("note") or "").strip()
+    if isinstance(dec.get("strategy"), str) and dec["strategy"].strip():
+        out["strategy"] = dec["strategy"].strip()
+    # ★新台は、線が変わったら機種行の指紋を外す★（merged と同じ線・書き方だけ変えてある＝
+    #   壊し方の目印が merged と重ならないように）
+    _fp = out.get("targetProjection")
+    if _fp and "publication_policy" in out:
+        import target_projection as _tpr
+        if not _tpr.renderable(out) or _tpr.projection_id(out) != _fp:
+            del out["targetProjection"]
+    return out
+
+
+def _final_form(slug: str, before: dict, after: dict) -> tuple:
+    """★当てたあと、後続の作り直しまで済んだ姿★（機種行, 記事）を書かずに作る
+
+    ★なぜ★（2026-10-25・Codex review259 の1）＝欄を消すと、そのあと target_display が
+    一覧の文（strategy / strategyByRate）と記事の狙い目の箱を作り直し、新台なら記事の狙い目の欄を
+    未確認へ戻す。★作り直す前の姿で数字を比べると、作り直しで消える数字を見逃す★。
+    """
+    import copy
+    import target_display as _tdf
+    m2 = copy.deepcopy(after)
+    art = None
+    p = os.path.join(DETAILS, f"{slug}.json")
+    if os.path.isfile(p):
+        art = _sj.read_json(p, expect=dict)
+    got = _tdf.for_machine(m2)
+    if got:
+        dr = got["defaultRate"]
+        if got["byRate"].get(dr):
+            m2["strategy"] = got["byRate"][dr]
+            m2["strategyByRate"] = dict(got["plain"])
+        if isinstance(art, dict) and isinstance(art.get("summaryBoxes"), list):
+            _sb, _why = _tdf._rebuild_boxes(slug, art["summaryBoxes"],
+                                            "%s狙い目" % _tdf.rate_label(m2["checker"], dr),
+                                            got["plain"].get(dr) or "")
+            if not _why:
+                art = dict(art, summaryBoxes=_sb)
+    elif _tdf._norate_target(m2):
+        _t, _w = _tdf.norate_text(m2)
+        if _t:
+            m2["strategy"] = _t
+    if isinstance(art, dict) and "publication_policy" in m2 and not m2.get("targetProjection"):
+        import target_projection as _tpf
+        art = copy.deepcopy(art)
+        _tpf.unsync_detail(art)
+    return m2, art
+
+
+def revise_problems(dec, ms=None) -> list:
+    """★欄を消す・注記を書き換える決定が受け取れる形か★（1件でも駄目なら何も書かない）"""
+    ng, m = _common_problems(dec, ms)
+    if m is None:
+        return ng
+    slug = str(dec.get("slug") or "")
+    if "modes" in dec:
+        ng.append("線を書く決定（modes）と混ぜて書けません（別の決定ファイルにしてください）")
+    drops, notes = dec.get("drop_modes") or [], dec.get("notes") or []
+    if not isinstance(drops, list) or not isinstance(notes, list):
+        return ng + ["drop_modes と notes は一覧で書いてください"]
+    if not drops and not notes:
+        return ng + ["drop_modes か notes のどちらかが要ります"]
+    ck = m.get("checker") or {}
+    have = [str(x.get("key") or "") for x in (ck.get("modes") or []) if isinstance(x, dict)]
+    try:
+        done = {(x["slug"], x["mode"]) for x in drops_all()}
+    except Exception as e:                # noqa: BLE001
+        return ng + [f"消した欄の一覧を読めません（書きません）: {type(e).__name__}: {e}"]
+    if len({str(k) for k in drops}) != len(drops):
+        ng.append("drop_modes に同じ欄が2回あります")
+    for k in drops:
+        k = str(k)
+        if k not in have and (slug, k) not in done:
+            ng.append(f"消す欄「{k}」がこの機種にありません（あるのは {'・'.join(have)}）")
+    if not [k for k in have if k not in {str(x) for x in drops}]:
+        ng.append("欄が1つも残らなくなります（チェッカーごと消す道具にしない）")
+    allowed = _published_numbers(slug, m)
+    for i, nt in enumerate(notes):
+        tag = f"notes[{i}]"
+        if not isinstance(nt, dict):
+            ng.append(f"{tag}: 辞書ではありません")
+            continue
+        key = str(nt.get("key") or "")
+        if key in {str(x) for x in drops}:
+            ng.append(f"{tag}: 消す欄「{key}」の注記は直せません")
+            continue
+        places = _note_places(m, key, str(nt.get("rate") or ""), nt.get("count"))
+        if not places:
+            ng.append(f"{tag}: その注記の置き場がありません"
+                      f"（key={key!r} rate={nt.get('rate')!r} count={nt.get('count')!r}）")
+            continue
+        text = str(nt.get("note") or "").strip()
+        if not text:
+            ng.append(f"{tag}: note が空です（注記ごと消す道具にしない）")
+            continue
+        # ★★いまの注記を before で言わせる★★（2026-10-25・Codex review258 の3）＝
+        #   言わせないと、判断したあとに直された注記を古い判断で上書きできる
+        #   ★もう書いた文と同じなら通す★（2026-10-25・review259 の2）＝書いたあと一覧の作り直し等で
+        #   止まっても、同じ決定をもう一度流せば後続へ進んで収束する
+        if any(str(x.get("note") or "") not in (str(nt.get("before") or ""), text) for x in places):
+            ng.append(f"{tag}: before がいまの注記と違います（判断したあとに変わった可能性）")
+            continue
+        import decide_now as _dn_num
+        made = [n + u for n, u in _dn_num.numbers_with_unit(text) if (n, u) not in allowed]
+        if made:
+            ng.append(f"{tag}: 注記に、この機種の公開データに無い数字があります: "
+                      + " / ".join(made[:4]) + "（数字を作らない）")
+    if "strategy" in dec:
+        st = dec.get("strategy")
+        if not isinstance(st, str) or not st.strip():
+            ng.append("strategy（一覧の文）が空です")
+        elif rate_keys(m):
+            ng.append(f"{slug}: 交換率を持つ機種の一覧の文は target_display が作ります（手で書きません）")
+        else:
+            # ★★一覧の文も数字を作らない★★（2026-10-25・Codex review258 の2）＝
+            #   線を書く決定と同じ物差し（今の一覧の文に在る数字か、残る欄の線）
+            import decide_now as _dn_num
+            _ok = set(_dn_num.numbers_with_unit(str(m.get("strategy") or "")))
+            _after0 = revised(m, {k: v for k, v in dec.items() if k != "strategy"})
+            _ck0 = _after0.get("checker") or {}
+            for _md in (_ck0.get("modes") or []):
+                _c0 = _mode_conf(_after0, str(_md.get("key") or ""))
+                for lv in LEVELS + ("ceiling",):
+                    if _int(_c0.get(lv)) is not None:
+                        _ok |= {(str(_c0[lv]), "G"), (str(_c0[lv]), "")}
+            _made = [n + u for n, u in _dn_num.numbers_with_unit(st) if (n, u) not in _ok]
+            if _made:
+                ng.append("一覧の文に、今の文にも残る欄の線にも無い数字があります: "
+                          + " / ".join(_made[:4]) + "（数字を作らない）")
+    if ng:
+        return ng
+    after = revised(m, dec)
+    # ★★消える数値は名指しさせる★★（2026-10-25・Codex review258 の4）＝
+    #   欄や注記を消すと、機種行と記事から数字が無くなることがある。note_text・decide_now と同じ線
+    import decide_now as _dn_num
+    _named = {str(x.get("n")) for x in (dec.get("numbers_removed") or [])
+              if isinstance(x, dict) and len(str(x.get("why") or "").strip()) >= 10}
+    _art = ""
+    _pa = os.path.join(DETAILS, f"{slug}.json")
+    if os.path.isfile(_pa):
+        with io.open(_pa, encoding="utf-8") as f:
+            _art = f.read()
+    _fm, _fa = _final_form(slug, m, after)
+    _was = set(_dn_num.numbers_with_unit(json.dumps(m, ensure_ascii=False) + "\n" + _art))
+    _now = set(_dn_num.numbers_with_unit(json.dumps(_fm, ensure_ascii=False) + "\n"
+                                         + json.dumps(_fa, ensure_ascii=False)))
+    _lost = sorted(n + u for n, u in _was - _now if n not in _named and n + u not in _named)
+    if _lost:
+        return [f"{slug}: 当てると機種データからも記事からも無くなる数値があります: "
+                + " / ".join(_lost[:8])
+                + "（消してよいなら numbers_removed に理由（10字以上）つきで名指ししてください）"]
+    return new_note_problems(m, after, set(have))
+
+
+def apply_revise(dec: dict, ms: list, dry_run: bool = False) -> int:
+    ng = revise_problems(dec, ms)
+    if ng:
+        print("★書きません★（1件でも通らなければ何も書かない）")
+        for x in ng:
+            print("  ・" + x)
+        return 1
+    slug = str(dec.get("slug") or "")
+    i = next(i for i, m in enumerate(ms) if str(m.get("slug") or "") == slug)
+    new = revised(ms[i], dec)
+    if dry_run:
+        print(f"{slug}: こう書きます →")
+        print("  " + json.dumps(new.get("checker"), ensure_ascii=False)[:600])
+        return 0
+    # ★★消した欄の一覧を先に書く★★＝機種行の書き込みが途中で落ちても、
+    #   同じ決定をもう一度流せば収束する（一覧に在る欄は「もう消した」として通る）
+    drops = [str(x) for x in (dec.get("drop_modes") or [])]
+    if drops:
+        import datetime as _dtr
+        rows = drops_all()
+        have = {(x["slug"], x["mode"]) for x in rows}
+        for k in drops:
+            if (slug, k) not in have:
+                rows.append({"slug": slug, "mode": k, "why": str(dec.get("why") or "")[:300],
+                             "judges": list(dec.get("judges") or []),
+                             "at": _dtr.date.today().isoformat()})
+        tmp = DROPS_STORE + ".tmp"
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            f.write(json.dumps({"schema_version": "checker-mode-drops/v1", "drops": rows},
+                               ensure_ascii=False, indent=1) + "\n")
+        os.replace(tmp, DROPS_STORE)
+    if new != ms[i]:
+        ms[i] = new
+        tmp = MACHINES + ".tmp"
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            f.write(json.dumps(ms, ensure_ascii=False, indent=1) + "\n")
+        os.replace(tmp, MACHINES)
+        if _find(_machines(), slug) != new:
+            print("★書いた後の読み直しが合いません★（手で確かめてください）")
+            return 1
+    # ★新台で指紋が外れたら、記事の狙い目の欄も未確認に戻す★（apply_decision と同じ線）
+    if "targetProjection" not in new and "publication_policy" in new:
+        if _unsync_article(slug) != 0:
+            return 1
+    # ★★交換率の有無にかかわらず、一覧の文の作り直しを必ず通す★★（2026-10-25・Codex review260）＝
+    #   検査（_final_form）は交換率の無い機種でも作り直した姿で数字を比べるので、
+    #   書く側も同じ作り直しを通さないと「検査では残る数字が、実際には消える」形になる
+    if _rebuild_target_text() != 0:
+        return 1
+    print(f"{slug}: 欄を直しました（消した欄: {'・'.join(drops) or 'なし'}／"
+          f"注記: {len(dec.get('notes') or [])} 件）")
+    return 0
+
+
+def _revise_tests(t) -> None:
+    """★欄を消す・注記を書き換える★（2026-10-25）＝本番の置き場へは書かない"""
+    import tempfile
+    global DROPS_STORE
+    _bak = (DROPS_STORE, globals()["_machines"], globals()["DETAILS"])
+    _ms = [{"slug": "zzz_rev", "name": "試験機",
+            "checker": {"unit": "G", "modes": [{"key": "cz", "label": "CZ間"},
+                                               {"key": "suru", "label": "スルー天井", "hasSuru": True},
+                                               {"key": "reset", "label": "リセット"}],
+                        "cz": {"good": 350, "caution": 250, "excellent": 500,
+                               "note": "CZ間天井750G+α。スルー回数とは分けて見る。"},
+                        "suru": {"suru": [{"count": 0, "good": 350, "note": "0スルー350G"}]},
+                        "reset": {"good": 50, "caution": 0, "excellent": 180, "note": "設定変更後は天井短縮。"}}}]
+    try:
+        _td = tempfile.mkdtemp(prefix="rev_")
+        DROPS_STORE = os.path.join(_td, "drops.json")
+        globals()["DETAILS"] = _td
+        globals()["_machines"] = lambda: json.loads(json.dumps(_ms))
+        io.open(os.path.join(_td, "zzz_rev.json"), "w", encoding="utf-8").write(
+            json.dumps({"slug": "zzz_rev", "lead": "CZ間750G消化でCZ当選、AT間1500G消化でAT当選です。"},
+                       ensure_ascii=False))
+        base = {"slug": "zzz_rev", "decision": REVISE, "judges": ["claude", "codex"],
+                "why": "出典に無いスルー天井の仕組みから作られた欄なので消す（試験）"}
+        ok = {**base, "drop_modes": ["suru", "reset"],
+              "notes": [{"key": "cz", "note": "CZ間750G消化でCZ当選。"}]}
+        _NRV = [{"n": n, "why": "出典に無いスルー天井の線（試験）"} for n in ("0", "50", "180", "350")]
+        ok = {**ok, "numbers_removed": _NRV,
+              "notes": [{"key": "cz", "before": "CZ間天井750G+α。スルー回数とは分けて見る。",
+                         "note": "CZ間750G消化でCZ当選。"}]}
+        t("★欄を消して注記を書き換える決定を受け取る★", revise_problems(ok, _ms) == [])
+        # ★機種行まで書いたあと（欄は消え、注記は新しい文）で止まった形★
+        io.open(DROPS_STORE, "w", encoding="utf-8").write(json.dumps({"drops": [
+            {"slug": "zzz_rev", "mode": "suru"}, {"slug": "zzz_rev", "mode": "reset"}]}))
+        t("★注記と欄をもう書いたあとでも、同じ決定は通る★（途中で止まったあとの再実行で収束する・review259）",
+          revise_problems(ok, [revised(_ms[0], ok)]) == [])
+        os.remove(DROPS_STORE)
+        _msr = [{"slug": "zzz_rev", "name": "試験機", "strategy": "5.6枚 CZ間350G〜 / リセット50G〜",
+                 "strategyByRate": {"eq56": "CZ間350G〜 / リセット50G〜"},
+                 "checker": {"unit": "G", "defaultRate": "eq56",
+                             "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
+                             "modes": [{"key": "cz", "label": "CZ間"}, {"key": "reset", "label": "リセット"}],
+                             "cz": {"good": 350, "caution": 250, "excellent": 500},
+                             "reset": {"good": 50, "caution": 0, "excellent": 180}}}]
+        _okr = {**base, "drop_modes": ["reset"],
+                "numbers_removed": [{"n": n, "why": "裏付けの無い線（試験）"} for n in ("0", "180")]}
+        t("★一覧の文の作り直しで消える数字も名指しを求める★（作り直す前の姿で比べない・review259）",
+          any("無くなる数値" in x and __import__("re").search("(?<![0-9])50G", x)
+              for x in revise_problems(_okr, _msr)))
+        t("★注記の before がいまの注記と違えば断る★（あとから直された注記を古い判断で上書きしない）",
+          any("before" in x for x in revise_problems(
+              {**ok, "notes": [{"key": "cz", "before": "古い注記", "note": "CZ間750G消化でCZ当選。"}]}, _ms)))
+        t("★消える数値を名指ししなければ断る★（欄を消すと線の数字が無くなる）",
+          any("無くなる数値" in x for x in revise_problems({**ok, "numbers_removed": []}, _ms)))
+        _ms_s = [dict(_ms[0], strategy="CZ間350G〜")]
+        t("★一覧の文に作った数字を書かせない★",
+          any("数字を作らない" in x for x in revise_problems(
+              {**base, "notes": [], "drop_modes": ["reset"], "numbers_removed": _NRV,
+               "strategy": "CZ間999G〜"}, _ms_s)))
+        _r = revised(_ms[0], ok)
+        t("　当てたあとは cz だけ残り、注記が新しい文になる",
+          [x["key"] for x in _r["checker"]["modes"]] == ["cz"]
+          and "suru" not in _r["checker"] and "reset" not in _r["checker"]
+          and _r["checker"]["cz"]["note"] == "CZ間750G消化でCZ当選。")
+        t("★無い欄は消せない★",
+          any("ありません" in x for x in revise_problems({**base, "drop_modes": ["at"]}, _ms)))
+        t("★欄を全部消す決定は断る★",
+          any("1つも残らなく" in x for x in revise_problems(
+              {**base, "drop_modes": ["cz", "suru", "reset"]}, _ms)))
+        _B = "CZ間天井750G+α。スルー回数とは分けて見る。"
+        t("★注記に公開データに無い数字を書かせない★（数字を作らない）",
+          any("数字を作らない" in x for x in revise_problems(
+              {**base, "notes": [{"key": "cz", "before": _B, "note": "CZ間900G消化でCZ当選。"}]}, _ms)))
+        t("★注記の置き場が無ければ断る★",
+          any("置き場がありません" in x for x in revise_problems(
+              {**base, "notes": [{"key": "cz", "rate": "eq56", "before": _B, "note": "CZ間750G。"}]}, _ms)))
+        t("★判断者が1人なら断る★（共通の検査）",
+          any("判断者" in x for x in revise_problems({**ok, "judges": ["claude"]}, _ms)))
+        t("★線を書く決定と混ぜて書けない★",
+          any("混ぜて" in x for x in revise_problems({**ok, "modes": [{"key": "cz", "good": 300}]}, _ms)))
+        t("★注記を線と食い違う形にしない★（note_text の点検）",
+          any("食い違" in x for x in revise_problems(
+              {**base, "notes": [{"key": "cz", "before": _B, "note": "CZ間1500Gから狙い目。"}]}, _ms)))
+        # ★★書く側も、交換率の無い機種で一覧の文の作り直しを通す★★（review260）＝
+        #   本物の書き込みを一時の置き場で動かし、作り直しが呼ばれたかを数える
+        global MACHINES
+        _bak_m, _bak_rb = MACHINES, globals()["_rebuild_target_text"]
+        _calls = []
+        try:
+            MACHINES = os.path.join(_td, "machines.json")
+            io.open(MACHINES, "w", encoding="utf-8").write(json.dumps(_ms, ensure_ascii=False))
+            globals()["_machines"] = _bak[1]
+            globals()["_rebuild_target_text"] = lambda: _calls.append(1) or 0
+            _rc = apply_revise(ok, _bak[1]())
+            t("★交換率の無い機種でも、書いたあと一覧の文の作り直しを通す★（検査と実際をそろえる・review260）",
+              _rc == 0 and _calls == [1]
+              and [x["key"] for x in _bak[1]()[0]["checker"]["modes"]] == ["cz"])
+        finally:
+            MACHINES, globals()["_rebuild_target_text"] = _bak_m, _bak_rb
+            globals()["_machines"] = lambda: json.loads(json.dumps(_ms))
+        # ★消した欄の一覧★＝書き込みで残り、壊れていたら黙って0件と読まない
+        io.open(DROPS_STORE, "w", encoding="utf-8").write("{")
+        t("★消した欄の一覧が壊れていたら書かない★",
+          any("一覧を読めません" in x for x in revise_problems(ok, _ms)))
+    finally:
+        DROPS_STORE, globals()["_machines"], globals()["DETAILS"] = _bak
+
+
 def apply_decision(path: str, dry_run: bool = False) -> int:
     dec = _sj.read_json(path, expect=dict)
     ms = _machines()
+    if str(dec.get("decision") or "") == REVISE:
+        return apply_revise(dec, ms, dry_run)
     # ★★「線を引かない」という結論も受け取る★★（2026-09-21・台帳#704）
     #   ★天井が分かっても、座ってよいゲーム数を出せないことはある★
     #   （平均投資・当選時の期待枚数が確認できていない機種）。
@@ -1663,6 +2057,7 @@ def selftest() -> int:
     t("　チェッカーに入っている天井は読める（対照）", _wired == {888})
 
     _no_line_tests(t)
+    _revise_tests(t)
     _unsync_tests(t)
     _format_tests(t)
     _restore_tests(t)

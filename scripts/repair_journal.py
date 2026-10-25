@@ -109,7 +109,9 @@ MAX_ATTEMPTS = 3          # ★その晩のうちに3回まで★（CLAUDE.md �
 #     drop_sentence … 落とす場所がちょうど1か所／落とす文の数値を全部名指し
 #     split_row     … 文字を1つも増やさない（元のセル＝分けたセルの連結）
 #   なので、ここに足しても守りは緩まない。
-ALLOWED_OPS = ("drop", "replace", "drop_line", "drop_sentence", "split_row")
+# ★drop_section / drop_row は 2026-10-25 に足した★（節を丸ごと・表の行を消す。守る線は decide_now 側）
+ALLOWED_OPS = ("drop", "replace", "drop_line", "drop_sentence", "split_row",
+               "drop_section", "drop_row")
 
 
 class JournalError(Exception):

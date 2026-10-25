@@ -946,7 +946,8 @@ def _load_decision(path: str) -> dict:
         raise ValueError("actions がありません")
     for a in acts:
         if a.get("op") not in ("drop", "replace", "drop_line",
-                               "drop_sentence", "split_row"):
+                               "drop_sentence", "split_row",
+                               "drop_section", "drop_row"):
             raise ValueError(f"知らない操作です: {a.get('op')!r}")
         if not a.get("why"):
             raise ValueError("理由の無い操作は受け取りません")
@@ -958,6 +959,11 @@ def _load_decision(path: str) -> dict:
             raise ValueError("drop には消す行の逐語が要ります")
         if a["op"] == "replace" and not (a.get("before") and a.get("after")):
             raise ValueError("replace には before と after が要ります")
+        if a["op"] == "drop_section" and not a.get("text"):
+            raise ValueError("drop_section には消す節の見出し（text）が要ります")
+        if a["op"] == "drop_row" and not (
+                a.get("where") and a.get("text") and isinstance(a.get("before"), list)):
+            raise ValueError("drop_row には where / text / before（行まるごと）が要ります")
     return d
 
 
@@ -1127,6 +1133,122 @@ def _words(s: str) -> list:
     return _WORD_RE.findall(str(s or ""))
 
 
+# ★★節を丸ごと消す・表の行を消す★★（2026-10-25・運営者「至急直して」）
+#   ★なぜ要るか★＝ダンベルの記事に、出典に無い「スルー回数で天井が短くなる」仕組みが
+#   書かれていた。中身が全部その仕組みに依存した節（「CZ間とスルー天井の違い」）と、
+#   表の行（「スルー天井」）を、この道具では消せなかった＝★自動タスクは直せず、
+#   「次回」と書いて約5週間後へ回していた★。
+#   ★守る線は今までと同じ★＝2AIの理由（meaning_why）／消える数字は全部名指し
+#   （全部当てたあとの数え直しも通す）／記事の指紋／★場所は逐語で確かめる★
+#   （節は見出しが1つだけ一致・行は場所と行まるごとの中身が一致）。
+#   ★書く順番★＝ほかの書き換えを元の場所で済ませてから、最後に行→節の順で消す
+#   （場所は変更前の記事から組むので、先に消すと後ろがずれる）。
+WHOLE_KINDS = ("drop_section", "drop_row")
+_FACT_ROW_AT = None
+
+
+def fact_row_target(where: str):
+    """`factTable[2]` の形から行の番号を取り出す（★この形だけ★）"""
+    global _FACT_ROW_AT
+    if _FACT_ROW_AT is None:
+        import re as _re5
+        _FACT_ROW_AT = _re5.compile(r"\AfactTable\[(\d+)\]\Z")
+    m = _FACT_ROW_AT.match(str(where or ""))
+    return int(m.group(1)) if m else None
+
+
+def _strings_in(o) -> list:
+    """読者に出る文字（入れ物の中の文字列）を全部取り出す"""
+    out = []
+    if isinstance(o, str):
+        out.append(o)
+    elif isinstance(o, list):
+        for x in o:
+            out += _strings_in(x)
+    elif isinstance(o, dict):
+        for k, v in o.items():
+            if k in ("type", "badge"):
+                continue
+            out += _strings_in(v)
+    return out
+
+
+def whole_spot(d: dict, a: dict):
+    """★消す節・行を1つに決める★ 返すもの: ((種類, 場所1, 場所2, 決定), 中身) ／ 断る理由（文字列）"""
+    if a.get("op") == "drop_section":
+        secs = d.get("sections") or []
+        hits = [i for i, x in enumerate(secs)
+                if isinstance(x, dict) and x.get("title") == a.get("text")]
+        if len(hits) != 1:
+            return f"消す節が {len(hits)} か所です（見出しが1つだけ一致すること）: {str(a.get('text'))[:30]!r}"
+        if len(secs) <= 1:
+            return "節が1つも残らなくなります"
+        return ("drop_section", hits[0], None, a), secs[hits[0]]
+    where = str(a.get("where") or "")
+    fr = fact_row_target(where)
+    if fr is not None:
+        rows = d.get("factTable") or []
+        if fr >= len(rows):
+            return f"その場所に行がありません: {where!r}"
+        row, spot, n = rows[fr], ("drop_row", "fact", fr, a), len(rows)
+    else:
+        rt = row_target(where)
+        if not rt:
+            return ("行の場所は factTable[i] か sections[i].tables[j].rows[k] の形で"
+                    f"書いてください: {where!r}")
+        try:
+            rows = d["sections"][rt[0]]["tables"][rt[1]]["rows"]
+            row = rows[rt[2]]
+        except (IndexError, KeyError, TypeError):
+            return f"その場所に行がありません: {where!r}"
+        spot, n = ("drop_row", rt[0], (rt[1], rt[2]), a), len(rows)
+    if row != a.get("before"):
+        return "その場所の行が、決定の before と違います（記事が変わった可能性）"
+    if a.get("text") not in [c for c in row if isinstance(c, str)]:
+        return "text は、消す行の中のセルの文字そのままにしてください（目印にするため）"
+    if n <= 1:
+        return "表が空になります（行が1つも残りません）"
+    return spot, row
+
+
+def _apply_whole(d: dict, plan: list) -> None:
+    """★最後に行→節の順で消す★（場所は変更前の記事から組んであるので、後ろから消す）"""
+    _fact = sorted({bi for k, si, bi, _a in plan if k == "drop_row" and si == "fact"},
+                   reverse=True)
+    for ri in _fact:
+        del d["factTable"][ri]
+    _tbl = {}
+    for k, si, bi, _a in plan:
+        if k == "drop_row" and si != "fact":
+            _tbl.setdefault((si, bi[0]), set()).add(bi[1])
+    for (si, ti), ris in _tbl.items():
+        for ri in sorted(ris, reverse=True):
+            del d["sections"][si]["tables"][ti]["rows"][ri]
+    for si in sorted({si for k, si, bi, _a in plan if k == "drop_section"}, reverse=True):
+        del d["sections"][si]
+
+
+def whole_conflicts(plan: list) -> str:
+    """★消す節・行の中を、同じ決定でほかに触っていないか★（触ったものが消えるのに「直した」と報告しない）"""
+    _dsec = {si for k, si, bi, _a in plan if k == "drop_section"}
+    _drow = {(si, bi) for k, si, bi, _a in plan if k == "drop_row" and si != "fact"}
+    _dtbl = {(si, bi[0]) for (si, bi) in _drow}
+    _dfact = {bi for k, si, bi, _a in plan if k == "drop_row" and si == "fact"}
+    for k, si, bi, a in plan:
+        if k == "drop_section":
+            continue
+        if k not in OUTSIDE_KINDS and si in _dsec:
+            return ("消す節の中を、同じ決定でほかにも直そうとしています"
+                    f"（{str(a.get('text') or a.get('before') or '')[:24]!r}）／★消すか直すかどちらかにしてください★")
+        if k in ("table_cell", "table_cell_in") and (si, (bi[0], bi[1])) in _drow:
+            return f"消す行のセルを、同じ決定で直そうとしています（{a.get('where')}）"
+        if k == "split_row" and (si, bi) in _dtbl:
+            return "同じ表で「行を分ける」と「行を消す」は一緒にできません（行がずれるため）"
+        if k in ("fact", "fact_in") and si in _dfact:
+            return "消す基本情報表の行を、同じ決定で直そうとしています"
+    return ""
+
+
 def _simulate(detail: dict, plan: list) -> str:
     """★決定を全部あてたら記事がどうなるか★（書かずに文字列で返す）
 
@@ -1167,6 +1289,7 @@ def _simulate(detail: dict, plan: list) -> str:
         body = d["sections"][si]["body"]
         d["sections"][si]["body"] = [x for i, x in enumerate(body)
                                      if i not in idxs]
+    _apply_whole(d, plan)
     return json.dumps(d, ensure_ascii=False)
 
 
@@ -1515,6 +1638,31 @@ def apply_decision(path: str, apply_it: bool = False, *,
                 {"text": _t, "why": str(a.get("why") or "")[:200],
                  "meaning_why": _mw[:200]})
             continue
+        if a["op"] in WHOLE_KINDS:
+            _mw = str(a.get("meaning_why") or "").strip()
+            if len(_mw) < 15:
+                result["problems"].append(
+                    "節や行を丸ごと消すときは、なぜ消してよいかを meaning_why に"
+                    f"書いてください（15字以上）: {str(a.get('text'))[:34]!r}")
+                return result
+            _ws = whole_spot(d, a)
+            if isinstance(_ws, str):
+                result["problems"].append(_ws)
+                return result
+            _body_txt = "\n".join(_strings_in(_ws[1]))
+            # ★中の数値は、すべて名指しで理由を書くこと★（drop_line と同じ線）
+            _named = {str(x.get("n")) for x in (dec.get("numbers_removed") or [])
+                      if isinstance(x, dict)}
+            _miss_n = [n for n in _numbers(_body_txt) if n not in _named]
+            if _miss_n:
+                result["problems"].append(
+                    "消す節・行の数値は、すべて numbers_removed に理由つきで"
+                    "名指ししてください: " + " / ".join(sorted(set(_miss_n))[:6]))
+                return result
+            result.setdefault("removed_lines", []).append(
+                {"text": json.dumps(_ws[1], ensure_ascii=False),
+                 "why": str(a.get("why") or "")[:200], "meaning_why": _mw[:200]})
+            continue
         if a["op"] == "drop":
             # ★★消すことで「どちらが正解か」を選んでしまう場合は受け取らない★★
             #   （2026-08-21・Codexの設計レビュー）
@@ -1608,6 +1756,10 @@ def apply_decision(path: str, apply_it: bool = False, *,
         #   例: sections[6].tables[0].rows[5]
         if a["op"] == "split_row" and row_target(where):
             pass
+        elif a["op"] in WHOLE_KINDS:
+            # ★場所は whole_spot が逐語で確かめて決める★（上の検査で通っている）
+            plan.append(whole_spot(d, a)[0])
+            continue
         # ★表のセルを指す形★（2026-09-18・台帳#698）
         elif a["op"] == "replace" and cell_target(where):
             pass
@@ -1898,6 +2050,10 @@ def apply_decision(path: str, apply_it: bool = False, *,
                 "後のものだけが効いたり、書く時だけ失敗したりします。"
                 "1件ずつ決め直してください★")
             return result
+    _wc = whole_conflicts(plan)
+    if _wc:
+        result["problems"].append(_wc)
+        return result
     if _splits:
         for _k, _si, _bi, _a in plan:
             if _k not in ("table_cell", "table_cell_in"):
@@ -1944,6 +2100,8 @@ def apply_decision(path: str, apply_it: bool = False, *,
       #   ★書き込みは最後にまとめて行う★ので、途中で止めても記事は無傷。
       try:
         for kind, si, bi, a in plan:
+            if kind in WHOLE_KINDS:
+                continue                  # ★最後にまとめて消す★（_apply_whole）
             if kind in OUTSIDE_KINDS:
                 # ★節の外は sections を触らない★（場所の指し方が違う）
                 _write_outside(d, kind, si, bi, a["after"],
@@ -2010,6 +2168,7 @@ def apply_decision(path: str, apply_it: bool = False, *,
             body = d["sections"][si]["body"]
             d["sections"][si]["body"] = [x for i, x in enumerate(body)
                                          if i not in idxs]
+        _apply_whole(d, plan)
       except _StopWrite as _we:
         # ★ここまでの書き換えは写しの上だけ★＝本物のファイルは無傷
         #   ★捕まえるのは「意図して止めた」ときだけ★（2026-09-18・Codexの指摘）
@@ -4069,6 +4228,65 @@ def _selftest() -> int:
           _r10.get("wrote")
           and json.loads(io.open(_p10, encoding="utf-8").read())
           ["sections"][0]["body"] == ["同じ文です。"])
+        # ★★節を丸ごと消す・表の行を消す★★（2026-10-25）
+        _DOC_W = {"name": "試験機", "slug": "zzz_whole",
+                  "factTable": [["機械割", "97.7%"], ["スルー天井", "0回400G"], ["確認場所", "液晶"]],
+                  "sections": [
+                      {"title": "天井・恩恵", "body": ["天井：CZ間750G"]},
+                      {"title": "基本スペック", "type": "table", "tables": [{"headers": ["項目", "内容"], "rows": [
+                          ["天井", "CZ間750G"], ["スルー天井", "0回400G→1回200G"], ["設定段階", "6段階"]]}]},
+                      {"title": "違いの節", "body": ["スルー回数で1回200Gまで浅くなります。", "回数で見ます。"]}]}
+        _pw = os.path.join(_td2, "zzz_whole.json")
+
+        def _decw(actions, nr=None):
+            io.open(_pw, "w", encoding="utf-8", newline="\n").write(
+                json.dumps(_DOC_W, ensure_ascii=False, indent=1) + "\n")
+            _ss = _h2.sha256(io.open(_pw, encoding="utf-8").read().encode("utf-8")
+                             .replace(bytes([13, 10]), bytes([10]))).hexdigest()
+            _qq = os.path.join(_td2, "decw.json")
+            io.open(_qq, "w", encoding="utf-8").write(json.dumps({
+                "schema_version": SCHEMA, "slug": "zzz_whole", "source_sha256": _ss,
+                "decided_by": ["claude", "codex"], "numbers_removed": nr or [],
+                "actions": actions}, ensure_ascii=False))
+            return _qq
+
+        _MWW = "出典に無い仕組みに依存した節なので丸ごと消す（2AI一致）"
+        _NRW = [{"n": n, "why": "出典に無いスルー天井の数値（試験）"} for n in ("1回", "200G", "0回", "400G")]
+        _AW = [{"op": "drop_section", "text": "違いの節", "why": "試験", "meaning_why": _MWW},
+               {"op": "drop_row", "where": "factTable[1]", "text": "0回400G",
+                "before": ["スルー天井", "0回400G"], "why": "試験", "meaning_why": _MWW},
+               {"op": "drop_row", "where": "sections[1].tables[0].rows[1]", "text": "0回400G→1回200G",
+                "before": ["スルー天井", "0回400G→1回200G"], "why": "試験", "meaning_why": _MWW}]
+        _rw = apply_decision(_decw(_AW, _NRW), True, guard=False)
+        _dw2 = json.loads(io.open(_pw, encoding="utf-8").read())
+        t("★★節を丸ごと消す・表の行を消す（基本情報表と節の表）★★",
+          _rw.get("wrote") and [x["title"] for x in _dw2["sections"]] == ["天井・恩恵", "基本スペック"]
+          and [r[0] for r in _dw2["factTable"]] == ["機械割", "確認場所"]
+          and [r[0] for r in _dw2["sections"][1]["tables"][0]["rows"]] == ["天井", "設定段階"])
+        t("★消える数値を名指ししなければ断る★（1件ずつの検査）",
+          not apply_decision(_decw(_AW, []), True, guard=False).get("wrote"))
+        # ★同じ数値がほかの節に残る形★＝最後の数え直しには引っかからないので、
+        #   1件ずつの検査だけが止める（罠④＝隣の検査に助けられていないこと）
+        _AW5 = [{"op": "drop_section", "text": "違いの節", "why": "試験", "meaning_why": _MWW}]
+        _DOC_W["sections"][2]["body"].append("天井はCZ間750Gです。")
+        _NR5 = [{"n": n, "why": "出典に無いスルー天井の数値（試験）"} for n in ("1回", "200G")]
+        t("★ほかに同じ数値が残っても、消す節の数値は名指しを求める★",
+          "名指し" in " ".join(apply_decision(_decw(_AW5, _NR5), False, guard=False)["problems"]))
+        _DOC_W["sections"][2]["body"].pop()
+        _AW2 = [dict(_AW[1], before=["スルー天井", "0回300G"])]
+        t("★場所の行が before と違えば断る★（記事が変わった可能性）",
+          "before と違います" in " ".join(apply_decision(_decw(_AW2, _NRW), False, guard=False)["problems"]))
+        _AW3 = [_AW[0], {"op": "replace", "where": "body", "before": "回数で見ます。",
+                         "after": "回数で確かめます。", "why": "試験", "meaning_why": _MWW}]
+        t("★消す節の中を同じ決定で直そうとしたら断る★",
+          "消す節の中" in " ".join(apply_decision(_decw(_AW3, _NRW), False, guard=False)["problems"]))
+        t("★理由（meaning_why）が無ければ断る★",
+          "meaning_why" in " ".join(apply_decision(
+              _decw([dict(_AW[0], meaning_why="")], _NRW), False, guard=False)["problems"]))
+        _rw4 = apply_decision(_decw([{"op": "drop_section", "text": "無い節", "why": "試験",
+                                      "meaning_why": _MWW}], _NRW), True, guard=False)
+        t("★見出しが一致しない節は消さない★（1文字も書かない）",
+          not _rw4.get("wrote") and json.loads(io.open(_pw, encoding="utf-8").read()) == _DOC_W)
     finally:
         globals()["DETAILS"] = _keep2
 
