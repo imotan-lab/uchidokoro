@@ -12352,16 +12352,17 @@
     "reset"
    ],
    "reason_codes": [
-    "CLAIMS_LT_3",
     "CATEGORIES_LT_2",
     "NO_UNIQUE_GAMEPLAY"
    ],
    "claims": [
+    "games_per_50",
+    "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-11",
-   "input_digest": "sha256:21ac7dbe88748e16c59b85912cea034a29dd8aaf439243fcb43fc4f510987b5d"
+   "decided_at": "2026-10-26",
+   "input_digest": "sha256:23c9004db6a200022ce83a4ae44d5f02d944ef4d2c68f75eaa411a3a91dff7a1"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
@@ -12377,6 +12378,17 @@
    "_observed_model_code_sources": [
     "p-town.dmm.com"
    ]
+  },
+  "checker": {
+   "coinRate": 32.9,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {}
   }
  },
  {
