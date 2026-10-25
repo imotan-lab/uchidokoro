@@ -2117,6 +2117,9 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     got = gather(name, maker, slug=slug,
                  machine_name=vo.get("identity_name") or name,
                  release_date=str(vo.get("release") or ""))
+    # ★★集めた材料を、手を加える前に控える★★（2026-10-25・更新タスクの自己修正）
+    #   書く直前の再確認（apply_one）が、取り直さずに同じ材料で見直すため。
+    out["_gathered"] = _copy_gathered(got)
     # ★次回の「軽い様子見」に使うため、見た出典URLを控える★
     #   （2026-08-13・台帳#346）ここで初めて確定するので、
     #   材料を集めたあとに控える。書けなくても処理は止めない。
@@ -2612,6 +2615,33 @@ def sitemap_after(sm: str, slug: str, indexable: bool) -> tuple:
     return _pub.remove_from_sitemap(sm, slug), False
 
 
+def _copy_gathered(got):
+    """集めた材料の写し（★計画の途中で手が加わる前の姿★）。写せなければ None。"""
+    import copy
+    try:
+        return copy.deepcopy(got)
+    except Exception:                      # noqa: BLE001
+        return None
+
+
+def _regather(plan: dict):
+    """★書く直前の再確認に渡す「材料集め」★（2026-10-25・更新タスクの自己修正）
+
+    ★取り直さない★＝計画のときに控えた材料（`_gathered`）の写しを返すだけ。
+    控えが無ければ、今までどおり材料なし（2AIの確定値だけ）で見直す。
+    ★直す前★＝いつも材料なしで見直していたので、名鑑から読んだ値を
+    載せた機種は「確認済みだった事実が消えます」で書く直前に必ず止まった。
+    """
+    snap = (plan or {}).get("_gathered")
+
+    def _g(*a, **k):
+        if isinstance(snap, dict):
+            import copy
+            return copy.deepcopy(snap)
+        return {"material": None, "problems": []}
+    return _g
+
+
 def apply_one(got: dict) -> dict:
     """育てた結果を書き込む（★全部そろうか、何も残さないか★）。
 
@@ -2666,10 +2696,11 @@ def apply_one(got: dict) -> dict:
                 out["problems"].append(
                     f"計画したときから中身が変わっています: "
                     f"{os.path.relpath(p, BASE)}")
-        again = plan_one(slug, gather=lambda *a, **k: {"material": None,
-                                                       "problems": []},
+        again = plan_one(slug, gather=_regather(got),
                          verify=lambda *a, **k: {"problems": [], "release": ""})
         # ↑ 取得はやり直さない。前提（区分・方針・台帳・目印）だけ見直す
+        #   ★材料は計画のときの控えを渡す★（2026-10-25）＝空にすると、
+        #   名鑑から読んだ値が「消える」と判定され、書く直前で必ず止まった
         for p in again["problems"]:
             if "材料を集められません" in p or "本人性" in p:
                 continue
@@ -3675,6 +3706,38 @@ def selftest() -> int:
           apply_one({"slug": "x", "machine": {}, "detail": {},
                      "was": "AUTO_PENDING", "now": "AUTO_PENDING",
                      "fingerprint": {}})["problems"]))
+    # ── ★★書く直前の再確認は、計画で集めた材料をそのまま使う★★
+    #   （2026-10-25・更新タスクの自己修正）
+    #   ★直す前★＝再確認は材料を空にして計画を作り直していたので、
+    #   名鑑から読んだ値（2AIの控えに無い値）が「消える」と判定され、
+    #   ★そういう値を載せた機種は書く直前で必ず止まった★
+    #   （dmm_5089・dmm_5136＝機械割、pw_10510＝「育てるものがありません」）。
+    _rg_fn = globals().get("_regather")
+    _rg_mat = {"material": {"spec": {"payout_range": "97%〜110%"}},
+               "problems": []}
+    _rg_got = (_rg_fn({"_gathered": _rg_mat})("名", "社", slug="x")
+               if callable(_rg_fn) else None)
+    t("★★書く直前の再確認は、計画で集めた材料をそのまま使う★★"
+      "（★空にすると、名鑑から読んだ値が『消える』と出て書く直前で必ず止まる★）",
+      _rg_got == _rg_mat and _rg_got is not _rg_mat
+      and _rg_got["material"] is not _rg_mat["material"])
+    t("　計画に材料の控えが無ければ、今までどおり材料なしで見直す",
+      callable(_rg_fn)
+      and _rg_fn({})("名", "社") == {"material": None, "problems": []})
+    # ★控えを作る側も確かめる★（Codexの指摘＝ここが None や元の辞書を返しても
+    #   上の試験は手作りの控えを使うので緑のままだった）
+    _cg_src = {"material": {"spec": {"payout_range": "97%〜110%"}},
+               "problems": ["p"]}
+    _cg = _copy_gathered(_cg_src)
+    t("★★材料の控えは、取得直後の姿の深い写し★★"
+      "（★None なら直す前と同じく書く直前で止まる・元の辞書なら合流後の材料が混ざる★）",
+      _cg == _cg_src and _cg is not _cg_src
+      and isinstance(_cg, dict) and _cg["material"] is not _cg_src["material"]
+      and _cg["material"]["spec"] is not _cg_src["material"]["spec"])
+    t("★★配線：書く直前の再確認が、計画の材料の控えを渡している★★",
+      "gather=_regather(got)" in inspect.getsource(apply_one))
+    t("★★配線：計画は、集めた材料をそのまま控える★★",
+      'out["_gathered"] = _copy_gathered(got)' in inspect.getsource(plan_one))
     # ── ★★すでに検索に載っている機種を育てても、sitemap で止まらない★★
     #   （2026-09-26・更新タスクの自己修正）
     #   2026-09-21（台帳#702）から検索に載った機種も育てるようにしたが、

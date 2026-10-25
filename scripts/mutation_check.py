@@ -8059,6 +8059,31 @@ MUTATIONS = [
         "after": "    out[\"problems\"] += claims_grew(cur.get(\"page_decision\"), mat)\n",
         "run": ["scripts/grow_machine.py"],
     },
+    # ★★書く直前の再確認は、計画で集めた材料をそのまま使う（2026-10-25・更新タスクの自己修正）★★
+    {
+        "why": "★書く直前の再確認が、計画の材料の控えを渡さず材料なしで見直す"
+               "（★名鑑から読んだ値が『消える』と出て、育成が書く直前で必ず止まる＝dmm_5089・dmm_5136★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        again = plan_one(slug, gather=_regather(got),\n",
+        "after": "        again = plan_one(slug, gather=lambda *a, **k: {\"material\": None, \"problems\": []},\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★書く直前の再確認に渡す材料集めが、控えがあっても空の材料を返す"
+               "（★配線だけ残って中身が直す前と同じになる★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "            return copy.deepcopy(snap)\n",
+        "after": "            return {\"material\": None, \"problems\": []}\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★計画の材料の控えが、写しを作らず None を返す"
+               "（★再確認がまた材料なしになり、書く直前で必ず止まる・Codexの指摘★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        return copy.deepcopy(got)\n",
+        "after": "        return None\n",
+        "run": ["scripts/grow_machine.py"],
+    },
 ]
 
 
