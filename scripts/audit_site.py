@@ -1208,7 +1208,9 @@ def check_27_hub_counts(machines: list) -> list[str]:
         def _line(conf):
             if not isinstance(conf, dict) or _td.is_off(conf):
                 return None
-            return _td.effective_good(conf, _td.default_rate(c))
+            g = _td.effective_good(conf, _td.default_rate(c))
+            # ★狙い目なし（99999）は数えない★（build_hub_pages.mode_line と同じ）
+            return None if g is None or g >= _td.NO_TARGET else g
 
         ncau = _line(_mode_conf(c, "normal"))
         if ncau is None:
@@ -1239,6 +1241,7 @@ def check_27_hub_counts(machines: list) -> list[str]:
             mclass=_pd.machine_class(m),
             has_suru=bool(c.get("hasSuru") or "suru" in modes or "through" in modes),
             has_cycle=bool(c.get("hasCycle") or "cycle" in modes),
+            games_set=("tenjo_games" in m),
             ncau=ncau,
             rcau=_line(_mode_conf(c, "reset")),
         ))
@@ -1253,7 +1256,7 @@ def check_27_hub_counts(machines: list) -> list[str]:
             and r.get("mclass") == "LEGACY_COMPLETE"]
     A = [r for r in rows
          if r["unit"] == "G" and isinstance(r["limit"], (int, float))
-         and not r["has_cycle"] and r["limit"] < 1000
+         and (r["games_set"] or not r["has_cycle"]) and r["limit"] < 1000
          and isinstance(r["ncau"], (int, float))]
     C = [r for r in rows
          if r["unit"] == "G"  # ★ゲーム数で数える機種だけ★（build_hub_pages.dataset_C と同じ・2026-10-25）

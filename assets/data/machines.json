@@ -515,6 +515,8 @@
    "グールFT"
   ],
   "limit": 1200,
+  "tenjo_display": "CZ間600G+α／AT間1200G+α",
+  "tenjo_games": 600,
   "strategyByRate": {
    "eq56": "CZ間300G〜 / AT間 0スルー350G〜／2スルー250G〜 / リセット60G〜",
    "rate55": "CZ間350G〜 / AT間 0スルー400G〜／2スルー300G〜 / リセット80G〜",
@@ -616,6 +618,8 @@
    }
   },
   "limit": 1200,
+  "tenjo_display": "CZ間499G+α／AT間1200G",
+  "tenjo_games": 499,
   "original": {
    "title": "ソードアート・オンラインII",
    "kind": "ライトノベル",
@@ -916,6 +920,8 @@
    "とあるまじゅつのきんしょもくろく2"
   ],
   "limit": null,
+  "tenjo_display": "AT間1200G／CZ間800G+α",
+  "tenjo_games": 800,
   "original": {
    "title": "とある魔術の禁書目録",
    "kind": "ライトノベル",
@@ -1652,6 +1658,8 @@
    ]
   },
   "limit": 1500,
+  "tenjo_display": "CZ間1000G+α／AT間1500G+α",
+  "tenjo_games": 1000,
   "strategyByRate": {
    "eq56": "CZ間400G〜 / AT間460G〜",
    "rate55": "CZ間430G〜 / AT間490G〜",
@@ -2178,6 +2186,8 @@
    "limit": 1500
   },
   "limit": 1500,
+  "tenjo_display": "CZ間999G+α／ボーナス&AT間1500G+α",
+  "tenjo_games": 999,
   "strategyByRate": {
    "eq56": "CZ間550G〜 / ボーナス間950G〜 / 決戦スルー 0スルー550G〜／3スルー0G〜 / 周期 1周期目550G〜／5周期目0G〜 / リセット200G〜",
    "rate55": "CZ間600G〜 / ボーナス間1000G〜 / 決戦スルー 0スルー600G〜／3スルー0G〜 / 周期 1周期目600G〜／5周期目0G〜 / リセット300G〜",
@@ -2518,7 +2528,9 @@
    "やじきたどうちゅうき",
    "参る"
   ],
-  "limit": null
+  "limit": null,
+  "tenjo_display": "999まいる",
+  "tenjo_games": null
  },
  {
   "slug": "dmm_5113",
@@ -3088,6 +3100,8 @@
    "ワールドダイスタァ"
   ],
   "limit": null,
+  "tenjo_display": "通常時999G+α",
+  "tenjo_games": 999,
   "original": {
    "title": "ワールドダイスター",
    "kind": "アニメ",
@@ -3111,6 +3125,8 @@
    "じゃしんちゃんどろっぷきっく"
   ],
   "limit": null,
+  "tenjo_display": "通常時799G+α",
+  "tenjo_games": 799,
   "original": {
    "title": "邪神ちゃんドロップキック",
    "kind": "漫画",
@@ -3134,6 +3150,8 @@
    "すとりーとふぁいたー6"
   ],
   "limit": null,
+  "tenjo_display": "通常時1000G+α（液晶）",
+  "tenjo_games": 1000,
   "original": {
    "title": "ストリートファイター6",
    "kind": "ゲーム",
@@ -3160,6 +3178,8 @@
    "スマスロとんスキ"
   ],
   "limit": null,
+  "tenjo_display": "通常時1000G+α",
+  "tenjo_games": 1000,
   "original": {
    "title": "とんでもスキルで異世界放浪メシ",
    "kind": "ライトノベル",
@@ -3188,7 +3208,9 @@
    "すーぱーびんむすめ",
    "びんむすめ"
   ],
-  "limit": null
+  "limit": null,
+  "tenjo_display": "通常時1200G",
+  "tenjo_games": 1200
  },
  {
   "slug": "dmm_5089",
@@ -3286,6 +3308,8 @@
    }
   },
   "limit": 1500,
+  "tenjo_display": "CZ間700G+α／AT間1500G+α",
+  "tenjo_games": 700,
   "original": {
    "title": "ウルトラマン",
    "kind": "特撮",
@@ -4065,6 +4089,8 @@
    }
   },
   "limit": 999,
+  "tenjo_display": "CZ間550G+α／AT間999G",
+  "tenjo_games": 550,
   "aliases": [
    "攻殻機動隊",
    "攻殻",
@@ -4129,6 +4155,8 @@
    }
   },
   "limit": 1400,
+  "tenjo_display": "CZ間800G+α／AT間1400G+α",
+  "tenjo_games": 800,
   "original": {
    "title": "機動戦士ガンダムUC",
    "kind": "小説",
@@ -4307,7 +4335,9 @@
     "note": "REG後/リセット後は天井499Gに短縮。"
    }
   },
-  "limit": 999
+  "limit": 999,
+  "tenjo_display": "BIG後999G+α／REG後499G+α",
+  "tenjo_games": 999
  },
  {
   "slug": "my_juggler_v",
@@ -5507,6 +5537,8 @@
    "suruMax": 7
   },
   "limit": 1100,
+  "tenjo_display": "BIG後1100G+α／REG後900G+α",
+  "tenjo_games": 1100,
   "strategyByRate": {
    "eq56": "BIG後600G〜 / REG後400G〜 / スルー天井 0スルー600G〜／6スルー0G〜 / リセット150G〜",
    "rate55": "BIG後650G〜 / REG後450G〜 / スルー天井 0スルー650G〜／7スルー0G〜 / リセット200G〜",
@@ -6418,7 +6450,9 @@
     "note": "リセット時は天井499G+αに短縮。"
    }
   },
-  "limit": 799
+  "limit": 799,
+  "tenjo_display": "BIG後799G+α／REG後649G+α",
+  "tenjo_games": 799
  },
  {
   "slug": "gineiden_dnt",
@@ -6581,6 +6615,8 @@
    }
   },
   "limit": 1400,
+  "tenjo_display": "液晶CZ間1200G+α",
+  "tenjo_games": 1200,
   "original": {
    "title": "からくりサーカス",
    "kind": "漫画",
@@ -9481,6 +9517,8 @@
    "baseRateKey": "equal"
   },
   "limit": 999,
+  "tenjo_display": "CZ間400G／ボーナス間999G",
+  "tenjo_games": 400,
   "original": {
    "title": "ソードアート・オンライン",
    "kind": "ライトノベル",
@@ -9982,6 +10020,8 @@
   ],
   "checker": null,
   "limit": null,
+  "tenjo_display": "ボーナス間ステチェン19回／AT間ステチェン40回",
+  "tenjo_games": null,
   "original": {
    "title": "無職転生",
    "kind": "ライトノベル",
@@ -10163,7 +10203,9 @@
    "title": "機動戦士ガンダムSEED",
    "kind": "アニメ",
    "search": "ガンダムSEED Blu-ray"
-  }
+  },
+  "tenjo_display": "CZ間777G+α／AT間1280G+α",
+  "tenjo_games": 777
  },
  {
   "slug": "youjitsu",
@@ -10274,7 +10316,9 @@
    "title": "ようこそ実力至上主義の教室へ",
    "kind": "ライトノベル",
    "search": "ようこそ実力至上主義の教室へ 小説"
-  }
+  },
+  "tenjo_display": "CZ間500G+α／AT間980G+α",
+  "tenjo_games": 500
  },
  {
   "slug": "midoridon_viva",
@@ -10358,7 +10402,9 @@
    "title": "ゴジラ",
    "kind": "映画",
    "search": "ゴジラ Blu-ray"
-  }
+  },
+  "tenjo_display": "Gポイント天井（モード別）／AT間最大2500G",
+  "tenjo_games": null
  },
  {
   "slug": "code_geass",
@@ -10508,7 +10554,9 @@
    "title": "ケンガンアシュラ",
    "kind": "漫画",
    "search": "ケンガンアシュラ 漫画"
-  }
+  },
+  "tenjo_display": "CZ間400G",
+  "tenjo_games": 400
  },
  {
   "slug": "rezero2",
@@ -10544,7 +10592,9 @@
    "title": "Re:ゼロから始める異世界生活",
    "kind": "ライトノベル",
    "search": "Re:ゼロから始める異世界生活 小説"
-  }
+  },
+  "tenjo_display": "最大1400pt／AT間1300G",
+  "tenjo_games": 1300
  },
  {
   "slug": "goji_eva",
@@ -10656,7 +10706,9 @@
     ]
    },
    "limit": 1050
-  }
+  },
+  "tenjo_display": "ボーナス間1000G+α",
+  "tenjo_games": 1000
  },
  {
   "slug": "prismnana",
@@ -12432,6 +12484,8 @@
    }
   },
   "limit": 999,
+  "tenjo_display": "CZ間500G+α／AT間999G+α",
+  "tenjo_games": 500,
   "original": {
    "title": "takt op.",
    "kind": "アニメ",
@@ -12469,7 +12523,9 @@
     "note": "本機は沖スロのモード管理型で、滞在モードが見えにくくゲーム数を単純に数える天井狙いは効きにくい機種です。当サイトでは設定狙い・リセット狙い（リセ後チャンスモード250G）を主軸に案内しています。"
    }
   },
-  "limit": null
+  "limit": null,
+  "tenjo_display": "通常モード999G+α",
+  "tenjo_games": 999
  },
  {
   "slug": "dmm_5079",

@@ -421,6 +421,9 @@ def load_rows(source: "Path | None" = None):
                 # （バジ天膳/からくり/まどマギフォルテ/沖ドキDUOアンコールが漏れていた・2026-07-13修正）
                 has_suru=bool(c.get("hasSuru") or "suru" in modes or "through" in modes),
                 has_cycle=bool(c.get("hasCycle") or "cycle" in modes),
+                # ★G数天井を tenjo_games で決めた機種は、周期の天井も持っていても対象★（2026-10-25・Codex review251）
+                #   ＝モンキーターンV（795G＋6周期）・ヴァルヴレイヴ2（CZ間999G＋周期）が漏れていた。
+                games_set=("tenjo_games" in m),
                 nline=base_line(m),
                 nlabel=mode_label(c, base_pick(m)[0], "通常"),
                 rlabel=mode_label(c, "reset", "リセット後"),
@@ -436,8 +439,13 @@ def load_rows(source: "Path | None" = None):
 def yome(r) -> str:
     # ★先行記事は strategy があっても分類を断定しない★（Codex 18巡目・二重防御）
     #   公開射影が strategy を落とすので通常は来ないが、生成器側でも守る。
-    if r.get("status") == "preview"             or r.get("mclass", "LEGACY_COMPLETE") != "LEGACY_COMPLETE":
+    if r.get("status") == "preview":
         return "解析待ち"
+    # ★新台経路は「機種ページで確認」★（2026-10-25・2AIの全点検で一致）＝記事には天井・狙い目が
+    #   載っているのに「解析待ち」と出ていた。新台の狙い目は指紋がそろったときだけ記事に出る
+    #   （target_projection）ので、表では値を写さず記事へ案内する。
+    if r.get("mclass", "LEGACY_COMPLETE") != "LEGACY_COMPLETE":
+        return AUTO_ROW_TEXT
     s = (r.get("strategy") or "").strip()
     if s:
         return s
@@ -451,11 +459,16 @@ def yome(r) -> str:
     return "狙い目情報なし"
 
 
+AUTO_ROW_TEXT = "機種ページで確認"
+
+
 def tenjo_disp(r) -> str:
     # machines.json に tenjo_display があれば優先（液晶/実など複数条件天井の一覧表記用）
     td = r.get("tenjo_display")
     if td:
         return td
+    if r.get("mclass", "LEGACY_COMPLETE") != "LEGACY_COMPLETE":
+        return AUTO_ROW_TEXT
     lim = r.get("limit")
     if not isinstance(lim, (int, float)):
         return "—"
@@ -473,7 +486,7 @@ def dataset_A(rows):
     a = [
         r for r in rows
         if r["unit"] == "G" and isinstance(r["rank_limit"], (int, float))
-        and not r["has_cycle"] and r["rank_limit"] < SHALLOW_TENJO_LIMIT
+        and (r.get("games_set") or not r["has_cycle"]) and r["rank_limit"] < SHALLOW_TENJO_LIMIT
         and isinstance(r["nline"], (int, float))
     ]
     a.sort(key=lambda r: (r["rank_limit"], r["nline"]))
@@ -710,16 +723,17 @@ def _build_pages(rows: list, prose_all: dict) -> tuple:
 
     # --- tenjo ---
     tenjo_list = render_rank_list(
-        A, lambda r: f'天井 <strong>{tenjo_disp(r)}</strong> ／ 狙い目 {esc(yome(r))}'
+        A, lambda r: f'天井 <strong>{esc(tenjo_disp(r))}</strong> ／ 狙い目 {esc(yome(r))}'
     )
     tenjo_note = (
-        "※同じ天井ゲーム数の機種は、狙い目ゲーム数が浅い順に掲載しています。"
+        "※天井の欄はG数の天井です。スルー回数・周期・ポイントなど、ほかの天井は各機種ページで確認してください。"
+        "同じ天井ゲーム数の機種は、狙い目ゲーム数が浅い順に掲載しています。"
         # ★list-count は「機種数」の印★（2026-07-31）
         #   ここに付けると監査が 1000 を機種数と読み違える（実際に起きた）。
         #   ゲーム数はただの数字として出す。
         f"G数でカウントする天井が{SHALLOW_TENJO_LIMIT}G"
         f"未満の機種は全<span class=\"list-count\">{len(A)}</span>機種です"
-        "（周期天井の機種と、G数天井のチェッカーデータが無い機種は集計対象外です）。"
+        "（G数で数えない天井だけの機種と、チェッカーに狙い目が無い機種は集計対象外です）。"
     )
 
     # --- reset ---
@@ -732,21 +746,21 @@ def _build_pages(rows: list, prose_all: dict) -> tuple:
     )
     reset_note = (
         "※リセット後に浅くから狙える幅（通常時の狙い目 − リセット後の狙い目）が大きい順。比較の基準は各機種の主要カウンターモード（通常時・CZ間・ST間など）です。"
-        "狙い目は各機種の記事と同じ線で、交換率を選べる機種は記事で最初に表示される交換率の線です。"
+        "狙い目は各機種の狙い目チェッカーの線で、交換率を選べる機種は最初に表示される交換率の線です。"
         f"チェッカーのデータで短縮を確認できる機種は全<span class=\"list-count\">{len(C)}</span>機種で、上位{len(C_top)}機種を掲載しています。"
     )
 
     # --- suru ---
     suru_list = render_spec_list(D, lambda r: esc(yome(r)))
     suru_note = (
-        f"チェッカー対応データのあるスルー天井機種は全<span class=\"list-count\">{len(D)}</span>機種です。"
+        f"チェッカーでスルー回数を入れて判定できる機種は全<span class=\"list-count\">{len(D)}</span>機種です。"
         "「N回目で確定」という表記は（N−1）スルーの状態を指す点に注意してください。"
     )
 
     # --- ichiran ---
     ichiran_list = render_spec_list(
         ALL,
-        lambda r: f'{esc(r["info"])}｜天井 <strong>{tenjo_disp(r)}</strong>｜狙い目 {esc(yome(r))}',
+        lambda r: f'{esc(r["info"])}｜天井 <strong>{esc(tenjo_disp(r))}</strong>｜狙い目 {esc(yome(r))}',
     )
     # ★全体の機種数は出さない★（2026-07-31・運営者の判断／Codex同意）
     #   増減のたびに README・運営者情報・散文の数を合わせる必要があり、
@@ -755,7 +769,8 @@ def _build_pages(rows: list, prose_all: dict) -> tuple:
     # ★並びの説明は書かない★（2026-08-29）＝トップページは人気の高い順に毎週入れ替わるが、
     #   このページは公開ゲートが開くまで作り直せないので並びが揃わない。
     #   ★言えないことを言わない★（元は「稼働率順」と書いていた）。
-    ichiran_note = ("機種名をタップすると各詳細ページへ移動します。")
+    ichiran_note = ("機種名をタップすると各詳細ページへ移動します。"
+                    "天井の欄はG数の天井です。スルー回数・周期・ポイントなど、ほかの天井は各機種ページで確認してください。")
 
     pages = {
         "guide-tenjo-ranking.html": (prose_all["tenjo"], {"list": tenjo_list, "note": tenjo_note}),
@@ -1244,6 +1259,14 @@ def selftest() -> int:
       _raises('<span data-dv="target:h:eq56:cz">x</span>')
       and _raises('<span data-dv="target:zz:eq56:normal">x</span>')
       and _raises('<span data-dv="price:h">x</span>'))
+    t("★新台経路の行は「機種ページで確認」（解析待ちと言わない）★",
+      yome({"mclass": "AUTO_INDEXABLE", "strategy": ""}) == AUTO_ROW_TEXT
+      and tenjo_disp({"mclass": "AUTO_PENDING", "limit": None}) == AUTO_ROW_TEXT)
+    _ra = [dict(slug="m", unit="G", rank_limit=795, has_cycle=True, games_set=True, nline=420),
+           dict(slug="c", unit="G", rank_limit=700, has_cycle=True, games_set=False, nline=300)]
+    t("★天井ランキング：G数天井を決めた機種は周期の天井があっても入れる★",
+      [r["slug"] for r in dataset_A(_ra)] == ["m"])
+    t("天井の書き方は tenjo_display が優先", tenjo_disp({"tenjo_display": "CZ間600G+α", "limit": 1200}) == "CZ間600G+α")
     t("★点検：印のあるページも比べる★",
       check_set({"guide-a.html": "A"}, {"index.html": "B"}) == {"guide-a.html": "A", "index.html": "B"})
     t("★ランキング：狙い目なし（99999）を数字として出さない★",

@@ -2017,6 +2017,20 @@ MUTATIONS = [
         "run": ["scripts/fix_static_text.py"],
     },
     {
+        "why": "★新台の行を「解析待ち」と言う（記事には天井・狙い目が載っている）★",
+        "file": "scripts/build_hub_pages.py",
+        "before": "        return AUTO_ROW_TEXT\n    s = (r.get(\"strategy\") or \"\").strip()",
+        "after": "        return \"解析待ち\"\n    s = (r.get(\"strategy\") or \"\").strip()",
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
+        "why": "★天井ランキングから、G数天井と周期の天井の両方を持つ機種が漏れる★",
+        "file": "scripts/build_hub_pages.py",
+        "before": '        and (r.get("games_set") or not r["has_cycle"]) and r["rank_limit"] < SHALLOW_TENJO_LIMIT',
+        "after": '        and not r["has_cycle"] and r["rank_limit"] < SHALLOW_TENJO_LIMIT',
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
         "why": "★並べ替えても早見表を見に行かない"
                "（関所が引き金を引かず、昨日と同じことが起きる）★",
         "file": "scripts/pre_push_check.py",
