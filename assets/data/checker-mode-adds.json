@@ -1,0 +1,29 @@
+{
+ "schema_version": "checker-mode-adds/v1",
+ "adds": [
+  {
+   "slug": "toaru_index2",
+   "mode": "normal",
+   "why": "なな徹「5.6枚交換700G~（通常条件）／350G~（設定変更時）」とちょんぼりすた「AT終了後 AT間700G〜／設定変更後 AT間350G〜」が一致。どちらも実ゲーム数のAT間。様子見・強めを分ける期待値表が無いので3本とも同じ値にした",
+   "judges": [
+    "claude",
+    "codex"
+   ],
+   "at": "2026-10-27",
+   "seq": 1,
+   "had_checker": false
+  },
+  {
+   "slug": "toaru_index2",
+   "mode": "reset",
+   "why": "なな徹「5.6枚交換700G~（通常条件）／350G~（設定変更時）」とちょんぼりすた「AT終了後 AT間700G〜／設定変更後 AT間350G〜」が一致。どちらも実ゲーム数のAT間。様子見・強めを分ける期待値表が無いので3本とも同じ値にした",
+   "judges": [
+    "claude",
+    "codex"
+   ],
+   "at": "2026-10-27",
+   "seq": 2,
+   "had_checker": false
+  }
+ ]
+}

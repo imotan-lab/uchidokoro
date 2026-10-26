@@ -1032,7 +1032,7 @@
    "title": "スマスロ とある魔術の禁書目録2 狙い目・天井・解析まとめ"
   },
   "info": "スマスロAT",
-  "strategy": "算定中（AT間1200G／CZ間800G+α）",
+  "strategy": "AT間700G〜 / 設定変更後350G〜",
   "aliases": [
    "禁書目録2",
    "とある魔術の禁書目録2",
@@ -1053,6 +1053,31 @@
    "manufacturer_id": "fujishoji",
    "regulatory_model_code": "Lとある魔術の禁書目録2FA",
    "market_release_date": "2026-08-03"
+  },
+  "checker": {
+   "unit": "G",
+   "normal": {
+    "caution": 700,
+    "good": 700,
+    "excellent": 700,
+    "target": 700
+   },
+   "reset": {
+    "caution": 350,
+    "good": 350,
+    "excellent": 350,
+    "target": 350
+   },
+   "modes": [
+    {
+     "key": "normal",
+     "label": "AT間（実ゲーム数）"
+    },
+    {
+     "key": "reset",
+     "label": "設定変更後（AT間）"
+    }
+   ]
   }
  },
  {
