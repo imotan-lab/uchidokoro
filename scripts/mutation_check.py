@@ -8411,6 +8411,15 @@ MUTATIONS = [
         "after": "            pass\n",
         "run": ["scripts/mode_queue.py"],
     },
+    {
+        "why": "★モードの欄：本文の写しを改行の自動変換つきで読み戻す"
+               "（★本文の「\\r」が改行に化けて指紋が合わず、1件も控えられない＝2026-10-27★）★",
+        "file": "scripts/mode_verdict.py",
+        "before": "    with open(p, encoding=\"utf-8\", newline=\"\") as f:\n",
+        "after": "    with open(p, encoding=\"utf-8\") as f:\n",
+        "run": ["scripts/mode_verdict.py"],
+        "issues": [],
+    },
 ]
 
 

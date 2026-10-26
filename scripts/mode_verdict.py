@@ -466,6 +466,23 @@ def selftest() -> int:
         t("★引用をすり替えても使わない★",
           verdict("swap", "mode", C)[0] == "UNKNOWN")
 
+        # ★★本文に「\r」があっても、写しを読み戻して同じ指紋になる★★
+        #   （2026-10-27・実際に起きた）＝読み戻しが改行の自動変換で
+        #   「\r」を改行に変え、出典ページの本文が変わって
+        #   「指紋が合いません」で何も控えられなかった（リコリコ・DMMの本文）。
+        import mode_ask as _ma2
+        _cr = {U: "前の行\r後ろの行\r\nその次", S: "ゾーンの話です。"}
+        with tempfile.TemporaryDirectory(prefix="mvcr_") as _dir:
+            _mp = os.path.join(_dir, "x_manifest.json")
+            with open(_mp.replace("_manifest.json", "_corpus.txt"), "w",
+                      encoding="utf-8", newline="\n") as f:
+                f.write(_ma2.dump_pages(_cr))
+            _back, _why = _read_corpus_file(_mp)
+        t("★★本文の「\\r」が写しの読み戻しで変わらない★★"
+          "／★これが無いと指紋が合わず、モード・ゾーンを1件も控えられない★",
+          not _why and _back == _cr
+          and _pc.manifest(_back, True)["fp"] == _pc.manifest(_cr, True)["fp"])
+
         # ── 箱の状態 ──
         t("★どちらかが「ある」なら表を出す★",
           box_state("HAS", "UNKNOWN") == "HAS"
@@ -560,7 +577,9 @@ def _read_corpus_file(manifest_path: str):
     p = manifest_path.replace("_manifest.json", "_corpus.txt")
     if not os.path.isfile(p):
         return {}, f"本文の写しがありません（{p}）"
-    with open(p, encoding="utf-8") as f:
+    # ★newline="" で読む★（2026-10-27）＝改行の自動変換で本文の「\r」が
+    #   改行に化け、書いたときと指紋が合わなくなる（書く側も newline="\n"）
+    with open(p, encoding="utf-8", newline="") as f:
         pages = _ma.load_pages(f.read())
     if not pages:
         return {}, "本文の写しが空です"
