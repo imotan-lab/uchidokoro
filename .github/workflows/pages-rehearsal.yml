@@ -106,6 +106,8 @@ jobs:
           #   公開するか・検索に載せるかを決める中心なのに、
           #   手元で流したときしか確かめていなかった。
           python scripts/page_decision.py --selftest
+          # ★最終更新日を git の記録から作る部品★（2026-10-26・公開の直前に呼ぶ）
+          python scripts/updated_dates.py --selftest
           python scripts/apply_indexing_policy.py --selftest
           python scripts/gates.py --selftest
           python scripts/audit_public.py --selftest

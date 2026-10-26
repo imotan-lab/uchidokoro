@@ -57,6 +57,7 @@
     <p class="eyebrow"><a href="index.html" class="eyebrow-link">‹ 一覧</a>&nbsp;&nbsp;ARTICLE</p>
     <h1 id="machineTitle" class="page-title">L吉宗</h1>
     <p id="heroSub" class="hero-sub">吉宗はサボハニ（大都技研グループ）製のスマスロAT機です。天井は999G+αで、純増約7.1枚/Gの差枚数管理型となっています。共通俵確率に大きな設定差があります。ボーナス後193Gまでの天国フォローが必須です。</p>
+    <p id="updatedDate" class="updated-date is-hidden"></p>
     <!-- ★数値の出どころを控えめに明示する★（2026-07-30・運営者判断）
          各種解析情報をもとにまとめた当サイトの整理であって、
          1つ1つの数値の確認はまだ済んでいない、という状態を短く示す。
@@ -122,7 +123,7 @@
     </nav>
 
     <div class="article-block" id="evTableBlock">
-      <h2 class="block-label">▶ 期待値早見表</h2>
+      <h2 class="block-label">▶ ゲーム数別の早見表</h2>
       <div id="evModeToggle" class="mode-toggle ev-mode-toggle"></div>
       <table id="evTable" class="ev-table"></table>
       <p class="hint-text" id="evTableNote"></p>
@@ -284,6 +285,18 @@ function resolveMachineSlug() {
   // タイトル（document.titleはmeta-auto.jsが担当）
   document.getElementById("machineTitle").textContent = machine.name;
   document.getElementById("heroSub").textContent = detail?.lead || "";
+  // ★最終更新日★（2026-10-26）＝公開の直前に git の記録から作る（scripts/updated_dates.py）。
+  //   記事データの updated 欄は道具が書き換えておらず古いので使わない。
+  //   ★読めない・形が違うときは出さない★（間違った日付を見せない）
+  //   ★ブラウザの記憶（HTTPキャッシュ）を使わない★（review282 の4）＝作れなかった日に古い日付を出さない
+  fetch("assets/data/updated-dates.json", {cache: "no-store"}).then(r => r.ok ? r.json() : null).then(u => {
+    const d = u && u.dates && u.dates[slug];
+    const m = typeof d === "string" && d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return;
+    const el = document.getElementById("updatedDate");
+    el.textContent = `最終更新：${+m[1]}年${+m[2]}月${+m[3]}日`;
+    el.classList.remove("is-hidden");
+  }).catch(() => {});
 
   // 原作リンク表示（machine.original があれば）
   if (machine.original && machine.original.title) {
@@ -307,7 +320,7 @@ function resolveMachineSlug() {
   //   旧preview（既存7機種）は従来どおりバナーを出す。
   const _isAuto = (machine.publication_policy !== undefined);
   // ★★新台で狙い目の4表示を出すのは、機種行と記事の指紋が等しいときだけ★★（2026-10-04）
-  //   （チェッカー・狙い目早見表・期待値早見表の判定・記事の狙い目の欄）。
+  //   （チェッカー・狙い目早見表・ゲーム数別の早見表の判定・記事の狙い目の欄）。
   //   指紋は Python の target_projection が作り、押し出しの関所（監査57）が中身まで照合する。
   //   ★ページは判定しない★（文字が等しいかを見るだけ＝規則を2か所に書かない）。
   const _targetSynced = _isAuto && typeof machine.targetProjection === "string"
@@ -480,7 +493,7 @@ function resolveMachineSlug() {
     if (checkerNote) {
       checkerNote.textContent = checkerNormal.note || "設定狙い向けの機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨します。";
     }
-    // 期待値早見表ブロック自体も非表示（ラベル「▶ 期待値早見表」も含めて消す）
+    // ゲーム数別の早見表ブロック自体も非表示（ラベル「▶ ゲーム数別の早見表」も含めて消す）
     const evBlockHide = document.getElementById("evTableBlock");
     if (evBlockHide) evBlockHide.classList.add("is-hidden");
   } else {
@@ -1157,7 +1170,7 @@ function resolveMachineSlug() {
   // ★目次表★（2026-08-31・運営者の要望・台帳#523）
   //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
   //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
-  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //   ★ゲーム数別の早見表は入れない★＝モードの切り替えで出たり消えたりするので、
   //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
   (function renderToc(){
     const tocBlock = document.getElementById("tocBlock");

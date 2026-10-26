@@ -285,6 +285,8 @@ button, input, select { font: inherit; }
   padding: 20px;
 }
 .is-hidden { display: none !important; }
+/* ★最終更新日★（2026-10-26）機種ページのタイトルの下 */
+.updated-date { font-size: var(--fs-sub); color: var(--muted); margin: 4px 0 0; }
 .fallback-msg { padding: 40px; text-align: center; color: var(--muted); }
 .fallback-msg a { color: var(--gold); }
 .aff-pixel { border: none; }

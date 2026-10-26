@@ -8362,6 +8362,20 @@ MUTATIONS = [
         "after": "        _now_utc = self._keep\n",
         "run": ["scripts/claim_ledger.py", "scripts/claim_reconcile.py"],
     },
+    {
+        "why": "★最終更新日：消えた版を飛ばす（★消して同じ中身で戻したとき、消す前の古い日付が出る・review282★）★",
+        "file": "scripts/updated_dates.py",
+        "before": "            c = d if d in (MISSING, BROKEN) else _canon(d, drop=(\"updated\",))\n",
+        "after": "            if d in (MISSING, BROKEN):\n                continue\n            c = _canon(d, drop=(\"updated\",))\n",
+        "run": ["scripts/updated_dates.py"],
+    },
+    {
+        "why": "★最終更新日：在るのに読めない版を「無い」と読む（★古い日付のまま正常に終わる・review283★）★",
+        "file": "scripts/updated_dates.py",
+        "before": "        raise RuntimeError(f\"{sha[:8]}:{path} を読めません: {r.stderr.decode('utf-8', 'replace')[:200]}\")\n",
+        "after": "        return MISSING\n",
+        "run": ["scripts/updated_dates.py"],
+    },
 ]
 
 

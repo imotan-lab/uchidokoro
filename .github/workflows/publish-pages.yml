@@ -42,6 +42,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # ★最終更新日を git の記録から作るので、記録を全部取る★（2026-10-26）
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
@@ -70,6 +73,15 @@ jobs:
           # ★シンボリックリンクを配信しない★
           l="$(find . -path ./.git -prune -o -type l -print | wc -l)"
           [ "$l" -eq 0 ] || { echo "★シンボリックリンクが ${l} 件あります★"; exit 1; }
+
+      - name: 機種ごとの最終更新日を作る（git の記録から）
+        shell: bash
+        run: |
+          # ★作れなくても公開は止めない★＝ページは日付を出さないだけ（間違った日付を見せない）。
+          #   ★作れなかったことは注記に残す★（黙って消えない）
+          #   ★10分で打ち切る★（止まったまま公開へ進めなくならない・review282 の5）
+          timeout 600 python scripts/updated_dates.py --write assets/data/updated-dates.json \
+            || { rm -f assets/data/updated-dates.json; echo "::warning title=最終更新日::★作れませんでした。ページは日付を出しません★"; }
 
       - name: Setup Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5

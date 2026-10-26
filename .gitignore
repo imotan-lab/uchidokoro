@@ -52,3 +52,5 @@ _design/spec_review/
 .publish-in-progress.json
 .recover.lock
 .push-pending.json
+# ★最終更新日は公開の直前に git の記録から作る生成物★（scripts/updated_dates.py・2026-10-26）
+assets/data/updated-dates.json
