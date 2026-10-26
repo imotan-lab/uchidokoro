@@ -12531,6 +12531,110 @@
   }
  },
  {
+  "slug": "dmm_5073",
+  "name": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン",
+  "seo": {
+   "title": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "UNKNOWN",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "MACHINE_PROFILE_UNKNOWN"
+   ],
+   "claims": [
+    "payout_range"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-10-26",
+   "input_digest": "sha256:30e99f7519a9860faa804dc25ca4b98423ee110c814c4e9a42851407927bbd8e"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-11-02",
+  "identity": {
+   "manufacturer_id": "kyoraku",
+   "official_product_url": "https://p-town.dmm.com/machines/5073",
+   "announced_name": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5073 型式=Lガンゲイル・オンラインMD メーカー=京楽 導入=2026-11-02 確認日=2026-10-26",
+   "market_release_date": "2026-11-02",
+   "regulatory_model_code": "Lガンゲイル・オンラインMD",
+   "_model_code_sources": [
+    "vote:dmm-ptown"
+   ]
+  }
+ },
+ {
+  "slug": "dmm_5119",
+  "name": "Ｌパチスロ ゴジラ対エヴァンゲリオン ２",
+  "seo": {
+   "title": "Ｌパチスロ ゴジラ対エヴァンゲリオン ２ スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [
+    "payout_range"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-10-27",
+   "input_digest": "sha256:b57c69a79a963e0d796881fe7f4f06f23049ac94aeb77e09defbad93dcd76930"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-11-02",
+  "identity": {
+   "manufacturer_id": "dmm:ビスティ",
+   "official_product_url": "https://p-town.dmm.com/machines/5119",
+   "announced_name": "Ｌパチスロ ゴジラ対エヴァンゲリオン ２",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5119 型式=未掲載 メーカー=ビスティ 導入=2026-11-02 確認日=2026-10-26",
+   "market_release_date": "2026-11-02"
+  }
+ },
+ {
   "slug": "dmm_5090",
   "name": "スマート沖スロ ハイハイシオサイRe",
   "seo": {
@@ -12901,110 +13005,6 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5136 型式=未掲載 メーカー=セブンリーグ 導入=2027-01 確認日=2026-10-22",
    "market_release_date": "2027-01"
-  }
- },
- {
-  "slug": "dmm_5073",
-  "name": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン",
-  "seo": {
-   "title": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "UNKNOWN",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [
-    "spec"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "cz",
-    "ceiling",
-    "setting",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "MACHINE_PROFILE_UNKNOWN"
-   ],
-   "claims": [
-    "payout_range"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-10-26",
-   "input_digest": "sha256:30e99f7519a9860faa804dc25ca4b98423ee110c814c4e9a42851407927bbd8e"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-11-02",
-  "identity": {
-   "manufacturer_id": "kyoraku",
-   "official_product_url": "https://p-town.dmm.com/machines/5073",
-   "announced_name": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン",
-   "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5073 型式=Lガンゲイル・オンラインMD メーカー=京楽 導入=2026-11-02 確認日=2026-10-26",
-   "market_release_date": "2026-11-02",
-   "regulatory_model_code": "Lガンゲイル・オンラインMD",
-   "_model_code_sources": [
-    "vote:dmm-ptown"
-   ]
-  }
- },
- {
-  "slug": "dmm_5119",
-  "name": "Ｌパチスロ ゴジラ対エヴァンゲリオン ２",
-  "seo": {
-   "title": "Ｌパチスロ ゴジラ対エヴァンゲリオン ２ スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [
-    "spec"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "cz",
-    "ceiling",
-    "setting",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
-   "claims": [
-    "payout_range"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-10-27",
-   "input_digest": "sha256:b57c69a79a963e0d796881fe7f4f06f23049ac94aeb77e09defbad93dcd76930"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-11-02",
-  "identity": {
-   "manufacturer_id": "dmm:ビスティ",
-   "official_product_url": "https://p-town.dmm.com/machines/5119",
-   "announced_name": "Ｌパチスロ ゴジラ対エヴァンゲリオン ２",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5119 型式=未掲載 メーカー=ビスティ 導入=2026-11-02 確認日=2026-10-26",
-   "market_release_date": "2026-11-02"
   }
  }
 ]
