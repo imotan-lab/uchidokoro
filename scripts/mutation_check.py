@@ -8327,6 +8327,34 @@ MUTATIONS = [
         "after": "    if rate_keys(new) and _rebuild_target_text() != 0:\n        return 1\n    print(f\"{slug}: 欄を直しました",
         "run": ["scripts/checker_verdict.py"],
     },
+    {
+        "why": "★新しい欄を足しても、足した欄の一覧に残さない（★突き合わせの検査が想定を合わせられず、無人タスクが止まる★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "    _added = sorted(_mode_keys(new) - _mode_keys(ms[i]))\n",
+        "after": "    _added = []\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★足した欄の一覧を書けなくても、機種行だけ書く（★一覧と機種行が食い違ったまま残る★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "            print(f\"★書きません★: 足した欄の一覧を書けません（{type(e).__name__}: {e}）\")\n            return 1\n",
+        "after": "            print(f\"★書きません★: 足した欄の一覧を書けません（{type(e).__name__}: {e}）\")\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★一度足した欄は、消したあと足し直しても記録しない（★足し直した欄が永久に想定に入らず、無人タスクが止まる・review274★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        if mode_latest(slug, k) != \"add\":\n",
+        "after": "        if not any(x[\"slug\"] == slug and x[\"mode\"] == k for x in rows):\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★2AIが足した欄を「元からのチェッカー」と数える（★チェッカーが新しく付いた機種の2つ目の欄で、機種数が合わなくなる・review274★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "had_checker=bool(_baseline_keys(slug, _mode_keys(ms[i]))))\n",
+        "after": "had_checker=bool(_mode_keys(ms[i])))\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
 ]
 
 

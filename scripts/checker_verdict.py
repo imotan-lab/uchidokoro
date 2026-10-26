@@ -873,6 +873,90 @@ def drops_all() -> list:
     return rows
 
 
+#   ★★足した欄も一覧（checker-mode-adds.json）に残す★★（2026-10-26）＝公開済みの機種に
+#   新しい欄を足すと、突き合わせの検査の固定の想定（欄の数・チェッカーのある機種数）と合わなくなり、
+#   無人タスクは見張りのスクリプトを触れないので、人が想定を書き足すまで止まっていた。
+ADDS_STORE = os.path.join(BASE, "assets", "data", "checker-mode-adds.json")
+
+
+def adds_all() -> list:
+    """★足した欄の一覧★（無ければ空・壊れていれば例外＝黙って0件と読まない）"""
+    if not os.path.exists(ADDS_STORE):
+        return []
+    got = _sj.read_json(ADDS_STORE, expect=dict)
+    rows = got.get("adds")
+    if not isinstance(rows, list) or not all(
+            isinstance(x, dict) and x.get("slug") and x.get("mode") for x in rows):
+        raise ValueError("checker-mode-adds.json の中身が壊れています")
+    return rows
+
+
+def _mode_keys(m: dict) -> set:
+    return {str(x.get("key")) for x in (((m or {}).get("checker") or {}).get("modes") or [])
+            if isinstance(x, dict) and x.get("key")}
+
+
+_PENDING_SEQ: list = []
+
+
+def _seq_of(x: dict) -> int:
+    """★通し番号★（番号の無い古い行は 0＝いちばん古い出来事として扱う）"""
+    v = x.get("seq", 0)
+    if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+        raise ValueError(f"欄の一覧の通し番号が壊れています: {x.get('slug')}.{x.get('mode')}")
+    return v
+
+
+def mode_history() -> dict:
+    """★(機種, 欄) ごとの出来事の並び★＝[(番号, "drop"|"add", 行), ...]（番号の順）
+    ★2つの一覧は履歴★＝消してから足し直す・足してから消すを、順番ごと残す（Codex review274）"""
+    ev: dict = {}
+    for kind, rows in (("drop", drops_all()), ("add", adds_all())):
+        for x in rows:
+            ev.setdefault((x["slug"], x["mode"]), []).append((_seq_of(x), kind, x))
+    for k in ev:
+        # 同じ番号（どちらも番号の無い古い行）は、消した欄を先にする（足す一覧は番号つきでしか書かない）
+        ev[k].sort(key=lambda e: (e[0], 0 if e[1] == "drop" else 1))
+    return ev
+
+
+def mode_latest(slug: str, key: str):
+    h = mode_history().get((slug, key)) or []
+    return h[-1][1] if h else None
+
+
+def _baseline_keys(slug: str, keys) -> set:
+    """★元から在った欄だけ★（足した履歴から始まる欄＝2AIが足した欄を除く）
+    ＝2つ目の欄を足すとき「元からチェッカーを持っていた」と取り違えないため"""
+    h = mode_history()
+    return {k for k in keys if not ((slug, k) in h and h[(slug, k)][0][1] == "add")}
+
+
+def _next_seq() -> int:
+    seqs = [_seq_of(x) for x in drops_all() + adds_all()] + list(_PENDING_SEQ)
+    return 1 + max(seqs or [0])
+
+
+def _record_adds(slug: str, keys: list, dec: dict, had_checker: bool) -> None:
+    """★機種行を書く前に、足す欄を一覧へ書く★（途中で止まっても同じ決定の再実行で収束する）
+    ★had_checker＝足す前にその機種がチェッカーの欄を持っていたか★（新しくチェッカーが付いた機種を数えるため）"""
+    import datetime as _dta
+    rows = adds_all()
+    for k in keys:
+        if mode_latest(slug, k) != "add":
+            rows.append({"slug": slug, "mode": k, "why": str(dec.get("why") or "")[:300],
+                         "judges": list(dec.get("judges") or []),
+                         "at": _dta.date.today().isoformat(), "seq": _next_seq(),
+                         "had_checker": bool(had_checker)})
+            _PENDING_SEQ.append(rows[-1]["seq"])
+    tmp = ADDS_STORE + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps({"schema_version": "checker-mode-adds/v1", "adds": rows},
+                           ensure_ascii=False, indent=1) + "\n")
+    os.replace(tmp, ADDS_STORE)
+    _PENDING_SEQ.clear()
+
+
 def _note_places(m: dict, key: str, rate: str = "", count=None) -> list:
     """★その注記の置き場（辞書そのもの）★ modeData と直下に同じ欄があれば両方返す"""
     ck = (m or {}).get("checker") or {}
@@ -1098,17 +1182,19 @@ def apply_revise(dec: dict, ms: list, dry_run: bool = False) -> int:
     if drops:
         import datetime as _dtr
         rows = drops_all()
-        have = {(x["slug"], x["mode"]) for x in rows}
         for k in drops:
-            if (slug, k) not in have:
+            if mode_latest(slug, k) != "drop":
                 rows.append({"slug": slug, "mode": k, "why": str(dec.get("why") or "")[:300],
                              "judges": list(dec.get("judges") or []),
-                             "at": _dtr.date.today().isoformat()})
+                             "at": _dtr.date.today().isoformat(), "seq": _next_seq()})
+                # ★同じ書き込みの中で次の番号を正しく出すため、書きかけの行も数える★
+                _PENDING_SEQ.append(rows[-1]["seq"])
         tmp = DROPS_STORE + ".tmp"
         with open(tmp, "w", encoding="utf-8", newline="\n") as f:
             f.write(json.dumps({"schema_version": "checker-mode-drops/v1", "drops": rows},
                                ensure_ascii=False, indent=1) + "\n")
         os.replace(tmp, DROPS_STORE)
+        _PENDING_SEQ.clear()
     if new != ms[i]:
         ms[i] = new
         tmp = MACHINES + ".tmp"
@@ -1289,6 +1375,14 @@ def apply_decision(path: str, dry_run: bool = False) -> int:
         print(f"{slug}: こう書きます →")
         print("  " + json.dumps(new.get("checker"), ensure_ascii=False)[:600])
         return 0
+    _added = sorted(_mode_keys(new) - _mode_keys(ms[i]))
+    # ★新台経路は突き合わせの検査が数えないので記録しない★（育成が機種行を作り直しても止めないため）
+    if _added and "publication_policy" not in ms[i]:
+        try:
+            _record_adds(slug, _added, dec, had_checker=bool(_baseline_keys(slug, _mode_keys(ms[i]))))
+        except (OSError, ValueError, RuntimeError) as e:
+            print(f"★書きません★: 足した欄の一覧を書けません（{type(e).__name__}: {e}）")
+            return 1
     ms[i] = new
     tmp = MACHINES + ".tmp"
     # ★字下げ1・LF★＝ほかの書き手（grow_machine / publish_new_machine 等）と同じ書式。
@@ -1361,6 +1455,102 @@ def show(slug: str) -> int:
 ★caution ≦ good ≦ excellent ≦ ceiling★
 """ % slug)
     return 0
+
+
+def _adds_tests(t) -> None:
+    """★足した欄を一覧に残す★（2026-10-26）＝本番の machines.json と一覧には触らない"""
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    global MACHINES, DETAILS, ADDS_STORE
+    keep = (MACHINES, DETAILS, ADDS_STORE)
+    tmpd = tempfile.mkdtemp(prefix="ckadd_")
+    try:
+        DETAILS = os.path.join(tmpd, "details")
+        os.makedirs(DETAILS)
+        MACHINES = os.path.join(tmpd, "machines.json")
+        ADDS_STORE = os.path.join(tmpd, "adds.json")
+        m = {"slug": "zzz_add", "name": "試験機",
+             "checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                         "normal": {"ceiling": 1000, "caution": 300, "good": 400, "excellent": 600}}}
+
+        def put():
+            with open(MACHINES, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(json.dumps([m], ensure_ascii=False, indent=1) + "\n")
+
+        def run(modes):
+            dp = os.path.join(tmpd, "dec.json")
+            with open(dp, "w", encoding="utf-8") as fh:
+                json.dump({"slug": "zzz_add", "judges": ["claude", "codex"],
+                           "why": "天井1000Gで恩恵はAT確定のため（試験）", "modes": modes},
+                          fh, ensure_ascii=False)
+            with contextlib.redirect_stdout(_io.StringIO()):
+                return apply_decision(dp)
+
+        put()
+        rc = run([{"key": "normal", "label": "通常", "ceiling": 1000,
+                   "excellent": 600, "good": 450, "caution": 300}])
+        t("★あった欄の線を直すだけなら、足した欄の一覧は作らない★",
+          rc == 0 and not os.path.exists(ADDS_STORE))
+        put()
+        rc = run([{"key": "reset", "label": "リセット", "ceiling": 1000,
+                   "excellent": 400, "good": 250, "caution": 150}])
+        got = adds_all() if os.path.exists(ADDS_STORE) else []
+        t("★★新しい欄を足したら、足した欄の一覧に残す★★（突き合わせの検査が想定を合わせる）",
+          rc == 0 and [(x["slug"], x["mode"]) for x in got] == [("zzz_add", "reset")]
+          and "reset" in _mode_keys(json.load(open(MACHINES, encoding="utf-8"))[0]))
+        put()
+        with open(ADDS_STORE, "w", encoding="utf-8") as fh:
+            fh.write("{")
+        rc = run([{"key": "reset", "label": "リセット", "ceiling": 1000,
+                   "excellent": 400, "good": 250, "caution": 150}])
+        t("★足した欄の一覧が壊れていたら、機種行も書かない★（黙って0件と読まない）",
+          rc == 1 and "reset" not in _mode_keys(json.load(open(MACHINES, encoding="utf-8"))[0]))
+        # ★★足す→消す→足し直すを本物の書き込みで通し、履歴が順番どおりに残る★★（Codex review274 の1）
+        global DROPS_STORE
+        keep_d, keep_rb = DROPS_STORE, globals()["_rebuild_target_text"]
+        try:
+            DROPS_STORE = os.path.join(tmpd, "drops.json")
+            globals()["_rebuild_target_text"] = lambda: 0
+            os.remove(ADDS_STORE)
+            put()
+            _R = [{"key": "reset", "label": "リセット", "ceiling": 1000,
+                   "excellent": 400, "good": 250, "caution": 150}]
+            rc1 = run(_R)
+            rev = {"slug": "zzz_add", "decision": REVISE, "judges": ["claude", "codex"],
+                   "why": "裏付けの無いリセットの線なので消す（試験）", "drop_modes": ["reset"],
+                   "numbers_removed": [{"n": n, "why": "裏付けの無い線（試験）"} for n in ("150", "250")]}
+            with contextlib.redirect_stdout(_io.StringIO()):
+                rc2 = apply_revise(rev, _machines())
+            rc3 = run(_R)
+            h = mode_history().get(("zzz_add", "reset")) or []
+            t("★★足す→消す→足し直すは、番号の順に「足す・消す・足す」と残り、いまの姿は「足した」★★"
+              "（2つの一覧を集合で打ち消すと、足し直した欄が永久に数えられない・review274）",
+              (rc1, rc2, rc3) == (0, 0, 0) and [e[1] for e in h] == ["add", "drop", "add"]
+              and [e[0] for e in h] == sorted({e[0] for e in h})
+              and mode_latest("zzz_add", "reset") == "add")
+            # ★チェッカーの無い機種に足すと「元から持っていなかった」、2つ目の欄も同じ★（review274 の2）
+            os.remove(ADDS_STORE)
+            os.remove(DROPS_STORE)
+            m0 = m
+            m = {"slug": "zzz_add", "name": "試験機", "checker": {"unit": "G", "modes": []}}
+            put()
+            # ★天井が確かめられていない機種なので、天井は書かない★（線だけ受け取る）
+            _N = [{"key": "normal", "label": "通常", "excellent": 600, "good": 400, "caution": 300}]
+            _R2 = [{"key": "reset", "label": "リセット", "excellent": 400, "good": 250, "caution": 150}]
+            rcn = run(_N)
+            rcr = run(_N + _R2)
+            had = [(x["mode"], x.get("had_checker")) for x in adds_all()]
+            t("★チェッカーの無い機種に欄を足すと、2つ目の欄も「元から持っていなかった」と残す★"
+              "（あとから足した欄を、元の欄と取り違えない）",
+              (rcn, rcr) == (0, 0) and had == [("normal", False), ("reset", False)])
+            m = m0
+        finally:
+            DROPS_STORE, globals()["_rebuild_target_text"] = keep_d, keep_rb
+    finally:
+        MACHINES, DETAILS, ADDS_STORE = keep
+        shutil.rmtree(tmpd, ignore_errors=True)
 
 
 def _unsync_tests(t) -> None:
@@ -2058,6 +2248,7 @@ def selftest() -> int:
 
     _no_line_tests(t)
     _revise_tests(t)
+    _adds_tests(t)
     _unsync_tests(t)
     _format_tests(t)
     _restore_tests(t)

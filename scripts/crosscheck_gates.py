@@ -181,10 +181,39 @@ EXPECTED_AXIS_PASSED = {
 }
 
 
-def _mode_drops() -> set:
-    """★2AIが消した欄★（checker_verdict が書く一覧・壊れていたら例外＝黙って0件と読まない）"""
+def _mode_changes() -> tuple:
+    """★2AIが消した欄・足した欄★（checker_verdict が書く2つの履歴・壊れていたら例外＝黙って0件と読まない）
+    ★固定の想定は、どちらの一覧も無かったときの姿★なので、欄ごとに
+      最初の出来事 … 「消した」なら元から在った欄／「足した」なら元に無かった欄
+      最後の出来事 … いまの姿（消した＝無いはず／足した＝在るはず）
+    で決める（Codex review274：足す→消す→足し直す、で相殺したままにならない）。
+    返すもの＝(元から在っていま無い, 元に無くていま在る, いま無いはず, いま在るはず, 元からチェッカーを持っていた機種)"""
     import checker_verdict as _cvd
-    return {(x["slug"], x["mode"]) for x in _cvd.drops_all()}
+    net_drop, net_add, gone, there, had = set(), set(), set(), set(), set()
+    first_add: dict = {}
+    for key, evs in _cvd.mode_history().items():
+        base = evs[0][1] == "drop"
+        now = evs[-1][1]
+        (gone if now == "drop" else there).add(key)
+        if base and now == "drop":
+            net_drop.add(key)
+        elif not base and now == "add":
+            net_add.add(key)
+        if base:
+            had.add(key[0])
+        for e in evs:
+            if e[1] == "add" and (key[0] not in first_add or e[0] < first_add[key[0]][0]):
+                first_add[key[0]] = e
+    # ★元からチェッカーを持っていたかは、その機種で最初に足したときの記録だけで決める★
+    #   （2つ目以降の欄を足すときには、もう足した欄を持っているので当てにならない）
+    for s_, e in first_add.items():
+        if e[2].get("had_checker", True):
+            had.add(s_)
+    return net_drop, net_add, gone, there, had
+
+
+def _mode_drops() -> set:
+    return _mode_changes()[0]
 
 
 def _all_allow_ledger(sim: dict, detail: dict, g: dict, slug: str) -> dict:
@@ -214,12 +243,19 @@ def run() -> int:
 
     needs_edit: set = set()
     needs_display_fix: set = set()
-    drops = _mode_drops()
+    drops, adds, _gone, _there, _had_ck = _mode_changes()
     dropped_live = 0
+    # ★★2AIが公開済みの機種に足した欄は、想定に自動で足す★★（2026-10-26）＝
+    #   無人タスクは見張りのスクリプトを触れないので、足すたびに検査が止まっていた
+    added_by_slug: dict = {}
+    all_added: set = set()
+    # ★機種ごとの「実際に公開データへ入った欄の数」★（編集待ちから抜けた機種の分を想定に足すため）
+    live_by_slug: dict = {}
+    published_slugs: set = set()
     # ★★記録した欄が、本当に機種行から消えていること★★（2026-10-25・Codex review258 の1）＝
     #   件数だけを差し引くと、記録した欄を残したまま別の欄を消しても数が合って緑になる
     _by_slug = {m.get("slug"): m for m in machines}
-    for (s_, k_) in sorted(drops):
+    for (s_, k_) in sorted(_gone):
         _ck = (_by_slug.get(s_) or {}).get("checker") or {}
         _left = (k_ in {str(x.get("key")) for x in (_ck.get("modes") or []) if isinstance(x, dict)}
                  or k_ in _ck or k_ in (_ck.get("modeData") or {}))
@@ -228,6 +264,13 @@ def run() -> int:
         elif _left:
             problems.append(f"消した欄の一覧にあるのに、欄が残っています: {s_}.{k_}"
                             "（同じ決定をもう一度流すと消します）")
+    for (s_, k_) in sorted(_there):
+        _ck = (_by_slug.get(s_) or {}).get("checker") or {}
+        if s_ not in _by_slug:
+            problems.append(f"足した欄の一覧に、機種一覧に無い機種があります: {s_}.{k_}")
+        elif k_ not in {str(x.get("key")) for x in (_ck.get("modes") or []) if isinstance(x, dict)}:
+            problems.append(f"足した欄の一覧にあるのに、欄がありません: {s_}.{k_}"
+                            "（足した欄が黙って消えた）")
     for m in machines:
         # ★新台経路（page-decision/v1）は gates 経路に載せない★（Codex72回目）
         #   build_public_data と同じ「明示的に除外」。壊れた判定書はここで止まる。
@@ -260,12 +303,29 @@ def run() -> int:
                 problems.append(f"{m['slug']}: 公開が止まった（{e}）")
             continue
         published += 1
+        published_slugs.add(m["slug"])
         dropped_live += sum(1 for (s_, _k) in drops if s_ == m["slug"])
+        # ★★2AIが足した欄は、公開されたかどうかに関係なく記録の数だけ想定に足す★★（Codex review275）＝
+        #   公開された欄から数えると、足した欄を黙って非公開にしても想定が一緒に減って通る。
+        #   ★元からチェッカーを持っていなかった機種は、チェッカー機種数にも足す★
+        #   （元の欄を消して足した欄だけ残った機種を二重に数えない・review274）
+        added_by_slug[m["slug"]] = sum(1 for (s_, _k) in adds if s_ == m["slug"])
+        if added_by_slug[m["slug"]] and m["slug"] not in _had_ck:
+            all_added.add(m["slug"])
         # ★宣言ではなく「実際に公開データへ入った mode」を数える★
         #   （宣言だけ残って中身が無い状態を「監査済み」と誤認しないため）
         pub_ck = view["machine"].get("checker")
+        # ★★足した欄は、件数だけでなく欄そのものが公開されていること★★（Codex review276）＝
+        #   件数だけだと、足した欄を非公開にして別の欄を記録なしで足すと数が合って通る
+        _live_keys = ({k for k in view["gates"]["checker_modes"] if k in pub_ck}
+                      if isinstance(pub_ck, dict) else set())
+        for (s_, k_) in sorted(adds):
+            if s_ == m["slug"] and k_ not in _live_keys:
+                problems.append(f"足した欄が公開されていません: {s_}.{k_}"
+                                "（非公開にするなら消す決定を通す）")
         if isinstance(pub_ck, dict):
             live = [k for k in view["gates"]["checker_modes"] if k in pub_ck]
+            live_by_slug[m["slug"]] = len(live)
             if live:
                 checker_machines += 1
                 checker_modes += len(live)
@@ -295,10 +355,29 @@ def run() -> int:
     for s_ in sorted(needs_edit - EXPECTED_NEEDS_EDIT):
         problems.append(f"編集待ちが増えた（原稿に公開できない表現が入った）: {s_}")
     _fixed = sorted(EXPECTED_NEEDS_EDIT - needs_edit)
+    # ★★編集が済んで公開できるようになった機種の分は、想定を自動で合わせる★★（2026-10-26）
+    #   ★なぜ★＝直す前は、記事を直して公開できるようになるたびに、人がこのファイルの想定
+    #   （機種数・チェッカーの機種数と欄の数）を書き足さないと検査が止まった。
+    #   無人タスクは見張りのスクリプトに触れないので、★タスクが記事を直すほど、その日の公開が
+    #   止まる★形だった（2026-10-25 にモンキーVで実際に起きた）。
+    #   ★緩めていないもの★＝新しく編集待ちに入った機種・公開されるはずの機種が消えた・
+    #   直していない機種の欄が増減した、はいままでどおり止める。足すのは「編集待ちの名簿にいて、
+    #   実際に公開できた機種」の分だけ（その機種の欄の数は実際に公開データへ入った数）。
+    _fixed_pub = [s_ for s_ in _fixed if s_ in published_slugs]
+    expected_public += len(_fixed_pub)
+    fixed_checker_machines = sum(1 for s_ in _fixed_pub if live_by_slug.get(s_, 0) > 0)
+    fixed_checker_modes = sum(live_by_slug.get(s_, 0) for s_ in _fixed_pub)
+    #   ★編集が済んだ機種の「消した欄」は引かない★＝その機種の欄はもともと想定に入っておらず、
+    #   足す数（live）も消したあとの実数なので、引くと二重に引いて検査が止まる。
+    dropped_live -= sum(1 for (s_, _k) in drops if s_ in _fixed_pub)
+    #   ★足した欄も同じ★＝編集が済んだ機種の欄は live でもう数えたので、二重に足さない
+    added_live = sum(n for s_, n in added_by_slug.items() if s_ not in _fixed_pub)
+    added_machines = len(all_added - set(_fixed_pub))
     if _fixed:
         print(f"✅ 編集が済んだ機種: {len(_fixed)} 件 {_fixed[:8]}"
               f"{' …' if len(_fixed) > 8 else ''}")
-        print("   → EXPECTED_NEEDS_EDIT から外してください")
+        print(f"   （公開できた {len(_fixed_pub)} 件・チェッカー {fixed_checker_machines} 機種 {fixed_checker_modes} 欄は想定に自動で足しました。"
+              "名簿から外すのは人の手が空いたときでよい）")
 
     # 件数予算（黙って機種が消える事故を止める）
     if published != expected_public:
@@ -312,13 +391,17 @@ def run() -> int:
 
     # ★checkerが実際に射影・監査されていることを停止条件にする★
     #   （以前は暫定状態のズレで全checkerが未検証のまま「違反0」と表示していた）
-    if checker_machines != EXPECTED_CHECKER_MACHINES:
+    _exp_machines = EXPECTED_CHECKER_MACHINES + fixed_checker_machines + added_machines
+    if checker_machines != _exp_machines:
         problems.append(f"checkerを公開した機種数が想定と違う: "
-                        f"{checker_machines} != {EXPECTED_CHECKER_MACHINES}")
-    if checker_modes != EXPECTED_CHECKER_MODES - dropped_live:
+                        f"{checker_machines} != {_exp_machines}"
+                        f"（編集が済んだ機種 {fixed_checker_machines}・2AIがチェッカーを付けた機種 {added_machines} を足した想定）")
+    _exp_modes = EXPECTED_CHECKER_MODES - dropped_live + fixed_checker_modes + added_live
+    if checker_modes != _exp_modes:
         problems.append(f"公開したcheckerモード数が想定と違う: "
-                        f"{checker_modes} != {EXPECTED_CHECKER_MODES - dropped_live}"
-                        f"（2AIが消した欄 {dropped_live} 件を差し引いた想定）")
+                        f"{checker_modes} != {_exp_modes}"
+                        f"（2AIが消した欄 {dropped_live} 件を差し引き、編集が済んだ機種の {fixed_checker_modes} 欄・"
+                        f"2AIが足した欄 {added_live} 件を足した想定）")
     if checker_machines == 0:
         problems.append("checkerが1件も監査されていない（検査が素通りしている）")
 
@@ -359,13 +442,14 @@ def axis_regression() -> list[str]:
 
     # ★件数ではなく固定集合と突き合わせる（入れ替わりも検出する）★
     #   ★2AIが消した欄は想定から外す★（checker-mode-drops.json）
-    _dr = _mode_drops()
-    for label, got, want in (("止まるべきmode", stopped, EXPECTED_AXIS_STOPPED - _dr),
-                             ("通るべきmode", passed, EXPECTED_AXIS_PASSED - _dr)):
+    #   ★2AIが足した欄は、止まる側・通る側のどちらに入っても受け入れる★（元の想定に無い欄なので）
+    _dr, _ad = _mode_changes()[:2]
+    for label, got, want in (("止まるべきmode", stopped, (EXPECTED_AXIS_STOPPED - _dr) | (stopped & _ad)),
+                             ("通るべきmode", passed, (EXPECTED_AXIS_PASSED - _dr) | (passed & _ad))):
         for x in sorted(want - got):
-            ng.append(f"軸回帰: {label}が{'止まらなくなった' if want is EXPECTED_AXIS_STOPPED else '止まるようになった'}: {x[0]}.{x[1]}")
+            ng.append(f"軸回帰: {label}が{'止まらなくなった' if label == "止まるべきmode" else '止まるようになった'}: {x[0]}.{x[1]}")
         for x in sorted(got - want):
-            ng.append(f"軸回帰: 想定外に{'止まった' if want is EXPECTED_AXIS_STOPPED else '通った'}: {x[0]}.{x[1]}")
+            ng.append(f"軸回帰: 想定外に{'止まった' if label == "止まるべきmode" else '通った'}: {x[0]}.{x[1]}")
     print(f"軸契約の回帰: 止まる {len(stopped)} 件（想定 {len(EXPECTED_AXIS_STOPPED - _dr)}）/ "
           f"通る {len(passed)} 件（想定 {len(EXPECTED_AXIS_PASSED - _dr)}）")
     return ng
