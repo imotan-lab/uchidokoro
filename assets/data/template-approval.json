@@ -15,7 +15,7 @@
   "assets/img/favicon-32.png": "3f5b40035348d8cfefc638d46ace8803af6f0371ad781e1e110b3bd4f2ee6854",
   "assets/img/icon-192.png": "6122a8c63bd4591c5328353958ad268f465083afb4ff162235617442e23ab520",
   "assets/img/icon-512.png": "355dc261d09febe62221c97c22d34f06573f524b0dd38c4f8de5c2c47f8bb9db",
-  "assets/img/logo.png": "9e1aecc76bb223c79786f4b0902447358c7f2f3c342b952ebb28649714e162e3",
+  "assets/img/logo.png": "705bb2c31feb7723650596e1766e4083c9a37f73ee13fce405ae386f4a8c122c",
   "assets/img/ogp.png": "e9cdabcc41b87b7df40924e875e487336a01055ca27995c9211d3402b758886a",
   "contact.html": "1c2c302b3678c64b3523c407279facd6e68d9c02e8064002924371fe236eddc4",
   "favicon.ico": "f11291f4464eebccdc0242598acffe2aba30fa52ffcf9949482324a096efcdb9",
@@ -64,7 +64,7 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "ecc07863430476c152cdd79dc300b6387d68b1b466deeb2e80f1a3449ce51b1a",
-  "service-worker.js": "fb6cfc3cebf63bd256750dd14725bd22c7388b368402f0ea967601b2cb5febd3",
+  "service-worker.js": "b1bdfc4b24ec643d2e2f3995546e91c039ee200bfa1848b19f45944f17fd95eb",
   "setting.html": "28e9fd623fe0dac838ebdefbb5c8b08563a61617a509ebb4f136bfa0d4e85691"
  }
 }
