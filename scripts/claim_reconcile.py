@@ -411,6 +411,12 @@ def _inv(slots, unclassified=None, hashes=None):
 
 
 def selftest() -> int:
+    # ★試験の材料（cl._mk_claim）は期限つきなので、「いま」を固定して流す★（2026-10-26）
+    with cl.fixed_now():
+        return _selftest_body()
+
+
+def _selftest_body() -> int:
     results = []
 
     def t(name, cond):

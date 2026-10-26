@@ -8355,6 +8355,13 @@ MUTATIONS = [
         "after": "had_checker=bool(_mode_keys(ms[i])))\n",
         "run": ["scripts/checker_verdict.py"],
     },
+    {
+        "why": "★試験の中の「いま」を固定しない（★材料の期限が過ぎた日から、中身と関係なく自己試験が落ちる★）★",
+        "file": "scripts/claim_ledger.py",
+        "before": "        _now_utc = lambda: _dt.datetime(2026, 8, 1, 0, 0, 0)\n",
+        "after": "        _now_utc = self._keep\n",
+        "run": ["scripts/claim_ledger.py", "scripts/claim_reconcile.py"],
+    },
 ]
 
 

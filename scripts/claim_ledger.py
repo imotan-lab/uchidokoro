@@ -588,7 +588,31 @@ def _mk_ledger(claims) -> dict:
     }
 
 
+class fixed_now:
+    """★試験の中の「いま」を固定する★（2026-10-26）＝試験の材料（_mk_claim）の期限
+    （2026-10-26T03:20Z）が過ぎた日に、中身と関係なくCIの自己試験が落ちた
+    （期限の切れる材料は、いつか必ず落ちる）。★材料を使うほかの試験もこれで包む★
+    （claim_reconcile）。期限切れを止める判定そのものは「期限が2020年」の試験が見る"""
+
+    def __enter__(self):
+        import datetime as _dt
+        global _now_utc
+        self._keep = _now_utc
+        _now_utc = lambda: _dt.datetime(2026, 8, 1, 0, 0, 0)
+        return self
+
+    def __exit__(self, *exc):
+        global _now_utc
+        _now_utc = self._keep
+        return False
+
+
 def selftest() -> int:
+    with fixed_now():
+        return _selftest_body()
+
+
+def _selftest_body() -> int:
     results = []
 
     def t(name, cond):
@@ -602,6 +626,9 @@ def selftest() -> int:
             return True
         return False
 
+    import datetime as _dt0
+    t("★試験の中の「いま」は固定されている★（材料の期限が過ぎても、中身と関係なく落ちない）",
+      _now_utc() == _dt0.datetime(2026, 8, 1, 0, 0, 0))
     t("正常なledgerは通る", validate_ledger(_mk_ledger([_mk_claim()])))
 
     # --- 逐語引用まわり
