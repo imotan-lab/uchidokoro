@@ -8376,6 +8376,41 @@ MUTATIONS = [
         "after": "        return MISSING\n",
         "run": ["scripts/updated_dates.py"],
     },
+    {
+        "why": "★モードの欄：人気の機種を先にしない（★読者の多い機種ほど後回しになる★）★",
+        "file": "scripts/mode_queue.py",
+        "before": "    return pop + [s for s in alive if s not in pop]\n",
+        "after": "    return alive\n",
+        "run": ["scripts/mode_queue.py"],
+    },
+    {
+        "why": "★モードの欄：進んでいなくても止まっていると言わない（★2か月1件も入らず誰も気づかなかった形に戻る★）★",
+        "file": "scripts/mode_queue.py",
+        "before": "            stalled = gap >= STALL_DAYS\n",
+        "after": "            stalled = False\n",
+        "run": ["scripts/mode_queue.py"],
+    },
+    {
+        "why": "★モードの欄：控えがあれば反映が失敗していても済み扱いにする（★その機種が二度と選ばれない・review285★）★",
+        "file": "scripts/mode_queue.py",
+        "before": "    return {s for s in decided if str((tried.get(s) or {}).get(\"result\", \"\")) in DONE_RESULTS}\n",
+        "after": "    return set(decided)\n",
+        "run": ["scripts/mode_queue.py"],
+    },
+    {
+        "why": "★モードの欄：失敗を記録しただけで「進んだ」と数える（★毎朝失敗しても番人が気づかない・review285★）★",
+        "file": "scripts/mode_queue.py",
+        "before": "                if str(v.get(\"result\", \"\")) in DONE_RESULTS), default=\"\")\n",
+        "after": "                ), default=\"\")\n",
+        "run": ["scripts/mode_queue.py"],
+    },
+    {
+        "why": "★モードの欄：表示を UTF-8 に固定しない（★記録が壊れたとき🟠を出せず終了コード1＝🟡と取り違える・review286★）★",
+        "file": "scripts/mode_queue.py",
+        "before": "            _st.reconfigure(encoding=\"utf-8\", errors=\"replace\")\n",
+        "after": "            pass\n",
+        "run": ["scripts/mode_queue.py"],
+    },
 ]
 
 
