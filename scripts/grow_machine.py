@@ -1449,6 +1449,57 @@ def text_kept(old_detail: dict, new_detail: dict, accepted=frozenset()) -> list:
     return [f"前に載っていた内容が消える/変わる更新です: {' ／ '.join(gone[:10])}"]
 
 
+def carry_mode_section(old_detail: dict, detail: dict) -> None:
+    """★モード・ゾーンの欄を、作り直した記事へ持ち越す★（2026-10-28）
+
+    ★なぜ★＝この欄を入れる・差し替える・消すのは mode_apply（朝の STEP 1-M）だけで、
+    育成の材料には入っていない（`mode_corpus` を作る側が無い）。持ち越さないと、
+    欄を入れた新台は毎朝「前に載っていた内容が消える」と数えられ、
+    3回目で運営者へメールが飛んでいた（pw_10503・10/27に欄を入れた翌朝）。
+    ★育成は欄の中身を判断しない★＝前の記事の欄をそのまま、基本スペックの次へ置く。
+    作り直した記事に既に欄があれば（控えから作れた）そちらを使う。
+    """
+    if not isinstance(old_detail, dict) or not isinstance(detail, dict):
+        return
+    secs = detail.get("sections")
+    if not isinstance(secs, list):
+        return
+    title = _ba.MODE_TITLE
+    if any(isinstance(s, dict) and s.get("title") == title for s in secs):
+        return
+    prev = next((s for s in (old_detail.get("sections") or [])
+                 if isinstance(s, dict) and s.get("title") == title), None)
+    if prev is None:
+        return
+    titles = [s.get("title") if isinstance(s, dict) else "" for s in secs]
+    pos = next((p for ti, p in _ba.OPTIONAL_SECTIONS if ti == title), 2)
+    if "基本スペック" in titles:
+        pos = titles.index("基本スペック") + 1
+    detail["sections"] = secs[:pos] + [json.loads(json.dumps(prev))] + secs[pos:]
+
+
+def _carry_mode_tests(t) -> None:
+    """★モード・ゾーンの欄は作り直しで消えない★（2026-10-28）"""
+    import inspect
+    box = {"title": _ba.MODE_TITLE, "type": "table",
+           "tables": [{"headers": ["ゾーン"], "rows": [["100G"]], "note": _ba.MODE_NOTE}]}
+    old = {"sections": [{"title": "天井・恩恵", "body": ["a"]}, {"title": "基本スペック", "body": ["b"]},
+                        box, {"title": "当サイトの狙い目", "body": ["c"]}]}
+    new = {"sections": [{"title": "天井・恩恵", "body": ["a"]}, {"title": "基本スペック", "body": ["b"]},
+                        {"title": "当サイトの狙い目", "body": ["c"]}]}
+    carry_mode_section(old, new)
+    t("★★前の記事のモード・ゾーンの欄を、基本スペックの次へ持ち越す★★（直す前は毎朝「消える」と数えた）",
+      [s["title"] for s in new["sections"]] == ["天井・恩恵", "基本スペック", _ba.MODE_TITLE, "当サイトの狙い目"]
+      and new["sections"][2] == box
+      and not text_kept(old, new, {}))
+    t("★前の記事に欄が無ければ何も足さない★",
+      (lambda n: (carry_mode_section({"sections": []}, n), n)[1])(
+          {"sections": [{"title": "基本スペック", "body": ["b"]}]})["sections"]
+      == [{"title": "基本スペック", "body": ["b"]}])
+    t("★★育成の本体（plan_one）が持ち越しを呼んでいる★★（呼び出しを外すと関数だけの試験は緑のまま）",
+      "carry_mode_section(old_detail, detail)" in inspect.getsource(plan_one))
+
+
 def _carry_full_tests(t) -> None:
     """★材料側に同じ欄があっても、2AIの注記・回数の行・交換率ごとの値を持ち越す★"""
     old = {"slug": "zzz", "checker": {"unit": "G",
@@ -2284,6 +2335,8 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     #   ★右は「今夜の判定書」ではなく「今夜の材料」★（2026-08-23・台帳#461）
     dp = _detail_path(slug)
     old_detail = _sj.read_json(dp, expect=dict) if os.path.isfile(dp) else {}
+    # ★モード・ゾーンの欄は mode_apply の持ち物なので持ち越す★（2026-10-28）
+    carry_mode_section(old_detail, detail)
     out["problems"] += claims_grew(cur.get("page_decision"), mat,
                                    accepted_lost_claims(slug, old_detail))
     lost = text_kept(old_detail, detail, accepted_losses(slug, old_detail))
@@ -5445,6 +5498,7 @@ def selftest() -> int:
       retired_boilerplate_problems(["この文はどこにもありませんZZZ"]) == [])
     _generated_target_tests(t)
     _carry_full_tests(t)
+    _carry_mode_tests(t)
 
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1

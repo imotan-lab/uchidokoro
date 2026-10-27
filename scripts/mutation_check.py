@@ -8420,6 +8420,23 @@ MUTATIONS = [
         "run": ["scripts/mode_verdict.py"],
         "issues": [],
     },
+    {
+        "why": "★育成：モード・ゾーンの欄を作り直した記事へ持ち越さない"
+               "（★欄を入れた新台が毎朝「前の内容が消える」と数えられ、3回目で運営者へメール＝2026-10-28★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    if prev is None:\n        return\n    titles = [s.get(\"title\") if isinstance(s, dict) else \"\" for s in secs]\n",
+        "after": "    if True:\n        return\n    titles = [s.get(\"title\") if isinstance(s, dict) else \"\" for s in secs]\n",
+        "run": ["scripts/grow_machine.py"],
+        "issues": [],
+    },
+    {
+        "why": "★育成：本体（plan_one）がモード・ゾーンの欄の持ち越しを呼ばない（関数だけの試験は緑のまま＝罠③）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    carry_mode_section(old_detail, detail)\n",
+        "after": "    pass\n",
+        "run": ["scripts/grow_machine.py"],
+        "issues": [],
+    },
 ]
 
 
