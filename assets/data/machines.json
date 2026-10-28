@@ -12567,7 +12567,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-26",
+   "decided_at": "2026-10-29",
    "input_digest": "sha256:2d86ed84360193f0dcf0966144cc28fc28bf175555871839c179ceb27abbf66c"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -12586,7 +12586,7 @@
    ]
   },
   "checker": {
-   "coinRate": 32.0,
+   "coinRate": 31.3,
    "unit": "G",
    "modes": [
     {
