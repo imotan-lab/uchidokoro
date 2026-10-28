@@ -880,7 +880,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-18",
+   "decided_at": "2026-10-29",
    "input_digest": "sha256:45f6a74ba62edd94348f5dce5429a1c637624ce5317136247a450cd00ae9f68c"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -899,7 +899,24 @@
    ],
    "_legacy_official_product_url": "https://www.heiwanet.co.jp/products/pachislot/ssb1/",
    "regulatory_model_code": "L青春ブタ野郎L1"
-  }
+  },
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "ボーナス間"
+    }
+   ],
+   "normal": {
+    "caution": 450,
+    "good": 550,
+    "excellent": 700,
+    "ceiling": 899,
+    "target": 550
+   }
+  },
+  "targetProjection": "d95631c7d986f4f9"
  },
  {
   "slug": "kabaneri",
