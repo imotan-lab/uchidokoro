@@ -3089,7 +3089,7 @@
    "title": "スマスロ ワールドダイスター 狙い目・天井・解析まとめ"
   },
   "info": "スマスロAT",
-  "strategy": "算定中（天井は通常時999G+α）",
+  "strategy": "通常650G〜 / 設定変更後350G〜",
   "aliases": [
    "ワールドダイスター",
    "ワルスタ",
@@ -3103,6 +3103,31 @@
    "title": "ワールドダイスター",
    "kind": "アニメ",
    "search": "ワールドダイスター"
+  },
+  "checker": {
+   "unit": "G",
+   "normal": {
+    "caution": 550,
+    "good": 650,
+    "target": 650,
+    "excellent": 800
+   },
+   "reset": {
+    "caution": 300,
+    "good": 350,
+    "target": 350,
+    "excellent": 450
+   },
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "設定変更後"
+    }
+   ]
   }
  },
  {
