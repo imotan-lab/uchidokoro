@@ -797,17 +797,23 @@ def unanswered_benefit_rows(slug: str, rows) -> list:
     rows = [mb for mb in (rows or []) if isinstance(mb, dict)]
     if not slug or not rows:
         return rows
-    done = set()
+    # ★どちらか片方でも読めなければ、1件も外さない★（Codex review efdd1f8f の3）
     try:
-        done |= set(_cv.for_slug_checked(slug))
-    except Exception:                                    # noqa: BLE001
-        pass
-    try:
+        done = set(_cv.for_slug_checked(slug))
         import ceiling_dismiss as _cd
-        done |= _cd.dismissed_fields(slug)
+        dis = _cd.dismissed(slug)
     except Exception:                                    # noqa: BLE001
-        pass
-    return [mb for mb in rows if benefit_target_field(mb) not in done]
+        return rows
+
+    def _answered(mb) -> bool:
+        f = benefit_target_field(mb)
+        if f in done:
+            return True
+        # ★読み違いの控えは、いま読んだ先が控えたときの読んだ先に収まるときだけ効く★
+        #   （新しい出典に載ったら問いを戻す・Codex review efdd1f8f の1）
+        urls = {u for u in (mb.get("urls") or []) if str(u).startswith("http")}
+        return f in dis and bool(urls) and urls <= dis[f]
+    return [mb for mb in rows if not _answered(mb)]
 
 
 def missing_benefit_questions(rows) -> list:
@@ -4311,27 +4317,34 @@ def _selftest_body() -> int:
           "--field ceiling#" in _qs_mode[0]
           and "reset#ceiling" not in _qs_mode[0])
         # ★★2AIがもう答えた候補は問いにしない★★（2026-10-29・記録済み／読み違いと控え済み）
-        _keep_fs, _keep_df = _cv.for_slug_checked, None
+        _keep_fs = _cv.for_slug_checked
         import ceiling_dismiss as _cd_t
-        _keep_df = _cd_t.dismissed_fields
+        _keep_df = _cd_t.dismissed
         try:
             _f_rs = [benefit_target_field(x) for x in _mb_rs2]
             _cv.for_slug_checked = lambda s: {_f_rs[0]: {}}
-            _cd_t.dismissed_fields = lambda s: {"ceiling#x"}
-            _left = unanswered_benefit_rows("zzz_q", _mb_rs2 + [
-                {"jp": "スルー天井", "amount": 9, "unit": "スルー", "field": "ceiling#x"}])
+            _cd_t.dismissed = lambda s: {"ceiling#x": {"https://a.invalid/1"}}
+            _nine = {"jp": "スルー天井", "amount": 9, "unit": "スルー", "field": "ceiling#x",
+                     "urls": ["https://a.invalid/1"]}
+            _left = unanswered_benefit_rows("zzz_q", _mb_rs2 + [_nine])
             t("★★記録済み・読み違いと控え済みの候補は問いにしない★★（毎朝同じ問いが出ていた・2026-10-29）",
               [benefit_target_field(x) for x in _left] == _f_rs[1:]
               and len(missing_benefit_questions(_left)) == 1)
+            t("★★読んだ先が控えと違えば（新しい出典に載った）問いを戻す★★（Codex review efdd1f8f の1）",
+              len(unanswered_benefit_rows("zzz_q", [dict(_nine, urls=["https://b.invalid/2"])])) == 1
+              and len(unanswered_benefit_rows("zzz_q", [dict(_nine, urls=[])])) == 1)
 
             def _boom(s):
                 raise ValueError("壊れた控え")
             _cv.for_slug_checked = _boom
-            _cd_t.dismissed_fields = _boom
-            t("　控えが読めないときは外さない（問いが出るほうが安全）",
-              len(unanswered_benefit_rows("zzz_q", _mb_rs2)) == 2)
+            t("　確定値の控えだけが読めなくても、1件も外さない（Codex review efdd1f8f の3）",
+              len(unanswered_benefit_rows("zzz_q", _mb_rs2 + [_nine])) == 3)
+            _cv.for_slug_checked = lambda s: {_f_rs[0]: {}}
+            _cd_t.dismissed = _boom
+            t("　読み違いの控えだけが読めなくても、1件も外さない",
+              len(unanswered_benefit_rows("zzz_q", _mb_rs2 + [_nine])) == 3)
         finally:
-            _cv.for_slug_checked, _cd_t.dismissed_fields = _keep_fs, _keep_df
+            _cv.for_slug_checked, _cd_t.dismissed = _keep_fs, _keep_df
         t("　URLが控えられていないときは、問いにそう書く（黙ってURL無しにしない）",
           "控えられていません" in missing_benefit_questions(
               [{"jp": "スルー天井", "amount": 6, "unit": "スルー",

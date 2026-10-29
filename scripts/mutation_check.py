@@ -1317,8 +1317,8 @@ MUTATIONS = [
     {
         "why": '★数値の単位を数えない（★線700に対して「700枚」、70% を 70‰ に変えても通る★）★',
         "file": 'scripts/decide_now.py',
-        "before": '    return [(tok, "" if s[end:end + 1] in _TAIL_DELIMS + _NOT_UNIT',
-        "after": '    return [(tok, "" if True',
+        "before": '    return [(tok, "" if (s[end:end + 1] in _TAIL_DELIMS + _NOT_UNIT',
+        "after": '    return [(tok, "" if (True',
         "run": ['scripts/checker_verdict.py'],
     },
     # ─── 2026-09-25・既存の機種のカウンターの線も2AIの決定で書く ───
@@ -8356,11 +8356,46 @@ MUTATIONS = [
         "run": ["scripts/checker_verdict.py"],
     },
     {
+        "why": "★設定示唆の札の文字を直せない（★2AIが決めても札の誤りが残る・2026-10-29★）★",
+        "file": "scripts/decide_now.py",
+        "before": "    if (isinstance(cell, dict) and isinstance(cell.get(\"text\"), str)\n",
+        "after": "    if (False and isinstance(cell, dict) and isinstance(cell.get(\"text\"), str)\n",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★札の文字を直すと強さの印（badge）が消える（★示唆の強さが画面から消える・2026-10-29★）★",
+        "file": "scripts/decide_now.py",
+        "before": "        row[ci] = dict(row[ci], text=text)\n",
+        "after": "        row[ci] = {\"text\": text}\n",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★ひらがなを単位と読む（★文末だけの直しを「数値が変わる」として断り、朝タスクが見送り続ける・2026-10-29★）★",
+        "file": "scripts/decide_now.py",
+        "before": "                         or \"ぁ\" <= s[end:end + 1] <= \"ゟ\")\n",
+        "after": "                         or False)\n",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
         "why": "★2AIがもう答えた天井の候補も毎朝問いにする（★記録済み・読み違いと控え済みでも同じ問いが出続ける・2026-10-29★）★",
         "file": "scripts/add_machine_run.py",
-        "before": "    return [mb for mb in rows if benefit_target_field(mb) not in done]\n",
+        "before": "    return [mb for mb in rows if not _answered(mb)]\n",
         "after": "    return rows\n",
         "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★読み違いの控えを、読んだ先が変わっても効かせる（★新しい出典に載った天井の問いが消える・review efdd1f8f の1★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "        return f in dis and bool(urls) and urls <= dis[f]\n",
+        "after": "        return f in dis\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★読み違いの控えを読むときに判断者・理由・読んだ先を確かめない（★壊れた控えで問いが消える・review efdd1f8f の2★）★",
+        "file": "scripts/ceiling_dismiss.py",
+        "before": "        if decision_problems({\"slug\": slug, \"field\": fld, **{k: rec.get(k) for k in (\"by\", \"why\", \"urls\")}}):\n",
+        "after": "        if False:\n",
+        "run": ["scripts/ceiling_dismiss.py"],
     },
     {
         "why": "★天井の候補の読み違いを1人の判断で控える（★2AIの組がそろわないのに問いが消える・2026-10-29★）★",

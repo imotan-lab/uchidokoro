@@ -6,12 +6,12 @@
   "assets/data/directory-catalogs.json": "a368d3e2839d3944b2b8064e40c735268c34da52d8eec6b294e1e55bf91205eb",
   "assets/data/maker-catalogs.json": "c1bfaa9377e999f95bcefc5d1958a88e07356d2dbb40f2e1f6ef2a68e2952308",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
-  "scripts/add_machine_run.py": "d44fcca7fe5d750d265a4c49aa41071f0233ede45432776fde2b4ad263dea0c4",
+  "scripts/add_machine_run.py": "179e2fa704dde1dcbbaab8472fe03c19567646578ee3d31c49f1404e4c2c9ccf",
   "scripts/adoption_basis.py": "b816e9cabae59738572420fbf6d77b888ad70fc5d6585aacf6e783ac9188c2d0",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
-  "scripts/ceiling_dismiss.py": "332731ccd2761b43e78bcf9ca478915fa8654de7084724e2f4c9aa9b6b5eb758",
+  "scripts/ceiling_dismiss.py": "7f8cd6b409e004625c6aafb5cd7ea739f13850a90883c97528526806bf92399b",
   "scripts/ceiling_lookup.py": "17cd802e6d8e5eb90bcc13354cef0d602f7c3693ab5419434643c4b1edac0118",
   "scripts/collect_evidence.py": "ae4e112289e2f6a16ea79506674e25b954b97ffb89471c625ac160944215d6e1",
   "scripts/confirmed_values.py": "20a7e5800ad61f7cf4e50b6dc82f7cd5de5e462aeaacf120ae00e4a38f32196d",
@@ -283,6 +283,5 @@
    "page_reading",
    "read_failure"
   ]
- },
- "_deps_changed_why": "ceiling_dismiss は、2AIが読み違いと決めた天井の候補を問いに出さないための控えを読む。値も出典も触らないが、問いが消える＝その候補を2AIが見なくなるので、add_machine_run と同じ材料の契約に入れて変更を承認の対象にする。"
+ }
 }

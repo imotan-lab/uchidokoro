@@ -12,8 +12,9 @@
 同じ問いが毎朝出続けていた（10/27・パリピ孔明の「9スルー天井」）。
 
 ★決定ファイル★（Writeツールで書く）
-  {"slug": "prskkm", "field": "ceiling#through-9-354de2",
+  {"slug": "prskkm", "field": "ceiling#through-9-354de2", "urls": ["<問いの「読んだ先」のURL>"],
    "by": ["claude", "codex"], "why": "<15字以上・出典のどこを読んで無いと決めたか>"}
+  ・urls は問いの「読んだ先」をそのまま（★読んだ先が変われば控えは効かず、問いが戻る★）
   ・field は問いに書いてある項目名をそのまま（★項目名は読んだ中身の指紋つき＝読み方が変われば別の問いになる★）
   ・by は claude と codex の組、Codexが利用制限なら claude-agent-a と claude-agent-b の組
 
@@ -51,10 +52,28 @@ def _read() -> dict:
     return got
 
 
-def dismissed_fields(slug: str) -> set:
-    """★その機種で、2AIが読み違いと決めた項目名★（読めなければ例外）"""
+def dismissed(slug: str) -> dict:
+    """★その機種で、2AIが読み違いと決めた候補★＝{項目名: 読んだページのURLの集合}（読めなければ例外）
+
+    ★読むたびに書くときと同じ条件を確かめる★（判断者の組・理由・URL）＝満たさない控えは無かったことにする
+    （JSONとして読める壊れ方〈null・{}・1人・1文字〉で問いが消えないように・Codex review efdd1f8f の2）
+    """
     rows = (_read().get("machines") or {}).get(slug) or {}
-    return set(rows) if isinstance(rows, dict) else set()
+    out = {}
+    if not isinstance(rows, dict):
+        return out
+    for fld, rec in rows.items():
+        if not isinstance(rec, dict):
+            continue
+        if decision_problems({"slug": slug, "field": fld, **{k: rec.get(k) for k in ("by", "why", "urls")}}):
+            continue
+        out[fld] = set(rec.get("urls") or [])
+    return out
+
+
+def dismissed_fields(slug: str) -> set:
+    """★項目名だけ★（一覧用）"""
+    return set(dismissed(slug))
 
 
 def decision_problems(dec) -> list:
@@ -70,6 +89,12 @@ def decision_problems(dec) -> list:
         ng.append("判断者は claude と codex（または claude-agent-a と claude-agent-b）の組です")
     if len(str(dec.get("why") or "").strip()) < MIN_WHY:
         ng.append(f"理由が{MIN_WHY}字より短いです")
+    # ★★どのページで読んだ候補かを控える★★（Codex review efdd1f8f の1）＝問いの「読んだ先」をそのまま。
+    #   ★読んだ先が変われば（新しい出典に載った等）、控えは効かず問いが戻る★
+    urls = dec.get("urls")
+    if (not isinstance(urls, list) or not urls
+            or not all(isinstance(u, str) and u.startswith("http") for u in urls)):
+        ng.append("urls（問いに書いてある「読んだ先」のURL）が要ります")
     return ng
 
 
@@ -83,6 +108,7 @@ def record(dec: dict) -> int:
     data = _read() or {"schema_version": "ceiling-dismissed/v1", "machines": {}}
     rows = data.setdefault("machines", {}).setdefault(dec["slug"], {})
     rows[dec["field"]] = {"by": sorted(dec["by"]), "why": str(dec["why"]).strip()[:500],
+                          "urls": sorted(set(dec["urls"])),
                           "at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M")}
     os.makedirs(os.path.dirname(STORE), exist_ok=True)
     tmp = STORE + ".tmp"
@@ -106,7 +132,7 @@ def selftest() -> int:
     try:
         STORE = os.path.join(tempfile.mkdtemp(prefix="cdis_"), "ceiling_dismissed.json")
         ok = {"slug": "zzz_a", "field": "ceiling#through-9-354de2", "by": ["claude", "codex"],
-              "why": "出典2社の天井の節に9スルーの記述が無い（試験）"}
+              "why": "出典2社の天井の節に9スルーの記述が無い（試験）", "urls": ["https://a.invalid/1"]}
         t("★控える前は何も無い★", dismissed_fields("zzz_a") == set())
         t("★決定を受け取って控える★", record(ok) == 0 and dismissed_fields("zzz_a") == {ok["field"]})
         t("★判断者が1人なら断る★", decision_problems({**ok, "by": ["claude"]}) != [])
@@ -114,6 +140,13 @@ def selftest() -> int:
         t("★代役の組は受け取る★", decision_problems({**ok, "by": ["claude-agent-a", "claude-agent-b"]}) == [])
         t("★理由が短ければ断る★", decision_problems({**ok, "why": "無い"}) != [])
         t("★天井以外の項目名は断る★", decision_problems({**ok, "field": "payout_rate"}) != [])
+        t("★読んだ先のURLが無ければ断る★", decision_problems({**ok, "urls": []}) != [])
+        t("★控えには読んだ先が残る★", dismissed("zzz_a") == {ok["field"]: {"https://a.invalid/1"}})
+        with open(STORE, "w", encoding="utf-8") as f:
+            json.dump({"machines": {"zzz_a": {"ceiling#x": None, "ceiling#y": {},
+                                              "ceiling#z": {"by": ["claude"], "why": "短", "urls": ["https://a"]}}}}, f)
+        t("★★読める形で壊れた控え（null・空・1人・短い理由）は無かったことにする★★（Codex review efdd1f8f の2）",
+          dismissed("zzz_a") == {})
         with open(STORE, "w", encoding="utf-8") as f:
             f.write("{壊れた")
         try:

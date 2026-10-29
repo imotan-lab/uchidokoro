@@ -567,7 +567,7 @@ def _elems(d: dict, where: str) -> list:
             _cell = d["sections"][_si]["tables"][_ti]["rows"][_ri][_ci]
         except Exception:                                    # noqa: BLE001
             _cell = None
-        return [_cell] if isinstance(_cell, str) else []
+        return [_cell_str(_cell)] if _cell_str(_cell) is not None else []
     if w in ("", "body", "table_note"):
         for sec in (d.get("sections") or []):
             if not isinstance(sec, dict):
@@ -709,11 +709,29 @@ def cell_target(where: str):
     return tuple(int(x) for x in m.groups())
 
 
+def _cell_str(cell):
+    """★セルの読者に出る文字★＝文字のセルはそのまま／設定示唆の札は text（ほかの形は None）"""
+    if isinstance(cell, str):
+        return cell
+    if (isinstance(cell, dict) and isinstance(cell.get("text"), str)
+            and set(cell) <= {"text", "badge"}):
+        return cell["text"]
+    return None
+
+
+def _set_cell(row: list, ci: int, text: str) -> None:
+    """★セルの文字だけを書き換える★＝札なら強さの印（badge）を元のまま残す（2026-10-29）"""
+    if isinstance(row[ci], dict):
+        row[ci] = dict(row[ci], text=text)
+    else:
+        row[ci] = text
+
+
 def _cell_at(sec, si, want_si, ti, ri, ci):
     """いま見ている節が指定の節なら、そのセルの中身を返す（無ければ None）。
 
     ★節の番号まで一致を求める★＝別の節の同じ位置を書き換えないため。
-    ★文字のセルだけ★（バッジの辞書は設定示唆の専用なので触らない）。
+    ★設定示唆の札（{"text", "badge"}）は text だけを見る★（2026-10-29・強さの印は変えない）。
     """
     if si != want_si:
         return None
@@ -721,7 +739,7 @@ def _cell_at(sec, si, want_si, ti, ri, ci):
         cell = sec["tables"][ti]["rows"][ri][ci]
     except Exception:                                        # noqa: BLE001
         return None
-    return cell if isinstance(cell, str) else None
+    return _cell_str(cell)
 
 
 def cell_plan(sec, si: int, where: str, before: str):
@@ -1053,7 +1071,11 @@ def numbers_with_unit(s: str) -> list:
     ★「700G」と「700枚」を別物として比べる★ためのもの。
     """
     s = str(s or "")
-    return [(tok, "" if s[end:end + 1] in _TAIL_DELIMS + _NOT_UNIT
+    # ★ひらがなは単位ではない★（2026-10-29）＝「1/300」と「1/300です」を別の数値と読み、
+    #   朝タスクが文末だけの直し（体言止め→です・ます）を「数値が変わる」として毎回見送っていた。
+    #   単位はG・枚・回・周・%・pt・スルー（カタカナ）などで、ひらがなの単位は無い
+    return [(tok, "" if (s[end:end + 1] in _TAIL_DELIMS + _NOT_UNIT
+                         or "ぁ" <= s[end:end + 1] <= "ゟ")
              else s[end:end + 1])
             for end, tok in _num_spans(s)]
 
@@ -1268,10 +1290,10 @@ def _simulate(detail: dict, plan: list) -> str:
                 a["before"], a["after"], 1)
         elif kind in ("table_cell", "table_cell_in"):
             _ti, _ri, _ci = bi
-            _cur = d["sections"][si]["tables"][_ti]["rows"][_ri][_ci]
-            d["sections"][si]["tables"][_ti]["rows"][_ri][_ci] = (
-                _cur.replace(a["before"], a["after"], 1)
-                if kind == "table_cell_in" else a["after"])
+            _row = d["sections"][si]["tables"][_ti]["rows"][_ri]
+            _cur = _cell_str(_row[_ci])
+            _set_cell(_row, _ci, _cur.replace(a["before"], a["after"], 1)
+                      if kind == "table_cell_in" else a["after"])
         elif kind == "table_note":
             d["sections"][si]["tables"][bi]["note"] = a["after"]
         elif kind == "table_note_in":
@@ -2137,6 +2159,7 @@ def apply_decision(path: str, apply_it: bool = False, *,
                     _cur2 = sec["tables"][_ti2]["rows"][_ri2][_ci2]
                 except Exception:                            # noqa: BLE001
                     _cur2 = None
+                _cur2 = _cell_str(_cur2)
                 _okc = isinstance(_cur2, str) and (
                     _cur2 == a["before"] if kind == "table_cell"
                     else _cur2.count(a["before"]) == 1)
@@ -2146,9 +2169,9 @@ def apply_decision(path: str, apply_it: bool = False, *,
                         f"（{a.get('where') or ''}）"
                         "／★行がずれた可能性があるので"
                         "1文字も書きません★")
-                sec["tables"][_ti2]["rows"][_ri2][_ci2] = (
-                    _cur2.replace(a["before"], a["after"], 1)
-                    if kind == "table_cell_in" else a["after"])
+                _set_cell(sec["tables"][_ti2]["rows"][_ri2], _ci2,
+                          _cur2.replace(a["before"], a["after"], 1)
+                          if kind == "table_cell_in" else a["after"])
             elif kind == "table_note":
                 sec["tables"][bi]["note"] = a["after"]
             elif kind == "table_note_in":
@@ -3171,6 +3194,10 @@ def _selftest() -> int:
         t("★★記号の単位（%）も単位として残す／「〜」は単位ではない★★",
           numbers_with_unit("BIG比率70%") == [("70", "%")]
           and numbers_with_unit("700〜") == [("700", "")])
+        t("★★ひらがなは単位ではない★★（「1/300」と「1/300です」を同じ数値と読む・文末だけの直しを通す）",
+          numbers_with_unit("初当たり1/300です。") == numbers_with_unit("初当たり1/300")
+          and numbers_with_unit("700Gです") == [("700", "G")]
+          and numbers_with_unit("4スルー") == [("4", "ス")])
 
         # ── 2026-08-27・Codexの6回目 ───────────────────────────
         S6 = {"slug": "s6", "sections": [
@@ -3908,6 +3935,21 @@ def _selftest() -> int:
                   "1/5.94（未確認1/6.33）", "1/5.94") == [])
     t("　★セルの一部だけも直せる★",
       _plan_kinds(_CELLD, _cw, "（未確認1/6.33）", "") == ["table_cell_in"])
+    # ★★設定示唆の札の文字も直せる★★（2026-10-29・朝タスクが「札のセルが道具で直せない」と残していた）
+    _BD = {"sections": [{"title": "設定示唆まとめ", "type": "settei", "tables": [{
+        "headers": ["ボイス", "示唆"],
+        "rows": [["刃牙", {"text": "通常A（基本）", "badge": "hint"}],
+                 ["勇次郎", {"text": "設定4以上", "badge": "ok"}]]}]}]}
+    _bw = "sections[0].tables[0].rows[0][1]"
+    t("★★設定示唆の札の文字を名指しで直せる★★（直す前は文字のセルしか直せなかった）",
+      _plan_kinds(_BD, _bw, "通常A（基本）", "デフォルト") == ["table_cell"]
+      and _plan_kinds(_BD, _bw, "（基本）", "") == ["table_cell_in"])
+    _brow = json.loads(json.dumps(_BD["sections"][0]["tables"][0]["rows"][0]))
+    _set_cell(_brow, 1, "デフォルト")
+    t("　★書くのは文字だけ・強さの印（badge）は元のまま★",
+      _brow[1] == {"text": "デフォルト", "badge": "hint"})
+    t("　★知らない形の辞書のセルは直さない★",
+      _cell_str({"text": "x", "badge": "ok", "color": "red"}) is None)
 
     # ★★セルの一部だけを直すときも、文のまとまりまで広げて確かめる★★
     #   （2026-09-18・Codexの指摘）★直す前は候補0件で素通り★＝
