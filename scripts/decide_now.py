@@ -2702,10 +2702,12 @@ def _selftest() -> int:
         _keep_fsc = _cvt.for_slug_checked
         try:
             _cvt.for_slug_checked = lambda s: {"payout_rate": {"value": {
-                "1": "97.4%", "2": "98.9%", "_memo": "未照合 99.9%", "note": "注記 88.8%"}}}
+                "1": "97.4%", "2": "98.9%", "_memo": {"99.9%": "未照合"}, "note": {"88.8%": "注記"}}}}
             _srcm = confirmed_source("k2", "payout_rate")
             t("★★出どころは出典と照合した値だけから作る★★（メモ・注記の数字は入れない・Codex review confirmed の1）",
               "98.9%" in _srcm and "2" in _srcm and "99.9" not in _srcm and "88.8" not in _srcm)
+            t("　機種名の形が違えば、記録があっても読まない",
+              confirmed_source("../x", "payout_rate") is None)
         finally:
             _cvt.for_slug_checked = _keep_fsc
         t("★確定値の記録を読むのはこの機種・完全一致の項目名だけ★（slug の形が違えば読まない）",
