@@ -163,6 +163,9 @@ CONTRACT_INPUTS = frozenset({
     "scripts/html_tables.py",
     "scripts/confirmed_values.py",
     "scripts/page_probe.py",
+    # ★2AIが「出典に無い読み違い」と決めた天井の候補の控え★（2026-10-29）＝
+    #   add_machine_run が問いを出すかを決めるのに読む（問いが消える＝その候補を2AIが見なくなる）
+    "scripts/ceiling_dismiss.py",
     # ★取ってきた本文を1個のデータとして持ち回る器★（2026-08-17・台帳#393）
     #   「確かめた本文」と「あとで読む本文」を同じ物にする土台なので、
     #   材料の採否そのものと同じ集合に置く。

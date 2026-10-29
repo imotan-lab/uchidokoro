@@ -776,6 +776,40 @@ def _collect_all_urls(urls, pages, log=None) -> tuple:
     return out, bad
 
 
+def benefit_target_field(mb: dict) -> str:
+    """★その問いが「この項目名で記録して」と案内する項目名★（missing_benefit_questions と同じ決め方）"""
+    rec = mb.get("record") if isinstance(mb.get("record"), dict) else {}
+    fld = str(mb.get("field") or "")
+    if (str(rec.get("after_event") or "") == "設定変更"
+            and str(rec.get("kind") or "") == "GAME"):
+        return "reset#" + (fld.split("#", 1)[1] if "#" in fld else f"ceiling-{mb.get('amount')}")
+    return fld or "ceiling"
+
+
+def unanswered_benefit_rows(slug: str, rows) -> list:
+    """★2AIがもう答えた候補は問いにしない★（2026-10-29）
+
+    ★なぜ★＝記録済み（パリピ孔明の設定変更後428G）や、2AIが「出典に無い読み違い」と決めた候補
+    （同じく9スルー天井）でも、毎朝同じ問いが出続けていた（10/21〜29のログ）。
+    答えた印＝①案内している項目名で確定値が記録済み ②ceiling_dismiss で読み違いと控え済み。
+    ★控えが読めないときは外さない★（問いが出るほうが安全）。
+    """
+    rows = [mb for mb in (rows or []) if isinstance(mb, dict)]
+    if not slug or not rows:
+        return rows
+    done = set()
+    try:
+        done |= set(_cv.for_slug_checked(slug))
+    except Exception:                                    # noqa: BLE001
+        pass
+    try:
+        import ceiling_dismiss as _cd
+        done |= _cd.dismissed_fields(slug)
+    except Exception:                                    # noqa: BLE001
+        pass
+    return [mb for mb in rows if benefit_target_field(mb) not in done]
+
+
 def missing_benefit_questions(rows) -> list:
     """★恩恵が読み取れなかった天井を、2AIへの問いにする★
     （2026-09-27・台帳#717）
@@ -827,9 +861,7 @@ def missing_benefit_questions(rows) -> list:
             #   `reset#ceiling` 固定だと、設定変更後の天井が2つ（CZ間・AT間など）
             #   ある機種で★あとの答えが前の記録を上書きする★（記録は項目名で入れ替わる）。
             #   候補の項目名（`ceiling#game-600-e455c4`）の「#」より後ろを使う。
-            rf = "reset#" + (str(mb.get("field") or "").split("#", 1)[1]
-                             if "#" in str(mb.get("field") or "")
-                             else f"ceiling-{mb.get('amount')}")
+            rf = benefit_target_field(mb)      # ★答えた印を探す側と同じ決め方★
             out.append(
                 f"★{mb.get('jp') or '天井'}{c} は "
                 f"{mb.get('amount')}{mb.get('unit') or ''} と読めましたが、"
@@ -1367,8 +1399,8 @@ def _gather(name: str, maker: str = "", slug: str = "",
     #   ★出口は既にある合流口を使う★（`read_questions` → `_deliver_read_questions`）
     #   ＝`ask_2ai` は後段で丸ごと作り直されるので、そこへ直接足しても消える。
     got.setdefault("read_questions", []).extend(
-        missing_benefit_questions(
-            got["material"]["ceilings"].get("missing_benefit") or []))
+        missing_benefit_questions(unanswered_benefit_rows(
+            slug, got["material"]["ceilings"].get("missing_benefit") or [])))
     # ★ATの仕様はモードごとに★（純増を混ぜたら誤情報）
     got["material"]["at_specs"] = _read(_at, "ATの仕様")
     # ★CZは名前ごとに★（どのCZの期待度か分からないと誤情報）
@@ -4278,6 +4310,28 @@ def _selftest_body() -> int:
         t("　（対照）設定変更と関係の無い天井は、今までどおり候補の項目名へ案内する",
           "--field ceiling#" in _qs_mode[0]
           and "reset#ceiling" not in _qs_mode[0])
+        # ★★2AIがもう答えた候補は問いにしない★★（2026-10-29・記録済み／読み違いと控え済み）
+        _keep_fs, _keep_df = _cv.for_slug_checked, None
+        import ceiling_dismiss as _cd_t
+        _keep_df = _cd_t.dismissed_fields
+        try:
+            _f_rs = [benefit_target_field(x) for x in _mb_rs2]
+            _cv.for_slug_checked = lambda s: {_f_rs[0]: {}}
+            _cd_t.dismissed_fields = lambda s: {"ceiling#x"}
+            _left = unanswered_benefit_rows("zzz_q", _mb_rs2 + [
+                {"jp": "スルー天井", "amount": 9, "unit": "スルー", "field": "ceiling#x"}])
+            t("★★記録済み・読み違いと控え済みの候補は問いにしない★★（毎朝同じ問いが出ていた・2026-10-29）",
+              [benefit_target_field(x) for x in _left] == _f_rs[1:]
+              and len(missing_benefit_questions(_left)) == 1)
+
+            def _boom(s):
+                raise ValueError("壊れた控え")
+            _cv.for_slug_checked = _boom
+            _cd_t.dismissed_fields = _boom
+            t("　控えが読めないときは外さない（問いが出るほうが安全）",
+              len(unanswered_benefit_rows("zzz_q", _mb_rs2)) == 2)
+        finally:
+            _cv.for_slug_checked, _cd_t.dismissed_fields = _keep_fs, _keep_df
         t("　URLが控えられていないときは、問いにそう書く（黙ってURL無しにしない）",
           "控えられていません" in missing_benefit_questions(
               [{"jp": "スルー天井", "amount": 6, "unit": "スルー",

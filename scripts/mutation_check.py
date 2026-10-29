@@ -1115,8 +1115,8 @@ MUTATIONS = [
     {
         "why": "★恩恵の分からない天井を2AIへの問いにしない（★誰にも届かないまま欠落する★）★",
         "file": "scripts/add_machine_run.py",
-        "before": "    got.setdefault(\"read_questions\", []).extend(\n        missing_benefit_questions(\n            got[\"material\"][\"ceilings\"].get(\"missing_benefit\") or []))",
-        "after": "    [].extend(\n        missing_benefit_questions(\n            got[\"material\"][\"ceilings\"].get(\"missing_benefit\") or []))",
+        "before": "    got.setdefault(\"read_questions\", []).extend(\n        missing_benefit_questions(unanswered_benefit_rows(",
+        "after": "    [].extend(\n        missing_benefit_questions(unanswered_benefit_rows(",
         "run": ["scripts/add_machine_run.py"],
     },
     {
@@ -1129,8 +1129,8 @@ MUTATIONS = [
     {
         "why": "★設定変更後の天井の記録先を reset#ceiling 固定にする（★天井が2つある機種で、あとの答えが前の記録を上書きする★）★",
         "file": "scripts/add_machine_run.py",
-        "before": "            rf = \"reset#\" + (str(mb.get(\"field\") or \"\").split(\"#\", 1)[1]",
-        "after": "            rf = \"reset#ceiling\" or (str(mb.get(\"field\") or \"\").split(\"#\", 1)[1]",
+        "before": "        return \"reset#\" + (fld.split(\"#\", 1)[1] if \"#\" in fld else f\"ceiling-{mb.get('amount')}\")\n",
+        "after": "        return \"reset#ceiling\"\n",
         "run": ["scripts/add_machine_run.py"],
     },
     {
@@ -8354,6 +8354,20 @@ MUTATIONS = [
         "before": "had_checker=bool(_baseline_keys(slug, _mode_keys(ms[i]))))\n",
         "after": "had_checker=bool(_mode_keys(ms[i])))\n",
         "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★2AIがもう答えた天井の候補も毎朝問いにする（★記録済み・読み違いと控え済みでも同じ問いが出続ける・2026-10-29★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "    return [mb for mb in rows if benefit_target_field(mb) not in done]\n",
+        "after": "    return rows\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★天井の候補の読み違いを1人の判断で控える（★2AIの組がそろわないのに問いが消える・2026-10-29★）★",
+        "file": "scripts/ceiling_dismiss.py",
+        "before": "    if _cv.judges_pair(dec.get(\"by\")) is None or not _cv.judges_exact(dec.get(\"by\")):\n",
+        "after": "    if not dec.get(\"by\"):\n",
+        "run": ["scripts/ceiling_dismiss.py"],
     },
     {
         "why": "★欄が入った機種に、欄の出ない NO_BOX も数える（★進み具合が実際より多く見える・2026-10-29★）★",
