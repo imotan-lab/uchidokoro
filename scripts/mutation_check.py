@@ -8386,8 +8386,15 @@ MUTATIONS = [
     {
         "why": "★受け取った表記の変化を確かめ直しの前に当てない（★DMMの確かめ直しで止まり、受け取っても牙狼が育たない・review 9fe1f3b5 の1★）★",
         "file": "scripts/grow_machine.py",
-        "before": "        if f == \"manufacturer_id\" and b == maker:\n            maker = a\n",
-        "after": "        if f == \"manufacturer_id\" and b == maker:\n            pass\n",
+        "before": "            out[fld] = afters.pop()\n",
+        "after": "            pass\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★受け取りを続けて当てる（★A→B と B→A を受け取ると元へ戻り、確かめ直しで止まり続ける・review c299 の1★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    return out[\"announced_name\"], out[\"manufacturer_id\"]\n",
+        "after": "    for f, b, a in sorted(accepted or ()):\n        if f == \"manufacturer_id\" and b == out[\"manufacturer_id\"]:\n            out[\"manufacturer_id\"] = a\n    return out[\"announced_name\"], out[\"manufacturer_id\"]\n",
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -8801,11 +8808,23 @@ def block_real_push(root: str) -> None:
     試験が自分で作る仮の置き場（file://）への送信には効かない。
     ★向け直せなければ例外★（守れないまま試験を動かさない）
     """
+    # ★明示した pushurl には pushInsteadOf が効かない★（Codex review c299 の2）＝先に全部消す
+    for rem in subprocess.run(["git", "-C", root, "remote"], capture_output=True, text=True).stdout.split():
+        subprocess.run(["git", "-C", root, "config", "--unset-all", f"remote.{rem}.pushurl"],
+                       capture_output=True, text=True)
     r = subprocess.run(["git", "-C", root, "config", "url.file:///uchidokoro-test-copy-no-push/.pushInsteadOf",
                         "https://"], capture_output=True, text=True)
-    got = subprocess.run(["git", "-C", root, "remote", "get-url", "--push", "--all", "origin"],
-                         capture_output=True, text=True).stdout
-    if r.returncode != 0 or ("github.com" in got and "uchidokoro-test-copy-no-push" not in got):
+    bad = r.returncode != 0
+    # ★送り先を1つずつ確かめる★（まとめた文字列で見ると、1件だけ無効でも残りを見逃す）
+    for rem in subprocess.run(["git", "-C", root, "remote"], capture_output=True, text=True).stdout.split():
+        g = subprocess.run(["git", "-C", root, "remote", "get-url", "--push", "--all", rem],
+                           capture_output=True, text=True)
+        urls = [u for u in g.stdout.split() if u]
+        if g.returncode != 0 or not urls or any(
+                not u.startswith("file:///uchidokoro-test-copy-no-push/") and "://" in u
+                and not u.startswith("file://") for u in urls):
+            bad = True
+    if bad:
         raise RuntimeError("★試験の写しの送り先を無効にできません（写しから本物へ送らないため、試験を止めます）★")
 
 
@@ -9041,6 +9060,21 @@ def main() -> int:
                 print("❌ ★番号の選び方が壊れています★: " + _b)
             return 1
         print("★名前から選んだ番号は、その名前を指しています★")
+
+        # ★★写しから本物へ送らない守り★★（2026-10-29）＝明示した pushurl があっても無効になること
+        _pt = tempfile.mkdtemp(prefix="mut_push_")
+        subprocess.run(["git", "init", "-q", _pt], capture_output=True)
+        subprocess.run(["git", "-C", _pt, "remote", "add", "origin", "https://example.invalid/a.git"],
+                       capture_output=True)
+        subprocess.run(["git", "-C", _pt, "remote", "set-url", "--add", "--push", "origin",
+                        "https://example.invalid/b.git"], capture_output=True)
+        block_real_push(_pt)
+        _pu = subprocess.run(["git", "-C", _pt, "remote", "get-url", "--push", "--all", "origin"],
+                             capture_output=True, text=True).stdout.split()
+        if not _pu or not all(u.startswith("file:///uchidokoro-test-copy-no-push/") for u in _pu):
+            print("❌ ★写しの送り先が本物のまま残ります★: " + " ".join(_pu))
+            return 1
+        print("★写しの送り先は無効になっています★")
 
         # ★この道具自身の試験★＝壊し方の目印が実在するか
         bad = []

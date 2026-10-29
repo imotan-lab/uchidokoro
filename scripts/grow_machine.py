@@ -730,13 +730,18 @@ def identity_same(old: dict, new: dict, accepted=frozenset()) -> list:
 
 
 def apply_accepted_identity(name: str, maker: str, accepted) -> tuple:
-    """★2AIが受け取った表記の変化を当てた (機種名, メーカー)★（前の値が登録と完全一致するときだけ）"""
-    for f, b, a in sorted(accepted or ()):
-        if f == "manufacturer_id" and b == maker:
-            maker = a
-        elif f == "announced_name" and b == name:
-            name = a
-    return name, maker
+    """★2AIが受け取った表記の変化を当てた (機種名, メーカー)★（前の値が登録と完全一致するときだけ）
+
+    ★1回だけ当てる・続けて当てない★（Codex review c299 の1）＝「A→B」を当てたあとに「B→A」も受け取っていると、
+    続けて当てて元へ戻り、確かめ直しで止まり続けた。★見るのは登録の値だけ★。
+    同じ前の値に後の値が2つ以上あれば、どれとも決められないので当てない（確かめ直しで止まり、問いが出る）
+    """
+    out = {"manufacturer_id": maker, "announced_name": name}
+    for fld, cur in (("manufacturer_id", maker), ("announced_name", name)):
+        afters = {a for f, b, a in (accepted or ()) if f == fld and b == cur}
+        if len(afters) == 1:
+            out[fld] = afters.pop()
+    return out["announced_name"], out["manufacturer_id"]
 
 
 def maker_change_questions(slug: str, maker: str, problems) -> list:
@@ -4020,6 +4025,13 @@ def selftest() -> int:
     t("★★受け取った表記の変化は、DMMでの確かめ直しの前に当てる★★（Codex review 9fe1f3b5 の1）",
       apply_accepted_identity("L牙狼", "dmm:サンセイR&D", _acc) == ("L牙狼", "dmm:SANSEI LAB")
       and apply_accepted_identity("L牙狼", "dmm:別社", _acc) == ("L牙狼", "dmm:別社"))
+    _acc2 = _acc | {("manufacturer_id", "dmm:SANSEI LAB", "dmm:サンセイR&D")}
+    t("★★受け取りは1回だけ当てる・続けて当てない★★（A→B と B→A を受け取っていても戻り直さない・Codex review c299 の1）",
+      apply_accepted_identity("L牙狼", "dmm:SANSEI LAB", _acc2) == ("L牙狼", "dmm:サンセイR&D")
+      and apply_accepted_identity("L牙狼", "dmm:サンセイR&D", _acc2) == ("L牙狼", "dmm:SANSEI LAB"))
+    t("　同じ前の値に後の値が2つあれば当てない（決められない）",
+      apply_accepted_identity("L牙狼", "dmm:サンセイR&D",
+                              _acc | {("manufacturer_id", "dmm:サンセイR&D", "dmm:三共")}) == ("L牙狼", "dmm:サンセイR&D"))
     _mq = maker_change_questions("zzz", "dmm:サンセイR&D", [
         "IDENTITY_FAILED メーカーが食い違います（期待: サンセイR&D / 機種ページ: SANSEI LAB）"])
     t("★★確かめ直しで「メーカーが食い違います」なら、前と後の値をそのまま書いた問いを出す★★",
