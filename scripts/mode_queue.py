@@ -112,7 +112,9 @@ def progress(machines: list, decided: set, tried: dict, today: str) -> dict:
         else:
             gap = (_dt.date.fromisoformat(today) - _dt.date.fromisoformat(last)).days
             stalled = gap >= STALL_DAYS
-    return {"decided": len(alive & done), "total": len(alive), "remaining": remaining,
+    # ★欄が入った機種★＝反映まで済んだうち、記事に欄が出たもの（NO_BOX は決まったが欄は出ない）
+    applied = len({s for s in alive & done if str(tried[s].get("result", "")) == "APPLIED"})
+    return {"decided": len(alive & done), "applied": applied, "total": len(alive), "remaining": remaining,
             "last_tried": last or "（まだ1機種も済んでいない）", "stalled": stalled}
 
 
@@ -142,6 +144,10 @@ def selftest() -> int:
         t("★一度もやっていなければ止まっている★", progress(ms, set(), {}, "2026-10-26")["stalled"])
         _all = {s: {"at": "2026-10-25", "result": "APPLIED"} for s in "abcd"}
         t("★全部済めば止まっていない★", not progress(ms, {"a", "b", "c", "d"}, _all, "2026-10-26")["stalled"])
+        _mix = {"a": {"at": "2026-10-25", "result": "APPLIED"}, "b": {"at": "2026-10-25", "result": "NO_BOX"}}
+        t("★欄が入った機種は APPLIED だけを数える★（決まったが欄が出ない NO_BOX は数えない）",
+          progress(ms, {"a", "b"}, _mix, "2026-10-26")["applied"] == 1
+          and progress(ms, {"a", "b"}, _mix, "2026-10-26")["decided"] == 2)
         _fail = {s: {"at": "2026-10-25", "result": "ERROR"} for s in "ab"}
         t("★★毎朝失敗を記録するだけでは「進んだ」にならない★★（review285 の1）",
           progress(ms, set(), _fail, "2026-10-26")["stalled"])
@@ -216,7 +222,8 @@ def _main() -> int:
         print(" ".join(got) if got else "（今朝やる機種はありません）")
         return 0
     p = progress(machines, decided, tried, today)
-    line = (f"モード・ゾーンの欄：{p['decided']}/{p['total']} 機種で済んだ（残り {p['remaining']}・"
+    line = (f"モード・ゾーンの欄：{p['decided']}/{p['total']} 機種で済んだ（うち欄が入った {p['applied']}・"
+            f"残り {p['remaining']}・"
             f"最後に済んだ日 {p['last_tried']}）")
     if p["stalled"]:
         print(f"🟡 {line}。★{STALL_DAYS}日以上1件も進んでいません★（朝の更新タスクの STEP 1-M）")

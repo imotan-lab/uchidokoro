@@ -26,7 +26,7 @@
   "scripts/machine_sources.py": "8ad9bb744ccb198702a39c3d016dd515af00b56862d15d28ce984450da922ec3",
   "scripts/maker_identity_cache.py": "f349ed376124d7a22c3c989ff0e93ec24df085c420f44293c3ca1d2a32b5d31c",
   "scripts/mode_apply.py": "f79e96d71cb31c552c532ba90f2256a857e65eb6972e0c6ac31f265e1f7abbca",
-  "scripts/mode_ask.py": "ec2db5bdfeb0aac1b23551e548832d93efc599987ea1c1067f091e925b3451cd",
+  "scripts/mode_ask.py": "b4891cbe65e959ed957d3c11e5a85137ea8202efb016940c5c8f30394f782bd4",
   "scripts/mode_verdict.py": "7f313105487573ebdd4287276337805aa567d12f5730197d23a3305cbed2390a",
   "scripts/model_code_lookup.py": "b866ea9405c82be3df3d4386ba2bb43d544a61a35b61ee80e6497796e804e4b4",
   "scripts/new_machine_watch.py": "12e8f8e3efecd61c9f8426bf4663b86a6ca874de80d18edfd90403ac6f73a3ec",

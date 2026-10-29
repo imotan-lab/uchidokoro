@@ -8356,6 +8356,20 @@ MUTATIONS = [
         "run": ["scripts/checker_verdict.py"],
     },
     {
+        "why": "★欄が入った機種に、欄の出ない NO_BOX も数える（★進み具合が実際より多く見える・2026-10-29★）★",
+        "file": "scripts/mode_queue.py",
+        "before": "if str(tried[s].get(\"result\", \"\")) == \"APPLIED\"})\n",
+        "after": "if str(tried[s].get(\"result\", \"\")) in DONE_RESULTS})\n",
+        "run": ["scripts/mode_queue.py"],
+    },
+    {
+        "why": "★2AIへの問いからモードの定義を外す（★高確・シナリオをモードに数えるかで2AIが割れ、欄が入らない・2026-10-29★）★",
+        "file": "scripts/mode_ask.py",
+        "before": "★★「モード」の定義★★",
+        "after": "★★モードについて★★",
+        "run": ["scripts/mode_ask.py"],
+    },
+    {
         "why": "★トップの機種一覧が空でも通す（★全記事へのリンクが消えても監査が黙る・2026-10-29★）★",
         "file": "scripts/build_hub_pages.py",
         "before": "    if not slugs:\n        ng.append(\"トップの機種一覧にリンクが1本もありません\")\n",
