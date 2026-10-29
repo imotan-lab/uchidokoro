@@ -371,6 +371,8 @@ def decision_problems(dec, ms=None) -> list:
                 _writes.add("ceiling")
             if "good" in md:
                 _writes.add("target")
+            if "rows" in md:
+                _writes |= set(ROW_KINDS)
             _clash = sorted(k for k in set(_top) & set(_alt)
                             if k not in _writes and _top[k] != _alt[k])
             if _clash:
@@ -390,7 +392,7 @@ def decision_problems(dec, ms=None) -> list:
                 ng.append(f"{tag}: {lv} が 1〜{MAX_VALUE} の整数ではありません")
                 continue
             vals[lv] = v
-        if "good" not in vals and not (md.get("byRate") and key in _have):
+        if "good" not in vals and not ((md.get("byRate") or "rows" in md) and key in _have):
             ng.append(f"{tag}: good（狙い目）がありません")
         # ★浅い→深いの順になっているか★（意味ではなく大小の筋）
         order = [vals[lv] for lv in LEVELS if lv in vals]
@@ -431,6 +433,7 @@ def decision_problems(dec, ms=None) -> list:
                 ng.append(f"{tag}: {lv}（{vals[lv]}）が、{why}（{limit}）を"
                           "超えています")
         ng += by_rate_problems(tag, md, rates, limit, why, m, key, nums)
+        ng += rows_problems(tag, md, m, key, rates, limit, why, nums)
     if ng:
         return ng
     # ★★当てたあとの完成形でも、もう一度だけ見る★★（2026-09-18）
@@ -447,6 +450,8 @@ def decision_problems(dec, ms=None) -> list:
            if any(f"当てたあと: {k} の" in p for k in touched)]
     # ★★交換率が悪くなるほど、同じか深くなっていること★★（2026-10-02・#428）
     out += rate_view_problems(_after, touched)
+    # ★★触った回数の行も、書いたあとの姿で筋を見る★★（2026-10-29）
+    out += row_view_problems(_after, dec)
     # ★★注記の数値が線と食い違うようにならないこと★★（2026-10-02・#428）＝
     #   線だけ直すと「5.6枚交換なら420Gから」の注記が古い数値のまま残る。
     #   ★新しく生まれる食い違いだけを断る★（元からあるものまで断ると直す道が無くなる）
@@ -531,6 +536,216 @@ def by_rate_problems(tag, md, rates, limit, why, m, key, nums) -> list:
                 if made:
                     ng.append(f"{rt}: 注記に、線にも天井にも今の注記にも無い数字があります: "
                               + " / ".join(made[:4]) + "（数字を作らない）")
+    return ng
+
+
+# ★★回数の表（スルー・周期）の行を書き換える★★（2026-10-29）
+#   ★なぜ★＝朝の更新タスクがバキで「0スルー 5.6枚300G は CZ間の平均より不利な状態なのに浅い」と
+#   2AIで決めても、行ごとの線を書く道が無く「道具の制限で直せず」と残していた（10/29のログ）。
+#   ★決定の形★＝modes[i] に "rows": [{"count": 0, "good": 450, "caution": 350, "excellent": 550,
+#     "note": "...", "byRate": {"eq56": {"good": 450, "note": "..."}}}]
+#   ★機械が見るのは形と筋だけ★＝既にある回数の行だけ（足さない・消さない）／0〜上限の整数／
+#   書いたあとの姿で、その行の中の段の順・交換率の順・欄の天井／注記に作った数字が無い。
+#   ★触った行だけ見る★（ほかの行の古い食い違いで、関係のない直しを断らない＝罠⓸）
+ROW_KINDS = ("suru", "cycle")
+
+
+def _row_kind(conf: dict):
+    """★その欄の回数の表★＝(種類, 行の一覧)／無ければ (None, None)"""
+    for kind in ROW_KINDS:
+        if isinstance((conf or {}).get(kind), list):
+            return kind, conf[kind]
+    return None, None
+
+
+def _row_nums_allowed(m: dict, old_notes, values, nums, count) -> set:
+    """★注記に書いてよい数字★＝いまの注記・交換率の呼び名・その行の線・天井・回数"""
+    import decide_now as _dn_num
+    allowed = set()
+    for s in old_notes:
+        allowed |= set(_dn_num.numbers_with_unit(str(s or "")))
+    _ck0 = (m or {}).get("checker") or {}
+    for _x in (_ck0.get("exchangeRates") or (m or {}).get("exchangeRates") or []):
+        if isinstance(_x, dict):
+            allowed |= set(_dn_num.numbers_with_unit(str(_x.get("label") or "")))
+    for v in list(values) + list(nums):
+        allowed |= {(str(v), "G"), (str(v), "")}
+    return allowed
+
+
+def rows_problems(tag, md, m, key, rates, limit, why, nums) -> list:
+    """★回数の表の行の決定が受け取れる形か★（書いたあとの筋は row_view_problems）"""
+    if "rows" not in md:
+        return []
+    import decide_now as _dn_num
+    rows = md.get("rows")
+    kind, have = _row_kind(_mode_conf(m, key))
+    if kind is None:
+        return [f"{tag}: 「{key}」には回数の表（スルー・周期）がありません（rows は書けません）"]
+    if not isinstance(rows, list) or not rows:
+        return [f"{tag}: rows が1件もありません"]
+    ng, seen = [], set()
+    by_count = {r.get("count"): r for r in have if isinstance(r, dict)}
+    for j, row in enumerate(rows):
+        rowt = f"{tag}.rows[{j}]"
+        if not isinstance(row, dict):
+            ng.append(f"{rowt}: 辞書ではありません")
+            continue
+        cnt = row.get("count")
+        if not isinstance(cnt, int) or isinstance(cnt, bool) or cnt not in by_count:
+            ng.append(f"{rowt}: 回数 {cnt!r} の行がありません（あるのは "
+                      f"{sorted(c for c in by_count if isinstance(c, int))}・行は足しません）")
+            continue
+        if cnt in seen:
+            ng.append(f"{rowt}: 回数 {cnt} が2回出てきます")
+        seen.add(cnt)
+        old = by_count[cnt]
+        unknown = sorted(set(row) - {"count", "note", "byRate"} - set(LEVELS))
+        if unknown:
+            ng.append(f"{rowt}: 書けない項目があります（{'・'.join(unknown)}）")
+        if not any(k in row for k in LEVELS + ("note", "byRate")):
+            ng.append(f"{rowt}: 書き換える中身がありません")
+
+        def _lv_ok(where, src):
+            out = {}
+            for lv in LEVELS:
+                if lv not in src:
+                    continue
+                v = _int(src.get(lv))
+                if v is None or not (0 <= v <= MAX_VALUE):
+                    ng.append(f"{where}: {lv} が 0〜{MAX_VALUE} の整数ではありません")
+                    continue
+                if limit is not None and v > limit:
+                    ng.append(f"{where}: {lv}（{v}）が、{why}（{limit}）を超えています")
+                out[lv] = v
+            return out
+
+        vals = _lv_ok(rowt, row)
+        after_vals = [v for v in vals.values()] + [
+            _int(old.get(lv)) for lv in LEVELS if lv not in vals and _int(old.get(lv)) is not None]
+        by = row.get("byRate")
+        old_by = old.get("byRate") if isinstance(old.get("byRate"), dict) else {}
+        if by is not None:
+            if not rates:
+                ng.append(f"{rowt}: この機種は交換率の切替を持たないので byRate は書けません")
+            elif not isinstance(by, dict) or not by:
+                ng.append(f"{rowt}: byRate が辞書ではありません")
+            else:
+                for rk, rv in by.items():
+                    rrt = f"{rowt}.byRate.{rk}"
+                    if rk not in set(rates):
+                        ng.append(f"{rrt}: この機種に無い交換率です（あるのは {'・'.join(rates)}）")
+                        continue
+                    if not isinstance(rv, dict) or not rv:
+                        ng.append(f"{rrt}: 辞書ではありません")
+                        continue
+                    bad = sorted(set(rv) - {"note"} - set(LEVELS))
+                    if bad:
+                        ng.append(f"{rrt}: 書けない項目があります（{'・'.join(bad)}）")
+                    rvals = _lv_ok(rrt, rv)
+                    o2 = old_by.get(rk) if isinstance(old_by.get(rk), dict) else {}
+                    full = list(rvals.values()) + [
+                        _int(o2.get(lv)) for lv in LEVELS
+                        if lv not in rvals and _int(o2.get(lv)) is not None]
+                    if "note" in rv:
+                        nt = rv.get("note")
+                        if not isinstance(nt, str) or not nt.strip():
+                            ng.append(f"{rrt}: note（注記）が空です")
+                        else:
+                            ok_n = _row_nums_allowed(m, [o2.get("note"), old.get("note")],
+                                                     full + after_vals, nums, cnt)
+                            made = [n + u for n, u in _dn_num.numbers_with_unit(nt)
+                                    if (n, u) not in ok_n and n != str(cnt)]
+                            if made:
+                                ng.append(f"{rrt}: 注記に、線にも天井にも今の注記にも無い数字があります: "
+                                          + " / ".join(made[:4]) + "（数字を作らない）")
+        if "note" in row:
+            nt = row.get("note")
+            if not isinstance(nt, str) or not nt.strip():
+                ng.append(f"{rowt}: note（注記）が空です")
+            else:
+                ok_n = _row_nums_allowed(m, [old.get("note")], after_vals, nums, cnt)
+                made = [n + u for n, u in _dn_num.numbers_with_unit(nt)
+                        if (n, u) not in ok_n and n != str(cnt)]
+                if made:
+                    ng.append(f"{rowt}: 注記に、線にも天井にも今の注記にも無い数字があります: "
+                              + " / ".join(made[:4]) + "（数字を作らない）")
+    return ng
+
+
+def _apply_rows(conf: dict, rows: list) -> dict:
+    """★決めた回数の行・決めた項目だけ書き換える★（行は足さない・消さない）"""
+    kind, have = _row_kind(conf)
+    if kind is None:
+        return conf
+    new_rows = json.loads(json.dumps(have, ensure_ascii=False))
+    for row in rows or []:
+        for cur in new_rows:
+            if not isinstance(cur, dict) or cur.get("count") != row.get("count"):
+                continue
+            for lv in LEVELS:
+                if lv in row:
+                    cur[lv] = row[lv]
+            if "good" in row and "target" in cur:
+                cur["target"] = row["good"]
+            if "note" in row:
+                cur["note"] = row["note"]
+            if isinstance(row.get("byRate"), dict):
+                _by = dict(cur.get("byRate") or {})
+                for rk, rv in row["byRate"].items():
+                    c2 = dict(_by.get(rk) or {})
+                    for lv in LEVELS:
+                        if lv in rv:
+                            c2[lv] = rv[lv]
+                    if "good" in rv and "target" in c2:
+                        c2["target"] = rv["good"]
+                    if "note" in rv:
+                        c2["note"] = rv["note"]
+                    _by[rk] = c2
+                cur["byRate"] = _by
+    out = dict(conf)
+    out[kind] = new_rows
+    return out
+
+
+def row_view_problems(after: dict, dec: dict) -> list:
+    """★書いたあとの画面と同じ姿で、触った回数の行の筋を見る★
+
+    ①その行・その交換率の中で caution ≦ good ≦ excellent ②欄の天井を超えない
+    ③交換率が悪くなるほど同じか深い（★byRate に無い交換率は行の直下の値で比べる★）
+    """
+    ng = []
+    rates = rate_keys(after)
+    for md in dec.get("modes") or []:
+        if not isinstance(md, dict) or not isinstance(md.get("rows"), list):
+            continue
+        key = str(md.get("key") or "")
+        conf = _mode_conf(after, key)
+        kind, have = _row_kind(conf)
+        if kind is None:
+            continue
+        ce = _lead_int(conf.get("ceiling"))
+        counts = {r.get("count") for r in md["rows"] if isinstance(r, dict)}
+        for row in have:
+            if not isinstance(row, dict) or row.get("count") not in counts:
+                continue
+            tag = f"当てたあと: {key} の {row.get('count')}{'スルー' if kind == 'suru' else '周期'}の行"
+            # ★行の直下の値も見る★（交換率ごとの値に隠れていても、行が無い交換率では画面に出る）
+            views = [("", {k: v for k, v in row.items() if k != "byRate"})] + [
+                (r, rate_view(row, r)) for r in rates if r]
+            for r, v in views:
+                pairs = [(lv, _int(v.get(lv))) for lv in LEVELS if _int(v.get(lv)) is not None]
+                if any(pairs[j][1] > pairs[j + 1][1] for j in range(len(pairs) - 1)):
+                    ng.append(f"{tag}（{r or '交換率なし'}）で caution ≦ good ≦ excellent の順になっていません（"
+                              + " / ".join(f"{a}={b}" for a, b in pairs) + "）")
+                for lv, x in pairs:
+                    if ce is not None and x > ce:
+                        ng.append(f"{tag}（{r or '交換率なし'}）の {lv}（{x}）がその欄の天井（{ce}）を超えます")
+            for lv in LEVELS:
+                seq = [(r, _int(v.get(lv))) for r, v in views if r and _int(v.get(lv)) is not None]
+                if any(seq[i][1] > seq[i + 1][1] for i in range(len(seq) - 1)):
+                    ng.append(f"{tag} の {lv} が、交換率が良いほうが深くなっています（"
+                              + " / ".join(f"{r}={v}" for r, v in seq) + "）")
     return ng
 
 
@@ -737,6 +952,9 @@ def merged(m: dict, dec: dict) -> dict:
                     cur["note"] = rv["note"]
                 _by[rk] = cur
             conf["byRate"] = _by
+        # ★★回数の表の行★★（2026-10-29）＝決めた回数・決めた項目だけ書き換える
+        if isinstance(md.get("rows"), list):
+            conf = _apply_rows(conf, md["rows"])
         if _in_md:
             _md = dict(_md)
             _md[key] = conf
@@ -1216,6 +1434,90 @@ def apply_revise(dec: dict, ms: list, dry_run: bool = False) -> int:
     print(f"{slug}: 欄を直しました（消した欄: {'・'.join(drops) or 'なし'}／"
           f"注記: {len(dec.get('notes') or [])} 件）")
     return 0
+
+
+def _rows_tests(t) -> None:
+    """★回数の表の行を書き換える★（2026-10-29）＝バキの形（CZ間＋スルーの行に交換率ごとの線）"""
+    _bak_kc = globals()["known_ceilings"]
+    globals()["known_ceilings"] = lambda s, m=None: set()
+
+    def _row(c, g, ca, ex, by):
+        return {"count": c, "excellent": ex, "good": g, "caution": ca, "note": f"{c}スルー。{g}G〜が目安です。",
+                "byRate": {rk: {"caution": v[0], "good": v[1], "target": v[1], "excellent": v[2],
+                                "note": f"{c}スルーは{v[1]}G基準です。"} for rk, v in by.items()}}
+    _m = {"slug": "zzz_rows", "name": "試験機",
+          "checker": {"unit": "G", "defaultRate": "eq56",
+                      "exchangeRates": [{"key": "eq56", "label": "5.6枚"}, {"key": "rate50", "label": "6.5枚"}],
+                      "modes": [{"key": "cz", "label": "CZ間"},
+                                {"key": "suru", "label": "スルー天井", "hasSuru": True}],
+                      "cz": {"good": 450, "caution": 350, "excellent": 550},
+                      "suru": {"suruMax": 2, "suru": [
+                          _row(0, 340, 250, 500, {"eq56": (220, 300, 450), "rate50": (300, 390, 560)}),
+                          _row(1, 300, 200, 400, {"eq56": (180, 260, 380), "rate50": (250, 350, 460)}),
+                          _row(2, 0, 0, 100, {"eq56": (0, 0, 100), "rate50": (0, 0, 100)})]}}}
+    _ms = [_m]
+
+    def d(rows, **kw):
+        x = {"slug": "zzz_rows", "judges": ["claude", "codex"],
+             "why": "0スルーはCZ間の平均より不利なので浅すぎる（試験）",
+             "modes": [{"key": "suru", "rows": rows}]}
+        x.update(kw)
+        return x
+    ok = d([{"count": 0, "good": 500, "caution": 400, "excellent": 600,
+             "byRate": {"eq56": {"good": 450, "caution": 350, "excellent": 550,
+                                 "note": "5.6枚交換の0スルーは450G基準です。"},
+                        "rate50": {"good": 520, "caution": 420, "excellent": 620}}}])
+    try:
+        t("★★回数の表の行を書き換える決定を受け取る★★（直す前はバキの0スルー300Gを直す道が無かった）",
+          decision_problems(ok, _ms) == [])
+        _a = merged(_m, ok)
+        _r = _a["checker"]["suru"]["suru"]
+        t("　当てたあとは 0スルーの行だけが変わり、target も good にそろう・ほかの行は1文字も変わらない",
+          _r[0]["good"] == 500 and _r[0]["byRate"]["eq56"]["good"] == 450
+          and _r[0]["byRate"]["eq56"]["target"] == 450 and _r[0]["byRate"]["rate50"]["target"] == 520
+          and _r[0]["byRate"]["eq56"]["note"] == "5.6枚交換の0スルーは450G基準です。"
+          and _r[1:] == _m["checker"]["suru"]["suru"][1:])
+        t("★無い回数の行は書かない★（行は足さない）",
+          any("行がありません" in x for x in decision_problems(d([{"count": 5, "good": 100}]), _ms)))
+        t("★回数の表の無い欄には rows を書かせない★",
+          any("回数の表" in x for x in decision_problems(
+              {**ok, "modes": [{"key": "cz", "rows": [{"count": 0, "good": 1}]}]}, _ms)))
+        t("★行の中で段の順が逆なら断る★",
+          any("caution ≦ good ≦ excellent" in x for x in decision_problems(
+              d([{"count": 0, "good": 500, "caution": 600}]), _ms)))
+        t("★交換率が良いほうが深くなる行は断る★",
+          any("交換率が良いほうが深く" in x for x in decision_problems(
+              d([{"count": 1, "byRate": {"eq56": {"good": 360, "caution": 260, "excellent": 460}}}]), _ms)))
+        t("★注記に作った数字を書かせない★",
+          any("数字を作らない" in x for x in decision_problems(
+              d([{"count": 0, "good": 500, "caution": 400, "excellent": 600,
+                  "byRate": {"eq56": {"good": 450, "caution": 350, "excellent": 550},
+                             "rate50": {"good": 520, "caution": 420, "excellent": 620}},
+                  "note": "0スルーは777G基準です。"}]), _ms)))
+        t("　注記の回数の数字（0スルー）と線の数字は作った数字ではない",
+          decision_problems(d([{"count": 0, "good": 500, "caution": 400, "excellent": 600,
+                                "byRate": {"eq56": {"good": 450, "caution": 350, "excellent": 550},
+                                           "rate50": {"good": 520, "caution": 420, "excellent": 620}},
+                                "note": "0スルーは500G基準です。"}]), _ms) == [])
+        t("★知らない項目は書かせない★",
+          any("書けない項目" in x for x in decision_problems(d([{"count": 0, "ceiling": 900}]), _ms)))
+        t("★0Gの線は受け取る★（スルー天井の直前は0G〜が目安になる）",
+          decision_problems(d([{"count": 2, "excellent": 80,
+                                "byRate": {"eq56": {"excellent": 80}, "rate50": {"excellent": 90}}}]), _ms) == [])
+        t("★同じ回数を2回書かせない★",
+          any("2回" in x for x in decision_problems(d([{"count": 1, "good": 300}, {"count": 1, "good": 300}]), _ms)))
+        _mc = json.loads(json.dumps(_m))
+        _mc["checker"]["suru"]["ceiling"] = 480
+        t("★欄の天井を超える行は断る★",
+          any("天井" in x for x in decision_problems(ok, [_mc])))
+        _md = json.loads(json.dumps(_m))
+        _md["checker"]["modeData"] = {"suru": json.loads(json.dumps(_m["checker"]["suru"]))}
+        _am = merged(_md, ok)
+        t("★modeData に入っている欄は、modeData と直下の両方を同じ中身にする★",
+          _am["checker"]["modeData"]["suru"] == _am["checker"]["suru"]
+          and _am["checker"]["modeData"]["suru"]["suru"][0]["good"] == 500)
+    finally:
+        globals()["known_ceilings"] = _bak_kc
 
 
 def _revise_tests(t) -> None:
@@ -2248,6 +2550,7 @@ def selftest() -> int:
 
     _no_line_tests(t)
     _revise_tests(t)
+    _rows_tests(t)
     _adds_tests(t)
     _unsync_tests(t)
     _format_tests(t)

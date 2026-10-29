@@ -1651,6 +1651,35 @@ def check_56_auto_article_contract(machines: list) -> list[str]:
     return ngs + _check_56_selftest()
 
 
+def check_59_top_machine_links(machines: list) -> list[str]:
+    """★トップの「掲載機種の一覧」が壊れていないか★（2026-10-29）
+
+    ★なぜ★＝トップの生のHTMLから全記事へ届く唯一のリンク群。印が消える・中身が空になる・
+    消えた機種への死にリンクを止める。★最新かどうかは見ない★（60が知らせる）。
+    ★判定は build_hub_pages.machine_links_problems の1か所★。
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    try:
+        import build_hub_pages as _bh59
+        html = (BASE / _bh59.LINKS_PAGE).read_text(encoding="utf-8")
+    except Exception as e:                # noqa: BLE001
+        return [f"トップの機種一覧を読めません: {type(e).__name__}: {e}"]
+    return _bh59.machine_links_problems(html, machines, BASE)
+
+
+def check_60_top_links_pending(machines: list) -> list[str]:
+    """★まだトップの一覧に載っていない機種★（知らせるだけ・直し方は build_hub_pages.py --legacy）"""
+    sys.path.insert(0, str(BASE / "scripts"))
+    try:
+        import build_hub_pages as _bh60
+        html = (BASE / _bh60.LINKS_PAGE).read_text(encoding="utf-8")
+    except Exception as e:                # noqa: BLE001
+        return [f"トップの機種一覧を読めません: {type(e).__name__}: {e}"]
+    miss = _bh60.machine_links_missing(html, machines)
+    return [f"トップの一覧にまだ無い機種 {len(miss)} 件（{'・'.join(miss[:5])}）"
+            "→ python scripts/build_hub_pages.py --legacy"] if miss else []
+
+
 def check_58_pochipochi_store(machines: list) -> list[str]:
     """★ポチポチくんの控えと setting.html の自動の区画がそろっているか★（2026-10-19）
 
@@ -4277,6 +4306,8 @@ CHECKS = [
     ("56_新台記事が空っぽ", check_56_auto_article_contract),
     ("57_新台の狙い目の指紋", check_57_auto_target_sync),
     ("58_ポチポチくんの控え", check_58_pochipochi_store),
+    ("59_トップの機種一覧", check_59_top_machine_links),
+    ("60_トップの一覧の更新待ち", check_60_top_links_pending),
 ]
 
 
@@ -4318,7 +4349,10 @@ CHECKS = [
 #   常体が1文入るだけで**サイトの配信ごと落ちる**。
 #   ★55だけ外して16を残すと、同じ事故がもう一度起きる★ので一緒に移した。
 INFO_ONLY = {"9_記事文字数", "23_CLAUDE_md肥大検知", "31_Codexへの未報告",
-             "55_文体（です・ます）の残り", "16_文体混在"}
+             "55_文体（です・ます）の残り", "16_文体混在",
+             # ★60は知らせるだけ★＝夜の新台公開でも監査が走るので、「最新の機種がまだ載っていない」で
+             #   止めると夜が止まる（一覧は --legacy でだけ作り直す・2026-10-29）
+             "60_トップの一覧の更新待ち"}
 
 
 def selftest() -> int:

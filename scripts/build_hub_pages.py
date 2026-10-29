@@ -814,6 +814,90 @@ def render_all(source_root: "Path") -> dict:
     return built
 
 
+# ★★トップページの「掲載機種の一覧」★★（2026-10-29）
+#   ★なぜ★＝トップの生のHTMLに記事へのリンクが0本だった（一覧はJSで後から描く）。
+#   Googleは最初のHTMLのリンクから先に辿るので、全機種への普通のリンクを最初から置く。
+#   ★作り直すのは --legacy だけ★（毎週月曜の並べ替え・対話・朝タスクの作り直し）＝
+#   --check と夜の新台公開は見ない（夜が index.html を書かずに済むように・Codex review index_links_1 の案B）。
+#   ★新台がこの一覧に載るのは次の --legacy まで遅れる★（JSの一覧と早見表には即日載る）。
+#   ★壊れた・消えた・死にリンクは監査59が止める／載っていない機種は監査60が知らせるだけ★
+LINKS_PAGE = "index.html"
+LINKS_BEGIN = "<!-- MACHINE-LINKS-BEGIN -->"
+LINKS_END = "<!-- MACHINE-LINKS-END -->"
+_LINK_RE = re.compile(r'<a class="all-machines-item" href="machines/([a-z0-9_]+)/">')
+
+
+def machine_links_html(rows: list) -> str:
+    """★機種一覧の並び（machines.json の順）のまま、全機種へのリンクを作る★"""
+    items = []
+    for m in rows:
+        if not isinstance(m, dict) or not re.fullmatch(r"[a-z0-9_]+", str(m.get("slug") or "")):
+            raise ValueError(f"機種の slug が読めません: {m!r}"[:200])
+        if not str(m.get("name") or "").strip():
+            raise ValueError(f"機種名が空です: {m.get('slug')}")
+        items.append(f'      <a class="all-machines-item" href="machines/{m["slug"]}/">{esc(m["name"])}</a>')
+    if not items:
+        raise ValueError("機種が1件もありません")
+    return "\n".join(['    <div class="all-machines">'] + items + ["    </div>"])
+
+
+def _links_span(html: str):
+    if html.count(LINKS_BEGIN) != 1 or html.count(LINKS_END) != 1:
+        raise ValueError(f"{LINKS_PAGE} の機種一覧の印が1組ではありません")
+    a = html.index(LINKS_BEGIN) + len(LINKS_BEGIN)
+    b = html.index(LINKS_END)
+    if b < a:
+        raise ValueError(f"{LINKS_PAGE} の機種一覧の印の順が逆です")
+    return a, b
+
+
+def splice_machine_links(html: str, rows: list) -> str:
+    """★印のあいだだけを作り直す★（印が1組でなければ例外＝書かない）"""
+    a, b = _links_span(html)
+    return html[:a] + "\n" + machine_links_html(rows) + "\n    " + html[b:]
+
+
+def machine_links_problems(html: str, rows: list, base=None) -> list:
+    """★トップの機種一覧が壊れていないか★（監査59・夜の公開でも走るので「最新か」は見ない）
+
+    ①印が1組・正しい順 ②リンクが1本以上 ③どれも機種一覧にある機種で、記事ページの実体がある
+    ④同じ機種が2回出ない ⑤印のあいだに、決まった形のリンク以外の <a> が無い
+    """
+    try:
+        a, b = _links_span(html)
+    except ValueError as e:
+        return [str(e)]
+    body = html[a:b]
+    slugs = _LINK_RE.findall(body)
+    ng = []
+    if not slugs:
+        ng.append("トップの機種一覧にリンクが1本もありません")
+    if body.count("<a ") != len(slugs):
+        ng.append("トップの機種一覧に、決まった形でないリンクがあります")
+    known = {str(m.get("slug")) for m in rows if isinstance(m, dict)}
+    root = base if base is not None else BASE
+    seen = set()
+    for s in slugs:
+        if s in seen:
+            ng.append(f"トップの機種一覧に {s} が2回あります")
+        seen.add(s)
+        if s not in known:
+            ng.append(f"トップの機種一覧の {s} は機種一覧にありません（消えた機種への死にリンク）")
+        elif not (root / "machines" / s / "index.html").is_file():
+            ng.append(f"トップの機種一覧の {s} の記事ページがありません（死にリンク）")
+    return ng
+
+
+def machine_links_missing(html: str, rows: list) -> list:
+    """★まだトップの一覧に載っていない機種★（監査60・知らせるだけ）"""
+    try:
+        a, b = _links_span(html)
+    except ValueError:
+        return []
+    have = set(_LINK_RE.findall(html[a:b]))
+    return [str(m.get("slug")) for m in rows if isinstance(m, dict) and str(m.get("slug")) not in have]
+
+
 def _build_legacy() -> int:
     """★いま公開中のハブ4ページを作り直す★（2026-08-30）
 
@@ -832,6 +916,8 @@ def _build_legacy() -> int:
         prose = _sj2.read_json(PROSE, expect=dict)
         built, _data_html, _allowed = _build_pages(rows, prose)
         marked = build_marked_pages()      # ★手書きページの印も、全部読めてから書く★
+        # ★トップの機種一覧は --legacy でだけ作り直す★（--check と夜の新台公開は見ない・2026-10-29）
+        marked[LINKS_PAGE] = splice_machine_links(marked[LINKS_PAGE], _sj2.read_rows(MACHINES))
     except Exception as e:                                   # noqa: BLE001
         print(f"★描けませんでした: {type(e).__name__}: {e} → 何も書きません")
         return 1
@@ -1276,6 +1362,44 @@ def selftest() -> int:
       and (_td.rate_label(_ck2, _td.default_rate(_ck2)) or _td.NORATE_PREFIX) == "チェッカー基準")
     t("ランキング：呼び名が無ければ既定の言い方",
       mode_label(_ck, "reset", "リセット後") == "リセット後")
+
+    # ★★トップの機種一覧★★（2026-10-29）＝印のあいだだけを作り直し、壊れ方は監査59が止める
+    def _splice_raises(h, rows):
+        try:
+            splice_machine_links(h, rows)
+            return False
+        except ValueError:
+            return True
+    import tempfile as _tf
+    _root = Path(_tf.mkdtemp(prefix="links_"))
+    for _s in ("aa", "bb"):
+        (_root / "machines" / _s).mkdir(parents=True)
+        (_root / "machines" / _s / "index.html").write_text("x", encoding="utf-8")
+    _rows = [{"slug": "aa", "name": "機種<A>"}, {"slug": "bb", "name": "機種B"}]
+    _pg = f"<main>{LINKS_BEGIN}{LINKS_END}</main><footer>f</footer>"
+    _one = splice_machine_links(_pg, _rows)
+    t("★印のあいだに全機種へのリンクを置き、名前は文字として出す★",
+      _LINK_RE.findall(_one) == ["aa", "bb"] and "機種&lt;A&gt;" in _one
+      and _one.startswith("<main>") and _one.endswith("</main><footer>f</footer>"))
+    t("★2回作り直しても同じ★（毎回ずれない）", splice_machine_links(_one, _rows) == _one)
+    t("★できた一覧は監査59を通る★", machine_links_problems(_one, _rows, _root) == [])
+    t("★印が無ければ監査59が止める★",
+      any("1組" in x for x in machine_links_problems("<main></main>", _rows, _root)))
+    t("★中身が空なら監査59が止める★",
+      any("1本も" in x for x in machine_links_problems(_pg, _rows, _root)))
+    t("★消えた機種への死にリンクを止める★",
+      any("死にリンク" in x for x in machine_links_problems(_one, _rows[:1], _root)))
+    (_root / "machines" / "bb" / "index.html").unlink()
+    t("★記事ページの実体が無ければ止める★",
+      any("記事ページがありません" in x for x in machine_links_problems(_one, _rows, _root)))
+    t("★決まった形でないリンクを混ぜたら止める★",
+      any("決まった形" in x for x in machine_links_problems(
+          _one.replace(LINKS_END, '<a href="https://example.invalid/">x</a>' + LINKS_END), _rows, _root)))
+    t("★新台がまだ載っていないだけでは止めない★（夜の公開でも監査が走る）／知らせる側には出る",
+      machine_links_problems(splice_machine_links(_pg, _rows[:1]), _rows, _root) == []
+      and machine_links_missing(splice_machine_links(_pg, _rows[:1]), _rows) == ["bb"])
+    t("★印が2組あれば作り直さない★（どこへ書くか決められない）",
+      _splice_raises(_pg + _pg, _rows))
 
     print(f"\n{ok}/{len(cases)} 合格")
     return 0 if ok == len(cases) else 1
