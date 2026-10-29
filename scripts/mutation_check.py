@@ -8812,17 +8812,20 @@ def block_real_push(root: str) -> None:
     for rem in subprocess.run(["git", "-C", root, "remote"], capture_output=True, text=True).stdout.split():
         subprocess.run(["git", "-C", root, "config", "--unset-all", f"remote.{rem}.pushurl"],
                        capture_output=True, text=True)
-    r = subprocess.run(["git", "-C", root, "config", "url.file:///uchidokoro-test-copy-no-push/.pushInsteadOf",
-                        "https://"], capture_output=True, text=True)
-    bad = r.returncode != 0
+    bad = False
+    # ★https・ssh・scp形式（git@…:）のどれも向け直す★（Codex review 25f9 の1）
+    for pre in ("https://", "http://", "ssh://", "git@", "git://"):
+        r = subprocess.run(["git", "-C", root, "config", "--add",
+                            "url.file:///uchidokoro-test-copy-no-push/.pushInsteadOf", pre],
+                           capture_output=True, text=True)
+        bad = bad or r.returncode != 0
     # ★送り先を1つずつ確かめる★（まとめた文字列で見ると、1件だけ無効でも残りを見逃す）
     for rem in subprocess.run(["git", "-C", root, "remote"], capture_output=True, text=True).stdout.split():
         g = subprocess.run(["git", "-C", root, "remote", "get-url", "--push", "--all", rem],
                            capture_output=True, text=True)
         urls = [u for u in g.stdout.split() if u]
-        if g.returncode != 0 or not urls or any(
-                not u.startswith("file:///uchidokoro-test-copy-no-push/") and "://" in u
-                and not u.startswith("file://") for u in urls):
+        # ★許すのは遮断先と file:// だけ★（「://」の有無で見ると scp 形式を見逃す）
+        if g.returncode != 0 or not urls or any(not u.startswith("file://") for u in urls):
             bad = True
     if bad:
         raise RuntimeError("★試験の写しの送り先を無効にできません（写しから本物へ送らないため、試験を止めます）★")
@@ -9068,7 +9071,14 @@ def main() -> int:
                        capture_output=True)
         subprocess.run(["git", "-C", _pt, "remote", "set-url", "--add", "--push", "origin",
                         "https://example.invalid/b.git"], capture_output=True)
+        subprocess.run(["git", "-C", _pt, "remote", "add", "scp", "git@example.invalid:x/y.git"],
+                       capture_output=True)
         block_real_push(_pt)
+        _pu = subprocess.run(["git", "-C", _pt, "remote", "get-url", "--push", "--all", "scp"],
+                             capture_output=True, text=True).stdout.split()
+        if not _pu or not all(u.startswith("file:///uchidokoro-test-copy-no-push/") for u in _pu):
+            print("❌ ★写しの送り先（scp形式）が本物のまま残ります★: " + " ".join(_pu))
+            return 1
         _pu = subprocess.run(["git", "-C", _pt, "remote", "get-url", "--push", "--all", "origin"],
                              capture_output=True, text=True).stdout.split()
         if not _pu or not all(u.startswith("file:///uchidokoro-test-copy-no-push/") for u in _pu):
