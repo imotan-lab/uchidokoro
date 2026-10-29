@@ -8727,6 +8727,7 @@ def _run_tests(root: str, scripts: list) -> tuple:
     env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1",
                PYTHONDONTWRITEBYTECODE="1", UCHIDOKORO_LOGS=_logdir,
                UCHIDOKORO_RESEARCH=_research)
+    env.update(no_push_git_env(os.environ))
     for rel in scripts:
         r = subprocess.run([sys.executable, os.path.join(root, rel),
                             "--selftest"],
@@ -8796,6 +8797,27 @@ def _rmtree_hard(path) -> None:
         _sh_r.rmtree(path, onerror=_force)
     except Exception:                      # noqa: BLE001
         pass
+
+
+_NO_PUSH_PREFIXES = ("https://", "http://", "ssh://", "git@", "git://")
+
+
+def no_push_git_env(base_env) -> dict:
+    """★★試験として動かす git すべてに「外へは送らない」設定を足す環境変数★★（2026-10-29）
+
+    ★なぜ写しの設定だけでは足りないか★＝写しの中の試験が、さらに自分で写し（clone）を作って
+    本物の送り先を設定し直す（ci_repro が本番と同じ検査にするため）と、写しの設定はそこへ届かない。
+    10/29 21:27〜21:41 にも、関所の試験の最中に同じコミットが本物へ上がった。
+    ★GIT_CONFIG_COUNT は、その子孫のどの repo の git にも効く★（試験が作る file:// の仮の置き場には効かない）
+    """
+    n = int(str(base_env.get("GIT_CONFIG_COUNT") or "0") or 0)
+    out = {}
+    for pre in _NO_PUSH_PREFIXES:
+        out[f"GIT_CONFIG_KEY_{n}"] = "url.file:///uchidokoro-test-copy-no-push/.pushInsteadOf"
+        out[f"GIT_CONFIG_VALUE_{n}"] = pre
+        n += 1
+    out["GIT_CONFIG_COUNT"] = str(n)
+    return out
 
 
 def block_real_push(root: str) -> None:
@@ -9083,6 +9105,17 @@ def main() -> int:
                              capture_output=True, text=True).stdout.split()
         if not _pu or not all(u.startswith("file:///uchidokoro-test-copy-no-push/") for u in _pu):
             print("❌ ★写しの送り先が本物のまま残ります★: " + " ".join(_pu))
+            return 1
+        # ★写しの中で新しく作った repo（本物の送り先を設定し直したもの）にも効くこと★
+        _pt2 = tempfile.mkdtemp(prefix="mut_push2_")
+        subprocess.run(["git", "init", "-q", _pt2], capture_output=True)
+        subprocess.run(["git", "-C", _pt2, "remote", "add", "origin", "https://github.com/x/y.git"],
+                       capture_output=True)
+        _env2 = dict(os.environ, **no_push_git_env(os.environ))
+        _pu2 = subprocess.run(["git", "-C", _pt2, "remote", "get-url", "--push", "--all", "origin"],
+                              capture_output=True, text=True, env=_env2).stdout.split()
+        if not _pu2 or not all(u.startswith("file:///uchidokoro-test-copy-no-push/") for u in _pu2):
+            print("❌ ★試験が新しく作った repo の送り先が本物のまま残ります★: " + " ".join(_pu2))
             return 1
         print("★写しの送り先は無効になっています★")
 
