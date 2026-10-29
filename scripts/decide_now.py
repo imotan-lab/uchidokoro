@@ -995,6 +995,11 @@ def _machine_row(slug: str) -> dict:
         return {}
 
 
+def _is_kana(c: str) -> bool:
+    """★ひらがな1文字か★＝数字のすぐ後ろがひらがななら単位ではない（「1/300です」の「で」）"""
+    return len(c) == 1 and "ぁ" <= c <= "ゟ"
+
+
 def _numbers(s: str) -> list:
     """★数値は「すぐ後ろの1文字」ごと見る★（2026-08-27・Codexの指摘3）
 
@@ -1011,7 +1016,8 @@ def _numbers(s: str) -> list:
     for end, tok in _num_spans(s):
         tail = s[end:end + 1]
         # ★区切りや文の終わりは単位ではない★（付けると別物になってしまう）
-        if tail in _TAIL_DELIMS:
+        # ★ひらがなも単位ではない★（2026-10-29・numbers_with_unit と同じ決まり＝_is_kana の1か所）
+        if tail in _TAIL_DELIMS or _is_kana(tail):
             out.append(tok)
         else:
             out.append(tok + tail)
@@ -1029,7 +1035,7 @@ NUM_PATTERN = (r"(?<![\d.])[-−▲△+＋][ \u3000\t]*\d+(?:\.\d+)?"
 _SIGNS = "-−▲△+＋"
 # ★数値のすぐ後ろが「単位ではない」文字★（`_numbers` と `numbers_with_unit` で共通）
 _TAIL_DELIMS = ("", " ", "\u3000", "、", "。", "／", "/", "・", "）", ")",
-                "」", "\n", "\t", "，", ",")
+                "」", "\n", "\t", "，", ",", '"')   # ★「"」は記事データ（JSON）の文字列の終わり★
 # ★範囲の「〜」は単位ではない★（単位つきで比べるときだけ外す）
 _NOT_UNIT = ("〜", "~", "～")
 
@@ -1075,7 +1081,7 @@ def numbers_with_unit(s: str) -> list:
     #   朝タスクが文末だけの直し（体言止め→です・ます）を「数値が変わる」として毎回見送っていた。
     #   単位はG・枚・回・周・%・pt・スルー（カタカナ）などで、ひらがなの単位は無い
     return [(tok, "" if (s[end:end + 1] in _TAIL_DELIMS + _NOT_UNIT
-                         or "ぁ" <= s[end:end + 1] <= "ゟ")
+                         or _is_kana(s[end:end + 1]))
              else s[end:end + 1])
             for end, tok in _num_spans(s)]
 
@@ -1865,7 +1871,9 @@ def apply_decision(path: str, apply_it: bool = False, *,
             if where and where not in ("body", "table_note") \
                     and not cell_target(where):
                 break
-            body = sec.get("body") or []
+            # ★★セルを名指ししたら、本文と注記は探さない★★（2026-10-29・Codex review 3fe0c78e の2）＝
+            #   本文に同じ文字があると本文のほうが先に当たり、札は元のまま「直した」と報告していた
+            body = [] if cell_target(where) else (sec.get("body") or [])
             for bi, line in enumerate(body):
                 if not isinstance(line, str):
                     continue
@@ -1898,6 +1906,8 @@ def apply_decision(path: str, apply_it: bool = False, *,
                 plan.append((_cp[0], si, _cp[1], a))
                 hit = True
                 break
+            if cell_target(where):
+                continue
             for ti, tbl in enumerate(sec.get("tables") or []):
                 if a["op"] == "replace" and tbl.get("note") == a["before"]:
                     plan.append(("table_note", si, ti, a))
@@ -3380,6 +3390,49 @@ def _selftest() -> int:
             ensure_ascii=False))
         t("　（対照）同じ節の中の重複なら、今までどおり通る",
           not apply_decision(_r8b)["problems"])
+
+        # ★★文末だけの直し（数字のあとにひらがなが付く）を、書く段まで通す★★（Codex review 3fe0c78e の1）
+        SFX = {"slug": "sfx", "sections": [{"title": "基本スペック", "body": ["初当たり1/300", "ほかの行です。"]}]}
+        with io.open(os.path.join(td, "sfx.json"), "w", encoding="utf-8", newline="\n") as f:
+            json.dump(SFX, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+        _rfx = os.path.join(td, "dsfx.json")
+        io.open(_rfx, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": SCHEMA, "slug": "sfx", "source_sha256": _sha_of("sfx"),
+             "decided_by": ["Claude", "codex"],
+             "actions": [{"op": "replace", "before": "初当たり1/300", "after": "初当たりは1/300です。",
+                          "why": "体言止めを です・ます にそろえる",
+                          "meaning_why": "文末を整えただけで数値も対象も同じ（試験）"}]},
+            ensure_ascii=False))
+        _gfx = apply_decision(_rfx)
+        t("★★文末だけの直しは「数値が変わる」と断らない★★（書く段の数値の読み方もひらがなを単位にしない）",
+          not _gfx["problems"])
+
+        # ★★札を名指ししたら、本文に同じ文字があっても札だけを直す★★（Codex review 3fe0c78e の2）
+        # ★本文の節を先に置く★（本文が先に探されると、札より先に当たってしまう形）
+        SBD = {"slug": "sbd", "sections": [
+            {"title": "立ち回りのコツ", "body": ["通常A（基本）", "ほかの行です。"]},
+            {"title": "設定示唆まとめ", "type": "settei", "tables": [{
+                "headers": ["ボイス", "示唆"],
+                "rows": [["刃牙", {"text": "通常A（基本）", "badge": "hint"}]]}]}]}
+        with io.open(os.path.join(td, "sbd.json"), "w", encoding="utf-8", newline="\n") as f:
+            json.dump(SBD, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+        _rbd = os.path.join(td, "dsbd.json")
+        io.open(_rbd, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": SCHEMA, "slug": "sbd", "source_sha256": _sha_of("sbd"),
+             "decided_by": ["Claude", "codex"],
+             "actions": [{"op": "replace", "before": "通常A（基本）", "after": "デフォルト",
+                          "where": "sections[1].tables[0].rows[0][1]",
+                          "why": "出典では刃牙のボイスはデフォルト",
+                          "meaning_why": "札の言い方を出典どおりにする（試験）"}]},
+            ensure_ascii=False))
+        _gbd = apply_decision(_rbd, apply_it=True, guard=False)
+        _after_bd = json.load(io.open(os.path.join(td, "sbd.json"), encoding="utf-8"))
+        t("★★札を名指ししたら札だけを直し、同じ文字の本文は触らない★★（強さの印も残る）",
+          not _gbd["problems"]
+          and _after_bd["sections"][1]["tables"][0]["rows"][0][1] == {"text": "デフォルト", "badge": "hint"}
+          and _after_bd["sections"][0]["body"][0] == "通常A（基本）")
 
         # ★★奥の守り（係り先の照合）だけが効く材料★★
         #   （2026-08-28・罠⑫＝手前に守りを足すと、奥が試されなくなる）

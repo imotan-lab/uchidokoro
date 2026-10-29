@@ -606,8 +606,94 @@ def release_refined(old: str, new: str) -> bool:
     return len(o) == 7 and n.startswith(o + "-") and len(n) == 10
 
 
-def identity_same(old: dict, new: dict) -> list:
-    """本人性が変わっていないか（★変わっていたら育てない★）。"""
+# ★★本人性の段の強さ★★（2026-10-29）＝型式名が独立2出典で採れると BOUND → CODE_MATCHED に上がる。
+#   ★上がるのは確認が強くなっただけ★なので止めない（落ちるのは今までどおり止める）。
+#   ゴジラ対エヴァ2（dmm_5119）が段が上がっただけで育成が止まっていた（10/29）
+_TIER_RANK = {"CATALOG_BOUND": 1, "CATALOG_CODE_MATCHED": 2}
+# ★★2AIが「同じ機種の表記の変化」と決めたら受け取ってよい項目★★（2026-10-29）
+#   ★URL・型式名・導入日・移行前の記録は受け取らない★（変われば別の機種を疑う）
+IDENTITY_ACCEPTABLE = ("manufacturer_id", "announced_name")
+IDENTITY_STORE = _lp.doc("grow_identity_accepted.json")
+MIN_IDENTITY_WHY = 15
+
+
+def identity_change_problems(dec) -> list:
+    """★本人性の表記の変化を受け取る決定の形★（言うだけでは通さない）"""
+    if not isinstance(dec, dict):
+        return ["決定ファイルが辞書ではありません"]
+    ng = []
+    if not re.fullmatch(r"[a-z0-9_]+", str(dec.get("slug") or "")):
+        ng.append("slug が英小文字・数字・下線ではありません")
+    if dec.get("field") not in IDENTITY_ACCEPTABLE:
+        ng.append(f"field は {'・'.join(IDENTITY_ACCEPTABLE)} のどれかです（URL・型式名・導入日は受け取りません）")
+    for k in ("before", "after"):
+        if not isinstance(dec.get(k), str) or not dec.get(k).strip():
+            ng.append(f"{k}（変わる前／後の値そのまま）が空です")
+    if dec.get("before") == dec.get("after"):
+        ng.append("before と after が同じです")
+    if _cv.judges_exact(dec.get("by")) is not True:
+        ng.append("判断者は claude,codex（代役なら claude-agent-a,claude-agent-b）の組だけです")
+    if len(str(dec.get("why") or "").strip()) < MIN_IDENTITY_WHY:
+        ng.append(f"理由（why）が{MIN_IDENTITY_WHY}字に足りません")
+    return ng
+
+
+def identity_accepted(slug: str, store: str = "") -> frozenset:
+    """★その機種で2AIが受け取った表記の変化★＝{(項目, 前, 後)}（★読むたびに同じ条件を確かめる★）
+
+    ★控えが読めなければ例外★（呼ぶ側は何も受け取らない＝止める側へ倒す）
+    """
+    st = store or IDENTITY_STORE
+    if not os.path.isfile(st):
+        return frozenset()
+    with open(st, encoding="utf-8") as f:
+        got = json.load(f)
+    rows = (got.get(slug) if isinstance(got, dict) else None) or []
+    out = set()
+    for r in rows if isinstance(rows, list) else []:
+        if isinstance(r, dict) and not identity_change_problems(dict(r, slug=slug)):
+            out.add((r["field"], r["before"], r["after"]))
+    return frozenset(out)
+
+
+def accept_identity(path: str, store: str = "") -> int:
+    """★2AIの「同じ機種の表記の変化」を控える★（--accept-identity <決定ファイル>）"""
+    try:
+        dec = _sj.read_json(path, expect=dict)
+    except Exception as e:                # noqa: BLE001
+        print(f"★決定ファイルが読めません: {e}★")
+        return 1
+    ng = identity_change_problems(dec)
+    if ng:
+        for x in ng:
+            print("  ✗ " + x)
+        return 1
+    st = store or IDENTITY_STORE
+    try:
+        with open(st, encoding="utf-8") as f:
+            got = json.load(f)
+        got = got if isinstance(got, dict) else {}
+    except FileNotFoundError:
+        got = {}
+    rows = [r for r in (got.get(dec["slug"]) or []) if isinstance(r, dict)]
+    rows.append({"field": dec["field"], "before": dec["before"], "after": dec["after"],
+                 "by": dec["by"], "why": dec["why"],
+                 "at": _dt.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")})
+    got[dec["slug"]] = rows
+    tmp = st + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(got, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, st)
+    _log(f"育成: {dec['slug']} の本人性の表記の変化を受け取りました（{dec['field']}: {dec['before']} → {dec['after']}・{dec['by']}）")
+    print(f"控えました: {dec['slug']} {dec['field']}（{dec['before']} → {dec['after']}）。次の育成で止めません")
+    return 0
+
+
+def identity_same(old: dict, new: dict, accepted=frozenset()) -> list:
+    """本人性が変わっていないか（★変わっていたら育てない★）。
+
+    ★例外は2つだけ★＝段が上がった（確認が強くなった）／2AIが受け取った表記の変化（accepted）
+    """
     ng = []
     for k, jp in (("manufacturer_id", "メーカー"),
                   ("regulatory_model_code", "型式名"),
@@ -633,10 +719,27 @@ def identity_same(old: dict, new: dict) -> list:
             # ★月だけ→日まで、は食い違いにしない★（台帳#441）
             if k == "market_release_date" and release_refined(a, b):
                 continue
+            if k == "identity_tier" and _TIER_RANK.get(b, 0) > _TIER_RANK.get(a, 99):
+                continue
+            if (k, a, b) in accepted:
+                continue
             ng.append(f"{jp}が変わっています（{a!r} → {b!r}）")
         if a and not b:
             ng.append(f"{jp}が取れなくなりました（登録済み: {a!r}）")
     return ng
+
+
+def identity_change_questions(slug: str, problems) -> list:
+    """★表記の変化で止まったら、2AIへの問いにする★（受け取れる項目のときだけ）"""
+    out = []
+    for x in problems or []:
+        if str(x).startswith(("メーカーが変わっています", "公式の機種名が変わっています")):
+            out.append({"kind": "grow_identity", "slug": slug, "text":
+                        f"★本人性の表記が変わりました★（{x}）／DMMの機種ページを読み、★同じ機種の表記の変化か★を2AIで決めてください"
+                        "／同じ機種なら決定ファイル（slug・field＝manufacturer_id か announced_name・before・after＝括弧内の値そのまま・"
+                        "by・why 15字以上）を書いて python scripts/grow_machine.py --accept-identity <決定ファイル>"
+                        "／★別の機種の疑いがあれば受け取らない★（育成は止まったまま・記事は無傷）"})
+    return out
 
 
 def claims_grew(old_decision: dict, material: dict, accepted=()) -> list:
@@ -2330,7 +2433,15 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
         machine.pop(_tp.KEY, None)
     out["problems"] += _tp.sync_problems(machine, detail)
     # ③ 本人性が変わっていないか
-    out["problems"] += identity_same(ident, machine.get("identity") or {})
+    try:
+        _id_ok = identity_accepted(slug)
+    except Exception as e:                # noqa: BLE001
+        _id_ok = frozenset()
+        out["problems"].append(f"本人性の受け取りの控えを読めません（{type(e).__name__}）")
+    _id_ng = identity_same(ident, machine.get("identity") or {}, _id_ok)
+    out["problems"] += _id_ng
+    # ★★表記の変化で止まったら2AIへ問う★★（2026-10-29・受け取る口が無く「技術的に残ったもの」になっていた）
+    out["questions"] += identity_change_questions(slug, _id_ng)
     # ④ 材料は増えるだけか（IDの増減と、載っている文の両方で見る）
     #   ★右は「今夜の判定書」ではなく「今夜の材料」★（2026-08-23・台帳#461）
     dp = _detail_path(slug)
@@ -3837,6 +3948,36 @@ def selftest() -> int:
     t("　同じなら通る",
       not identity_same({"manufacturer_id": "a", "announced_name": "L機"},
                         {"manufacturer_id": "a", "announced_name": "L機"}))
+    # ★★本人性の段が上がるのは止めない・下がるのは止める★★（2026-10-29・ゴジラ対エヴァ2）
+    t("★★本人性の段が上がっただけなら育成を止めない★★（確認が強くなっただけ）",
+      not identity_same({"identity_tier": "CATALOG_BOUND"}, {"identity_tier": "CATALOG_CODE_MATCHED"}))
+    t("　段が下がれば今までどおり止める",
+      bool(identity_same({"identity_tier": "CATALOG_CODE_MATCHED"}, {"identity_tier": "CATALOG_BOUND"})))
+    t("　知らない段への変化も止める",
+      bool(identity_same({"identity_tier": "CATALOG_BOUND"}, {"identity_tier": "X"})))
+    # ★★2AIが受け取った表記の変化だけは止めない★★（2026-10-29・牙狼のメーカー表記）
+    _acc = frozenset({("manufacturer_id", "dmm:サンセイR&D", "dmm:SANSEI LAB")})
+    t("★★2AIが受け取った表記の変化（前と後がそのまま一致）は止めない★★",
+      not identity_same({"manufacturer_id": "dmm:サンセイR&D"}, {"manufacturer_id": "dmm:SANSEI LAB"}, _acc))
+    t("　受け取ったのと違う変化は止める",
+      bool(identity_same({"manufacturer_id": "dmm:サンセイR&D"}, {"manufacturer_id": "dmm:別社"}, _acc)))
+    t("　表記の変化で止まったら2AIへの問いが出る",
+      len(identity_change_questions("zzz", ["メーカーが変わっています（'a' → 'b'）"])) == 1
+      and not identity_change_questions("zzz", ["型式名が変わっています（'a' → 'b'）"]))
+    _idec = {"slug": "zzz_i", "field": "manufacturer_id", "before": "dmm:サンセイR&D",
+             "after": "dmm:SANSEI LAB", "by": ["claude", "codex"], "why": "DMMの機種ページで型式・導入日が同じ（試験）"}
+    t("★受け取る決定の形★＝URL・型式名は受け取らない／判断者の組／理由",
+      identity_change_problems(_idec) == []
+      and identity_change_problems(dict(_idec, field="official_product_url")) != []
+      and identity_change_problems(dict(_idec, by=["claude"])) != []
+      and identity_change_problems(dict(_idec, why="同じ")) != [])
+    import tempfile as _tfi
+    _ist = os.path.join(_tfi.mkdtemp(prefix="gid_"), "acc.json")
+    with open(_ist, "w", encoding="utf-8") as _f:
+        json.dump({"zzz_i": [dict(_idec, by=["claude"], after="dmm:別社"), {"field": "manufacturer_id"}, None,
+                             {k: _idec[k] for k in ("field", "before", "after", "by", "why")}]}, _f)
+    t("★控えは読むたびに確かめる★（判断者1人・欠けた控えは効かない）",
+      identity_accepted("zzz_i", _ist) == frozenset({("manufacturer_id", "dmm:サンセイR&D", "dmm:SANSEI LAB")}))
     # 区分が AUTO_PENDING でなければ育てない
     #   ★2026-09-06★＝ここは実在の旧形式機種（hokuto）を呼んでいたが、
     #   ★戻り値をどの合否にも使っていなかった★（呼ぶだけの行）。
@@ -5530,11 +5671,14 @@ def _main() -> int:
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--accept-loss", help="2AIの『落としてよい』の決定ファイル")
+    ap.add_argument("--accept-identity", help="2AIの『同じ機種の表記の変化』の決定ファイル")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
     if a.accept_loss:
         return accept_loss(a.accept_loss)
+    if a.accept_identity:
+        return accept_identity(a.accept_identity)
     rows = _read_rows()
     # ★今日見る分だけを選ぶ★（2026-08-13・台帳#346）
     #   毎朝すべてをフル確認すると1機種8分×機種数かかる。
