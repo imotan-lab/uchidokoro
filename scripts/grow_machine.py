@@ -729,6 +729,40 @@ def identity_same(old: dict, new: dict, accepted=frozenset()) -> list:
     return ng
 
 
+def apply_accepted_identity(name: str, maker: str, accepted) -> tuple:
+    """★2AIが受け取った表記の変化を当てた (機種名, メーカー)★（前の値が登録と完全一致するときだけ）"""
+    for f, b, a in sorted(accepted or ()):
+        if f == "manufacturer_id" and b == maker:
+            maker = a
+        elif f == "announced_name" and b == name:
+            name = a
+    return name, maker
+
+
+def maker_change_questions(slug: str, maker: str, problems) -> list:
+    """★DMMの確かめ直しで「メーカーが食い違います」となったら、受け取るかを2AIへ問う★
+
+    ★前と後の値をそのまま書く★＝受け取りの控えは (manufacturer_id, 前, 後) の完全一致でだけ効く。
+    後の値は機種ページの表示名に「dmm:」を付けたもの（名簿に無い社の登録の形・dmm_discover.maker_conf）
+    """
+    import re as _re
+    out = []
+    for x in problems or []:
+        m = _re.search(r"メーカーが食い違います（期待: .*? / 機種ページ: (.+?)）", str(x))
+        if not m or not maker:
+            continue
+        after = "dmm:" + m.group(1).strip()
+        if after == maker:
+            continue
+        out.append({"kind": "grow_identity", "slug": slug, "text":
+                    f"★DMMの機種ページのメーカー表記が変わりました★（登録 {maker!r} / 機種ページ {m.group(1).strip()!r}）"
+                    "／DMMの機種ページを読み、★同じ機種のメーカー表記の変化か★を2AIで決めてください（型式名・導入日・機種名が同じか）"
+                    f"／同じ機種なら決定ファイル（slug={slug}・field=manufacturer_id・before={maker}・after={after}・by・why 15字以上）"
+                    "を書いて python scripts/grow_machine.py --accept-identity <決定ファイル>"
+                    "／★別の機種の疑いがあれば受け取らない★（育成は止まったまま・記事は無傷）"})
+    return out
+
+
 def identity_change_questions(slug: str, problems) -> list:
     """★表記の変化で止まったら、2AIへの問いにする★（受け取れる項目のときだけ）"""
     out = []
@@ -2209,6 +2243,16 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     name = ident.get("announced_name") or cur.get("name")
     maker = ident.get("manufacturer_id") or ""
     url = ident.get("official_product_url") or ""
+    # ★★2AIが受け取った表記の変化を、DMMでの確かめ直しの前に当てる★★（2026-10-29・Codex review 9fe1f3b5 の1）＝
+    #   確かめ直しは登録済みのメーカーで照合するので、控えを後で読むと、その前で必ず止まっていた。
+    #   当てた値は機種行の作り直しにも流れ、identity_same が (項目, 前, 後) を受け取り済みとして通す。
+    #   ★控えが読めなければ止める★（文言に「本人性」を入れない＝書く直前の見直しで捨てられないように）
+    try:
+        _id_ok = identity_accepted(slug)
+    except Exception as e:                # noqa: BLE001
+        out["problems"].append(f"表記の変化の控え（grow_identity_accepted.json）を読めません（{type(e).__name__}）")
+        return out
+    name, maker = apply_accepted_identity(name, maker, _id_ok)
     # ① 本人性を確かめ直す（同定はDMMの機種ページで行う）
     #   ★以前ここで一覧カード用の下ごしらえをしていた★（`_ensure_list`）。
     #   メーカー公式の巡回は 2026-08-16（台帳#377）に仕組みごと消したので、
@@ -2228,6 +2272,8 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     vo = verify(name, url, maker, old_release, require_recent=False)
     if vo.get("problems"):
         out["problems"] += [f"本人性を確かめ直せません: {p}" for p in vo["problems"]]
+        # ★★DMMのメーカー表記が変わったときは、受け取るかを2AIへ問う★★（Codex review 9fe1f3b5 の1）
+        out["questions"] += maker_change_questions(slug, maker, vo["problems"])
         # ★★型のついた失敗は、必ず問いにして返す★★（2026-09-10・CodexのP0）
         #   ★直す前はここで戻っていた★ので、
         #   ★育成レーンで毎朝止まる機種の問いが、どこにも出なかった★。
@@ -2433,11 +2479,6 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
         machine.pop(_tp.KEY, None)
     out["problems"] += _tp.sync_problems(machine, detail)
     # ③ 本人性が変わっていないか
-    try:
-        _id_ok = identity_accepted(slug)
-    except Exception as e:                # noqa: BLE001
-        _id_ok = frozenset()
-        out["problems"].append(f"本人性の受け取りの控えを読めません（{type(e).__name__}）")
     _id_ng = identity_same(ident, machine.get("identity") or {}, _id_ok)
     out["problems"] += _id_ng
     # ★★表記の変化で止まったら2AIへ問う★★（2026-10-29・受け取る口が無く「技術的に残ったもの」になっていた）
@@ -3976,6 +4017,20 @@ def selftest() -> int:
     with open(_ist, "w", encoding="utf-8") as _f:
         json.dump({"zzz_i": [dict(_idec, by=["claude"], after="dmm:別社"), {"field": "manufacturer_id"}, None,
                              {k: _idec[k] for k in ("field", "before", "after", "by", "why")}]}, _f)
+    t("★★受け取った表記の変化は、DMMでの確かめ直しの前に当てる★★（Codex review 9fe1f3b5 の1）",
+      apply_accepted_identity("L牙狼", "dmm:サンセイR&D", _acc) == ("L牙狼", "dmm:SANSEI LAB")
+      and apply_accepted_identity("L牙狼", "dmm:別社", _acc) == ("L牙狼", "dmm:別社"))
+    _mq = maker_change_questions("zzz", "dmm:サンセイR&D", [
+        "IDENTITY_FAILED メーカーが食い違います（期待: サンセイR&D / 機種ページ: SANSEI LAB）"])
+    t("★★確かめ直しで「メーカーが食い違います」なら、前と後の値をそのまま書いた問いを出す★★",
+      len(_mq) == 1 and "before=dmm:サンセイR&D" in _mq[0]["text"] and "after=dmm:SANSEI LAB" in _mq[0]["text"])
+    _src_pl = open(__file__, encoding="utf-8").read()
+    t("　（配線）育成の入口が、確かめ直しより前に受け取りを当てている",
+      _src_pl.index("name, maker = apply_accepted_identity(name, maker, _id_ok)")
+      < _src_pl.index("vo = verify(name, url, maker, old_release, require_recent=False)"))
+    t("　（配線）確かめ直しで止まったら、メーカー表記の問いを出している",
+      'out["questions"] += maker_change_questions(slug, maker, vo["problems"])' in _src_pl.split(
+          "def selftest", 1)[0])
     t("★控えは読むたびに確かめる★（判断者1人・欠けた控えは効かない）",
       identity_accepted("zzz_i", _ist) == frozenset({("manufacturer_id", "dmm:サンセイR&D", "dmm:SANSEI LAB")}))
     # 区分が AUTO_PENDING でなければ育てない

@@ -1000,6 +1000,21 @@ def _is_kana(c: str) -> bool:
     return len(c) == 1 and "ぁ" <= c <= "ゟ"
 
 
+def _strip_kana(n: str) -> str:
+    """★名指しの末尾のひらがなを落とす★（2026-10-29）＝ひらがなを単位と読まなくなる前に合意した
+    決定は「397.2と」のように名指ししている。読み方を変えても、合意済みの決定を無駄にしない"""
+    return n[:-1] if n and _is_kana(n[-1]) else n
+
+
+def _named_numbers(dec: dict) -> set:
+    """★numbers_removed の名指しを、いまの数値の読み方にそろえた集合★（元の書き方も残す）"""
+    out = set()
+    for x in (dec.get("numbers_removed") or []):
+        if isinstance(x, dict) and x.get("n"):
+            out |= {str(x["n"]), _strip_kana(str(x["n"]))}
+    return out
+
+
 def _numbers(s: str) -> list:
     """★数値は「すぐ後ろの1文字」ごと見る★（2026-08-27・Codexの指摘3）
 
@@ -1611,7 +1626,7 @@ def apply_decision(path: str, apply_it: bool = False, *,
                     "文を落とすときは、なぜ落としてよいかを meaning_why に"
                     f"書いてください（15字以上）: {_t[:34]!r}")
                 return result
-            _named = {str(x.get("n")) for x in (dec.get("numbers_removed") or [])
+            _named = _named_numbers(dec) | {str(x.get("n")) for x in (dec.get("numbers_removed") or [])
                       if isinstance(x, dict)}
             _miss_n = [n for n in _numbers(_t) if n not in _named]
             if _miss_n:
@@ -1641,7 +1656,7 @@ def apply_decision(path: str, apply_it: bool = False, *,
                 return result
             # ★消す行の数値は、すべて名指しで理由を書くこと★
             #   （「同じ数値が他所にある」だけでは免除しない＝Codexの助言）
-            _named = {str(x.get("n")) for x in (dec.get("numbers_removed") or [])
+            _named = _named_numbers(dec) | {str(x.get("n")) for x in (dec.get("numbers_removed") or [])
                       if isinstance(x, dict)}
             _miss_n = [n for n in _numbers(_t) if n not in _named]
             if _miss_n:
@@ -1679,7 +1694,7 @@ def apply_decision(path: str, apply_it: bool = False, *,
                 return result
             _body_txt = "\n".join(_strings_in(_ws[1]))
             # ★中の数値は、すべて名指しで理由を書くこと★（drop_line と同じ線）
-            _named = {str(x.get("n")) for x in (dec.get("numbers_removed") or [])
+            _named = _named_numbers(dec) | {str(x.get("n")) for x in (dec.get("numbers_removed") or [])
                       if isinstance(x, dict)}
             _miss_n = [n for n in _numbers(_body_txt) if n not in _named]
             if _miss_n:
@@ -1995,6 +2010,7 @@ def apply_decision(path: str, apply_it: bool = False, *,
     for item in dec.get("numbers_removed") or []:
         if isinstance(item, dict) and item.get("n") and item.get("why"):
             ok_to_lose[str(item["n"])] = item["why"]
+            ok_to_lose.setdefault(_strip_kana(str(item["n"])), item["why"])
     # ★名指しは単位を書かなくても効く★（2026-08-27）
     #   数値の見方を「単位ごと」に変えたので、
     #   決定が「6.4」と名指ししていても「6.4割」に当たるようにする。
@@ -3204,6 +3220,10 @@ def _selftest() -> int:
         t("★★記号の単位（%）も単位として残す／「〜」は単位ではない★★",
           numbers_with_unit("BIG比率70%") == [("70", "%")]
           and numbers_with_unit("700〜") == [("700", "")])
+        t("★★読み方を変える前の名指し（397.2と）も、いまの読み方（397.2）に当たる★★（合意済みの決定を無駄にしない）",
+          "397.2" in _named_numbers({"numbers_removed": [{"n": "397.2と", "why": "x"}]})
+          and "500G" in _named_numbers({"numbers_removed": [{"n": "500G", "why": "x"}]})
+          and "500" not in _named_numbers({"numbers_removed": [{"n": "500G", "why": "x"}]}))
         t("★★ひらがなは単位ではない★★（「1/300」と「1/300です」を同じ数値と読む・文末だけの直しを通す）",
           numbers_with_unit("初当たり1/300です。") == numbers_with_unit("初当たり1/300")
           and numbers_with_unit("700Gです") == [("700", "G")]

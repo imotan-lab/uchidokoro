@@ -386,7 +386,9 @@ def run() -> int:
     for s in sorted(EXPECTED_PUBLIC_SLUGS - seen_slugs
                     - EXPECTED_NEEDS_EDIT - EXPECTED_DISPLAY_FIX):
         problems.append(f"公開されるはずの機種が公開されていない: {s}")
-    for s in sorted(seen_slugs - EXPECTED_PUBLIC_SLUGS):
+    # ★編集待ちの名簿にいて公開できた機種は「想定外」ではない★（2026-10-29）＝件数は 10/26 に自動で
+    #   足すようにしたのに、ここだけ直し忘れ、ハッピージャグラーV3 を直した朝の公開が取り消されていた（10/28）
+    for s in sorted(seen_slugs - EXPECTED_PUBLIC_SLUGS - set(_fixed_pub)):
         problems.append(f"想定外の機種が公開されている: {s}")
 
     # ★checkerが実際に射影・監査されていることを停止条件にする★

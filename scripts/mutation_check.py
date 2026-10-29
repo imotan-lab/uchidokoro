@@ -8384,6 +8384,20 @@ MUTATIONS = [
         "run": ["scripts/style_check.py"],
     },
     {
+        "why": "★受け取った表記の変化を確かめ直しの前に当てない（★DMMの確かめ直しで止まり、受け取っても牙狼が育たない・review 9fe1f3b5 の1★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        if f == \"manufacturer_id\" and b == maker:\n            maker = a\n",
+        "after": "        if f == \"manufacturer_id\" and b == maker:\n            pass\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★メーカー表記が変わったときに2AIへ問わない（★受け取る口があっても誰も使わない・review 9fe1f3b5 の1★）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        out[\"questions\"] += maker_change_questions(slug, maker, vo[\"problems\"])\n",
+        "after": "",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★本人性の段が上がっただけで育成を止める（★ゴジラ対エヴァ2が育たない・2026-10-29★）★",
         "file": "scripts/grow_machine.py",
         "before": "            if k == \"identity_tier\" and _TIER_RANK.get(b, 0) > _TIER_RANK.get(a, 99):\n                continue\n",
