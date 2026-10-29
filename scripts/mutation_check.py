@@ -8391,6 +8391,13 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★試験の写しの「送れない形」の送り先を、中身を見ずに通す（★別の置き場へ向いていても気づかない・2026-10-29★）★",
+        "file": "scripts/prepush_gate.py",
+        "before": "                url = url[len(_TEST_COPY_NO_PUSH):]\n",
+        "after": "                continue\n",
+        "run": ["scripts/prepush_gate.py"],
+    },
+    {
         "why": "★受け取りを続けて当てる（★A→B と B→A を受け取ると元へ戻り、確かめ直しで止まり続ける・review c299 の1★）★",
         "file": "scripts/grow_machine.py",
         "before": "    return out[\"announced_name\"], out[\"manufacturer_id\"]\n",

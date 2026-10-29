@@ -50,6 +50,9 @@ WANT_HOST = "github.com"
 WANT_PATH = "imotan-lab/uchidokoro"
 
 
+_TEST_COPY_NO_PUSH = "file:///uchidokoro-test-copy-no-push/"
+
+
 def _same_repo(url: str) -> bool:
     """★URLが同じ置き場を指しているか★（2026-07-31・Codex16回目）
 
@@ -328,6 +331,10 @@ def remote_ok() -> list:
             ng.append(f"push先（{remote} の{kind}用）が分かりません")
             continue
         for url in urls:
+            # ★試験の写しでは送り先を「どこへも送れない形」へ向け直している★（mutation_check.block_real_push・
+            #   2026-10-29）＝中身は本来の送り先なので、その形のまま同じ置き場かを見る（送れないので安全側）
+            if url.startswith(_TEST_COPY_NO_PUSH):
+                url = url[len(_TEST_COPY_NO_PUSH):]
             if not _same_repo(url):
                 ng.append(f"push先（{remote} の{kind}用）が想定と違います: "
                           f"{_hide(url)[:60]!r}")
@@ -491,6 +498,19 @@ def selftest() -> int:
       "machines/x/index.html" in allowed_for("x")
       and "machines/y/index.html" not in allowed_for("x"))
     t("★push先が想定どおり★", remote_ok() == [])
+    _keep_git = globals()["_git"]
+    try:
+        class _R:
+            def __init__(self, out):
+                self.stdout, self.returncode = out, 0
+        globals()["_git"] = lambda *a, **k: _R(
+            "main" if "rev-parse" in a else
+            "file:///uchidokoro-test-copy-no-push/github.com/evil/x.git" if "--push" in a else
+            "https://github.com/imotan-lab/uchidokoro.git")
+        t("★★試験の写しの「送れない形」でも、別の置き場なら止める★★（向け直しの中身まで見る・2026-10-29）",
+          any("push用" in x or "push" in x for x in remote_ok()))
+    finally:
+        globals()["_git"] = _keep_git
     _sc = push_scope()
     t("★★これから何がpushされるか分かる★★（手前の未pushコミットも一緒に出る）",
       isinstance(_sc.get("commits"), list) and _sc.get("branch") == "main")
