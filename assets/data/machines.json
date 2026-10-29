@@ -13025,6 +13025,53 @@
   }
  },
  {
+  "slug": "dmm_5127",
+  "name": "L押忍！番長番付",
+  "seo": {
+   "title": "L押忍！番長番付 スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "spec",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [],
+   "policy_mode": "normal",
+   "decided_at": "2026-10-30",
+   "input_digest": "sha256:0f7d4ad6f4d35f11b7d97f83fbcf8cc288878da4bbbce9f6f7a2e5533f685f98"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-12",
+  "identity": {
+   "manufacturer_id": "daitogiken",
+   "official_product_url": "https://p-town.dmm.com/machines/5127",
+   "announced_name": "L押忍！番長番付",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5127 型式=未掲載 メーカー=パオン・ディーピー 導入=2026-12 確認日=2026-10-30",
+   "market_release_date": "2026-12"
+  }
+ },
+ {
   "slug": "dmm_5136",
   "name": "スマスロモンキーターンRED",
   "seo": {
@@ -13072,53 +13119,6 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5136 型式=未掲載 メーカー=セブンリーグ 導入=2027-01 確認日=2026-10-22",
    "market_release_date": "2027-01"
-  }
- },
- {
-  "slug": "dmm_5127",
-  "name": "L押忍！番長番付",
-  "seo": {
-   "title": "L押忍！番長番付 スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [],
-   "pending_topics": [
-    "gameplay",
-    "cz",
-    "ceiling",
-    "spec",
-    "setting",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
-   "claims": [],
-   "policy_mode": "normal",
-   "decided_at": "2026-10-30",
-   "input_digest": "sha256:0f7d4ad6f4d35f11b7d97f83fbcf8cc288878da4bbbce9f6f7a2e5533f685f98"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-12",
-  "identity": {
-   "manufacturer_id": "daitogiken",
-   "official_product_url": "https://p-town.dmm.com/machines/5127",
-   "announced_name": "L押忍！番長番付",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5127 型式=未掲載 メーカー=パオン・ディーピー 導入=2026-12 確認日=2026-10-30",
-   "market_release_date": "2026-12"
   }
  }
 ]
