@@ -1013,8 +1013,8 @@ MUTATIONS = [
     {
         "why": "★出どころの逐語がサイトに在るかを見ない（★架空の出どころを書けば、どんな数値でも書ける★）★",
         "file": "scripts/decide_now.py",
-        "before": "                if src not in published:",
-        "after": "                if False:",
+        "before": "                if not _from_conf and src not in published:\n",
+        "after": "                if False:\n",
         "run": ["scripts/decide_now.py"],
     },
     {
@@ -8389,6 +8389,20 @@ MUTATIONS = [
         "before": "            out[fld] = afters.pop()\n",
         "after": "            pass\n",
         "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★確定値の記録を出どころにしても、記事に無い数字として断る（★2AIが2社で確かめた正しい値を足せない・2026-10-29★）★",
+        "file": "scripts/decide_now.py",
+        "before": "                    _from_conf = True\n",
+        "after": "                    _from_conf = False\n",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★確定値の記録を、機種名の形を確かめずに読む（★別の場所の記録を出どころにできる・2026-10-29★）★",
+        "file": "scripts/decide_now.py",
+        "before": "    if not isinstance(field, str) or not field.strip() or not re.fullmatch(r\"[a-z0-9_]+\", slug or \"\"):\n",
+        "after": "    if not isinstance(field, str):\n",
+        "run": ["scripts/decide_now.py"],
     },
     {
         "why": "★「送れない形」の送り先を認める例外を本番でも効かせる（★本番の push 先の確認が弱くなる・review d5de★）★",

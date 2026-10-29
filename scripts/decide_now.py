@@ -1000,6 +1000,24 @@ def _is_kana(c: str) -> bool:
     return len(c) == 1 and "ぁ" <= c <= "ゟ"
 
 
+def confirmed_source(slug: str, field) -> str | None:
+    """★確定値の記録を、出どころの文字列として返す★（無い・読めない・形が違えば None＝断る）
+
+    ★その機種の記録だけ★（for_slug_checked＝契約つき）・★項目名は完全一致★。
+    返すのは記録の値を文字にしたもの（数字は単位ごと＝「98.9%」）。足す数値はこの中に全部あること
+    """
+    if not isinstance(field, str) or not field.strip() or not re.fullmatch(r"[a-z0-9_]+", slug or ""):
+        return None
+    try:
+        import confirmed_values as _cvd
+        rec = _cvd.for_slug_checked(slug).get(field)
+    except Exception:                                    # noqa: BLE001
+        return None
+    if not isinstance(rec, dict) or "value" not in rec:
+        return None
+    return json.dumps(rec["value"], ensure_ascii=False)
+
+
 def _strip_kana(n: str) -> str:
     """★名指しの末尾のひらがなを落とす★（2026-10-29）＝ひらがなを単位と読まなくなる前に合意した
     決定は「397.2と」のように名指ししている。読み方を変えても、合意済みの決定を無駄にしない"""
@@ -1547,15 +1565,30 @@ def apply_decision(path: str, apply_it: bool = False, *,
                         result["problems"].append(_cw)
                         return result
                 src = a.get("numbers_from")
+                # ★★出どころは「2AIが独立2出典で確定させた記録」でもよい★★（2026-10-29・運営者
+                #   「2AIで書くもの決めて載せられないの？」）＝記事にまだ無い正しい値（magireco の
+                #   設定2〜5の機械割）を、消すことしかできなかった。確定値の記録は、2社の出典の逐語が
+                #   本当にそのページにあるかを機械が照合済みで、判断者の組も揃っている。
+                #   ★見るのはこの機種の記録だけ・項目名は完全一致★（読めなければ断る＝数字を作らない）
+                _cf = a.get("numbers_from_confirmed")
+                _from_conf = False
+                if _cf and not src:
+                    src = confirmed_source(str(dec.get("slug") or ""), _cf)
+                    if src is None:
+                        result["problems"].append(
+                            f"確定値の記録に {_cf!r} がありません（この機種の confirmed_values に"
+                            "独立2出典で記録してから使ってください）")
+                        return result
+                    _from_conf = True
                 if not src and not _claims:
                     result["problems"].append(
                         f"数値が変わる言い換えには出どころが要ります"
-                        f"（numbers_from の逐語か claims_from の主張で）"
+                        f"（numbers_from の逐語か claims_from の主張か numbers_from_confirmed で）"
                         f": {a['before'][:34]!r}")
                     return result
                 if _claims and not src:
                     src = _claims[0]["source"]
-                if src not in published:
+                if not _from_conf and src not in published:
                     result["problems"].append(
                         f"出どころの逐語が、この機種の公開データに見つかりません: "
                         f"{src[:44]!r}")
@@ -2625,6 +2658,30 @@ def _selftest() -> int:
                      {"n": "1000", "why": "わざと：ここでは消えないが名指ししても害はない"}]))
         t("　出どころが実在し、消える数値を理由つきで名指しすれば通る",
           not rk5["problems"])
+
+        # ★★出どころは「2AIが独立2出典で確定させた記録」でもよい★★（2026-10-29）＝記事にまだ無い
+        #   正しい値を足せる。★記録が無い・別の項目・数字が記録に無い、は断る★
+        _keep_cs = globals()["confirmed_source"]
+        try:
+            globals()["confirmed_source"] = lambda s, f: (
+                json.dumps({"1": "97.4%", "2": "98.9%", "6": "110.4%"}) if (s, f) == ("k2", "payout_rate")
+                else None)
+            _cact = dict(base_act, after="設定2の機械割は98.9%です。",
+                         numbers_from_confirmed="payout_rate",
+                         meaning_why="確定値の記録どおりに設定2の値を足す（試験）")
+            _rm = [{"n": "6.4", "why": "派生値"}, {"n": "1000", "why": "他にある"}]
+            t("★★確定値の記録を出どころにすれば、記事にまだ無い正しい値を足せる★★（数字は記録の中にある）",
+              not apply_decision(dec_k2(_cact, removed=_rm))["problems"])
+            t("　記録に無い数字は足せない（数字を作らない）",
+              any("出どころに無い数値" in x for x in apply_decision(dec_k2(
+                  dict(_cact, after="設定2の機械割は99.9%です。"), removed=_rm))["problems"]))
+            t("　記録の無い項目名なら断る",
+              any("確定値の記録" in x for x in apply_decision(dec_k2(
+                  dict(_cact, numbers_from_confirmed="bonus_prob"), removed=_rm))["problems"]))
+        finally:
+            globals()["confirmed_source"] = _keep_cs
+        t("★確定値の記録を読むのはこの機種・完全一致の項目名だけ★（slug の形が違えば読まない）",
+          confirmed_source("../x", "payout_rate") is None and confirmed_source("k2", "") is None)
 
         # ── 2026-08-27・台帳#487 節の外（表・要約・リード文）────────
         #   ★実例（真打 吉宗）★＝基本情報表が「スルーカウントリセット」、
