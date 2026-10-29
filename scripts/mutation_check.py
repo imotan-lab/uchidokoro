@@ -9130,6 +9130,8 @@ def main() -> int:
         _env2 = dict(os.environ, **no_push_git_env(os.environ))
         _pu2 = subprocess.run(["git", "-C", _pt2, "remote", "get-url", "--push", "--all", "origin"],
                               capture_output=True, text=True, env=_env2).stdout.split()
+        shutil.rmtree(_pt, ignore_errors=True)        # ★仮の repo は片付ける★（毎回残っていた）
+        shutil.rmtree(_pt2, ignore_errors=True)
         if not _pu2 or not all(u.startswith("file:///uchidokoro-test-copy-no-push/") for u in _pu2):
             print("❌ ★試験が新しく作った repo の送り先が本物のまま残ります★: " + " ".join(_pu2))
             return 1
