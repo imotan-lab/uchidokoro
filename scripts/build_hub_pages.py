@@ -825,6 +825,8 @@ LINKS_PAGE = "index.html"
 LINKS_BEGIN = "<!-- MACHINE-LINKS-BEGIN -->"
 LINKS_END = "<!-- MACHINE-LINKS-END -->"
 _LINK_RE = re.compile(r'<a class="all-machines-item" href="machines/([a-z0-9_]+)/">')
+_ANY_A_RE = re.compile(r"<a(?=[\s>/])", re.I)
+_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
 
 
 def machine_links_html(rows: list) -> str:
@@ -867,12 +869,14 @@ def machine_links_problems(html: str, rows: list, base=None) -> list:
         a, b = _links_span(html)
     except ValueError as e:
         return [str(e)]
-    body = html[a:b]
+    # ★コメントの中はリンクではない★（印の内側を丸ごとコメントにしても通っていた・Codex review 772ffbb3 の4）
+    body = _COMMENT_RE.sub("", html[a:b])
     slugs = _LINK_RE.findall(body)
     ng = []
     if not slugs:
         ng.append("トップの機種一覧にリンクが1本もありません")
-    if body.count("<a ") != len(slugs):
+    # ★大文字・改行つきの <a も数える★（ブラウザはどれもリンクとして読む）
+    if len(_ANY_A_RE.findall(body)) != len(slugs):
         ng.append("トップの機種一覧に、決まった形でないリンクがあります")
     known = {str(m.get("slug")) for m in rows if isinstance(m, dict)}
     root = base if base is not None else BASE
@@ -894,7 +898,7 @@ def machine_links_missing(html: str, rows: list) -> list:
         a, b = _links_span(html)
     except ValueError:
         return []
-    have = set(_LINK_RE.findall(html[a:b]))
+    have = set(_LINK_RE.findall(_COMMENT_RE.sub("", html[a:b])))
     return [str(m.get("slug")) for m in rows if isinstance(m, dict) and str(m.get("slug")) not in have]
 
 
@@ -1398,6 +1402,14 @@ def selftest() -> int:
     t("★新台がまだ載っていないだけでは止めない★（夜の公開でも監査が走る）／知らせる側には出る",
       machine_links_problems(splice_machine_links(_pg, _rows[:1]), _rows, _root) == []
       and machine_links_missing(splice_machine_links(_pg, _rows[:1]), _rows) == ["bb"])
+    t("★印の内側を丸ごとコメントにしたら止める★（コメントの中はリンクではない）",
+      any("1本も" in x for x in machine_links_problems(
+          _one.replace(LINKS_BEGIN, LINKS_BEGIN + "<!--").replace(LINKS_END, "-->" + LINKS_END), _rows, _root)))
+    t("★大文字や改行つきの <a も決まった形でないリンクとして止める★",
+      any("決まった形" in x for x in machine_links_problems(
+          _one.replace(LINKS_END, '<A href="x">x</A>' + LINKS_END), _rows, _root))
+      and any("決まった形" in x for x in machine_links_problems(
+          _one.replace(LINKS_END, '<a\nhref="x">x</a>' + LINKS_END), _rows, _root)))
     t("★印が2組あれば作り直さない★（どこへ書くか決められない）",
       _splice_raises(_pg + _pg, _rows))
 

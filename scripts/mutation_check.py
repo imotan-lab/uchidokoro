@@ -1281,8 +1281,8 @@ MUTATIONS = [
     {
         "why": "★この決定で書く欄の食い違いまで断る（★線を直すだけで書けなくなる★）★",
         "file": "scripts/checker_verdict.py",
-        "before": "                            if k not in _writes and _top[k] != _alt[k])",
-        "after": "                            if _top[k] != _alt[k])",
+        "before": "                            if k not in _writes and (\n",
+        "after": "                            if (\n",
         "run": ["scripts/checker_verdict.py"],
     },
     # ─── 2026-09-25・Codex187の指摘（範囲の区切りと記号の単位）───
@@ -8370,6 +8370,41 @@ MUTATIONS = [
         "run": ["scripts/mode_ask.py"],
     },
     {
+        "why": "★回数の行の線を変えても、交換率ごとの注記の古い数字を見ない（★「0スルーは300G基準」が残る・review 772ffbb3 の1★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "                    if \"note\" not in rv:\n                        ng += _stale_note_problems(\n",
+        "after": "                    if False:\n                        ng += _stale_note_problems(\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★直下と modeData の回数の表を丸ごと比べずに通す（★書かない行まで片方の値で上書きされる・review 772ffbb3 の2★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "                                _mask_rows(_top[k], md.get(\"rows\")) != _mask_rows(_alt[k], md.get(\"rows\"))\n",
+        "after": "                                (\"rows\" not in md and _top[k] != _alt[k])\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★回数と同じ数字なら単位を見ずに注記へ通す（★1スルーの行に「1%」を作れる・review 772ffbb3 の3★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "                made = [n + u for n, u in _dn_num.numbers_with_unit(nt)\n                        if (n, u) not in ok_n and (n, u) != (str(cnt), cnt_unit)]\n",
+        "after": "                made = [n + u for n, u in _dn_num.numbers_with_unit(nt)\n                        if (n, u) not in ok_n and n != str(cnt)]\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★トップの機種一覧でコメントの中もリンクと数える（★一覧を丸ごとコメントにしても監査が通る・review 772ffbb3 の4★）★",
+        "file": "scripts/build_hub_pages.py",
+        "before": "    body = _COMMENT_RE.sub(\"\", html[a:b])\n",
+        "after": "    body = html[a:b]\n",
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
+        "why": "★トップの機種一覧で大文字・改行つきの <a を数えない（★決まった形でないリンクが紛れ込む・review 772ffbb3 の4★）★",
+        "file": "scripts/build_hub_pages.py",
+        "before": "    if len(_ANY_A_RE.findall(body)) != len(slugs):\n",
+        "after": "    if body.count(\"<a \") != len(slugs):\n",
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
         "why": "★トップの機種一覧が空でも通す（★全記事へのリンクが消えても監査が黙る・2026-10-29★）★",
         "file": "scripts/build_hub_pages.py",
         "before": "    if not slugs:\n        ng.append(\"トップの機種一覧にリンクが1本もありません\")\n",
@@ -8386,8 +8421,8 @@ MUTATIONS = [
     {
         "why": "★トップの機種一覧に決まった形でないリンクを許す（★外へのリンクを紛れ込ませられる・2026-10-29★）★",
         "file": "scripts/build_hub_pages.py",
-        "before": "    if body.count(\"<a \") != len(slugs):\n",
-        "after": "    if False:\n",
+        "before": "        ng.append(\"トップの機種一覧に、決まった形でないリンクがあります\")\n",
+        "after": "        pass\n",
         "run": ["scripts/build_hub_pages.py"],
     },
     {
@@ -8421,7 +8456,7 @@ MUTATIONS = [
     {
         "why": "★回数の行の注記に作った数字を許す（★出典にも線にも無い数字が読者に出る・2026-10-29★）★",
         "file": "scripts/checker_verdict.py",
-        "before": "                ok_n = _row_nums_allowed(m, [old.get(\"note\")], after_vals, nums, cnt)\n                made = [n + u for n, u in _dn_num.numbers_with_unit(nt)\n                        if (n, u) not in ok_n and n != str(cnt)]\n",
+        "before": "                ok_n = _row_nums_allowed(m, [old.get(\"note\")], after_vals, nums, cnt)\n                made = [n + u for n, u in _dn_num.numbers_with_unit(nt)\n                        if (n, u) not in ok_n and (n, u) != (str(cnt), cnt_unit)]\n",
         "after": "                made = []\n",
         "run": ["scripts/checker_verdict.py"],
     },

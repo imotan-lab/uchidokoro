@@ -371,10 +371,10 @@ def decision_problems(dec, ms=None) -> list:
                 _writes.add("ceiling")
             if "good" in md:
                 _writes.add("target")
-            if "rows" in md:
-                _writes |= set(ROW_KINDS)
             _clash = sorted(k for k in set(_top) & set(_alt)
-                            if k not in _writes and _top[k] != _alt[k])
+                            if k not in _writes and (
+                                _mask_rows(_top[k], md.get("rows")) != _mask_rows(_alt[k], md.get("rows"))
+                                if k in ROW_KINDS else _top[k] != _alt[k]))
             if _clash:
                 ng.append(f"{tag}: 直下と modeData の「{key}」が食い違っています"
                           f"（{'・'.join(_clash)}）。どちらが正しいか決めてから書いてください")
@@ -573,6 +573,60 @@ def _row_nums_allowed(m: dict, old_notes, values, nums, count) -> set:
     return allowed
 
 
+def _mask_rows(lst, dec_rows):
+    """★回数の表から、この決定が書く回数・書く項目だけを取り除いた写し★（直下と modeData の食い違いを見る用）
+
+    ★書かない行・書かない項目が食い違っていれば、そのまま比べて止める★
+    （まとめて除くと、書く必要のない行まで片方の値で上書きされる・Codex review 772ffbb3 の2）
+    """
+    if not isinstance(lst, list) or not isinstance(dec_rows, list):
+        return lst
+    plan = {r.get("count"): r for r in dec_rows if isinstance(r, dict)}
+    out = []
+    for row in lst:
+        if not isinstance(row, dict) or row.get("count") not in plan:
+            out.append(row)
+            continue
+        d = plan[row["count"]]
+        drop = {lv for lv in LEVELS if lv in d} | ({"note"} if "note" in d else set())
+        if "good" in d:
+            drop.add("target")
+        cur = {k: v for k, v in row.items() if k not in drop and k != "byRate"}
+        by = row.get("byRate")
+        if isinstance(by, dict):
+            dby = d.get("byRate") if isinstance(d.get("byRate"), dict) else {}
+            nb = {}
+            for rk, rv in by.items():
+                w = dby.get(rk) if isinstance(dby.get(rk), dict) else {}
+                dr = {lv for lv in LEVELS if lv in w} | ({"note"} if "note" in w else set())
+                if "good" in w:
+                    dr.add("target")
+                nb[rk] = {k: v for k, v in rv.items() if k not in dr} if isinstance(rv, dict) else rv
+            cur["byRate"] = nb
+        out.append(cur)
+    return out
+
+
+def _stale_note_problems(where, note, old_vals: dict, new_vals: dict) -> list:
+    """★線を変えたのに、その注記が変える前の線の数字のまま★（Codex review 772ffbb3 の1）
+
+    ★見るのは「変えた線の、変える前の値」が注記にG付きで残り、変えたあとの線のどれとも一致しないとき★
+    （note_text の点検は「300G基準」の形を拾わなかった）
+    """
+    import decide_now as _dn_num
+    changed = {lv for lv in LEVELS if lv in new_vals and old_vals.get(lv) is not None
+               and old_vals.get(lv) != new_vals.get(lv)}
+    if not changed or not isinstance(note, str):
+        return []
+    now = {str(v) for v in new_vals.values() if v is not None}
+    gone = {str(old_vals[lv]) for lv in changed} - now
+    left = sorted({n for n, u in _dn_num.numbers_with_unit(note) if u in ("G", "") and n in gone})
+    if left:
+        return [f"{where}: 線を変えたのに、注記が変える前の数字（{'・'.join(x + 'G' for x in left)}）のままです"
+                "（注記も一緒に書き直してください）"]
+    return []
+
+
 def rows_problems(tag, md, m, key, rates, limit, why, nums) -> list:
     """★回数の表の行の決定が受け取れる形か★（書いたあとの筋は row_view_problems）"""
     if "rows" not in md:
@@ -600,6 +654,7 @@ def rows_problems(tag, md, m, key, rates, limit, why, nums) -> list:
             ng.append(f"{rowt}: 回数 {cnt} が2回出てきます")
         seen.add(cnt)
         old = by_count[cnt]
+        cnt_unit = "ス" if kind == "suru" else "周"     # ★回数の書き方（0スルー・3周期）だけを例外にする★
         unknown = sorted(set(row) - {"count", "note", "byRate"} - set(LEVELS))
         if unknown:
             ng.append(f"{rowt}: 書けない項目があります（{'・'.join(unknown)}）")
@@ -647,6 +702,10 @@ def rows_problems(tag, md, m, key, rates, limit, why, nums) -> list:
                     full = list(rvals.values()) + [
                         _int(o2.get(lv)) for lv in LEVELS
                         if lv not in rvals and _int(o2.get(lv)) is not None]
+                    if "note" not in rv:
+                        ng += _stale_note_problems(
+                            rrt, o2.get("note"), {lv: _int(o2.get(lv)) for lv in LEVELS},
+                            {lv: (rvals[lv] if lv in rvals else _int(o2.get(lv))) for lv in LEVELS})
                     if "note" in rv:
                         nt = rv.get("note")
                         if not isinstance(nt, str) or not nt.strip():
@@ -655,10 +714,14 @@ def rows_problems(tag, md, m, key, rates, limit, why, nums) -> list:
                             ok_n = _row_nums_allowed(m, [o2.get("note"), old.get("note")],
                                                      full + after_vals, nums, cnt)
                             made = [n + u for n, u in _dn_num.numbers_with_unit(nt)
-                                    if (n, u) not in ok_n and n != str(cnt)]
+                                    if (n, u) not in ok_n and (n, u) != (str(cnt), cnt_unit)]
                             if made:
                                 ng.append(f"{rrt}: 注記に、線にも天井にも今の注記にも無い数字があります: "
                                           + " / ".join(made[:4]) + "（数字を作らない）")
+        if "note" not in row:
+            ng += _stale_note_problems(
+                rowt, old.get("note"), {lv: _int(old.get(lv)) for lv in LEVELS},
+                {lv: (vals[lv] if lv in vals else _int(old.get(lv))) for lv in LEVELS})
         if "note" in row:
             nt = row.get("note")
             if not isinstance(nt, str) or not nt.strip():
@@ -666,7 +729,7 @@ def rows_problems(tag, md, m, key, rates, limit, why, nums) -> list:
             else:
                 ok_n = _row_nums_allowed(m, [old.get("note")], after_vals, nums, cnt)
                 made = [n + u for n, u in _dn_num.numbers_with_unit(nt)
-                        if (n, u) not in ok_n and n != str(cnt)]
+                        if (n, u) not in ok_n and (n, u) != (str(cnt), cnt_unit)]
                 if made:
                     ng.append(f"{rowt}: 注記に、線にも天井にも今の注記にも無い数字があります: "
                               + " / ".join(made[:4]) + "（数字を作らない）")
@@ -1463,10 +1526,11 @@ def _rows_tests(t) -> None:
              "modes": [{"key": "suru", "rows": rows}]}
         x.update(kw)
         return x
-    ok = d([{"count": 0, "good": 500, "caution": 400, "excellent": 600,
+    ok = d([{"count": 0, "good": 500, "caution": 400, "excellent": 600, "note": "0スルー。500G〜が目安です。",
              "byRate": {"eq56": {"good": 450, "caution": 350, "excellent": 550,
                                  "note": "5.6枚交換の0スルーは450G基準です。"},
-                        "rate50": {"good": 520, "caution": 420, "excellent": 620}}}])
+                        "rate50": {"good": 520, "caution": 420, "excellent": 620,
+                                   "note": "0スルーは520G基準です。"}}}])
     try:
         t("★★回数の表の行を書き換える決定を受け取る★★（直す前はバキの0スルー300Gを直す道が無かった）",
           decision_problems(ok, _ms) == [])
@@ -1484,7 +1548,7 @@ def _rows_tests(t) -> None:
               {**ok, "modes": [{"key": "cz", "rows": [{"count": 0, "good": 1}]}]}, _ms)))
         t("★行の中で段の順が逆なら断る★",
           any("caution ≦ good ≦ excellent" in x for x in decision_problems(
-              d([{"count": 0, "good": 500, "caution": 600}]), _ms)))
+              d([{"count": 0, "good": 500, "caution": 600, "note": "0スルー。500G〜が目安です。"}]), _ms)))
         t("★交換率が良いほうが深くなる行は断る★",
           any("交換率が良いほうが深く" in x for x in decision_problems(
               d([{"count": 1, "byRate": {"eq56": {"good": 360, "caution": 260, "excellent": 460}}}]), _ms)))
@@ -1496,8 +1560,10 @@ def _rows_tests(t) -> None:
                   "note": "0スルーは777G基準です。"}]), _ms)))
         t("　注記の回数の数字（0スルー）と線の数字は作った数字ではない",
           decision_problems(d([{"count": 0, "good": 500, "caution": 400, "excellent": 600,
-                                "byRate": {"eq56": {"good": 450, "caution": 350, "excellent": 550},
-                                           "rate50": {"good": 520, "caution": 420, "excellent": 620}},
+                                "byRate": {"eq56": {"good": 450, "caution": 350, "excellent": 550,
+                                                    "note": "0スルーは450G基準です。"},
+                                           "rate50": {"good": 520, "caution": 420, "excellent": 620,
+                                                      "note": "0スルーは520G基準です。"}},
                                 "note": "0スルーは500G基準です。"}]), _ms) == [])
         t("★知らない項目は書かせない★",
           any("書けない項目" in x for x in decision_problems(d([{"count": 0, "ceiling": 900}]), _ms)))
@@ -1510,6 +1576,25 @@ def _rows_tests(t) -> None:
         _mc["checker"]["suru"]["ceiling"] = 480
         t("★欄の天井を超える行は断る★",
           any("天井" in x for x in decision_problems(ok, [_mc])))
+        t("★★線を変えたのに注記が変える前の数字のままなら断る★★（「0スルーは300G基準」が残る・Codex review 772ffbb3 の1）",
+          any("変える前の数字" in x for x in decision_problems(
+              d([{"count": 0, "byRate": {"eq56": {"good": 330, "caution": 250, "excellent": 460}}}]), _ms)))
+        t("　注記も一緒に書き直せば通る",
+          decision_problems(d([{"count": 0, "byRate": {"eq56": {"good": 330, "caution": 250, "excellent": 460,
+                                                                 "note": "0スルーは330G基準です。"}}}]), _ms) == [])
+        t("★★回数と同じ数字でも、別の単位なら作った数字★★（1スルーの行に「1%」・Codex review 772ffbb3 の3）",
+          any("数字を作らない" in x for x in decision_problems(
+              d([{"count": 1, "note": "1%で当選します。"}]), _ms)))
+        _mx = json.loads(json.dumps(_m))
+        _mx["checker"]["modeData"] = {"suru": json.loads(json.dumps(_m["checker"]["suru"]))}
+        _mx["checker"]["modeData"]["suru"]["suru"][1]["excellent"] = 410
+        t("★★直下と modeData で書かない行が食い違っていれば断る★★（片方で上書きしない・Codex review 772ffbb3 の2）",
+          any("食い違っています" in x for x in decision_problems(ok, [_mx])))
+        _mx2 = json.loads(json.dumps(_m))
+        _mx2["checker"]["modeData"] = {"suru": json.loads(json.dumps(_m["checker"]["suru"]))}
+        _mx2["checker"]["modeData"]["suru"]["suru"][0]["good"] = 999
+        t("　書く行・書く項目だけの食い違いは、書けばそろうので断らない",
+          not any("食い違っています" in x for x in decision_problems(ok, [_mx2])))
         _md = json.loads(json.dumps(_m))
         _md["checker"]["modeData"] = {"suru": json.loads(json.dumps(_m["checker"]["suru"]))}
         _am = merged(_md, ok)
