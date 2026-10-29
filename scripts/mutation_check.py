@@ -8370,10 +8370,10 @@ MUTATIONS = [
         "run": ["scripts/mode_ask.py"],
     },
     {
-        "why": "★回数の行の線を変えても、交換率ごとの注記の古い数字を見ない（★「0スルーは300G基準」が残る・review 772ffbb3 の1★）★",
+        "why": "★回数の行の線を変えても、画面に出る注記の古い数字を見ない（★「0スルーは300G基準」が残る・review 772ffbb3 の1／530a18be の1と2★）★",
         "file": "scripts/checker_verdict.py",
-        "before": "                    if \"note\" not in rv:\n                        ng += _stale_note_problems(\n",
-        "after": "                    if False:\n                        ng += _stale_note_problems(\n",
+        "before": "                ng += _stale_note_problems(\n                    f\"{tag}（{r or '交換率なし'}）\", v.get(\"note\"),\n",
+        "after": "                ng += [] if True else _stale_note_problems(\n                    f\"{tag}（{r or '交換率なし'}）\", v.get(\"note\"),\n",
         "run": ["scripts/checker_verdict.py"],
     },
     {
@@ -8442,7 +8442,7 @@ MUTATIONS = [
     {
         "why": "★書いたあとの回数の行の筋を見ない（★交換率が良いほうが深い行・段の順が逆の行が書かれる・2026-10-29★）★",
         "file": "scripts/checker_verdict.py",
-        "before": "    out += row_view_problems(_after, dec)\n",
+        "before": "    out += row_view_problems(_after, dec, m)\n",
         "after": "",
         "run": ["scripts/checker_verdict.py"],
     },

@@ -451,7 +451,7 @@ def decision_problems(dec, ms=None) -> list:
     # ★★交換率が悪くなるほど、同じか深くなっていること★★（2026-10-02・#428）
     out += rate_view_problems(_after, touched)
     # ★★触った回数の行も、書いたあとの姿で筋を見る★★（2026-10-29）
-    out += row_view_problems(_after, dec)
+    out += row_view_problems(_after, dec, m)
     # ★★注記の数値が線と食い違うようにならないこと★★（2026-10-02・#428）＝
     #   線だけ直すと「5.6枚交換なら420Gから」の注記が古い数値のまま残る。
     #   ★新しく生まれる食い違いだけを断る★（元からあるものまで断ると直す道が無くなる）
@@ -702,10 +702,6 @@ def rows_problems(tag, md, m, key, rates, limit, why, nums) -> list:
                     full = list(rvals.values()) + [
                         _int(o2.get(lv)) for lv in LEVELS
                         if lv not in rvals and _int(o2.get(lv)) is not None]
-                    if "note" not in rv:
-                        ng += _stale_note_problems(
-                            rrt, o2.get("note"), {lv: _int(o2.get(lv)) for lv in LEVELS},
-                            {lv: (rvals[lv] if lv in rvals else _int(o2.get(lv))) for lv in LEVELS})
                     if "note" in rv:
                         nt = rv.get("note")
                         if not isinstance(nt, str) or not nt.strip():
@@ -718,10 +714,6 @@ def rows_problems(tag, md, m, key, rates, limit, why, nums) -> list:
                             if made:
                                 ng.append(f"{rrt}: 注記に、線にも天井にも今の注記にも無い数字があります: "
                                           + " / ".join(made[:4]) + "（数字を作らない）")
-        if "note" not in row:
-            ng += _stale_note_problems(
-                rowt, old.get("note"), {lv: _int(old.get(lv)) for lv in LEVELS},
-                {lv: (vals[lv] if lv in vals else _int(old.get(lv))) for lv in LEVELS})
         if "note" in row:
             nt = row.get("note")
             if not isinstance(nt, str) or not nt.strip():
@@ -771,7 +763,7 @@ def _apply_rows(conf: dict, rows: list) -> dict:
     return out
 
 
-def row_view_problems(after: dict, dec: dict) -> list:
+def row_view_problems(after: dict, dec: dict, before: dict | None = None) -> list:
     """★書いたあとの画面と同じ姿で、触った回数の行の筋を見る★
 
     ①その行・その交換率の中で caution ≦ good ≦ excellent ②欄の天井を超えない
@@ -809,6 +801,21 @@ def row_view_problems(after: dict, dec: dict) -> list:
                 if any(seq[i][1] > seq[i + 1][1] for i in range(len(seq) - 1)):
                     ng.append(f"{tag} の {lv} が、交換率が良いほうが深くなっています（"
                               + " / ".join(f"{r}={v}" for r, v in seq) + "）")
+            # ★★線を変えたのに、画面に出る注記が変える前の数字のまま★★（Codex review 772ffbb3 の1・530a18be の1と2）
+            #   ★見るのは書いたあとに実際に出る注記★＝交換率ごとの注記が無ければ行の直下の注記を引き継ぐ。
+            #   出し直した注記でも、変える前の数字が残っていれば断る（「作った数字」の検査は旧注記の数字を許すため）
+            _, old_have = _row_kind(_mode_conf(before or {}, key))
+            old_row = next((x for x in (old_have or []) if isinstance(x, dict)
+                            and x.get("count") == row.get("count")), None)
+            if old_row is None:
+                continue
+            old_views = dict([("", {k: v for k, v in old_row.items() if k != "byRate"})] + [
+                (r, rate_view(old_row, r)) for r in rates if r])
+            for r, v in views:
+                ov = old_views.get(r) or {}
+                ng += _stale_note_problems(
+                    f"{tag}（{r or '交換率なし'}）", v.get("note"),
+                    {lv: _int(ov.get(lv)) for lv in LEVELS}, {lv: _int(v.get(lv)) for lv in LEVELS})
     return ng
 
 
@@ -1579,6 +1586,17 @@ def _rows_tests(t) -> None:
         t("★★線を変えたのに注記が変える前の数字のままなら断る★★（「0スルーは300G基準」が残る・Codex review 772ffbb3 の1）",
           any("変える前の数字" in x for x in decision_problems(
               d([{"count": 0, "byRate": {"eq56": {"good": 330, "caution": 250, "excellent": 460}}}]), _ms)))
+        t("★★古い注記をそのまま出し直しても断る★★（Codex review 530a18be の1）",
+          any("変える前の数字" in x for x in decision_problems(
+              d([{"count": 0, "byRate": {"eq56": {"good": 330, "caution": 250, "excellent": 460,
+                                                  "note": "0スルーは300G基準です。"}}}]), _ms)))
+        _mi = json.loads(json.dumps(_m))
+        _r0 = _mi["checker"]["suru"]["suru"][0]
+        _r0["note"] = "0スルーは300G基準です。"
+        _r0["byRate"]["eq56"].pop("note")
+        t("★★交換率ごとの注記が無く行の注記を引き継ぐときも、画面に出る注記で見る★★（Codex review 530a18be の2）",
+          any("変える前の数字" in x for x in decision_problems(
+              d([{"count": 0, "byRate": {"eq56": {"good": 330, "caution": 250, "excellent": 460}}}]), [_mi])))
         t("　注記も一緒に書き直せば通る",
           decision_problems(d([{"count": 0, "byRate": {"eq56": {"good": 330, "caution": 250, "excellent": 460,
                                                                  "note": "0スルーは330G基準です。"}}}]), _ms) == [])
