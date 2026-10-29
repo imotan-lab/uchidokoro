@@ -8398,6 +8398,13 @@ MUTATIONS = [
         "run": ["scripts/decide_now.py"],
     },
     {
+        "why": "★確定値の記録のメモ欄（出典と照合していない数字）まで出どころに入れる（★未照合の数字を記事に足せる・review confirmed の1★）★",
+        "file": "scripts/decide_now.py",
+        "before": "                if str(k).startswith(\"_\") or k in skip:\n",
+        "after": "                if False:\n",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
         "why": "★確定値の記録を、機種名の形を確かめずに読む（★別の場所の記録を出どころにできる・2026-10-29★）★",
         "file": "scripts/decide_now.py",
         "before": "    if not isinstance(field, str) or not field.strip() or not re.fullmatch(r\"[a-z0-9_]+\", slug or \"\"):\n",

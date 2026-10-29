@@ -1015,7 +1015,25 @@ def confirmed_source(slug: str, field) -> str | None:
         return None
     if not isinstance(rec, dict) or "value" not in rec:
         return None
-    return json.dumps(rec["value"], ensure_ascii=False)
+    # ★★出典と照合した値だけから作る★★（Codex review confirmed の1）＝記録の値には照合しない欄
+    #   （_ で始まるメモ・単位・注記など）もあり、丸ごと文字にするとメモの数字まで出どころになった。
+    #   照合の対象は confirmed_values._tokens と同じ決め方。並びの名前（設定の番号など）は残す
+    skip = getattr(_cvd, "_TOKEN_SKIP", ("unit", "note", "benefit", "counted", "phase", "role", "kind"))
+    parts = []
+
+    def _walk(v):
+        if isinstance(v, dict):
+            for k, x in v.items():
+                if str(k).startswith("_") or k in skip:
+                    continue
+                parts.append(str(k))
+                _walk(x)
+        elif isinstance(v, list):
+            for x in v:
+                _walk(x)
+    _walk(rec["value"])
+    parts += [str(x) for x in _cvd._tokens(rec["value"])]
+    return " / ".join(parts) if parts else None
 
 
 def _strip_kana(n: str) -> str:
@@ -2680,6 +2698,16 @@ def _selftest() -> int:
                   dict(_cact, numbers_from_confirmed="bonus_prob"), removed=_rm))["problems"]))
         finally:
             globals()["confirmed_source"] = _keep_cs
+        import confirmed_values as _cvt
+        _keep_fsc = _cvt.for_slug_checked
+        try:
+            _cvt.for_slug_checked = lambda s: {"payout_rate": {"value": {
+                "1": "97.4%", "2": "98.9%", "_memo": "未照合 99.9%", "note": "注記 88.8%"}}}
+            _srcm = confirmed_source("k2", "payout_rate")
+            t("★★出どころは出典と照合した値だけから作る★★（メモ・注記の数字は入れない・Codex review confirmed の1）",
+              "98.9%" in _srcm and "2" in _srcm and "99.9" not in _srcm and "88.8" not in _srcm)
+        finally:
+            _cvt.for_slug_checked = _keep_fsc
         t("★確定値の記録を読むのはこの機種・完全一致の項目名だけ★（slug の形が違えば読まない）",
           confirmed_source("../x", "payout_rate") is None and confirmed_source("k2", "") is None)
 
