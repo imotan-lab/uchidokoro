@@ -8791,6 +8791,24 @@ def _rmtree_hard(path) -> None:
         pass
 
 
+def block_real_push(root: str) -> None:
+    """★★試験の写しから、本物のGitHubへは決して送らない★★（2026-10-29）
+
+    ★なぜ★＝写しは .git ごと（鍵の入った送り先の設定ごと）作るので、試験のどれかが写しの中で
+    git push まで進むと、写しの先端がそのまま本物の main へ出る。2026-10-29 20:33〜20:45 に、
+    手元で push していないコミット（9fe1f3b5・f59aba3b）が本物へ上がっていた（どの試験かは未特定）。
+    ★GitHub あての送信だけを、存在しない場所へ向け直す★（pushInsteadOf）＝取ってくる側と、
+    試験が自分で作る仮の置き場（file://）への送信には効かない。
+    ★向け直せなければ例外★（守れないまま試験を動かさない）
+    """
+    r = subprocess.run(["git", "-C", root, "config", "url.file:///uchidokoro-test-copy-no-push/.pushInsteadOf",
+                        "https://"], capture_output=True, text=True)
+    got = subprocess.run(["git", "-C", root, "remote", "get-url", "--push", "--all", "origin"],
+                         capture_output=True, text=True).stdout
+    if r.returncode != 0 or ("github.com" in got and "uchidokoro-test-copy-no-push" not in got):
+        raise RuntimeError("★試験の写しの送り先を無効にできません（写しから本物へ送らないため、試験を止めます）★")
+
+
 def check(only: str = "", fast: bool = False, only_index=None) -> int:
     tmp = tempfile.mkdtemp(prefix="mut_")
     ng, weak, skipped = [], [], []
@@ -8832,6 +8850,7 @@ def check(only: str = "", fast: bool = False, only_index=None) -> int:
         shutil.copy2(_src, _dst)
     shutil.copytree(os.path.join(BASE, ".git"), os.path.join(root, ".git"),
                     ignore=shutil.ignore_patterns("__pycache__"))
+    block_real_push(root)
     try:
         _want = [x.strip() for x in str(only or "").split(",") if x.strip()]
         tried = 0
