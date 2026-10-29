@@ -72,7 +72,10 @@ _LABEL_MAX = 14
 #     誤検知 … ★基準値が書き直せなくなる★＝直した記録が残らず、
 #              後日そのまま復活しても報告すら出ない（台帳#586そのもの）
 #   → 一律に落とす。★数が増えたら測り直す★。
-_PAREN_RUN = re.compile(r"[（(][^）)]*[）)]")
+_PAREN_RUN = re.compile(r"[（(【][^）)】]*[）)】]")   # ★【】も補足として数えない★（2026-10-29・【5.6枚現金】BC4スルー以上）
+# ★太字の項目名（**名前**：値）は長さを問わずラベル★（2026-10-29）＝新台の記事のゲーム性の行は
+#   「**メインAT「エンジェルタイム」**：純増約0.5枚」の形で機械が作る（項目名がAT名なので長い）
+_BOLD_LABEL = re.compile(r"^\s*\*\*[^*\n]{1,40}\*\*\s*[：:]")
 
 # ★飾りの記号★（太字の ** と ★）
 #   ★意味ではなく記号の話★＝名簿ではないので、知らない言い回しでも効く。
@@ -108,6 +111,8 @@ def is_label_line(line: str) -> bool:
     t = undecorate(line).strip()
     if not t or "。" in t:
         return False
+    if _BOLD_LABEL.match(str(line)):
+        return True
     m = _LABEL.match(t)
     if not m:
         return False
@@ -272,6 +277,9 @@ def _check_text(out: list, slug: str, where: str, line, li=0) -> None:
     if not isinstance(line, str) or not line.strip():
         return
     if line.strip() in _STOCK or is_label_line(line):
+        return
+    # ★箇条書きの項目（・で始まり、。が無い）は文ではない★（2026-10-29・新台の「解析待ちの項目」）
+    if line.strip().startswith("・") and "。" not in line:
         return
     for x in sentences(line):
         # ★飾りだけの断片は文ではない★（2026-09-08・台帳#586）
@@ -441,15 +449,20 @@ def write_baseline(rows: list, path: str = None, init: bool = False,
         elif ver != SCHEMA:
             raise SystemExit(
                 f"★基準値の版が違います（{ver!r}）★")
+    extra = set()
     if old is not None:
         want = set(str(x) for x in (old.get("items") or []))
         extra = now - want
-        if extra:
-            raise SystemExit(
-                f"★増えているので書き直せません（新しい違反 {len(extra)} 件）★\n"
-                "  先に直してください（python scripts/style_check.py --slug <機種>）")
+        # ★★よその機種に新しい違反があっても、直した分は記録する★★（2026-10-29）
+        #   ★直す前は「新しい違反が1件でもあれば書き直せない」★＝朝タスクが自分の機種を直しても、
+        #   ほかの機種の新しい違反のせいで基準値を下げられず（10/21〜29 毎日）、
+        #   ★直した違反が後日そのまま戻っても気づけない★状態が続いていた。
+        #   ★新しい違反は基準値に入れない★（共通部分だけ残す）＝新しい違反は次も「新しい」と出続ける
+        now = now & want
         if now == want:
-            raise SystemExit("★減っていないので書き直す必要がありません★")
+            raise SystemExit("★減っていないので書き直す必要がありません★"
+                             + (f"（新しい違反 {len(extra)} 件は基準値に入れません）" if extra else ""))
+        rows = [r for r in rows if fingerprint(r) in now]
     if not os.path.isfile(path) and not init:
         # ★★基準値が無いときは黙って作らない★★
         #   （2026-08-31・Codexの7回目のP2）
@@ -502,6 +515,38 @@ def selftest() -> int:
         _o = []
         _check_text(_o, "x", "本文", line)
         return [r["sentence"] for r in _o]
+
+    # ★★文ではない行（箇条書き・太字の項目名・【】付きの項目名）を数えない★★（2026-10-29）
+    t("★★箇条書きの項目は文ではない★★（新台の「解析待ちの項目」）",
+      _ng("・狙い目ライン") == [] and _ng("・AT突入率") == [])
+    t("　（対照）。のある箇条書きは文として見る", _ng("・天井は1200Gとなる。") != [])
+    t("★★太字の項目名は長くてもラベル★★",
+      _ng("**メインAT「エンジェルタイム」**：純増約0.5枚") == [])
+    t("★★【】付きの項目名は【】を長さに数えない★★",
+      _ng("【5.6枚現金】BC4スルー以上：G数不問") == [])
+    t("　（対照）本物の体言止めの文は今までどおり捕まえる",
+      _ng("リセット時は天井が600G+αに短縮") != [])
+    # ★★よその機種に新しい違反があっても、直した分は基準値から外せる★★（2026-10-29）
+    import tempfile as _tfb
+    _bp = os.path.join(_tfb.mkdtemp(prefix="sbl_"), "b.json")
+    _ra = {"slug": "a", "section": "s", "line": 0, "sentence": "Aとなる"}
+    _rb = {"slug": "b", "section": "s", "line": 0, "sentence": "Bとなる"}
+    _rc = {"slug": "c", "section": "s", "line": 0, "sentence": "Cとなる"}
+    with open(_bp, "w", encoding="utf-8") as _f:
+        json.dump({"schema_version": SCHEMA, "items": sorted([fingerprint(_ra), fingerprint(_rb)])}, _f)
+    try:
+        write_baseline([_ra, _rc], _bp)
+        _wrote = True
+    except SystemExit:
+        _wrote = False
+    _items = set(json.load(open(_bp, encoding="utf-8"))["items"])
+    t("★★新しい違反があっても、直した分（B）は外し、新しい違反（C）は入れない★★",
+      _wrote and _items == {fingerprint(_ra)})
+    try:
+        write_baseline([_ra, _rc], _bp)
+        t("　何も直していなければ書き直さない（新しい違反だけでは動かない）", False)
+    except SystemExit:
+        t("　何も直していなければ書き直さない（新しい違反だけでは動かない）", True)
 
     t("★★行ぜんたいが太字の文を、違反にしない★★"
       "（★閉じの `**` だけが1つの文として数えられていた★）",

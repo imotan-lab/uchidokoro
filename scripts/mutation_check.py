@@ -5587,8 +5587,8 @@ MUTATIONS = [
                "（★実データで本物のラベル7件が違反になり、"
                "基準値が書き直せなくなる＝台帳#586そのものに戻る★）",
         "file": "scripts/style_check.py",
-        "before": '_PAREN_RUN = re.compile(r"[（(][^）)]*[）)]")',
-        "after": '_PAREN_RUN = re.compile(r"[（(][^）)]*[）)]\\s*$")',
+        "before": '_PAREN_RUN = re.compile(r"[（(【][^）)】]*[）)】]")',
+        "after": '_PAREN_RUN = re.compile(r"[（(【][^）)】]*[）)】]\\s*$")',
         "run": ["scripts/style_check.py"],
     },
     {
@@ -8354,6 +8354,34 @@ MUTATIONS = [
         "before": "had_checker=bool(_baseline_keys(slug, _mode_keys(ms[i]))))\n",
         "after": "had_checker=bool(_mode_keys(ms[i])))\n",
         "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★よその機種に新しい違反があると、直した分も基準値から外せない（★直した違反が戻っても気づけない・2026-10-29★）★",
+        "file": "scripts/style_check.py",
+        "before": "        now = now & want\n",
+        "after": "        if extra:\n            raise SystemExit(\"★増えているので書き直せません★\")\n",
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★新しい違反も基準値に取り込む（★新しい違反が次から「新しい」と出なくなる・2026-10-29★）★",
+        "file": "scripts/style_check.py",
+        "before": "        now = now & want\n",
+        "after": "        now = now | want\n",
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★箇条書きの項目を文として数える（★新台の「解析待ちの項目」が毎回違反になる・2026-10-29★）★",
+        "file": "scripts/style_check.py",
+        "before": "    if line.strip().startswith(\"・\") and \"。\" not in line:\n        return\n",
+        "after": "",
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★太字の項目名を長さでラベルから外す（★新台のゲーム性の行が違反になる・2026-10-29★）★",
+        "file": "scripts/style_check.py",
+        "before": "    if _BOLD_LABEL.match(str(line)):\n        return True\n",
+        "after": "",
+        "run": ["scripts/style_check.py"],
     },
     {
         "why": "★本人性の段が上がっただけで育成を止める（★ゴジラ対エヴァ2が育たない・2026-10-29★）★",
