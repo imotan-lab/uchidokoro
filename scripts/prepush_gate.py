@@ -333,7 +333,8 @@ def remote_ok() -> list:
         for url in urls:
             # ★試験の写しでは送り先を「どこへも送れない形」へ向け直している★（mutation_check.block_real_push・
             #   2026-10-29）＝中身は本来の送り先なので、その形のまま同じ置き場かを見る（送れないので安全側）
-            if url.startswith(_TEST_COPY_NO_PUSH):
+            #   ★この例外は試験の写しの中だけ★（mutation_check が UCHIDOKORO_TEST_COPY=1 を渡す・Codex review d5de）
+            if url.startswith(_TEST_COPY_NO_PUSH) and os.environ.get("UCHIDOKORO_TEST_COPY") == "1":
                 url = url[len(_TEST_COPY_NO_PUSH):]
             if not _same_repo(url):
                 ng.append(f"push先（{remote} の{kind}用）が想定と違います: "
@@ -507,8 +508,20 @@ def selftest() -> int:
             "main" if "rev-parse" in a else
             "file:///uchidokoro-test-copy-no-push/github.com/evil/x.git" if "--push" in a else
             "https://github.com/imotan-lab/uchidokoro.git")
+        _keep_env = os.environ.get("UCHIDOKORO_TEST_COPY")
+        os.environ["UCHIDOKORO_TEST_COPY"] = "1"
         t("★★試験の写しの「送れない形」でも、別の置き場なら止める★★（向け直しの中身まで見る・2026-10-29）",
-          any("push用" in x or "push" in x for x in remote_ok()))
+          bool(remote_ok()))
+        globals()["_git"] = lambda *a, **k: _R(
+            "main" if "rev-parse" in a else
+            "file:///uchidokoro-test-copy-no-push/github.com/imotan-lab/uchidokoro.git" if "--push" in a else
+            "https://github.com/imotan-lab/uchidokoro.git")
+        t("　写しの中なら「送れない形」の本来の送り先は通す", remote_ok() == [])
+        os.environ.pop("UCHIDOKORO_TEST_COPY", None)
+        t("★★写しの外（本番）では「送れない形」の送り先も止める★★（例外は試験の写しの中だけ・Codex review d5de）",
+          bool(remote_ok()))
+        if _keep_env is not None:
+            os.environ["UCHIDOKORO_TEST_COPY"] = _keep_env
     finally:
         globals()["_git"] = _keep_git
     _sc = push_scope()

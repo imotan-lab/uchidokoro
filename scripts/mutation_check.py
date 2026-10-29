@@ -8391,6 +8391,13 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★「送れない形」の送り先を認める例外を本番でも効かせる（★本番の push 先の確認が弱くなる・review d5de★）★",
+        "file": "scripts/prepush_gate.py",
+        "before": "            if url.startswith(_TEST_COPY_NO_PUSH) and os.environ.get(\"UCHIDOKORO_TEST_COPY\") == \"1\":\n",
+        "after": "            if url.startswith(_TEST_COPY_NO_PUSH):\n",
+        "run": ["scripts/prepush_gate.py"],
+    },
+    {
         "why": "★試験の写しの「送れない形」の送り先を、中身を見ずに通す（★別の置き場へ向いていても気づかない・2026-10-29★）★",
         "file": "scripts/prepush_gate.py",
         "before": "                url = url[len(_TEST_COPY_NO_PUSH):]\n",
@@ -8824,6 +8831,8 @@ def no_push_git_env(base_env) -> dict:
         out[f"GIT_CONFIG_VALUE_{n}"] = pre
         n += 1
     out["GIT_CONFIG_COUNT"] = str(n)
+    # ★写しの中だと知らせる★＝関所の push 先の確認が「送れない形」の送り先を認めるのはこのときだけ
+    out["UCHIDOKORO_TEST_COPY"] = "1"
     return out
 
 
