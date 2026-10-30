@@ -12309,15 +12309,15 @@
    "schema_version": "page-decision/v2",
    "indexable": true,
    "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
+   "ceiling_state": "PRESENT",
    "confirmed_topics": [
+    "ceiling",
     "cz",
     "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "ceiling",
     "strategy",
     "reset"
    ],
@@ -12325,14 +12325,16 @@
    "claims": [
     "at:MAIN_AT",
     "at_prob",
+    "ceiling:GAME:AT間",
+    "ceiling:GAME:CZ間",
     "cz:ラグナドールバトル",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-26",
-   "input_digest": "sha256:d75e5b09afd0650dfb79f2462a543bd46a05c5c0a2dc36b8b342f74bc1e14ad4"
+   "decided_at": "2026-10-31",
+   "input_digest": "sha256:856e7640453ab4c31055041e22d90e3cbee50b58b346d532d2ba42011ad9be50"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
