@@ -12611,29 +12611,30 @@
    "schema_version": "page-decision/v2",
    "indexable": false,
    "machine_profile": "UNKNOWN",
-   "ceiling_state": "UNKNOWN",
+   "ceiling_state": "PRESENT",
    "confirmed_topics": [
+    "ceiling",
+    "setting",
     "spec"
    ],
    "pending_topics": [
     "gameplay",
     "cz",
-    "ceiling",
-    "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
     "MACHINE_PROFILE_UNKNOWN"
    ],
    "claims": [
-    "payout_range"
+    "ceiling:GAME:",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-26",
-   "input_digest": "sha256:30e99f7519a9860faa804dc25ca4b98423ee110c814c4e9a42851407927bbd8e"
+   "decided_at": "2026-10-30",
+   "input_digest": "sha256:7d545daf9bf765dfb10eebd6c048ca123f0926473cfabd38882b455b30a11a8b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
@@ -12645,10 +12646,23 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5073 型式=Lガンゲイル・オンラインMD メーカー=京楽 導入=2026-11-02 確認日=2026-10-26",
    "market_release_date": "2026-11-02",
-   "regulatory_model_code": "Lガンゲイル・オンラインMD",
    "_model_code_sources": [
     "vote:dmm-ptown"
-   ]
+   ],
+   "regulatory_model_code": "Lガンゲイル・オンラインMD"
+  },
+  "checker": {
+   "coinRate": 31.0,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "ceiling": 975
+   }
   }
  },
  {
