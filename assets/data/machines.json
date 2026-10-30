@@ -12530,14 +12530,15 @@
    "claims": [
     "at:MAIN_AT",
     "at:UPPER_AT",
+    "ceiling:GAME:AT間",
     "ceiling:GAME:CZ間",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-30",
-   "input_digest": "sha256:c5a4b7fed3567cc906770dbcf9115a5c18488f623b1b5fee93033163df8658c3"
+   "decided_at": "2026-10-31",
+   "input_digest": "sha256:8ed90c68fe746050ef1c3e14b2711abc7b79ef223f42bb96702513d0f3b2f4e3"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
@@ -12563,9 +12564,7 @@
      "label": "通常"
     }
    ],
-   "normal": {
-    "ceiling": 600
-   }
+   "normal": {}
   }
  },
  {
