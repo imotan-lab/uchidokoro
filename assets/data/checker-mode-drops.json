@@ -20,6 +20,17 @@
     "codex"
    ],
    "at": "2026-10-25"
+  },
+  {
+   "slug": "godeater",
+   "mode": "nukete",
+   "why": "天井の仕組みを出典に合わせる（2体が別々に出典を読んで一致した直し）",
+   "judges": [
+    "claude-agent-a",
+    "claude-agent-b"
+   ],
+   "at": "2026-10-30",
+   "seq": 5
   }
  ]
 }
