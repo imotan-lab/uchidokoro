@@ -1,8 +1,14 @@
 {
  "slug": "dmm_5120",
- "updated": "2026-10-26",
+ "updated": "2026-10-31",
  "lead": "スロット Vivy -Fluorite Eye’s Song-の機種情報ページです。登場時期は2026年11月2日です。",
- "summaryBoxes": [],
+ "summaryBoxes": [
+  {
+   "label": "狙い目",
+   "value": "通常550G〜",
+   "role": "target"
+  }
+ ],
  "factTable": [
   [
    "機械割",
@@ -58,7 +64,7 @@
   {
    "title": "当サイトの狙い目",
    "body": [
-    "未確認（確認でき次第掲載します）"
+    "狙い目は、通常550G〜です。"
    ]
   },
   {
@@ -171,5 +177,6 @@
     }
    ]
   }
- ]
+ ],
+ "targetProjection": "d9017d3adaea3f1b"
 }
