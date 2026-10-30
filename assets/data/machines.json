@@ -12546,15 +12546,15 @@
    "schema_version": "page-decision/v2",
    "indexable": true,
    "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
+   "ceiling_state": "PRESENT",
    "confirmed_topics": [
+    "ceiling",
     "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
     "cz",
-    "ceiling",
     "strategy",
     "reset"
    ],
@@ -12562,13 +12562,14 @@
    "claims": [
     "at:MAIN_AT",
     "at:UPPER_AT",
+    "ceiling:GAME:CZ間",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-29",
-   "input_digest": "sha256:2d86ed84360193f0dcf0966144cc28fc28bf175555871839c179ceb27abbf66c"
+   "decided_at": "2026-10-30",
+   "input_digest": "sha256:c5a4b7fed3567cc906770dbcf9115a5c18488f623b1b5fee93033163df8658c3"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
@@ -12594,7 +12595,9 @@
      "label": "通常"
     }
    ],
-   "normal": {}
+   "normal": {
+    "ceiling": 600
+   }
   }
  },
  {
