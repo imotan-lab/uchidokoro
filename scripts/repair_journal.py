@@ -88,7 +88,9 @@ ESCALATED = "ESCALATED"
 #   ★書けない合意は永久に AGREED のまま残り、その機種の直しが全部止まる★
 #   （実測＝モンキーターンV・銀河英雄伝説・虚構推理・マギレコ・戦国乙女4）。
 WITHDRAWN = "WITHDRAWN"
-STATES = FLOW + (ESCALATED, WITHDRAWN)
+# ★★2AIが決めて閉じる★★（2026-10-30）＝`resolve()` の説明を見る
+RESOLVED = "RESOLVED"
+STATES = FLOW + (ESCALATED, WITHDRAWN, RESOLVED)
 MIN_WITHDRAW_WHY = 15
 
 MAX_ATTEMPTS = 3          # ★その晩のうちに3回まで★（CLAUDE.md の決まり）
@@ -233,9 +235,13 @@ def detect(slug: str, check: str, quote: str, where: str = "",
         got = load(fid)
         # ★取り下げた件も同じ扱い★（記事が変わっていなければ返すだけ＝
         #   同じ記事に同じ合意を作り直して、また居座らせない）
-        if got.get("state") in (ESCALATED, "DONE", WITHDRAWN):
+        if got.get("state") in (ESCALATED, "DONE", WITHDRAWN, RESOLVED):
             # ★記事が当時と同じなら、本当に同じ話なので触らない★
             if str(got.get("source_sha256") or "") == str(source_sha256):
+                return got
+            # ★2AIで閉じた件は、閉じたときの公開記事のままでも触らない★（2026-10-30）
+            if got.get("state") == RESOLVED \
+                    and str(got.get("resolved_source_sha256") or "") == str(source_sha256):
                 return got
             _archive(fid, got)
         else:
@@ -464,11 +470,41 @@ def agree(fid: str, ops: list, recheck_name: str, decided_by: list) -> dict:
                 "★触らない決定で合意すると、押し切ったのに直っていない件が"
                 "できて、あとから誰も直せなくなります★")
 
+    # ★★機種と逐語のほかに引数が要る検査（badge_is）は、合意した操作から作って残す★★
+    #   （2026-10-30・Codexの指摘）＝残さないと recheck_pass が「引数が足りません」で止まる
+    _rc = {"name": recheck_name, "version": spec["version"]}
+    _extra = _recheck_extra_args(spec, ops)
+    if _extra:
+        _rc["args"] = _extra
     return _step(rec, "AGREED", "2AIが一致した",
                  ops=ops, ops_sha256=decision_digest(_dec_raw),
-                 recheck={"name": recheck_name,
-                          "version": spec["version"]},
+                 recheck=_rc,
                  decided_by=list(decided_by))
+
+
+def _recheck_extra_args(spec: dict, ops: list) -> dict:
+    """★機種と逐語のほかに検査が求める引数を、合意した操作から作る★（2026-10-30）
+
+    いま作れるのは札の強さの印（where・badge）だけ＝badge を書いた操作がちょうど1つのとき。
+    作れなければ合意しない（作れないまま合意すると、閉じる段で必ず止まる）。
+    """
+    need = {k for k, v in (spec.get("args_spec") or {}).items() if v[1]} - {"slug", "text"}
+    if not need:
+        return {}
+    if need == {"where", "badge"}:
+        _bo = [o for o in ops if isinstance(o, dict) and "badge" in o]
+        if len(_bo) != 1:
+            raise JournalError(
+                f"札の強さの印を確かめる検査には、印を書く操作がちょうど1つ要ります（いま {len(_bo)} 件）")
+        # ★★場所がずれる操作と一緒にしない★★（2026-10-30・Codexの指摘）＝残す where は変更前の位置なので、
+        #   前の行や節を消すと、閉じる段の再検査が別の札を見て永久に落ちる
+        _shift = sorted({str(o.get("op")) for o in ops if isinstance(o, dict)
+                         and o.get("op") in ("drop_row", "drop_section", "split_row")})
+        if _shift:
+            raise JournalError(
+                f"札の強さの印を直す決定に、場所がずれる操作は入れられません（{'・'.join(_shift)}）。別の決定に分けてください")
+        return {"where": str(_bo[0].get("where") or ""), "badge": str(_bo[0].get("badge") or "")}
+    raise JournalError(f"この検査に渡す引数を、合意した操作から作れません: {sorted(need)}")
 
 
 def applied(fid: str, after_sha256: str) -> dict:
@@ -628,6 +664,10 @@ def recheck_pass(fid: str) -> dict:
     args = {"slug": rec["slug"]}
     if "text" in (meta.get("args_spec") or {}):
         args["text"] = rec["quote"]
+    # ★合意のときに残した引数（札の印の where・badge）も渡す★（2026-10-30・Codexの指摘）
+    for _k, _v in ((rec.get("recheck") or {}).get("args") or {}).items():
+        if _k not in ("slug", "text"):
+            args[_k] = _v
     # ★★合意したときの検査の版を渡す★★（Codexのレビュー17・中）
     #   ★直す前はいまの版を渡していた★ので、
     #   `closeable()` の「合意後に検査が変わったら閉じない」が
@@ -962,6 +1002,146 @@ def supersede(fid: str, by_fid: str, why: str) -> dict:
     return final
 
 
+# ★★2AIが決めて閉じる★★（2026-10-30）
+RESOLVABLE = ("DETECTED", "CLAUDE_SEALED", "CODEX_RECEIVED",
+              "COMMIT_VERIFIED", "PUSH_CONFIRMED")
+RESOLVE_WITHOUT_CHECK = ("COMMIT_VERIFIED", "PUSH_CONFIRMED")
+MIN_RESOLVE_WHY = 15
+
+
+def resolve(fid: str, check: str, by, why: str) -> dict:
+    """★決まった道で閉じられない記録を、2AIが決めて閉じる★（2026-10-30）
+
+    ★なぜ要るか★＝朝のタスクが「閉じられない直しの記録が7件」と毎朝残していた。
+      ・直しは公開済みなのに、指摘の逐語が**機械が作る狙い目の行**として機種一覧と
+        公開ページに正しく残る（記事からは消えた）＝text_gone が永久に落ちる
+      ・別の回の直しで逐語が消えたが、代わりの記録が無い／合意より後の段階で止まった
+      ・直しは公開済みだが、2AIが「残った文は直さなくてよい」と決めた
+      ★どれも出口が無かった★（取り下げは AGREED だけ・横へよけるのは代わりの DONE が要る）。
+
+    ★機械が確かめること★
+      ①閉じられる段階（RESOLVABLE）で、壊れていない／番号が中身と合う
+      ②判断者は claude と codex の両方（confirmed_values.judges_pair）／理由15字以上
+      ③check を名指しした場合＝閉じられる検査で、引数は機種と逐語だけで作れるもの。
+        公開用の枝の先端の中身でその場でやり直して合格すること（recheck.closeable）
+      ④check="none"（検査なしで2AIの判断だけ）は、直しのコミットが記録にある段階
+        （COMMIT_VERIFIED / PUSH_CONFIRMED）だけ。そのコミットが公開用の枝に入っていること
+      ⑤記録にコミットがあれば、それが公開用の枝に入っていること
+      ⑥検査のあいだに公開用の枝が進んでいないこと
+    ★記録は消さない★＝段階を RESOLVED にして、誰が・なぜ・何で確かめたかを残す。
+    ★同じ記事のまま同じ指摘を見つけ直しても立て直さない★（detect）。記事が変われば立て直す。
+    """
+    rec = load(fid)
+    _id_r = _identity_problem(rec, fid)
+    if _id_r:
+        raise JournalError(f"記録の番号が合いません: {_id_r}")
+    if rec.get("state") not in RESOLVABLE:
+        raise JournalError(
+            f"2AIで閉じられるのは {'・'.join(RESOLVABLE)} の記録だけです"
+            f"（いま {rec.get('state')}）")
+    _bw_r = _broken_why(rec)
+    if _bw_r:
+        raise JournalError(f"壊れた記録は閉じません: {_bw_r}")
+    import confirmed_values as _cv
+    who = {str(x).strip().lower() for x in (by or []) if str(x).strip()}
+    if _cv.judges_pair(sorted(who)) is None:
+        raise JournalError(
+            "閉じるには %s の両方の判断が要ります（いま: %s）"
+            % (_cv.JUDGES_LABEL, "・".join(sorted(who)) or "なし"))
+    why = str(why or "").strip()
+    if len(why) < MIN_RESOLVE_WHY:
+        raise JournalError(f"閉じる理由を {MIN_RESOLVE_WHY} 字以上書いてください")
+    check = str(check or "").strip()
+    commit = str(rec.get("commit") or "")
+    if check == "none" and (rec.get("state") not in RESOLVE_WITHOUT_CHECK or not commit):
+        raise JournalError(
+            "検査なし（none）で閉じられるのは、直しのコミットが記録にある段階"
+            f"（{'・'.join(RESOLVE_WITHOUT_CHECK)}）だけです（いま {rec.get('state')}）")
+    if commit:
+        ok_c, why_c, tip = _pushed(commit)
+        if not ok_c:
+            raise JournalError(f"直しが公開用の枝に入っていることを確かめられません: {why_c}")
+    else:
+        tip, why_t = _main_tip()
+        if not tip:
+            raise JournalError(f"公開先の先端を調べられません: {why_t}")
+    got = None
+    if check != "none":
+        _r = _recheck_mod()
+        meta = (_r.CHECKS or {}).get(check)
+        if not meta:
+            raise JournalError(f"知らない検査です: {check!r}")
+        if not meta.get("closeable"):
+            raise JournalError(f"この検査は観測どまりなので閉じられません: {check}")
+        spec = meta.get("args_spec") or {}
+        need = {k for k, v in spec.items() if v[1]}
+        # ★★その記録の逐語を確かめる検査だけ★★（2026-10-30・Codexの指摘）＝
+        #   機種だけを見る検査（文体など）では、逐語が残ったままの記録を閉じられた
+        if need != {"slug", "text"}:
+            raise JournalError(
+                f"閉じる検査は、その記録の逐語を確かめるもの（機種と逐語だけを受け取る）に限ります: "
+                f"{check}（{sorted(need)}）")
+        args = {"slug": rec["slug"], "text": rec["quote"]}
+        ok_g, why_g, got = _r.closeable({"check": check, "version": meta["version"],
+                                         "args": args, "expected_commit": tip})
+        if not ok_g:
+            raise JournalError(f"検査 {check} で確かめられません: {why_g}")
+    # ★★検査のあいだに枝が進んでいないか、もう一度見る★★（recheck_pass と同じ）
+    if commit:
+        _okc2, why_c2, tip_after = _pushed(commit)
+    else:
+        tip_after, why_c2 = _main_tip()
+    if tip_after != tip:
+        raise JournalError(
+            f"検査のあいだに公開用の枝が変わりました（{tip[:8]} → "
+            f"{(tip_after or '不明')[:8]}）: {why_c2}")
+    # ★★閉じたときの公開記事の指紋を残す★★（2026-10-30・Codexの指摘）＝
+    #   見つけたときの指紋だけだと、直したあとの同じ記事で見つけ直すたびに立て直していた
+    _rsha = _article_sha_at(tip, rec["slug"])
+    if not re.fullmatch(r"[0-9a-f]{64}", _rsha or ""):
+        raise JournalError("公開用の枝の先端で、記事の指紋を取れません")
+    import datetime as _dtr
+    _prev = rec.get("state")
+    rec["state"] = RESOLVED
+    rec["resolved_source_sha256"] = _rsha
+    rec["resolved_from"] = _prev
+    rec["resolved_by"] = sorted(who)
+    rec["resolved_why"] = why
+    rec["resolved_check"] = check
+    rec["resolved_result"] = got
+    rec["resolved_tip"] = tip
+    rec["resolved_at"] = _dtr.datetime.now().isoformat(timespec="seconds")
+    rec.setdefault("history", []).append(
+        {"to": RESOLVED, "note": f"2AIで閉じた（{_prev}・検査 {check}）: {why}"})
+    _save(rec)
+    return rec
+
+
+def _article_sha_at(commit: str, slug: str) -> str:
+    """★そのコミットの記事データの指紋★（decide_now と同じ数え方＝改行を LF にそろえる）"""
+    import subprocess
+    if not re.fullmatch(r"[0-9a-f]{40}", str(commit or "")) \
+            or not re.fullmatch(r"[a-z0-9_]+", str(slug or "")):
+        return ""
+    try:
+        r = subprocess.run(["git", "show", f"{commit}:assets/data/machine-details/{slug}.json"],
+                           cwd=BASE, capture_output=True, timeout=60)
+    except Exception:                                        # noqa: BLE001
+        return ""
+    if r.returncode != 0:
+        return ""
+    return hashlib.sha256(r.stdout.replace(b"\r\n", b"\n")).hexdigest()
+
+
+def _main_tip() -> tuple:
+    """★公開用の枝の先端★（試験で差し替えられるように切り出してある）"""
+    try:
+        import prepush_gate as _pgm
+        return _pgm.remote_main_tip()
+    except Exception as e:                                   # noqa: BLE001
+        return "", f"公開先の先端を調べられません: {type(e).__name__}"
+
+
 def _file_digest(path: str) -> str:
     """ファイルの中身の指紋（無ければ空）"""
     try:
@@ -1032,6 +1212,23 @@ def _broken_why(rec):
             return "取り下げた合意に、2AIの両方の判断がありません"
         if len(str(rec.get("withdrawn_why") or "").strip()) < MIN_WITHDRAW_WHY:
             return "取り下げたのに、理由がありません"
+    # ★★2AIが決めて閉じた記録は、誰が・なぜ・何で確かめたかが揃っていること★★（2026-10-30）
+    if rec.get("state") == RESOLVED:
+        try:
+            import confirmed_values as _cvr
+        except Exception:                                    # noqa: BLE001
+            return "判断者の決まりを読めません"
+        if _cvr.judges_pair(sorted({str(x).strip().lower()
+                                    for x in (rec.get("resolved_by") or [])})) is None:
+            return "閉じたのに、2AIの両方の判断がありません"
+        if len(str(rec.get("resolved_why") or "").strip()) < MIN_RESOLVE_WHY:
+            return "閉じたのに、理由がありません"
+        if not re.fullmatch(r"[0-9a-f]{40}", str(rec.get("resolved_tip") or "")):
+            return "閉じたのに、確かめた公開用の枝の先端がありません"
+        if not rec.get("resolved_check"):
+            return "閉じたのに、何で確かめたかがありません"
+        if len(str(rec.get("resolved_source_sha256") or "")) != 64:
+            return "閉じたのに、閉じたときの記事の指紋がありません"
     if len(str(rec.get("source_sha256") or "")) != 64:
         return "記事の指紋がありません"
     # ★★段階ごとに、そこまでで揃っているはずの欄を見る★★
@@ -2155,6 +2352,147 @@ def _selftest() -> int:
               and (_c2.get("history") or [{}])[-1].get("to") == SUPERSEDED)
             t("　途中の一時ファイルは残らない",
               not any(n.endswith(".supersede.tmp") for n in os.listdir(td)))
+
+            # ★★2AIが決めて閉じる（resolve）★★（2026-10-30）
+            _FakeGone.verdict = (True, "", {"result": "PASS"})
+            _kmt = globals()["_main_tip"]
+            _kas = globals()["_article_sha_at"]
+            globals()["_main_tip"] = lambda: ("e" * 40, "")
+            globals()["_article_sha_at"] = lambda c, s: "6" * 64
+            try:
+                rp = _to_done("zzz30", "三十番の機械が作る狙い目の行です。", "8" * 64,
+                              _stop="PUSH_CONFIRMED")
+                rd = detect("zzz30", "text_gone", "三十番の判断待ちの文です。",
+                            source_sha256="8" * 64)["finding_id"]
+                _two = ["claude", "codex"]
+                _w30 = "残った文は機械が作る正しい行なので、直さなくてよいと2AIで決めました。"
+                t("★判断者が片方だけなら閉じない★",
+                  _rejects(lambda: resolve(rp, "text_gone", ["claude"], _w30)))
+                t("★理由が短ければ閉じない★",
+                  _rejects(lambda: resolve(rp, "text_gone", _two, "短い理由")))
+                t("★判断待ちの記録は、検査なし（none）では閉じない★",
+                  _rejects(lambda: resolve(rd, "none", _two, _w30)))
+                t("★知らない検査では閉じない★",
+                  _rejects(lambda: resolve(rd, "zz_nope", _two, _w30)))
+                _FakeGone.CHECKS["zz_obs"] = {"version": 1, "closeable": False,
+                                              "args_spec": {"slug": (str, True, ())}}
+                _FakeGone.CHECKS["zz_more"] = {"version": 1, "closeable": True,
+                                               "args_spec": {"slug": (str, True, ()),
+                                                             "where": (str, True, ())}}
+                t("★観測どまりの検査では閉じない★",
+                  _rejects(lambda: resolve(rd, "zz_obs", _two, _w30)))
+                t("★機種と逐語だけで引数が作れない検査では閉じない★",
+                  _rejects(lambda: resolve(rd, "zz_more", _two, _w30)))
+                t("★★機種だけを見る検査（逐語を確かめない）では閉じない★★（Codexの指摘）",
+                  _rejects(lambda: resolve(rd, "model_code_gone", _two, _w30))
+                  and load(rd)["state"] == "DETECTED")
+                _FakeGone.verdict = (False, "まだ残っています", None)
+                t("★検査が落ちれば閉じない（記録はそのまま）★",
+                  _rejects(lambda: resolve(rd, "text_gone", _two, _w30))
+                  and load(rd)["state"] == "DETECTED")
+                _FakeGone.verdict = (True, "", {"result": "PASS"})
+                _tseq = iter([("e" * 40, ""), ("f" * 40, "")])
+                globals()["_main_tip"] = lambda: next(_tseq)
+                t("★検査のあいだに公開用の枝が進んだら閉じない（コミットの無い記録）★",
+                  _rejects(lambda: resolve(rd, "text_gone", _two, _w30))
+                  and load(rd)["state"] == "DETECTED")
+                globals()["_main_tip"] = lambda: ("e" * 40, "")
+                _FakeGone.asked.clear()
+                _r1 = resolve(rd, "text_gone", _two, _w30)
+                t("★判断待ちの記録を、検査が通れば閉じる★",
+                  _r1["state"] == RESOLVED and _r1["resolved_from"] == "DETECTED"
+                  and _r1["resolved_tip"] == "e" * 40 and _broken_why(load(rd)) == "")
+                t("　検査は公開用の枝の先端で、記録の逐語のまま確かめる",
+                  _FakeGone.asked[-1:] == [{"check": "text_gone", "version": 7,
+                                            "args": {"slug": "zzz30",
+                                                     "text": "三十番の判断待ちの文です。"},
+                                            "expected_commit": "e" * 40}])
+                t("★同じ記事のまま見つけ直しても立て直さない★",
+                  detect("zzz30", "text_gone", "三十番の判断待ちの文です。",
+                         source_sha256="8" * 64)["state"] == RESOLVED)
+                t("★★閉じたときの公開記事のままで見つけ直しても立て直さない★★（Codexの指摘）",
+                  _r1.get("resolved_source_sha256") == "6" * 64
+                  and detect("zzz30", "text_gone", "三十番の判断待ちの文です。",
+                             source_sha256="6" * 64)["state"] == RESOLVED)
+                _nosha = dict(load(rd))
+                _nosha.pop("resolved_source_sha256", None)
+                t("　閉じたときの記事の指紋が無ければ、壊れた記録として扱う", bool(_broken_why(_nosha)))
+                t("★閉じた記録はもう一度は閉じない★",
+                  _rejects(lambda: resolve(rd, "text_gone", _two, _w30)))
+                _re30 = detect("zzz30", "text_gone", "三十番の判断待ちの文です。",
+                               source_sha256="9" * 64)
+                t("★記事が変われば、閉じた記録をよけて新しく立て直す（同じ誤りの再発を直せる）★",
+                  _re30["state"] == "DETECTED" and _re30["source_sha256"] == "9" * 64
+                  and any(n.startswith(rd + ".json.closed") for n in os.listdir(td)))
+                globals()["_pushed"] = lambda c: (False, "まだ出ていません", "")
+                t("★直しが公開用の枝に無ければ閉じない★",
+                  _rejects(lambda: resolve(rp, "none", _two, _w30)))
+                _pseq = iter([(True, "", "e" * 40), (True, "", "f" * 40)])
+                globals()["_pushed"] = lambda c: next(_pseq)
+                t("★検査のあいだに公開用の枝が進んだら閉じない（コミットのある記録）★",
+                  _rejects(lambda: resolve(rp, "none", _two, _w30))
+                  and load(rp)["state"] == "PUSH_CONFIRMED")
+                globals()["_pushed"] = lambda c: (True, "", "e" * 40)
+                _r2 = resolve(rp, "none", _two, _w30)
+                t("★公開済みの直しは、検査なし（2AIの判断だけ）でも閉じられる★",
+                  _r2["state"] == RESOLVED and _r2["resolved_check"] == "none"
+                  and _r2["resolved_by"] == ["claude", "codex"] and _broken_why(load(rp)) == "")
+                _bad30 = dict(load(rp))
+                _bad30["resolved_by"] = ["claude"]
+                t("★閉じた記録から判断者の片方を消すと、壊れた記録として扱う★",
+                  bool(_broken_why(_bad30)))
+                # ★★札の強さの印を確かめる検査は、合意した操作から引数を作って閉じる段へ渡す★★（Codexの指摘）
+                _bq = "三十番の札の文字です。"
+                fb = detect("zzz30b", "badge_is", _bq, source_sha256="5" * 64)["finding_id"]
+                io.open(vp, "w", encoding="utf-8").write(_orig)
+                seal_claude(fb, vp)
+                record_codex(fb, "b" * 64, "Codexの判定です。札の強さを上げてよいと考えます。")
+                _bw = "sections[0].tables[0].rows[0][1]"
+                agree(fb, _decfile(fb, "zzz30b",
+                                   [{"op": "replace", "before": _bq, "after": _bq, "where": _bw,
+                                     "badge": "ok", "why": "確定の示唆なので強さを上げる"}],
+                                   sha="5" * 64, name="dec_" + fb),
+                      "badge_is", ["Claude", "codex"])
+                t("★合意に、札の場所と決めた印が残る★",
+                  (load(fb).get("recheck") or {}).get("args") == {"where": _bw, "badge": "ok"})
+                applied(fb, "c" * 64)
+                commit_verified(fb, "1" * 40)
+                push_confirmed(fb)
+                _FakeGone.CHECKS["badge_is"] = {"version": 1, "closeable": True,
+                                                "args_spec": {"slug": (str, True, ()),
+                                                              "where": (str, True, ()),
+                                                              "badge": (str, True, ())}}
+                _FakeGone.asked.clear()
+                recheck_pass(fb)
+                t("★閉じる段の再検査に、札の場所と決めた印が届く★",
+                  (_FakeGone.asked[-1:] or [{}])[0].get("args")
+                  == {"slug": "zzz30b", "where": _bw, "badge": "ok"})
+                fb2 = detect("zzz30b", "badge_is", "三十番の札の別の文字です。",
+                             source_sha256="5" * 64)["finding_id"]
+                io.open(vp, "w", encoding="utf-8").write(_orig)
+                seal_claude(fb2, vp)
+                record_codex(fb2, "b" * 64, "Codexの判定です。札の強さを上げてよいと考えます。")
+                t("★★札の印を直す決定に、行を消す操作を混ぜると合意しない（場所がずれる）★★（Codexの指摘）",
+                  _rejects(lambda: agree(fb2, _decfile(
+                      fb2, "zzz30b", [{"op": "replace", "before": "三十番の札の別の文字です。",
+                                       "after": "三十番の札の別の文字です。", "where": _bw,
+                                       "badge": "ok", "why": "確定の示唆なので強さを上げる"},
+                                      {"op": "drop_row", "where": "sections[0].tables[0].rows[0]",
+                                       "text": "前の行", "why": "前の行を消す"}],
+                      sha="5" * 64, name="dec3_" + fb2), "badge_is", ["Claude", "codex"]))
+                  and load(fb2)["state"] == "CODEX_RECEIVED")
+                t("★印を書く操作が無い決定では、札の印の検査で合意しない★",
+                  _rejects(lambda: agree(fb2, _decfile(
+                      fb2, "zzz30b", [{"op": "replace", "before": "三十番の札の別の文字です。",
+                                       "after": "三十番の札の直した文字です。", "where": _bw,
+                                       "why": "文字だけ直す"}],
+                      sha="5" * 64, name="dec2_" + fb2), "badge_is", ["Claude", "codex"])))
+            finally:
+                globals()["_main_tip"] = _kmt
+                globals()["_article_sha_at"] = _kas
+                _FakeGone.CHECKS.pop("badge_is", None)
+                _FakeGone.CHECKS.pop("zz_obs", None)
+                _FakeGone.CHECKS.pop("zz_more", None)
         finally:
             globals()["_pushed"] = _kp14
             globals()["_recheck_mod"] = _km14
@@ -2197,6 +2535,10 @@ def main() -> int:
                     help="別の記録で直り終えた判断待ちの記録を、横へよける")
     ap.add_argument("--by-finding", default=None, metavar="FINDING_ID",
                     help="代わりに直し終えた記録（同じ機種で DONE）")
+    ap.add_argument("--resolve", default=None, metavar="FINDING_ID",
+                    help="決まった道で閉じられない記録を、2AIが決めて閉じる")
+    ap.add_argument("--check", default=None,
+                    help="--resolve で確かめる検査の名前（none＝検査なし・公開済みの直しだけ）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
 
@@ -2232,6 +2574,23 @@ def main() -> int:
             return 1
         print(f"横へよけました: {rec['finding_id']} {rec['slug']}"
               f"（代わり {rec['superseded_by']}）")
+        return 0
+    if a.resolve:
+        # ★理由はファイルで受け取る★（鉄則1c＝自由文をシェルに書かない）
+        if not a.why_file or not a.check:
+            print("--check と --why-file が要ります")
+            return 1
+        with io.open(a.why_file, encoding="utf-8") as fh:
+            _why = fh.read()
+        try:
+            rec = resolve(a.resolve, a.check,
+                          [x for x in a.by.split(",") if x.strip()], _why)
+        except JournalError as e:
+            print(f"閉じませんでした: {e}")
+            return 1
+        print(f"閉じました: {rec['finding_id']} {rec['slug']}"
+              f"（{rec['resolved_from']} から・検査 {rec['resolved_check']}・"
+              f"判断者 {','.join(rec['resolved_by'])}）")
         return 0
     if a.show:
         print(json.dumps(load(a.show), ensure_ascii=False, indent=1))

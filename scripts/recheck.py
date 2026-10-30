@@ -1504,6 +1504,28 @@ def check_text_gone(args: dict) -> dict:
                     "html_checked": os.path.exists(hp)})
 
 
+def check_text_gone_in_article(args: dict) -> dict:
+    """★指摘された逐語が、記事データから消えていること★（公開ページは見ない・2026-10-30）
+
+    ★なぜ要るか★＝狙い目の行は機械がチェッカーの線から作り、機種一覧と公開ページに出す
+    （target_display）。記事に手書きされていた同じ行を直して消しても、★機械が作った正しい行が
+    公開ページに残る★ので text_gone は永久に落ち、直しの記録が閉じられなかった（4件）。
+    ★これを当てるかは2AIが決める★（公開ページに残っているのが機械の作った行だと確かめてから）。
+    """
+    slug = args.get("slug")
+    text = args.get("text")
+    if not valid_slug(slug):
+        return _result(NOT_APPLICABLE, "machines.json にその機種がありません", args)
+    if not isinstance(text, str) or len(text.strip()) < 4:
+        return _result(NOT_APPLICABLE, "確かめる逐語がありません（4字以上）", args)
+    detail, raw, why = _load_detail(slug)
+    if detail is None:
+        return _result(NOT_APPLICABLE, why, args)
+    if text in raw:
+        return _result(FAIL, "指摘された文がまだ記事データに残っています", args, {"data": True})
+    return _result(PASS, "指摘された文は記事データにありません", args, {"data": False})
+
+
 def check_guard_proven(args: dict) -> dict:
     """★機械の中身を直したことを、壊し方の検査で確かめる★
 
@@ -1620,7 +1642,42 @@ def check_confirmed_value_recorded(args: dict) -> dict:
                    observed=_obs)
 
 
+def check_badge_is(args: dict) -> dict:
+    """★設定示唆の札の強さの印が、決めた値になっているか★（2026-10-30）
+
+    ★なぜ★＝札の強さの印だけを直す決定は、指摘の文字がそのまま残るので「消えたか」（text_gone）では
+    閉じられず、直しの記録が閉じられないまま残る。見るのは名指しした札の印だけ（判断は要らない）。
+    """
+    slug, where, badge = args.get("slug"), args.get("where"), args.get("badge")
+    if not valid_slug(slug):
+        return _result(NOT_APPLICABLE, "machines.json にその機種がありません", args)
+    import decide_now as _dnb
+    ct = _dnb.cell_target(str(where or ""))
+    if not ct:
+        return _result(NOT_APPLICABLE, "where が札のセルの形ではありません", args)
+    detail, _raw, why = _load_detail(slug)
+    if detail is None:
+        return _result(NOT_APPLICABLE, why, args)
+    si, ti, ri, ci = ct
+    try:
+        cell = detail["sections"][si]["tables"][ti]["rows"][ri][ci]
+    except Exception:                                    # noqa: BLE001
+        return _result(FAIL, "名指しした札のセルがありません", args)
+    if not isinstance(cell, dict) or "badge" not in cell:
+        return _result(FAIL, "名指ししたセルは札ではありません", args)
+    if cell.get("badge") != badge:
+        return _result(FAIL, f"札の印は {cell.get('badge')!r} のままです（決めた値は {badge!r}）", args)
+    return _result(PASS, "札の印は決めた値になっています", args)
+
+
 CHECKS = {
+    "badge_is": {
+        "version": 1,
+        "closeable": True,          # ★名指しした札の印だけを見る★
+        "title": "設定示唆の札の強さの印が、決めた値になっているか",
+        "fn": check_badge_is,
+        "args_spec": {"slug": (str, True, None), "where": (str, True, None), "badge": (str, True, None)},
+    },
     "confirmed_value_recorded": {
         "version": 1,
         "closeable": True,          # ★控えを読み直して機械が白黒を付ける★
@@ -1640,6 +1697,13 @@ CHECKS = {
         "closeable": True,          # ★型を問わず使える★ あるか無いかだけ
         "title": "指摘された逐語が記事データ・公開HTMLから消えているか",
         "fn": check_text_gone,
+        "args_spec": {"slug": (str, True, None), "text": (str, True, None)},
+    },
+    "text_gone_in_article": {
+        "version": 1,
+        "closeable": True,          # ★記事データだけ・あるか無いかだけ★
+        "title": "指摘された逐語が記事データから消えているか（公開ページは見ない）",
+        "fn": check_text_gone_in_article,
         "args_spec": {"slug": (str, True, None), "text": (str, True, None)},
     },
     "plain_style_gone": {
@@ -1951,6 +2015,33 @@ def _selftest():
     t("★段が飛んでいれば読まない★",
       _evtable_bounds([{"range": "0〜300G"}, {"range": "400〜449G"}, {"range": "450G〜"}]) is None)
     t("表が短すぎれば読まない", _evtable_bounds([{"range": "0〜300G"}]) is None)
+
+    # --- ★札の強さの印が決めた値か★（2026-10-30）
+    _keep_ld, _keep_vs = globals()["_load_detail"], globals()["valid_slug"]
+    try:
+        globals()["valid_slug"] = lambda s: s == "zzz_b"
+        globals()["_load_detail"] = lambda s: ({"sections": [{"tables": [{"rows": [
+            ["刃牙", {"text": "通常A", "badge": "ok"}], ["x", "文字のセル"]]}]}]}, "", "")
+        _w = "sections[0].tables[0].rows[0][1]"
+        t("★札の印が決めた値なら PASS★",
+          check_badge_is({"slug": "zzz_b", "where": _w, "badge": "ok"})["result"] == PASS)
+        t("　違う値なら FAIL", check_badge_is({"slug": "zzz_b", "where": _w, "badge": "mid"})["result"] == FAIL)
+        t("　札でないセルなら FAIL", check_badge_is(
+            {"slug": "zzz_b", "where": "sections[0].tables[0].rows[1][1]", "badge": "ok"})["result"] == FAIL)
+        t("　閉じられる検査として登録されている", CHECKS["badge_is"]["closeable"] is True)
+        # ★記事データだけを見る「消えたか」★（2026-10-30）
+        globals()["_load_detail"] = lambda s: ({"x": 1}, '{"lead": "残った狙い目の行です"}', "")
+        t("★記事データに残っていれば FAIL★", check_text_gone_in_article(
+            {"slug": "zzz_b", "text": "残った狙い目の行"})["result"] == FAIL)
+        t("★記事データに無ければ PASS（公開ページは見ない）★", check_text_gone_in_article(
+            {"slug": "zzz_b", "text": "5.6枚 通常450G〜"})["result"] == PASS)
+        t("　短すぎる逐語は当てない", check_text_gone_in_article(
+            {"slug": "zzz_b", "text": "行"})["result"] == NOT_APPLICABLE)
+        t("　閉じられる検査として登録されている",
+          CHECKS["text_gone_in_article"]["closeable"] is True
+          and CHECKS["text_gone_in_article"]["fn"] is check_text_gone_in_article)
+    finally:
+        globals()["_load_detail"], globals()["valid_slug"] = _keep_ld, _keep_vs
 
     # --- 引数の検査
     t("★知らない検査は拒否★", validate_args("nope", {"slug": "x"}) != "")

@@ -14,7 +14,7 @@
   "scripts/ceiling_dismiss.py": "7f8cd6b409e004625c6aafb5cd7ea739f13850a90883c97528526806bf92399b",
   "scripts/ceiling_lookup.py": "17cd802e6d8e5eb90bcc13354cef0d602f7c3693ab5419434643c4b1edac0118",
   "scripts/collect_evidence.py": "ae4e112289e2f6a16ea79506674e25b954b97ffb89471c625ac160944215d6e1",
-  "scripts/confirmed_values.py": "20a7e5800ad61f7cf4e50b6dc82f7cd5de5e462aeaacf120ae00e4a38f32196d",
+  "scripts/confirmed_values.py": "2128568344f9a105d5d5cc6e49f20eacf45f954b6ff91bda815dd0445e2881bf",
   "scripts/cz_lookup.py": "0af48b371f0800d956270a1b50a08a259520c53f24ca424cc2c719ae49a4fbaf",
   "scripts/directory_index.py": "a758913881d5b7b6105069e5f3dfcb3e5a64aa2054578094d517166240ad2e21",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",

@@ -887,6 +887,17 @@ def token_in_quote(token: str, quote: str) -> bool:
     q = page_form(quote)
     if not t:
         return False
+    # ★★4桁以上の数は、けた区切りを入れた形でも探す★★（2026-10-30・朝タスクが見つけた）＝
+    #   値は数字だけ（^\d{1,5}$）で持つのに、出典は「1,200G」と書くので、2AIが一致しても
+    #   記録できなかった（星矢 黄金十二宮の AT 間天井）。境目の判定は今までどおり（1,1200 などは断る）
+    forms = [t]
+    if _re.fullmatch(r"\d{4,}", t):
+        forms.append(f"{int(t):,}")
+    return any(_token_form_in_quote(f, q) for f in forms)
+
+
+def _token_form_in_quote(t: str, q: str) -> bool:
+    """★1つの書き方の値が、引用にその値として書かれているか★（境目の判定は token_in_quote の説明どおり）"""
     for m in _re.finditer(_re.escape(t), q):
         # ★端が数の字のときだけ、その側の境目を見る★（ここが唯一の判定）
         #   ★★区切りは全角も見る★★（2026-09-16・Codexの指摘）
@@ -3198,6 +3209,14 @@ def selftest() -> int:
               and token_in_quote("G", "天井は９９９Ｇです")
               and not token_in_quote("600", "天井は１，６００Gです")
               and not token_in_quote("99", "天井は９９９Ｇです"))
+            t("★★4桁以上の数は、けた区切りの書き方（1,200G）でも見つける★★（2026-10-30・星矢のAT間天井）",
+              token_in_quote("1200", "AT間1,200G+α")
+              and token_in_quote("1200", "AT間１，２００Ｇ")
+              and token_in_quote("1200", "AT間1200G"))
+            t("　けた区切りでも別の数の一部には一致しない（11,200 ／ 1,2000 は断る）",
+              not token_in_quote("1200", "天井は11,200G")
+              and not token_in_quote("1200", "天井は1,2000G")
+              and not token_in_quote("200", "天井は1,200G"))
             # ★★公開前の取り直しも、一覧の並びに頼らず全角入りで確かめる★★
             _fw_ov = verify_source({"url": "https://chonborista.com/slot/fw",
                                     "quote": _fw_q,

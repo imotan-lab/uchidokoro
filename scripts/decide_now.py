@@ -719,12 +719,32 @@ def _cell_str(cell):
     return None
 
 
-def _set_cell(row: list, ci: int, text: str) -> None:
-    """★セルの文字だけを書き換える★＝札なら強さの印（badge）を元のまま残す（2026-10-29）"""
+def _set_cell(row: list, ci: int, text: str, badge=None) -> None:
+    """★セルの文字を書き換える★＝札なら強さの印（badge）は元のまま残す（2026-10-29）。
+    ★決定が badge を書いたときだけ印も変える★（2026-10-30・朝タスクが「札の強さの印は道具で直せず」と残していた）"""
     if isinstance(row[ci], dict):
         row[ci] = dict(row[ci], text=text)
+        if badge is not None:
+            row[ci]["badge"] = badge
     else:
         row[ci] = text
+
+
+def badge_problem(a: dict, cell) -> str:
+    """★札の強さの印を書き換える決定が受け取れるか★（空文字＝受け取れる）
+
+    ★印は札のセルにだけ・決まった5つの値だけ・意味の変化なので2AIの理由（meaning_why 15字以上）が要る★
+    """
+    if "badge" not in a:
+        return ""
+    if not (isinstance(cell, dict) and "badge" in cell):
+        return f"強さの印は設定示唆の札のセルにしか書けません（{a.get('where') or ''}）"
+    import gates as _gb
+    if a.get("badge") not in _gb._BADGE_VALUES:
+        return f"強さの印は {'・'.join(_gb._BADGE_VALUES)} のどれかです: {a.get('badge')!r}"
+    if len(str(a.get("meaning_why") or "").strip()) < 15:
+        return "強さの印を変えるときは、なぜその強さかを meaning_why に書いてください（15字以上）"
+    return ""
 
 
 def _cell_at(sec, si, want_si, ti, ri, ci):
@@ -1350,7 +1370,7 @@ def _simulate(detail: dict, plan: list) -> str:
             _row = d["sections"][si]["tables"][_ti]["rows"][_ri]
             _cur = _cell_str(_row[_ci])
             _set_cell(_row, _ci, _cur.replace(a["before"], a["after"], 1)
-                      if kind == "table_cell_in" else a["after"])
+                      if kind == "table_cell_in" else a["after"], a.get("badge"))
         elif kind == "table_note":
             d["sections"][si]["tables"][bi]["note"] = a["after"]
         elif kind == "table_note_in":
@@ -1517,6 +1537,11 @@ def apply_decision(path: str, apply_it: bool = False, *,
 
     _dup_ok = []          # ★機械が「重複」と認めて通した消し方★
     for a in dec["actions"]:
+        # ★強さの印は、札のセルを名指しした書き換えだけ★（ほかで書くと黙って捨てられるので断る）
+        if "badge" in a and not (a["op"] == "replace" and cell_target(str(a.get("where") or ""))):
+            result["problems"].append(
+                "強さの印（badge）は、札のセルを where で名指しした replace にだけ書けます")
+            return result
         if a["op"] == "replace":
             # ★★検査するのは「変更を含む一文」★★（2026-08-30・台帳#512）
             #   部分文字列は「場所の特定」にだけ使う。
@@ -1969,6 +1994,10 @@ def apply_decision(path: str, apply_it: bool = False, *,
             _cp = (cell_plan(sec, si, where, a.get("before") or "")
                    if a["op"] == "replace" else None)
             if _cp:
+                _bp = badge_problem(a, sec["tables"][_cp[1][0]]["rows"][_cp[1][1]][_cp[1][2]])
+                if _bp:
+                    result["problems"].append(_bp)
+                    return result
                 plan.append((_cp[0], si, _cp[1], a))
                 hit = True
                 break
@@ -2248,7 +2277,7 @@ def apply_decision(path: str, apply_it: bool = False, *,
                         "1文字も書きません★")
                 _set_cell(sec["tables"][_ti2]["rows"][_ri2], _ci2,
                           _cur2.replace(a["before"], a["after"], 1)
-                          if kind == "table_cell_in" else a["after"])
+                          if kind == "table_cell_in" else a["after"], a.get("badge"))
             elif kind == "table_note":
                 sec["tables"][bi]["note"] = a["after"]
             elif kind == "table_note_in":
@@ -3540,6 +3569,30 @@ def _selftest() -> int:
           not _gbd["problems"]
           and _after_bd["sections"][1]["tables"][0]["rows"][0][1] == {"text": "デフォルト", "badge": "hint"}
           and _after_bd["sections"][0]["body"][0] == "通常A（基本）")
+
+        # ★★札の強さの印も、2AIの理由つきで書き換えられる★★（2026-10-30・朝タスク「札の強さの印は道具で直せず」）
+        def _bd_dec(act):
+            with io.open(os.path.join(td, "sbd.json"), "w", encoding="utf-8", newline="\n") as f:
+                json.dump(SBD, f, ensure_ascii=False, indent=1)
+                f.write("\n")
+            io.open(_rbd, "w", encoding="utf-8").write(json.dumps(
+                {"schema_version": SCHEMA, "slug": "sbd", "source_sha256": _sha_of("sbd"),
+                 "decided_by": ["Claude", "codex"], "actions": [act]}, ensure_ascii=False))
+            return _rbd
+        _bact = {"op": "replace", "before": "通常A（基本）", "after": "通常A（基本）",
+                 "where": "sections[1].tables[0].rows[0][1]", "badge": "ok",
+                 "why": "出典では確定の示唆", "meaning_why": "出典がこのボイスを確定扱いにしている（試験）"}
+        _gb1 = apply_decision(_bd_dec(_bact), apply_it=True, guard=False)
+        _ab1 = json.load(io.open(os.path.join(td, "sbd.json"), encoding="utf-8"))
+        t("★★札の強さの印を書き換えられる★★（文字は同じでもよい）",
+          not _gb1["problems"]
+          and _ab1["sections"][1]["tables"][0]["rows"][0][1] == {"text": "通常A（基本）", "badge": "ok"})
+        t("　決まった5つ以外の印は断る",
+          any("強さの印は" in x for x in apply_decision(_bd_dec(dict(_bact, badge="max")))["problems"]))
+        t("　理由（meaning_why）が無ければ断る",
+          any("meaning_why" in x for x in apply_decision(_bd_dec(dict(_bact, meaning_why="")))["problems"]))
+        t("　札でない場所に印を書こうとしたら断る（黙って捨てない）",
+          any("badge" in x for x in apply_decision(_bd_dec(dict(_bact, where="body")))["problems"]))
 
         # ★★奥の守り（係り先の照合）だけが効く材料★★
         #   （2026-08-28・罠⑫＝手前に守りを足すと、奥が試されなくなる）
