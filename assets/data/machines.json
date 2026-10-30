@@ -12411,35 +12411,35 @@
    "schema_version": "page-decision/v2",
    "indexable": false,
    "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
+   "ceiling_state": "PRESENT",
    "confirmed_topics": [
+    "ceiling",
     "setting",
     "spec"
    ],
    "pending_topics": [
     "gameplay",
     "cz",
-    "ceiling",
     "strategy",
     "reset"
    ],
    "reason_codes": [
-    "CATEGORIES_LT_2",
     "NO_UNIQUE_GAMEPLAY"
    ],
    "claims": [
+    "ceiling:GAME:通常時",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-26",
-   "input_digest": "sha256:23c9004db6a200022ce83a4ae44d5f02d944ef4d2c68f75eaa411a3a91dff7a1"
+   "decided_at": "2026-10-30",
+   "input_digest": "sha256:e4968c480c7d0a180014d2f7310f709ab85019d5e01fcbc3da1d9cf72c4c55f3"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
   "identity": {
-   "manufacturer_id": "dmm:サンセイR&D",
+   "manufacturer_id": "dmm:SANSEI LAB",
    "official_product_url": "https://p-town.dmm.com/machines/5121",
    "announced_name": "L牙狼 闇を照らす者",
    "identity_tier": "CATALOG_BOUND",
@@ -12460,7 +12460,9 @@
      "label": "通常"
     }
    ],
-   "normal": {}
+   "normal": {
+    "ceiling": 999
+   }
   }
  },
  {
