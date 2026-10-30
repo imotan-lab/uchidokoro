@@ -12615,7 +12615,7 @@
   "page_decision": {
    "schema_version": "page-decision/v2",
    "indexable": false,
-   "machine_profile": "UNKNOWN",
+   "machine_profile": "AT_CZ",
    "ceiling_state": "PRESENT",
    "confirmed_topics": [
     "ceiling",
@@ -12629,7 +12629,7 @@
     "reset"
    ],
    "reason_codes": [
-    "MACHINE_PROFILE_UNKNOWN"
+    "NO_UNIQUE_GAMEPLAY"
    ],
    "claims": [
     "ceiling:GAME:",
@@ -12639,7 +12639,7 @@
    ],
    "policy_mode": "normal",
    "decided_at": "2026-10-30",
-   "input_digest": "sha256:7d545daf9bf765dfb10eebd6c048ca123f0926473cfabd38882b455b30a11a8b"
+   "input_digest": "sha256:5b3086b89d4cba39997af1f74e93d522d572021bc1135a335070718d20bed3cd"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
