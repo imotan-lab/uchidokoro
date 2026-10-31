@@ -12399,7 +12399,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-30",
+   "decided_at": "2026-11-01",
    "input_digest": "sha256:e4968c480c7d0a180014d2f7310f709ab85019d5e01fcbc3da1d9cf72c4c55f3"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
