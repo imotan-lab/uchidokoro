@@ -12840,7 +12840,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-07",
+   "decided_at": "2026-11-01",
    "input_digest": "sha256:7807fe8477a17ea8227feb91589688c5301d70d363f59a7945a04802fe97fb4a"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -12852,7 +12852,11 @@
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5109 型式=未掲載 メーカー=山佐ネクスト 導入=2026-12 確認日=2026-09-10",
-   "market_release_date": "2026-12-07"
+   "market_release_date": "2026-12-07",
+   "observed_model_code": "LパチスロゼーガペインETRND06G",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
   }
  },
  {
