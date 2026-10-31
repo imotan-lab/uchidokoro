@@ -12468,7 +12468,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-31",
+   "decided_at": "2026-11-01",
    "input_digest": "sha256:f4ed3fb93674fdd1be4ff55203a633975edbb814bd4dbdde3225c170fec29176"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
