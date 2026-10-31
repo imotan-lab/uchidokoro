@@ -12676,7 +12676,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-30",
+   "decided_at": "2026-11-01",
    "input_digest": "sha256:14619fb809d431dc4579444eeecceb1f0fa588b930a754bc3cc2b4f85c1a2c81"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -12689,11 +12689,27 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5119 型式=未掲載 メーカー=ビスティ 導入=2026-11-02 確認日=2026-10-26",
    "market_release_date": "2026-11-02",
-   "regulatory_model_code": "Lゴジラ対エヴァンゲリオン2S",
    "_model_code_sources": [
     "vote:dmm-ptown"
-   ]
-  }
+   ],
+   "regulatory_model_code": "Lゴジラ対エヴァンゲリオン2S"
+  },
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "caution": 500,
+    "good": 600,
+    "ceiling": 850,
+    "target": 600
+   }
+  },
+  "targetProjection": "deb3b0bf03305c8f"
  },
  {
   "slug": "dmm_5090",
