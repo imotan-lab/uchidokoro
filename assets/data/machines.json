@@ -6910,13 +6910,13 @@
     "excellent": 900,
     "good": 700,
     "caution": 600,
-    "note": "天井999G+α。"
+    "note": "天井は通常時最大999G+α。チェリー最大45回でもボーナス当選。"
    },
    "reset": {
     "excellent": 200,
     "good": 100,
     "caution": 0,
-    "note": "設定変更後は天井最大600G（または350G）に短縮。0G〜が狙い目。",
+    "note": "設定変更後は天井350G or 600Gに短縮。",
     "byRate": {
      "eq56": {
       "caution": 0,
