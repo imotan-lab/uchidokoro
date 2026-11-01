@@ -13068,7 +13068,7 @@
    ],
    "claims": [],
    "policy_mode": "normal",
-   "decided_at": "2026-10-30",
+   "decided_at": "2026-11-02",
    "input_digest": "sha256:0f7d4ad6f4d35f11b7d97f83fbcf8cc288878da4bbbce9f6f7a2e5533f685f98"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -13080,7 +13080,11 @@
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5127 型式=未掲載 メーカー=パオン・ディーピー 導入=2026-12 確認日=2026-10-30",
-   "market_release_date": "2026-12"
+   "market_release_date": "2026-12",
+   "observed_model_code": "L/押忍番長番付/PA7",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
   }
  },
  {
