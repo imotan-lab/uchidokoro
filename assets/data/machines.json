@@ -2705,32 +2705,31 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
+   "indexable": true,
    "machine_profile": "AT_CZ",
    "ceiling_state": "PRESENT",
    "confirmed_topics": [
     "ceiling",
+    "cz",
     "setting",
     "spec"
    ],
    "pending_topics": [
     "gameplay",
-    "cz",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "NO_UNIQUE_GAMEPLAY"
-   ],
+   "reason_codes": [],
    "claims": [
     "ceiling:GAME:通常時",
+    "cz:牙狼mode",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-01",
-   "input_digest": "sha256:e4968c480c7d0a180014d2f7310f709ab85019d5e01fcbc3da1d9cf72c4c55f3"
+   "decided_at": "2026-11-02",
+   "input_digest": "sha256:dcf2495482b81c81f2abb067d53c97a79a05537ed0fe6e533e4a7d27a9ed5551"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
