@@ -6443,8 +6443,17 @@ def _selftest_body() -> int:
             t("　実際に開けない公式URLでは組み立てまで進まない",
               "preview" not in r5
               and any("公式ページを取得できません" in x for x in r5["blocked"]))
+            # ★登場年月は今日の年月から作る★（2026-11-02・決め打ちの「2026年9月」が
+            #   新台の範囲から外れた日から、中身と関係なくこの試験が落ちた＝罠⑳-b）
+            #   ★今月ではなく前月にする★（Codex：今月だと「公式の値ではなく常に今月を返す」
+            #   誤りをこの2件が見逃す。新台の範囲は前月を含む）
+            import datetime as _dtm
+            _today_ym = _dtm.date.today().replace(day=1) - _dtm.timedelta(days=1)
+            _recent_txt = f"{_today_ym.year}年{_today_ym.month}月"
+            _recent_iso = f"{_today_ym.year:04d}-{_today_ym.month:02d}"
             _nw._get = lambda u, timeout=20: (
-                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>パチスロ 2026年9月 登場</body>")
+                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>パチスロ "
+                + _recent_txt + " 登場</body>")
             t("　同じ機種なら通る",
               verify_official("Lすーぱぁびん娘", "https://m.example/products/slot/lbinko/",
                               "m")["problems"] == [])
@@ -6452,7 +6461,7 @@ def _selftest_body() -> int:
               "（空で渡せば検査ごと飛ばせた・Codex17回目）",
               verify_official("Lすーぱぁびん娘",
                               "https://m.example/products/slot/lbinko/",
-                              "m")["release"] == "2026-09")
+                              "m")["release"] == _recent_iso)
             _nw._get = lambda u, timeout=20: (
                 "<title>Lすーぱぁびん娘|EXAMPLE</title><body>パチスロ 2019年4月 登場</body>")
             t("★★古い機種を新台として出せない★★"
