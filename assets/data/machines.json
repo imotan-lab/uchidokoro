@@ -13120,7 +13120,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-25",
+   "decided_at": "2026-11-02",
    "input_digest": "sha256:21ac7dbe88748e16c59b85912cea034a29dd8aaf439243fcb43fc4f510987b5d"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
