@@ -2773,33 +2773,32 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
+   "indexable": true,
    "machine_profile": "AT_CZ",
    "ceiling_state": "PRESENT",
    "confirmed_topics": [
     "ceiling",
+    "cz",
     "setting",
     "spec"
    ],
    "pending_topics": [
     "gameplay",
-    "cz",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "NO_UNIQUE_GAMEPLAY"
-   ],
+   "reason_codes": [],
    "claims": [
     "at_prob",
     "ceiling:GAME:AT間",
+    "cz:アクセスチャンスex",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-01",
-   "input_digest": "sha256:f4ed3fb93674fdd1be4ff55203a633975edbb814bd4dbdde3225c170fec29176"
+   "decided_at": "2026-11-02",
+   "input_digest": "sha256:6722ee8e16f18eeb224b308500dc43f7ef7b78f5f9330009c1d5e4448acd428a"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
