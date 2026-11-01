@@ -10878,7 +10878,7 @@
       "excellent": 100,
       "good": 0,
       "caution": 0,
-      "note": "7スルー：即打ち推奨。"
+      "note": "7スルー：0G〜が目安。"
      },
      {
       "count": 8,
@@ -10891,7 +10891,7 @@
    },
    "limit": 1050
   },
-  "tenjo_display": "ボーナス間1000G+α",
+  "tenjo_display": "ボーナス間最大1000G",
   "tenjo_games": 1000
  },
  {
