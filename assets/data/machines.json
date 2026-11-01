@@ -10310,7 +10310,7 @@
    "title": "Lパチスロ 機動戦士ガンダムSEED 狙い目・天井・期待値まとめ"
   },
   "info": "スマスロAT",
-  "strategy": "チェッカー基準 CZ間（通常）500G〜 / スルー天井 0スルー500G〜／3スルー0G〜 / リセット後300G〜",
+  "strategy": "チェッカー基準 CZ間（通常）500G〜 / CZスルー回数別 0スルー500G〜／3スルー0G〜 / リセット後300G〜",
   "aliases": [
    "ガンダム",
    "SEED",
@@ -10326,7 +10326,7 @@
     },
     {
      "key": "suru",
-     "label": "スルー天井",
+     "label": "CZスルー回数別",
      "hasSuru": true
     },
     {
@@ -10377,7 +10377,7 @@
     "excellent": 600,
     "good": 300,
     "caution": 250,
-    "note": "リセット・ST駆け抜け後は天井750Gに短縮。300G〜が目安。"
+    "note": "リセット・ST駆け抜け後はAT間天井が750Gに短縮。300G〜が目安。"
    },
    "limit": 800,
    "hasSuru": true,
@@ -10388,7 +10388,7 @@
    "kind": "アニメ",
    "search": "ガンダムSEED Blu-ray"
   },
-  "tenjo_display": "CZ間777G+α／AT間1280G+α",
+  "tenjo_display": "CZ間最大777G／AT間1280G+α",
   "tenjo_games": 777
  },
  {
