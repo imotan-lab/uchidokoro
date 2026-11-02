@@ -12992,27 +12992,27 @@
    "machine_profile": "AT_CZ",
    "ceiling_state": "PRESENT",
    "confirmed_topics": [
-    "ceiling"
+    "ceiling",
+    "spec"
    ],
    "pending_topics": [
     "gameplay",
     "cz",
-    "spec",
     "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
     "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
     "NO_UNIQUE_GAMEPLAY"
    ],
    "claims": [
-    "ceiling:GAME:"
+    "ceiling:GAME:",
+    "payout_range"
    ],
    "policy_mode": "normal",
    "decided_at": "2026-11-03",
-   "input_digest": "sha256:c4cc370f8d163e941ee3f3fda3d6f64673605576f599114c76a277831f97dd7a"
+   "input_digest": "sha256:c85c5eabcda42337bb8c003b69f9f76e0b13fbb9363ac3f7571f67d4d6ff3654"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-12-21",
@@ -13024,10 +13024,10 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5131 型式=未掲載 メーカー=オリンピア 導入=2026-12-21 確認日=2026-10-20",
    "market_release_date": "2026-12-21",
-   "observed_model_code": "Lブルーリフレクション帝L1",
    "_observed_model_code_sources": [
     "p-town.dmm.com"
-   ]
+   ],
+   "observed_model_code": "Lブルーリフレクション帝L1"
   },
   "checker": {
    "unit": "G",
