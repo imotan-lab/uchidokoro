@@ -2482,13 +2482,13 @@
       "note": "6.0枚交換はCZ間400G基準です。AT間700G基準との差が大きいです。"
      },
      "rate50": {
-      "excellent": 600,
+      "excellent": 550,
       "good": 450,
       "caution": 350,
       "note": "6.5枚交換ではCZ間450Gからが本線です。"
      },
      "rate45": {
-      "excellent": 650,
+      "excellent": 550,
       "good": 500,
       "caution": 400,
       "note": "7.0枚交換はCZ間500G基準です。"
@@ -2520,7 +2520,7 @@
       "note": "6.5枚交換ではAT間750Gからが本線です。"
      },
      "rate45": {
-      "excellent": 1000,
+      "excellent": 999,
       "good": 800,
       "caution": 600,
       "note": "7.0枚交換はAT間800G基準です。"
@@ -2552,7 +2552,7 @@
       "note": "6.5枚交換ではリセット200Gからが本線です。"
      },
      "rate45": {
-      "excellent": 400,
+      "excellent": 350,
       "good": 250,
       "caution": 120,
       "note": "7.0枚交換のリセット台は250G基準です。"
