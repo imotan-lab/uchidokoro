@@ -162,6 +162,11 @@ ALLOW_CLAIMS_RE = re.compile(
 #   個別に列挙する方式だと、新しいタスクの手順書が黙ってバックアップされない
 #   （task-watchdog_SKILL.md が実際に拒否されていた）
 ALLOW_TASK_SKILL_RE = re.compile(r"^[a-z0-9][a-z0-9\-_]{1,60}_SKILL\.md$")
+# ★週次アクセスレポートの控え★（2026-11-03・uchidokoro-weekly-seo）
+#   置き場はリポジトリの外（Documents/uchidokoro/weekly_seo）。累積の日別CSV・前にやったことの記録・
+#   毎週の文章（notes）・部品を、保存名 uchidokoro_wseo_ で控える。中身はアクセスの数字と文章だけ。
+#   ★形で許すので、拒否名の検査は今までどおり掛かる★（is_allowlisted）。PDFは許さない（中身を読めない）
+ALLOW_WSEO_RE = re.compile(r"^uchidokoro_wseo_[a-z0-9_\-]{1,60}\.(?:py|md|csv|json)$")
 
 # CLAUDE.md の日付つきスナップショット（圧縮など破壊的編集の前に退避する用途・2026-07-24追加）
 # 例: CLAUDE_uchidokoro_2026-07-24.md / CLAUDE_history_uchidokoro_2026-07-24.md
@@ -616,7 +621,8 @@ def is_allowlisted(basename: str, src: str | None = None) -> bool:
         return True
     if (bool(ALLOW_LOG_RE.match(basename))
             or bool(ALLOW_CLAUDE_SNAPSHOT_RE.match(basename))
-            or bool(ALLOW_TASK_SKILL_RE.match(basename))):
+            or bool(ALLOW_TASK_SKILL_RE.match(basename))
+            or bool(ALLOW_WSEO_RE.match(basename))):
         return not name_findings(basename)
     # claims は「名前の形」と「claims置き場にあること」の両方が要る
     if ALLOW_CLAIMS_RE.match(basename) and _in_claims_dir(src):
@@ -1497,6 +1503,11 @@ def _baseline_tests(t) -> None:
         t("　ふつうの手順書・ログは今までどおり許す（止めすぎない）",
           is_allowlisted("uchidokoro-add-machine_SKILL.md")
           and is_allowlisted("update_machine_2026-09-04.log"))
+        t("　週次レポートの控えは許す／その形でも拒否名とPDFは許さない",
+          is_allowlisted("uchidokoro_wseo_seo_daily.csv")
+          and is_allowlisted("uchidokoro_wseo_notes_2026-10-19.json")
+          and not is_allowlisted("uchidokoro_wseo_gmail_config.json")
+          and not is_allowlisted("uchidokoro_wseo_weekly_2026-10-19.pdf"))
 
         # ㉑★UTF-8の印（BOM）が付いていても、JSONとして読む★
         p21 = os.path.join(root, "note.md")
