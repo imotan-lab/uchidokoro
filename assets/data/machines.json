@@ -3053,29 +3053,29 @@
    "schema_version": "page-decision/v2",
    "indexable": false,
    "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
+   "ceiling_state": "PRESENT",
    "confirmed_topics": [
+    "ceiling",
     "spec"
    ],
    "pending_topics": [
     "gameplay",
     "cz",
-    "ceiling",
     "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
     "NO_UNIQUE_GAMEPLAY"
    ],
    "claims": [
+    "ceiling:GAME:BIG後",
+    "ceiling:GAME:REG後",
     "payout_range"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-12",
-   "input_digest": "sha256:b57c69a79a963e0d796881fe7f4f06f23049ac94aeb77e09defbad93dcd76930"
+   "decided_at": "2026-11-03",
+   "input_digest": "sha256:1a4d868fef8b1c1f4892f284650d171c4471e155f8f62772267e93c8f8249e5b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-19",
