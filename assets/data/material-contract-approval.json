@@ -2,8 +2,8 @@
  "schema_version": "material-contract-approval/v1",
  "_why": "★どの出典を材料に採るかを決める側の指紋★（台帳#389）。ここと実ファイルが一致する時だけ公開物を作れる。中身を直したらこのファイルも更新すること（python scripts/material_contract.py --approve）＝レビューに載せるための仕組み。",
  "files": {
-  "assets/data/automation-policy.json": "ea8991b434826dc4cf41f46b6d6df4384c84f07409838a35a4063c355afa82bc",
-  "assets/data/directory-catalogs.json": "213d4858dd8cc66fd37f5c21e41a7d5cbd6d57d65b88c6fc4485065a85a00171",
+  "assets/data/automation-policy.json": "10e8534dc9f07ff6cdc9602bb4c924c8caf95ca361654e7e16404695c028e0dc",
+  "assets/data/directory-catalogs.json": "6f38a65bfd7e07e8441391ddc1bd4060e1a432353b522a473ed29d326fadace9",
   "assets/data/maker-catalogs.json": "c1bfaa9377e999f95bcefc5d1958a88e07356d2dbb40f2e1f6ef2a68e2952308",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
   "scripts/add_machine_run.py": "26dafc57fa4e9f42a1ac4d8ea1974cfbc08d7d4b4ae23ff5f207ce166ddba222",

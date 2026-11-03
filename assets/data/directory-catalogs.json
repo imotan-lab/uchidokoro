@@ -648,6 +648,59 @@
       "title_tag": "h4",
       "_why_title_tag": "★機種名は h4 に入っている★（2026-08-14・実物で確認）。一撃のリンクには機種名・メーカー・タイプ・導入日が全部入るので、そのまま読むと芯が「東京喰種crossalphaクロスアルファatタイプ天井導入開始日…」になり一致しない。クラス名が付いていないのでタグで指す。",
       "_why_off": "★規約で自動取得が禁止されている★（2026-08-16・台帳#376）。P-WORLD 総合利用規約 第8条「プログラムを用いたアクセスなど、通常のブラウザアクセス以外の方法で本サービスを利用する行為」／一撃 利用規約 第3条「自動化ツール・ボット・スクレイピング等により本サイトの情報を大量取得・再配布する行為」。★人がブラウザで見るのは自由／機械では取りに行かない★。通信そのものは scripts/blocked_hosts.py が止める（最後の砦）。★許諾が取れたら運営者の判断で戻す★"
+    },
+    "slopachi-quest": {
+      "name": "スロパチクエスト",
+      "publisher_id": "slopachi-quest",
+      "surfaces": [
+        {
+          "url": "https://www.slopachi-quest.com/kisyubetsu/",
+          "kind": "パチスロ機種別（狙い目一覧）"
+        }
+      ],
+      "link_pattern": "/article/[a-z0-9\\-]+/?$",
+      "machine_page_pattern": "^https://www\\.slopachi-quest\\.com/article/[a-z0-9\\-]+/?$",
+      "machine_id_pattern": "^https://www\\.slopachi-quest\\.com/article/([a-z0-9\\-]+)/?$",
+      "min_expected": 60,
+      "_why_min_expected": "一覧のリンクは約185本だが、同じ機種の天井と設定差の記事が並ぶので機種名の芯にすると88件（2026-11-04実測）。下限はその7割",
+      "max_pages": 1,
+      "status": "ACTIVE",
+      "surface_pattern": "^https://www\\.slopachi-quest\\.com/kisyubetsu/$",
+      "_why": "★2026-11-04・ちょんぼりすたが名指しで取得を断るようになったので足した★（運営者「大手であればどこでもいい」）。機種別の一覧（/kisyubetsu/）1ページに約185機種が並ぶ（題は『機種名 天井:…｜狙い目:…』の形）。機種ページは /article/<英字の名前>/（天井の記事と設定差の記事が別ページ）。★一覧には機種でない記事（朝一リセ攻略・導入日順一覧）も数本混ざる★＝機種名と照合しないので害は無い。",
+      "user_area": {
+        "hosts": [
+          "slopachi-quest.com"
+        ],
+        "drop": [
+          {
+            "class": "commentlist"
+          },
+          {
+            "id": "comments-title"
+          },
+          {
+            "id": "respond"
+          }
+        ],
+        "require_before": [
+          {
+            "id": "respond"
+          }
+        ],
+        "require_after": [
+          {
+            "class": "entry-content"
+          }
+        ],
+        "markers": [
+          "件のコメント",
+          "コメントを残す",
+          "コメントを送信"
+        ],
+        "page_pattern": "^https://www\\.slopachi-quest\\.com/article/[a-z0-9\\-]+/?$",
+        "_why": "★読者のコメントを出典に数えない★（2026-11-04）。実ページを取って確かめた＝北斗の拳 転生の章2（hokuto-tensei2-tenjou）に commentlist（10件のコメント）・comments-title（『10 件のコメント』）・respond（『コメントを残す』の投稿フォーム）。Vivy（vivy-tenjou）はコメント0件で commentlist と comments-title が無く、respond だけある。★必ずある箱は respond（投稿フォーム）だけ★＝commentlist と comments-title はコメント0件のページに無いので求めない（ちょんぼりすたの台帳#492と同じ失敗をしない）。箱の名前が変わって落とし損ねたら、印（markers）が残って止まる。落としたあとに本文（entry-content）が残ることを求める。",
+        "_checked_at": "2026-11-04"
+      }
     }
   }
 }
