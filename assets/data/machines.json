@@ -9574,7 +9574,7 @@
     "excellent": 300,
     "good": 210,
     "caution": 150,
-    "note": "AT中・CZ中はカウント対象外。CZ失敗後からカウント。天井400G。",
+    "note": "CZ間400G消化でCZ当選。天井400G。",
     "byRate": {
      "eq56": {
       "excellent": 300,
@@ -9592,7 +9592,7 @@
       "caution": 180
      },
      "rate45": {
-      "excellent": 460,
+      "excellent": 400,
       "good": 300,
       "caution": 210
      }
@@ -9637,7 +9637,7 @@
       "caution": 0
      }
     ],
-    "note": "CZのスルー回数。",
+    "note": "CZのスルー回数。ボーナス後の初回ボスバトル敗北後はCZ3スルーまでにボーナスに当選するため、この目安は使わず続行します。",
     "suruMax": 6
    },
    "bonus_gap": {
