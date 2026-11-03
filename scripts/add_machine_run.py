@@ -3835,7 +3835,10 @@ def selftest() -> int:
     1本ずつ書くと必ずどれかが食い違う）。
     """
     import selftest_log_guard as _slg
-    return _slg.run_selftest(globals(), _selftest_body)
+    # ★名鑑一覧は断られる前の形の写しで試す★（2026-11-04・directory_index.catalogs_before_refusal）
+    import directory_index as _di_cb
+    with _di_cb.catalogs_before_refusal():
+        return _slg.run_selftest(globals(), _selftest_body)
 
 
 def _selftest_body() -> int:

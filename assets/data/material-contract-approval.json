@@ -2,21 +2,21 @@
  "schema_version": "material-contract-approval/v1",
  "_why": "★どの出典を材料に採るかを決める側の指紋★（台帳#389）。ここと実ファイルが一致する時だけ公開物を作れる。中身を直したらこのファイルも更新すること（python scripts/material_contract.py --approve）＝レビューに載せるための仕組み。",
  "files": {
-  "assets/data/automation-policy.json": "fedec6d762c065355134f54e656d7b11520a4d6a1d51cb4433771cb7c4d0063f",
-  "assets/data/directory-catalogs.json": "a368d3e2839d3944b2b8064e40c735268c34da52d8eec6b294e1e55bf91205eb",
+  "assets/data/automation-policy.json": "ea8991b434826dc4cf41f46b6d6df4384c84f07409838a35a4063c355afa82bc",
+  "assets/data/directory-catalogs.json": "213d4858dd8cc66fd37f5c21e41a7d5cbd6d57d65b88c6fc4485065a85a00171",
   "assets/data/maker-catalogs.json": "c1bfaa9377e999f95bcefc5d1958a88e07356d2dbb40f2e1f6ef2a68e2952308",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
-  "scripts/add_machine_run.py": "f747b849484cf26fc88c4de318eb20744641c3e06371475c31322efc21c1a3f8",
+  "scripts/add_machine_run.py": "26dafc57fa4e9f42a1ac4d8ea1974cfbc08d7d4b4ae23ff5f207ce166ddba222",
   "scripts/adoption_basis.py": "b816e9cabae59738572420fbf6d77b888ad70fc5d6585aacf6e783ac9188c2d0",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
-  "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
-  "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
+  "scripts/automation_policy.py": "308cf1510e49f3cc57354e66ad2acef887c60fca87c7b09b536d6b011a6c8169",
+  "scripts/blocked_hosts.py": "4ceaea818d61bff2571542622b695fb67295d523ba015667ba89d9829425c2d9",
   "scripts/ceiling_dismiss.py": "7f8cd6b409e004625c6aafb5cd7ea739f13850a90883c97528526806bf92399b",
   "scripts/ceiling_lookup.py": "17cd802e6d8e5eb90bcc13354cef0d602f7c3693ab5419434643c4b1edac0118",
-  "scripts/collect_evidence.py": "ae4e112289e2f6a16ea79506674e25b954b97ffb89471c625ac160944215d6e1",
-  "scripts/confirmed_values.py": "2128568344f9a105d5d5cc6e49f20eacf45f954b6ff91bda815dd0445e2881bf",
+  "scripts/collect_evidence.py": "a3ca8a9f76f057886ad5ad6134b9841fb53eb6ed72b56aa23173f70434d4dbab",
+  "scripts/confirmed_values.py": "dd1d68b313e131de2ec2ca4ab5ff07f6dd6591f9d9652e0138023c918ea56d31",
   "scripts/cz_lookup.py": "0af48b371f0800d956270a1b50a08a259520c53f24ca424cc2c719ae49a4fbaf",
-  "scripts/directory_index.py": "a758913881d5b7b6105069e5f3dfcb3e5a64aa2054578094d517166240ad2e21",
+  "scripts/directory_index.py": "5f8d9ae8689a3b57f6300607b8b5e35a4bf4a1f8f5436414171f71ecf73aa4b9",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
   "scripts/dmm_discover.py": "9f383b2fc427e566cf5e77590b573bfe18c4b00191134ed56598c4cb888c186c",
   "scripts/dmm_machine.py": "ad73c8af107a9e993c4a1d8ef5b131bd5355f7cc2fc962ae3f5398175a053fe3",
@@ -24,8 +24,8 @@
   "scripts/html_check.py": "2d58882be96adbeb8710638ccb47d3f784ab3d1b091f5eff74894ca7bba1d112",
   "scripts/html_tables.py": "5d0f32d7e988ce0696e07b4ac118d119ea4c4e2280b57acee89e0c6ebaa78c3e",
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
-  "scripts/machine_sources.py": "8ad9bb744ccb198702a39c3d016dd515af00b56862d15d28ce984450da922ec3",
-  "scripts/maker_identity_cache.py": "f349ed376124d7a22c3c989ff0e93ec24df085c420f44293c3ca1d2a32b5d31c",
+  "scripts/machine_sources.py": "a64a6c98f409cce1e33a2411d980696d0a64f751c37c638275f2f30aaaa1fa04",
+  "scripts/maker_identity_cache.py": "758f7eb8856fa87648a97b6c7fde6b334c14078be2e386f07ec095069ccf0aa7",
   "scripts/mode_apply.py": "f79e96d71cb31c552c532ba90f2256a857e65eb6972e0c6ac31f265e1f7abbca",
   "scripts/mode_ask.py": "b4891cbe65e959ed957d3c11e5a85137ea8202efb016940c5c8f30394f782bd4",
   "scripts/mode_verdict.py": "7f313105487573ebdd4287276337805aa567d12f5730197d23a3305cbed2390a",
@@ -38,9 +38,9 @@
   "scripts/read_failure.py": "be1280280387ea03708afdd281a97289c311a9aa70ef53a62dffd438de9b96fe",
   "scripts/selftest_log_guard.py": "0de496b6ac4774489492a6c66f47c80ca3c546aa30f77209bbd0c69fee8b3aab",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
-  "scripts/source_lineage.py": "706cbbd437ba491995e233e9758a73f7672e27a47021cfc1274f0c2e9d9f79ed",
+  "scripts/source_lineage.py": "930ab5ec437d47a0bebfdfc915de65adc5c617e5fa6aa6db2d9a002eb40442ea",
   "scripts/spec_lookup.py": "8c165305e7fb540dc7c517b5d40101b0b2cf8a216255ca3099b607c3b9d58bfe",
-  "scripts/user_area.py": "4900059ce6c370a5688ea937540a14eb71d8934bbc089b277b371498bdc0d480"
+  "scripts/user_area.py": "4544a004a05de65ea56fefe952eb11b9d82d7aa77e25562c884d3ccb7ae265a1"
  },
  "imports": {
   "scripts/add_machine_run.py": [
@@ -119,6 +119,7 @@
    "user_area"
   ],
   "scripts/confirmed_values.py": [
+   "automation_policy",
    "build_new_article",
    "ceiling_lookup",
    "claim_identity",
@@ -283,5 +284,6 @@
    "page_reading",
    "read_failure"
   ]
- }
+ },
+ "_deps_changed_why": "2026-11-04 ちょんぼりすたが名指しで取得を拒否（HTTP 403）。confirmed_values.reverify が、断られる前に確かめた引用を取り直さずに据え置くかを決めるため、通信の名簿（automation_policy.load）を読むようになった。automation_policy はもともと材料の契約の集合（5d）に入っているので、集合は変えない。"
 }

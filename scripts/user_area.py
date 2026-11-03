@@ -90,7 +90,11 @@ def _conf(host: str) -> dict:
         return {}
     got = _sj.read_json(CATALOGS, expect=dict).get("directories") or {}
     for c in got.values():
-        if not isinstance(c, dict) or c.get("status") != "ACTIVE":
+        # ★相手の拒否でやめた名鑑（OFF_REFUSED）の決まりも残す★（2026-11-04）
+        #   取りには行かないが、ページの作りの知識は正しいまま。外すと、手元に残った
+        #   本文を読むときに投稿欄が落ちなくなる（試験で実際に落ちた）。
+        if not isinstance(c, dict) or c.get("status") not in ("ACTIVE",
+                                                               "OFF_REFUSED"):
             continue
         ua = c.get("user_area")
         if not isinstance(ua, dict):
@@ -1098,7 +1102,11 @@ def selftest() -> int:
       and _bh2.is_blocked("https://1geki.jp/slot/x/"))
     t("　（対照）使ってよい名鑑は通信できる",
       not _bh2.is_blocked("https://p-town.dmm.com/machines/4709")
-      and not _bh2.is_blocked("https://chonborista.com/slot/x/1/"))
+      and not _bh2.is_blocked("https://nana-press.com/kaiseki/machine/1/"))
+    t("★★相手の拒否でやめた名鑑は、通信はしないが決まりごとは残す★★"
+      "（ちょんぼりすた・2026-11-03〜）",
+      _bh2.is_blocked("https://chonborista.com/slot/x/1/")
+      and bool(_conf("chonborista.com")))
     # ★★他の名鑑も登録されているか（2026-08-14・台帳#348）★★
     #   ★一律に同じ規則をコピーしていない★＝サイトごとに実HTMLを見て決めた。
     _dmm = _conf("p-town.dmm.com")

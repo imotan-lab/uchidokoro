@@ -194,7 +194,9 @@ def disagreements(policy: dict | None = None) -> list:
                 ng.append(f"{fname} の {cid}: 設定の形が違います"
                           "／★確かめられないので通しません★")
                 continue
-            if conf.get("status") == "OFF_TOS":
+            # ★使うのをやめた先（OFF_TOS＝規約／OFF_REFUSED＝相手の拒否）は見ない★
+            #   （2026-11-03・ちょんぼりすた）。巡回しないので通信の検査も要らない。
+            if str(conf.get("status") or "").startswith("OFF_"):
                 continue
             urls = [conf.get(k) for k in ("list_url", "base_url", "url")]
             sf = conf.get("surfaces")
@@ -343,6 +345,12 @@ def selftest() -> int:
     t("　OFF_TOS の巡回先は見ない（もう使わないので）",
       not _with({"x": {"status": "OFF_TOS", "surfaces": [
           {"url": "https://www.p-world.co.jp/x"}]}}))
+    t("　OFF_REFUSED（相手の拒否でやめた先）も見ない",
+      not _with({"x": {"status": "OFF_REFUSED", "surfaces": [
+          {"url": "https://chonborista.com/slot-list/"}]}}))
+    t("　ACTIVE のまま許可していない先は今までどおり見つける",
+      bool(_with({"x": {"status": "ACTIVE", "surfaces": [
+          {"url": "https://chonborista.com/slot-list/"}]}})))
     t("★★規約の記録がGitに載っていること★★"
       "（載っていないと、根拠が他のPCから読めない）",
       all(os.path.isfile(os.path.join(BASE, c["evidence_ref"]))

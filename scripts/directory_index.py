@@ -482,6 +482,43 @@ def found_urls(result: dict) -> list:
 
 # ---------------------------------------------------------------- selftest
 
+
+class catalogs_before_refusal:
+    """★試験用：相手の拒否でやめた名鑑（OFF_REFUSED）を ACTIVE に戻した写しを使う★
+
+    ★なぜ要るか（2026-11-04）★＝ちょんぼりすたが名指しで取得を断るようになり、
+      名鑑一覧で OFF_REFUSED にした。ところが名鑑の仕組みを試す自己試験の多くが
+      「本物の名鑑一覧で ACTIVE のちょんぼりすた」を見本にしていて、
+      ★仕組みは正しいのに見本が消えて赤くなった★（3本）。
+      試験が確かめたいのは仕組みなので、断られる前の形の写しを一時の場所に置いて、
+      その間だけ CATALOGS をそこへ向ける。★本物の名鑑一覧は書き換えない★。
+    使い方: with catalogs_before_refusal(): ...（抜けると元へ戻し、写しを消す）
+    """
+
+    def __enter__(self):
+        import json as _json
+        import tempfile as _tf
+        global CATALOGS
+        d = _sj.read_json(CATALOGS, expect=dict)
+        for c in (d.get("directories") or {}).values():
+            if isinstance(c, dict) and c.get("status") == "OFF_REFUSED":
+                c["status"] = "ACTIVE"
+        self._keep = CATALOGS
+        self._dir = _tf.mkdtemp(prefix="catalogs_test_")
+        path = os.path.join(self._dir, "directory-catalogs.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            _json.dump(d, fh, ensure_ascii=False)
+        CATALOGS = path
+        return path
+
+    def __exit__(self, *exc):
+        import shutil as _sh
+        global CATALOGS
+        CATALOGS = self._keep
+        _sh.rmtree(self._dir, ignore_errors=True)
+        return False
+
+
 def selftest() -> int:
     results = []
     nl = chr(10)

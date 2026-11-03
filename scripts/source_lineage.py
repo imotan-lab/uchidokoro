@@ -337,11 +337,21 @@ def selftest() -> int:
                    "https://nana-press.com/kaiseki/machine/1055/"]) == 1)
     t("★止めた先のURL（一撃）も数えない★",
       independent(["https://1geki.jp/slot/l_bofuri/",
-                   "https://chonborista.com/slot/x/"]) == 1)
+                   "https://p-town.dmm.com/machines/1/"]) == 1)
     t("★古い控えの発行者キーも数えない★",
       independent(["lin-hazuse", "lin-nana-press"]) == 1)
     t("　生きている出典2つは、いままでどおり2票",
-      independent(["https://nana-press.com/a", "https://chonborista.com/b"]) == 2)
+      independent(["https://nana-press.com/a", "https://p-town.dmm.com/b"]) == 2)
+    # ★★相手に断られてやめた出典（ちょんぼりすた・2026-11-03〜）★★
+    #   運営者の判断＝「それまでのはそのままでいい」。2AIの確定値は発行者の鍵
+    #   （vote:chonborista）で数えるので、断られる前の記録は今までどおり2票。
+    #   ★URLのまま渡されたもの★（取り直せない古い控え）は数えない＝P-WORLDと同じ。
+    t("★★断られる前に確かめた記録は、発行者の鍵で今までどおり2票★★"
+      "（ここで落とすと、ちょんぼりすたで確かめた143件が1出典に格下げされる）",
+      independent({vote_key("chonborista"), vote_key("nana-press")}) == 2)
+    t("　ちょんぼりすたのURLそのものは、もう取りに行けないので数えない",
+      independent(["https://chonborista.com/slot/x/",
+                   "https://nana-press.com/a"]) == 1)
     t("　空や None は数えない", independent([None, "", "https://nana-press.com/a"]) == 1)
     t("★★同じ転載系列は1票★★（ちょんぼりすたとやんちゃプレス）",
       g.get("chonborista") == g.get("yancha-press"))

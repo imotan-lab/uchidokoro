@@ -497,6 +497,13 @@ def _one_bad_page_selftest() -> bool:
 
 
 def selftest() -> int:
+    """★名鑑一覧は断られる前の形の写しで試す★（2026-11-04・directory_index.catalogs_before_refusal）"""
+    import directory_index as _di_cb
+    with _di_cb.catalogs_before_refusal():
+        return _selftest_body()
+
+
+def _selftest_body() -> int:
     ok, ran = True, [0]
 
     def t(name, cond):

@@ -43,6 +43,12 @@ BLOCKED = {
                      "データ収集の禁止）／2026-08-16・台帳#376",
     "1geki.jp": "一撃 利用規約 第3条（自動化ツール・ボット・スクレイピングによる"
                 "大量取得・再配布の禁止）／2026-08-16・台帳#376",
+    # ★規約ではなく相手の拒否★（2026-11-03）＝Cloudflare で、名乗りに
+    #   「uchidokoro」を含むものだけ 403 を返すようになった（他の名乗りは200）。
+    #   ★名乗りを変えて入らない★（相手の意思に反する）。運営者の判断で使うのをやめた。
+    #   それまでに2AIが確かめて記録した値はそのまま使う（confirmed_values.reverify）。
+    "chonborista.com": "ちょんぼりすたが、うちどころの名乗りを名指しで拒否"
+                       "（HTTP 403・2026-11-03から）／運営者の判断で使用をやめた",
 }
 
 
@@ -95,8 +101,10 @@ def selftest() -> int:
     t("　サブドメインも止める", is_blocked("https://idn.p-world.co.jp/x"))
     t("★★使ってよい名鑑は止めない★★",
       not is_blocked("https://p-town.dmm.com/machines/4709")
-      and not is_blocked("https://chonborista.com/slot/x/1/")
       and not is_blocked("https://nana-press.com/kaiseki/machine/1/"))
+    t("★★ちょんぼりすたは止める★★（2026-11-03から相手が名指しで拒否）",
+      is_blocked("https://chonborista.com/slot/x/1/")
+      and is_blocked("https://www.chonborista.com/slot-list/"))
     t("　名前が似ているだけの別ホストは止めない",
       not is_blocked("https://p-world.co.jp.example.com/x")
       and not is_blocked("https://my1geki.jp/x"))

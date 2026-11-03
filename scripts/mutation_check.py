@@ -8855,6 +8855,55 @@ MUTATIONS = [
         "run": ["scripts/repair_journal.py"],
         "issues": [],
     },
+    # ─── 2026-11-04・ちょんぼりすたが名指しで拒否（据え置き）───
+    {
+        "why": "★断られる前に確かめた出典も取りに行く（★403で30機種・143件の記録が全部止まる★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if kept_without_refetch(url, (src or {}).get(\"verified_at\")):\n                continue",
+        "after": "            if False:\n                continue",
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [],
+    },
+    {
+        "why": "★据え置きの日より後に確かめた出典まで据え置く（★断られた後の記録が確かめられないまま通る★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "    return v[:10] < keep\n",
+        "after": "    return True\n",
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [],
+    },
+    {
+        "why": "★BLOCKED でない先（使ってよい出典）まで据え置く（★取り直しの確かめが黙って消える★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "    if conf.get(\"status\") != \"BLOCKED\" or not keep:",
+        "after": "    if not keep:",
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [],
+    },
+    {
+        "why": "★相手の拒否でやめた名鑑の投稿欄の決まりを捨てる（★手元の本文から投稿欄が落ちない★）★",
+        "file": "scripts/user_area.py",
+        "before": "        if not isinstance(c, dict) or c.get(\"status\") not in (\"ACTIVE\",\n                                                               \"OFF_REFUSED\"):",
+        "after": "        if not isinstance(c, dict) or c.get(\"status\") not in (\"ACTIVE\",):",
+        "run": ["scripts/user_area.py"],
+        "issues": [],
+    },
+    {
+        "why": "★使うのをやめた名鑑（OFF_REFUSED）の巡回先まで通信の検査にかける（★名簿の食い違いで止まる★）★",
+        "file": "scripts/automation_policy.py",
+        "before": "            if str(conf.get(\"status\") or \"\").startswith(\"OFF_\"):",
+        "after": "            if conf.get(\"status\") == \"OFF_TOS\":",
+        "run": ["scripts/automation_policy.py"],
+        "issues": [],
+    },
+    {
+        "why": "★断られてやめた発行者（ちょんぼりすた）を票の鍵でも数えない（★断られる前に確かめた143件が1出典に格下げ★）★",
+        "file": "scripts/source_lineage.py",
+        "before": "                                 \"p-world\", \"lin-p-world\"})",
+        "after": "                                 \"p-world\", \"lin-p-world\", \"vote:chonborista\", \"chonborista\"})",
+        "run": ["scripts/source_lineage.py"],
+        "issues": [],
+    },
 ]
 
 

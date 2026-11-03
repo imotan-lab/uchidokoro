@@ -1467,6 +1467,45 @@ def init_store() -> str:
     return STORE
 
 
+def kept_without_refetch(url: str, verified_at, policy=None) -> bool:
+    """★取り直さずにそのまま使う出典か★（2026-11-04・運営者の判断）
+
+    ★なぜ要るか★＝ちょんぼりすたが 2026-11-03 から、うちどころの取得だけを
+      名指しで断るようになった（HTTP 403）。運営者の判断は
+      「今の時点で弾かれたんだから、それまでのはそのままでいい」。
+      ★直す前★は確かめ直しが毎回取りに行って失敗し、その出典を使った
+      記録のある機種（30機種・143件）が全部止まった。
+    ★通すのは3つがそろうときだけ★
+      ①その出典の名簿（automation-policy.json）が BLOCKED
+      ②名簿に keep_verified_before（その日より前に確かめたものは据え置く）がある
+      ③この引用を確かめた日（verified_at）がその日より前
+    ★確かめた日が無い・読めない・名簿が読めないときは通さない★（fail-closed）。
+    ★名乗りを変えて取りに行く道は作らない★（相手の意思に反する）。
+    """
+    import urllib.parse as _up
+    v = str(verified_at or "")
+    try:
+        datetime.date.fromisoformat(v[:10])
+    except ValueError:
+        return False
+    try:
+        if policy is None:
+            import automation_policy as _ap
+            policy = _ap.load()
+        host = (_up.urlsplit(str(url or "")).hostname or "").lower()
+        conf = (policy.get("hosts") or {}).get(host) or {}
+    except Exception:                                        # noqa: BLE001
+        return False
+    keep = str(conf.get("keep_verified_before") or "")
+    if conf.get("status") != "BLOCKED" or not keep:
+        return False
+    try:
+        datetime.date.fromisoformat(keep)
+    except ValueError:
+        return False
+    return v[:10] < keep
+
+
 def _default_fetch(url: str) -> str:
     """★出典を取り直す既定の道★（投稿欄を落とす唯一の入口を通る）
 
@@ -1582,6 +1621,10 @@ def reverify(slug: str, fetch=None, name: str = "",
         for src in (r.get("sources") or []):
             url = str((src or {}).get("url") or "")
             if not url:
+                continue
+            # ★相手に断られるようになった出典は、断られる前に確かめた分を据え置く★
+            #   （2026-11-04・運営者の判断・kept_without_refetch）
+            if kept_without_refetch(url, (src or {}).get("verified_at")):
                 continue
             html = _html_of(url)
             if isinstance(html, Exception):
@@ -3326,6 +3369,71 @@ def selftest() -> int:
             t("★★引用が消えていたら公開前に気づく★★"
               "／★控えを手で書き換えても、取り直せば分かる★",
               reverify(_rv_slug, fetch=_fetch_changed) != [])
+
+            # ★★相手に断られるようになった出典は、断られる前に確かめた分を据え置く★★
+            #   （2026-11-04・運営者「今の時点で弾かれたんだから、それまでのはそのままでいい」）
+            #   ★本物の名簿（automation-policy.json）を通す★＝ちょんぼりすたは BLOCKED・
+            #   keep_verified_before=2026-11-04。取りに行った先を数えて、行かなかったことを見る。
+            _kp_store = STORE
+            STORE = os.path.join(os.path.dirname(_kp_store), "cv_keep.json")
+
+            def _kp_write(_chon_at):
+                json.dump({"schema_version": SCHEMA, "machines": {_rv_slug: {
+                    "ceiling": {
+                        "value": {"kind": "GAME", "amount": "999", "unit": "G",
+                                  "benefit": "AT当選"},
+                        "sources": [
+                            {"url": "https://chonborista.com/slot/keep/1/",
+                             "quote": _quote, "verified_at": _chon_at},
+                            {"url": "https://nana-press.com/kaiseki/keep",
+                             "quote": _quote, "verified_at": "2026-10-01"}],
+                        "lineages": ["vote:chonborista", "vote:nana-press"],
+                        "agreed_by": ["claude", "codex"],
+                        "why": "2AIで突き合わせました",
+                        "decided_at": "2026-10-01",
+                        "official_url": ""}}}},
+                    open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
+
+            _kp_hits = []
+
+            def _kp_fetch(u):
+                _kp_hits.append(u)
+                if "chonborista" in u:
+                    raise RuntimeError("HTTP 403")
+                return _page(_quote)
+            try:
+                _kp_write("2026-10-01")
+                _kp_rv = reverify(_rv_slug, fetch=_kp_fetch)
+                t("★★断られる前に確かめた出典は取りに行かず、そのまま通る★★"
+                  "／★直す前は403で30機種・143件の記録が全部止まった★",
+                  _kp_rv == []
+                  and not [u for u in _kp_hits if "chonborista" in u]
+                  and [u for u in _kp_hits if "nana-press" in u])
+                _kp_hits.clear()
+                _kp_write("2026-11-04")
+                t("　断られた日より後に確かめたと書いてある出典は据え置かない（取りに行って止まる）",
+                  reverify(_rv_slug, fetch=_kp_fetch) != []
+                  and [u for u in _kp_hits if "chonborista" in u])
+                _kp_hits.clear()
+                _kp_write("")
+                t("　確かめた日が無い出典は据え置かない（fail-closed）",
+                  reverify(_rv_slug, fetch=_kp_fetch) != [])
+            finally:
+                STORE = _kp_store
+            _kp_pol = {"hosts": {
+                "a.example": {"status": "BLOCKED", "keep_verified_before": "2026-11-04"},
+                "b.example": {"status": "APPROVED", "keep_verified_before": "2026-11-04"},
+                "c.example": {"status": "BLOCKED"},
+                "d.example": {"status": "BLOCKED", "keep_verified_before": "そのうち"}}}
+            t("　据え置くのは BLOCKED かつ据え置きの日がある先で、その日より前に確かめたものだけ",
+              kept_without_refetch("https://a.example/x", "2026-11-03", _kp_pol)
+              and not kept_without_refetch("https://a.example/x", "2026-11-04", _kp_pol)
+              and not kept_without_refetch("https://a.example/x", "", _kp_pol)
+              and not kept_without_refetch("https://a.example/x", "昨日", _kp_pol)
+              and not kept_without_refetch("https://b.example/x", "2026-10-01", _kp_pol)
+              and not kept_without_refetch("https://c.example/x", "2026-10-01", _kp_pol)
+              and not kept_without_refetch("https://d.example/x", "2026-10-01", _kp_pol)
+              and not kept_without_refetch("https://zzz.example/x", "2026-10-01", _kp_pol))
 
             # ★★2AIで本人性を通した出典は、本文が変わったら知らせる★★
             #   （2026-08-24・Codexの8回目）
