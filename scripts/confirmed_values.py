@@ -1467,6 +1467,14 @@ def init_store() -> str:
     return STORE
 
 
+# ★自己試験の間だけ、据え置きの判定に使う名簿を差し替える★（2026-11-04）
+#   ★なぜ★＝試験の中で作る引用は「今日」確かめたことになる。本物の名簿
+#   （据え置きは 2026-11-04 より前）で判定すると、試験を動かした日付で結果が変わる
+#   （CIはUTCなので日本の11/4朝がまだ11/3で、ちょんぼりすたの見本が据え置かれ、
+#   「引用が消えたら気づく」の試験が赤くなった）。★本番では None のまま★。
+_KEEP_POLICY_FOR_TEST = None
+
+
 def kept_without_refetch(url: str, verified_at, policy=None) -> bool:
     """★取り直さずにそのまま使う出典か★（2026-11-04・運営者の判断）
 
@@ -1489,6 +1497,8 @@ def kept_without_refetch(url: str, verified_at, policy=None) -> bool:
     except ValueError:
         return False
     try:
+        if policy is None and _KEEP_POLICY_FOR_TEST is not None:
+            policy = _KEEP_POLICY_FOR_TEST
         if policy is None:
             import automation_policy as _ap
             policy = _ap.load()
@@ -2388,9 +2398,10 @@ def selftest() -> int:
                                parse_source("https://nana-press.com/1|" + Q2)]
         return record(**base)
 
-    global STORE
+    global STORE, _KEEP_POLICY_FOR_TEST
     keep = STORE
     STORE = os.path.join(tempfile.mkdtemp(), "confirmed_values.json")
+    _KEEP_POLICY_FOR_TEST = {"hosts": {}}     # ★試験の間は何も据え置かない★（日付に左右されない）
     # ★★下ごしらえが落ちても、❌として数える★★（2026-08-24）
     #   ★直す前はここで例外が出ると、試験は1つも❌を出さずに終わった★＝
     #   壊し方の通し確認から見ると「ただ落ちただけ」になり、
@@ -3376,6 +3387,8 @@ def selftest() -> int:
             #   keep_verified_before=2026-11-04。取りに行った先を数えて、行かなかったことを見る。
             _kp_store = STORE
             STORE = os.path.join(os.path.dirname(_kp_store), "cv_keep.json")
+            _KEEP_POLICY_FOR_TEST = {"hosts": {"chonborista.com": {
+                "status": "BLOCKED", "keep_verified_before": "2026-11-04"}}}
 
             def _kp_write(_chon_at):
                 json.dump({"schema_version": SCHEMA, "machines": {_rv_slug: {
@@ -3420,6 +3433,20 @@ def selftest() -> int:
                   reverify(_rv_slug, fetch=_kp_fetch) != [])
             finally:
                 STORE = _kp_store
+                _KEEP_POLICY_FOR_TEST = {"hosts": {}}
+            # ★本番の名簿が、ちょんぼりすたを据え置く形になっていること★
+            #   （試験の中は差し替えているので、本番の設定は別にここで見る）
+            import automation_policy as _ap_kp
+            _kp_real = _ap_kp.load()["hosts"]
+            t("　本番の名簿で、ちょんぼりすたは BLOCKED・据え置きの日は 2026-11-04"
+              "（www 付きも同じ）",
+              all((_kp_real.get(h) or {}).get("status") == "BLOCKED"
+                  and (_kp_real.get(h) or {}).get("keep_verified_before") == "2026-11-04"
+                  for h in ("chonborista.com", "www.chonborista.com"))
+              and kept_without_refetch("https://chonborista.com/slot/x/1/",
+                                       "2026-11-03", {"hosts": _kp_real})
+              and not kept_without_refetch("https://nana-press.com/kaiseki/x",
+                                           "2026-10-01", {"hosts": _kp_real}))
             _kp_pol = {"hosts": {
                 "a.example": {"status": "BLOCKED", "keep_verified_before": "2026-11-04"},
                 "b.example": {"status": "APPROVED", "keep_verified_before": "2026-11-04"},
@@ -3960,6 +3987,7 @@ def selftest() -> int:
         stops("　出典の書き方が違えば受け取らない", lambda: parse_source("URLだけ"))
     finally:
         STORE = keep
+        _KEEP_POLICY_FOR_TEST = None
         globals()["bind_machine"] = real_bind
 
     # ★種類ごとに、要る鍵と使わない鍵を決める★（2026-08-12・依頼160/161）
