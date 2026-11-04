@@ -8904,6 +8904,15 @@ MUTATIONS = [
         "run": ["scripts/source_lineage.py"],
         "issues": [],
     },
+    # ─── 2026-11-05・本文の段落を節と番号で名指しして直す（朝タスクの自己修正）───
+    {
+        "why": "★本文の段落を名指ししても、別の節の同じ文字を書き換える（★名指しした節を確かめない★）★",
+        "file": "scripts/decide_now.py",
+        "before": "                if si != _bt[0]:\n                    continue\n",
+        "after": "                if False:\n                    continue\n",
+        "run": ["scripts/decide_now.py"],
+        "issues": [],
+    },
 ]
 
 

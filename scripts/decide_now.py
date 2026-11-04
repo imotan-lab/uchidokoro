@@ -568,6 +568,10 @@ def _elems(d: dict, where: str) -> list:
         except Exception:                                    # noqa: BLE001
             _cell = None
         return [_cell_str(_cell)] if _cell_str(_cell) is not None else []
+    # ★★本文の段落を名指ししたら、その段落1つだけ★★（2026-11-05）
+    if body_target(w):
+        _bx = _body_at(d, w)
+        return [_bx] if _bx is not None else []
     if w in ("", "body", "table_note"):
         for sec in (d.get("sections") or []):
             if not isinstance(sec, dict):
@@ -707,6 +711,38 @@ def cell_target(where: str):
     if not m:
         return None
     return tuple(int(x) for x in m.groups())
+
+
+_BODY_AT = None
+
+
+def body_target(where: str):
+    """`where` から (節, 段落) を取り出す（2026-11-05・朝タスク）。
+
+    ★汎用の指し方にしない★＝この形だけを受ける。例: "sections[3].body[0]"
+    ★なぜ要るか★＝同じ決まり文句が複数の節の本文にあると、"body" では
+    どれを直すか決められず、分かっている事実を書けなかった（super_binmusume のリセット情報）。
+    """
+    global _BODY_AT
+    if _BODY_AT is None:
+        import re as _re6
+        _BODY_AT = _re6.compile(r"\Asections\[(\d+)\]\.body\[(\d+)\]\Z")
+    m = _BODY_AT.match(str(where or ""))
+    if not m:
+        return None
+    return tuple(int(x) for x in m.groups())
+
+
+def _body_at(d: dict, where: str):
+    """名指しした本文の段落（文字）を返す。無ければ None。"""
+    bt = body_target(where)
+    if not bt:
+        return None
+    try:
+        x = d["sections"][bt[0]]["body"][bt[1]]
+    except Exception:                                        # noqa: BLE001
+        return None
+    return x if isinstance(x, str) else None
 
 
 def _cell_str(cell):
@@ -1882,14 +1918,17 @@ def apply_decision(path: str, apply_it: bool = False, *,
         # ★表のセルを指す形★（2026-09-18・台帳#698）
         elif a["op"] == "replace" and cell_target(where):
             pass
+        # ★本文の段落を節と番号で指す形★（2026-11-05）＝言い換えのときだけ
+        elif a["op"] == "replace" and body_target(where):
+            pass
         elif where and where not in ("body", "table_note",
                                      "fact", "summary", "lead"):
             result["problems"].append(f"直す場所の指定が不明です: {where!r}")
             return result
         if a.get("op") == "replace":
             spots = _where_hits(d, a.get("before"))
-            if where and cell_target(where):
-                # ★セルは1か所を名指ししている★＝場所は確定しているので、
+            if where and (cell_target(where) or body_target(where)):
+                # ★セル・本文の段落は1か所を名指ししている★＝場所は確定しているので、
                 #   ここで数えない（同じ文字が他所にあっても、直すのはそのセル）
                 spots = []
             elif where:
@@ -1960,7 +1999,24 @@ def apply_decision(path: str, apply_it: bool = False, *,
             if hit:
                 break
             if where and where not in ("body", "table_note") \
-                    and not cell_target(where):
+                    and not cell_target(where) and not body_target(where):
+                break
+            # ★★本文の段落を名指ししたら、その節のその段落だけを見る★★（2026-11-05）＝
+            #   別の節の同じ文字を書き換えない。表の注記・セルも探さない
+            _bt = body_target(where) if a["op"] == "replace" else None
+            if _bt:
+                if si != _bt[0]:
+                    continue
+                _bl = (sec.get("body") or [])
+                _line = (_bl[_bt[1]] if isinstance(_bl, list) and _bt[1] < len(_bl)
+                         else None)
+                if isinstance(_line, str) and _line == a["before"]:
+                    plan.append(("replace", si, _bt[1], a))
+                    hit = True
+                elif isinstance(_line, str) and a["before"] \
+                        and _line.count(a["before"]) == 1:
+                    plan.append(("replace_in", si, _bt[1], a))
+                    hit = True
                 break
             # ★★セルを名指ししたら、本文と注記は探さない★★（2026-10-29・Codex review 3fe0c78e の2）＝
             #   本文に同じ文字があると本文のほうが先に当たり、札は元のまま「直した」と報告していた
@@ -3569,6 +3625,41 @@ def _selftest() -> int:
           not _gbd["problems"]
           and _after_bd["sections"][1]["tables"][0]["rows"][0][1] == {"text": "デフォルト", "badge": "hint"}
           and _after_bd["sections"][0]["body"][0] == "通常A（基本）")
+
+        # ★★本文の段落も、節と番号で名指しして直せる★★（2026-11-05・朝タスク）＝
+        #   同じ決まり文句（「当サイトでは未確認です…」）が複数の節にあると、本文は名指しできず
+        #   「2か所あります」で止まり、リセット情報が分かっているのに「未確認」のまま残っていた（super_binmusume）
+        SBY = {"slug": "sby", "sections": [
+            {"title": "当サイトの狙い目", "body": ["当サイトでは未確認です。", "ほかの行です。"]},
+            {"title": "朝一・リセット情報", "body": ["当サイトでは未確認です。"]}]}
+
+        def _by_dec(act):
+            with io.open(os.path.join(td, "sby.json"), "w", encoding="utf-8", newline="\n") as f:
+                json.dump(SBY, f, ensure_ascii=False, indent=1)
+                f.write("\n")
+            _q = os.path.join(td, "dsby.json")
+            io.open(_q, "w", encoding="utf-8").write(json.dumps(
+                {"schema_version": SCHEMA, "slug": "sby", "source_sha256": _sha_of("sby"),
+                 "decided_by": ["Claude", "codex"], "actions": [act]}, ensure_ascii=False))
+            return _q
+        _yact = {"op": "replace", "before": "当サイトでは未確認です。",
+                 "after": "設定変更後は天井が短縮されます。", "where": "sections[1].body[0]",
+                 "why": "リセット情報は分かっている",
+                 "meaning_why": "未確認と書いていた欄に、分かっている事実を書く（試験）"}
+        _gby = apply_decision(_by_dec(_yact), apply_it=True, guard=False)
+        _aby = json.load(io.open(os.path.join(td, "sby.json"), encoding="utf-8"))
+        t("★★本文の段落を節と番号で名指しして直せる★★（同じ文が別の節にあっても、名指しした段落だけ）",
+          not _gby["problems"]
+          and _aby["sections"][1]["body"][0] == "設定変更後は天井が短縮されます。"
+          and _aby["sections"][0]["body"][0] == "当サイトでは未確認です。")
+        t("　名指しした段落が before と違えば断る（別の段落を書き換えない）",
+          bool(apply_decision(_by_dec(dict(_yact, where="sections[0].body[1]")))["problems"]))
+        t("　無い段落を名指ししたら断る",
+          bool(apply_decision(_by_dec(dict(_yact, where="sections[1].body[5]")))["problems"]))
+        t("　本文の場所は決まった形でしか受け取らない",
+          body_target("sections[1].body[0]") == (1, 0)
+          and body_target("sections[1].body") is None
+          and body_target("sections[1].tables[0].rows[0][1]") is None)
 
         # ★★札の強さの印も、2AIの理由つきで書き換えられる★★（2026-10-30・朝タスク「札の強さの印は道具で直せず」）
         def _bd_dec(act):
