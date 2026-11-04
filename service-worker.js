@@ -1,4 +1,4 @@
-const CACHE_NAME = 'uchidokoro-v613';
+const CACHE_NAME = 'uchidokoro-v614';
 
 // ★先読みするのは「中身が機種に依存しない」ファイルだけ★
 //   （2026-07-28・Codex 11巡目 手順7）
