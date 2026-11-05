@@ -276,6 +276,12 @@ def _check_text(out: list, slug: str, where: str, line, li=0) -> None:
     """1行ぶん見て、外れている文を out へ足す。"""
     if not isinstance(line, str) or not line.strip():
         return
+    # ★公式が否定した噂の行は、取り消した本文だけを見る★（2026-11-05・Codex review290）
+    #   ＝否定の印を付けただけで印（指紋）が変わり「古い違反が消えて新しい違反が出た」と数えていた。
+    #   本文の文体は今までどおり数える（同じ印のまま）。
+    import rumor_format as _rf
+    if _rf.is_denied(line):
+        line = _rf.denied_body(line)
     if line.strip() in _STOCK or is_label_line(line):
         return
     # ★箇条書きの項目（・で始まり、。が無い）は文ではない★（2026-10-29・新台の「解析待ちの項目」）

@@ -1557,6 +1557,16 @@ def apply_decision(path: str, apply_it: bool = False, *,
             f"判断したときから記事が変わっています（{want[:12]}… → {got[:12]}…）")
         return result
 
+    # ★★公式が否定した噂の行（取り消し線つき）には触らない★★（2026-11-05・Codex review289）
+    #   言い換えで取り消し線だけ外すと、否定された噂が「未確認の噂」に戻って読者に出る。
+    #   ★その行は rumor_verdict.py だけが扱う★（判定は rumor_format の1か所）。
+    import rumor_format as _rfm
+    for a in dec["actions"]:
+        _tp = _rfm.touches_denied(d, [a.get("before"), a.get("text"), a.get("after")])
+        if _tp:
+            result["problems"].append(_tp)
+            return result
+
     # ★★合意が生きている機種は、その合意どおりにしか書けない★★
     #   （2026-08-27・Codexの指摘6）
     #   ★直す前は、合意した中身と当てる中身を結ぶものが無かった★ので、

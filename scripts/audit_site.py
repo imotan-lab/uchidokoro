@@ -1680,6 +1680,25 @@ def check_60_top_links_pending(machines: list) -> list[str]:
             "→ python scripts/build_hub_pages.py --legacy"] if miss else []
 
 
+def check_61_rumor_strike(machines: list) -> list[str]:
+    """★取り消し線（~~）は、噂の欄の「公式が否定した」行の形だけか★（2026-11-05）
+
+    ★なぜ★＝`~~x~~` は描画で `<del>` になる。噂の欄の外に出ると、天井や狙い目の
+    数値に線が引かれて読者に「否定された」と読める。形が崩れると日付・否定した側が出ない。
+    ★判定は rumor_format の1か所★。★見張りが働いていることもここで確かめる★
+    （壊れた行を1つ渡して、問題として返ること＝罠㊸）。
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    try:
+        import rumor_format as _rf61
+    except Exception as e:                # noqa: BLE001
+        return [f"噂の欄の書き方の道具を読めません: {type(e).__name__}: {e}"]
+    probe = {"sections": [{"title": "天井・恩恵", "body": ["~~天井は999Gです。~~"]}]}
+    if not _rf61.detail_problems(probe):
+        return ["★見張り61そのものが働いていません★（噂の欄の外の取り消し線を見逃しました）"]
+    return _rf61.check_all(str(BASE / "assets" / "data" / "machine-details"))
+
+
 def check_58_pochipochi_store(machines: list) -> list[str]:
     """★ポチポチくんの控えと setting.html の自動の区画がそろっているか★（2026-10-19）
 
@@ -4308,6 +4327,7 @@ CHECKS = [
     ("58_ポチポチくんの控え", check_58_pochipochi_store),
     ("59_トップの機種一覧", check_59_top_machine_links),
     ("60_トップの一覧の更新待ち", check_60_top_links_pending),
+    ("61_噂の欄の取り消し線", check_61_rumor_strike),
 ]
 
 

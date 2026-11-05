@@ -1068,7 +1068,8 @@ function resolveMachineSlug() {
   // 簡易Markdown変換（**xxx** → <strong>xxx</strong>）
   function md(text){
     if(typeof text !== "string") return text;
-    return text.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+    // ★~~x~~ は公式が否定した噂の取り消し線だけ★（噂の欄の外には監査61が出させない・2026-11-05）
+    return text.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>').replace(/~~([^~]+?)~~/g, '<del>$1</del>');
   }
 
   // 詳細セクション（プリレンダ済みHTMLをクリアしてJS版で置換・二重描画防止）

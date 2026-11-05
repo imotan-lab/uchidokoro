@@ -54,7 +54,9 @@ def md(text) -> str:
         return esc(text)
     out = esc(text)
     # esc後でも ** は不変なので強調変換できる
-    return re.sub(r"\*\*([^*]+?)\*\*", r"<strong>\1</strong>", out)
+    out = re.sub(r"\*\*([^*]+?)\*\*", r"<strong>\1</strong>", out)
+    # ★~~x~~ は公式が否定した噂の取り消し線だけ★（machine.html の md() と同じ・2026-11-05）
+    return re.sub(r"~~([^~]+?)~~", r"<del>\1</del>", out)
 
 
 def jp_date(date_str: str) -> str:

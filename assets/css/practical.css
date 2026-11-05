@@ -436,6 +436,8 @@ button, input, select { font: inherit; }
 .rumor-label { font-size: var(--fs-sub); font-weight: 700; color: var(--warn); margin: 0 0 10px 0; letter-spacing: .03em; }
 .rumor-body { font-size: var(--fs-body); color: var(--soft); line-height: 1.8; margin: 0 0 8px 0; }
 .rumor-body:last-child { margin-bottom: 0; }
+/* 公式が否定した噂（取り消し線の本文だけ薄く・否定の日付と名前は線の外） */
+.rumor-body del { color: var(--muted); text-decoration-thickness: 1px; }
 
 /* PREVIEW BANNER (先行記事・解析待ち) */
 .preview-banner { background: var(--gold-bg); border: 1px solid var(--gold-line); border-radius: var(--radius-sm); padding: 14px 16px; margin: 16px 0 8px 0; }
