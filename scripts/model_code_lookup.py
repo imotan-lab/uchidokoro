@@ -549,6 +549,20 @@ def _after_ok(after_seg: str, core: str, official_name: str,
         # ★飾り語・販売区分語だけの連結語★（新台スマスロ・設定判別・天井・…）
         if _decor_compound(w):
             return "ok"
+        # ★★本人の略称＋「新台◯◯」の連結語★★（2026-11-06・DMM「（モンハン新台パチスロ）」）
+        #   略称の決まりは上と同じ（頭の文字が同じ・名前の順番どおりの部分列）。
+        #   後ろは飾りの連結語として最後まで分解できるときだけ（派生印が混ざれば弾く）。
+        _wn = unicodedata.normalize("NFKC", w or "")
+        _k = _wn.find("新台")
+        if _k >= 2 and _decor_compound(_wn[_k:]):
+            _ac = _ci.normalize_core(_wn[:_k])
+            # ★略称部分にも、上と同じ拒否を当て直す★（短い数字・社名＝Codexの指摘・防御の厚み）
+            if len(_ac) >= 2 and _ac not in _DERIV_MARKS and _ac[:1] == core[:1] \
+                    and not (_ac.isdigit() and len(_ac) <= 2) \
+                    and _ac not in _maker_name_cores() \
+                    and _ac.replace("株式会社", "") not in _maker_name_cores() \
+                    and _subseq(_canon_gen_num(_ac), _canon_gen_num(core)):
+                return "abbrev"
         return "ng"
 
     # ★読み仮名を略称から推定しない★（2026-08-02・Codex54回目で撤去）
@@ -1649,6 +1663,28 @@ def selftest() -> int:
                       "パチスロ|設定判別・天井・ゾーン・解析・打ち方・ヤメ時</title>",
                       "スマスロ とんでもスキルで異世界放浪メシ",
                       strict_all_tail=True)[0] is True)
+    # ★★DMMの題の括弧に通称が付く形★★（2026-11-06・更新タスクの自己修正）
+    #   「（モンハン新台パチスロ）」になった日から、モンハン サンブレイクの控えが
+    #   確かめ直しで全部 TAIL_CONFLICT になり、育成が止まった（実測）。
+    t("★★実在の題「（モンハン新台パチスロ）設定判別…」＝本人の略称＋飾りの連結を通す★★"
+      "（DMM実データ・2026-11-06）",
+      page_is_machine("<title>スマスロ モンスターハンターライズ：サンブレイク （モンハン新台パチスロ）"
+                      "設定判別・天井・ゾーン・解析・打ち方・ヤメ時</title>",
+                      "スマスロ モンスターハンターライズ：サンブレイク",
+                      strict_all_tail=True)[0] is True)
+    t("　（対照）略称にならない語＋新台パチスロは弾く（別機種の名前を括弧に入れた形）",
+      page_is_machine("<title>スマスロ モンスターハンターライズ：サンブレイク （北斗新台パチスロ）"
+                      "設定判別・天井</title>",
+                      "スマスロ モンスターハンターライズ：サンブレイク",
+                      strict_all_tail=True)[0] is False)
+    t("　（対照）短い数字＋新台パチスロは略称として通さない（Codexの指摘）",
+      page_is_machine("<title>L1000ちゃん （10新台パチスロ）設定判別</title>",
+                      "L1000ちゃん", strict_all_tail=True)[0] is False)
+    t("　（対照）略称＋派生印（SP新台）は弾く",
+      page_is_machine("<title>スマスロ モンスターハンターライズ：サンブレイク （モンハンSP新台パチスロ）"
+                      "設定判別・天井</title>",
+                      "スマスロ モンスターハンターライズ：サンブレイク",
+                      strict_all_tail=True)[0] is False)
     t("　規格印つきでも派生印（L改）は弾く",
       page_is_machine("<title>Lすーぱぁびん娘（L改） | P-WORLD</title>",
                       "Lすーぱぁびん娘", strict_all_tail=True)[0] is False)

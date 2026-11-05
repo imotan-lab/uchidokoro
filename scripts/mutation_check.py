@@ -7417,6 +7417,14 @@ MUTATIONS = [
         "run": ["scripts/dmm_machine.py"],
     },
     {
+        "why": "★題の括弧の「本人の略称＋新台パチスロ」（（モンハン新台パチスロ））を本人の略称として読まない"
+               "（★モンハン サンブレイクの控えが確かめ直しで全部 TAIL_CONFLICT になり育成が止まる★）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": '        if _k >= 2 and _decor_compound(_wn[_k:]):\n',
+        "after": "        if False:\n",
+        "run": ["scripts/model_code_lookup.py"],
+    },
+    {
         "why": "★DMMの見出しの種別の括弧の頭に通称が付く形（（モンハン新台パチスロ））を括弧と読まない"
                "（★モンハン サンブレイクの育成が毎朝『続編・派生の語』で止まる★）★",
         "file": "scripts/dmm_machine.py",

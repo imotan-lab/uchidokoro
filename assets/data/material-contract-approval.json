@@ -29,7 +29,7 @@
   "scripts/mode_apply.py": "f79e96d71cb31c552c532ba90f2256a857e65eb6972e0c6ac31f265e1f7abbca",
   "scripts/mode_ask.py": "b4891cbe65e959ed957d3c11e5a85137ea8202efb016940c5c8f30394f782bd4",
   "scripts/mode_verdict.py": "7f313105487573ebdd4287276337805aa567d12f5730197d23a3305cbed2390a",
-  "scripts/model_code_lookup.py": "b866ea9405c82be3df3d4386ba2bb43d544a61a35b61ee80e6497796e804e4b4",
+  "scripts/model_code_lookup.py": "b21a1a43658617cfbc536fd25e6d1526233d1bcafe56acaba1e673e8a26de9b4",
   "scripts/new_machine_watch.py": "12e8f8e3efecd61c9f8426bf4663b86a6ca874de80d18edfd90403ac6f73a3ec",
   "scripts/page_corpus.py": "7019d1e19ec774a228111b7f5271324d7d5f7e6c92db8c025998f90642affa02",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
