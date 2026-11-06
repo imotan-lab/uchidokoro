@@ -251,6 +251,9 @@ button, input, select { font: inherit; }
   font-size: clamp(20px, 5vw, 28px);
   font-weight: 800;
   line-height: 1.3;
+  /* ★行の長さをそろえて折り返す★（2026-11-06・「ランキン／グ」と1文字だけ次の行に落ちていた）
+     対応していないブラウザは今まで通りの折り返し */
+  text-wrap: balance;
 }
 .hero-sub { margin: 0; color: var(--muted); font-size: var(--fs-body); line-height: 1.6; }
 /* 数値を出すページに必須の併記（build_machine_pages.py が公開データの指定で挿入する） */
@@ -659,10 +662,13 @@ button, input, select { font: inherit; }
 @media (max-width: 520px) {
   .header-inner { gap: 8px; flex-wrap: wrap; }
   .brand img { height: 36px; max-width: 180px; }
+  /* ★折り返して全部見せる★（2026-11-06・運営者のスマホで「トップ」「このサイトについて」が左の画面外へ切れていた。
+     右寄せのまま1行に収まらないと、はみ出した分が左へ出てスクロールでも戻せない） */
   .header-nav {
     width: 100%;
     justify-content: flex-end;
-    gap: 12px;
+    flex-wrap: wrap;
+    gap: 4px 12px;
     padding-top: 2px;
   }
 }
@@ -761,7 +767,12 @@ button, input, select { font: inherit; }
 .list-count { color: var(--gold); font-weight: 700; }
 
 /* TOP: H1・使い方ガイドセクション（2026-07 SEO/AdSense改善 Phase1） */
-.hero-h1 { font-size: var(--fs-lead); font-weight: 800; color: var(--gold); letter-spacing: .02em; line-height: 1.5; margin: 0 0 10px; }
+.hero-h1 { font-size: var(--fs-lead); font-weight: 800; color: var(--gold); letter-spacing: .02em; line-height: 1.5; margin: 0 0 10px;
+  /* ★語の途中で折り返さない★（2026-11-06・「カウンタ／ー」で切れていた）＝折り返すのは空白と <wbr> の位置だけ。
+     収まらない長さの語だけは anywhere で切る（はみ出し防止） */
+  word-break: keep-all; overflow-wrap: anywhere; }
+/* ★トップの見出しがヘッダーの線にくっついていた★（2026-11-06）＝記事ページ（.article-hero）と同じ上の余白 */
+.hero-panel:first-child { padding-top: 24px; }
 .btn-guide { display: inline-block; margin-top: 12px; padding: 10px 16px; border: 1px solid var(--gold); border-radius: 8px; color: var(--gold); font-size: var(--fs-body); font-weight: 700; text-decoration: none; }
 .btn-guide:hover { background: var(--gold-bg); }
 .toolbar-note { font-size: var(--fs-sub); color: var(--muted); line-height: 1.7; margin: 0 0 10px; }
