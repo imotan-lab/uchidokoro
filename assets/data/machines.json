@@ -2894,10 +2894,16 @@
    "modes": [
     {
      "key": "normal",
-     "label": "通常"
+     "label": "AT間"
     }
    ],
-   "normal": {}
+   "normal": {
+    "caution": 860,
+    "good": 860,
+    "excellent": 860,
+    "ceiling": 1200,
+    "target": 860
+   }
   }
  },
  {
