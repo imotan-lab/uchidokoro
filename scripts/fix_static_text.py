@@ -50,7 +50,7 @@ except Exception:
     pass
 
 # ★直せるページ★＝機種ページ以外で、検索から人が入ってくるもの
-PAGES = ("index.html", "about.html", "contact.html", "privacy.html", "404.html",
+PAGES = ("index.html", "about.html", "contact.html", "privacy.html", "terms.html", "404.html",
          "guide-haena.html", "guide-rate.html", "guide-reset.html",
          "guide-yamedoki.html", "guide-pochipochi.html",
          "scripts/hub_prose.json")
@@ -60,7 +60,7 @@ PAGES = ("index.html", "about.html", "contact.html", "privacy.html", "404.html",
 ROTATION = ("index.html", "guide-tenjo-ranking.html", "guide-reset-ranking.html",
             "guide-suru-tenjo.html", "guide-ichiran.html", "guide-haena.html", "guide-rate.html",
             "guide-reset.html", "guide-yamedoki.html", "guide-pochipochi.html",
-            "about.html", "privacy.html", "contact.html", "404.html")
+            "about.html", "privacy.html", "terms.html", "contact.html", "404.html")
 HUB_PAGES = ("guide-tenjo-ranking.html", "guide-reset-ranking.html",
              "guide-suru-tenjo.html", "guide-ichiran.html")
 STATE_KEY = "static_review"

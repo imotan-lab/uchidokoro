@@ -45,6 +45,7 @@ APPROVED_INPUTS = frozenset({
     "about.html",
     "contact.html",
     "privacy.html",
+    "terms.html",
     "guide-haena.html",
     "guide-pochipochi.html",
     "guide-rate.html",

@@ -422,7 +422,7 @@ def check_9_article_length(machines: list) -> list[str]:
 def check_10_legal_pages(machines: list) -> list[str]:
     """必須法的ページの本文文字量（500字以上）"""
     ngs = []
-    for fname in ["about.html", "privacy.html", "contact.html"]:
+    for fname in ["about.html", "privacy.html", "terms.html", "contact.html"]:
         p = BASE / fname
         if not p.is_file():
             ngs.append(f"{fname}: ファイルが存在しない")
