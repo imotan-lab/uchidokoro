@@ -1,3 +1,30 @@
+# AI training crawlers are disallowed. See https://uchidokoro.com/terms.html
+# Search engines and AI search (answers that link back) are allowed.
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: meta-externalagent
+Disallow: /
+
+User-agent: MistralAI-Training
+Disallow: /
+
+# Keep Gemini Apps as an entry point for readers.
+User-agent: Google-Extended
+Allow: /
+
 User-agent: *
 Allow: /
 

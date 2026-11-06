@@ -30,7 +30,7 @@
   "manifest.json": "e6fb79284404b5f9f68898a473d65c2efb6156cdbc2d60941cc2534a5b9ff856",
   "meta-auto.js": "d99aab6119e4f465d6ca6cddeeea3339d9b0954297513507a8b4042943370032",
   "privacy.html": "b5d8bb42d172abe5f7c1b9f6a8e7f0d032b433d74381728987e9de4ea482d526",
-  "robots.txt": "94670bb7c4d9b930985eeb08a6d4074283cafbfd3d30c00a74d7dedd46bedd2c",
+  "robots.txt": "67abd065d0da87ba5c2b13c375add509a3601669f21d6c53f48360d7f271ccf1",
   "scripts/apply_prose_dedup.py": "13c7636c1018db8c4de24d06edef76334e2bb7c1147b7a94958ffb76ca384937",
   "scripts/audit_public.py": "eff9994a488928e3568f6c344b569f6e8079f2ffa799399d5417f32103b444e3",
   "scripts/build_hub_pages.py": "b304d188e5f60b6da24b1f173d74da7c6dcd4de2e019317fb425035758138add",
