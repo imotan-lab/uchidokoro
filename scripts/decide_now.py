@@ -1092,6 +1092,33 @@ def confirmed_source(slug: str, field) -> str | None:
     return " / ".join(parts) if parts else None
 
 
+def pochipochi_source(slug: str, rate_key, path: str = "") -> str | None:
+    """★ポチポチくんの控えの設定別の確率を、出どころの文字列として返す★（無い・読めない・形が違えば None＝断る）
+
+    ★なぜ★（2026-11-07）＝控え（assets/data/pochipochi.json）は pochipochi.py が独立2出典の逐語と照合し、
+    判断者の組がそろったときだけ書く。toaru_index2 では記事が「CZ確率の設定4〜6は未確認」と書いたまま、
+    カウンターは2社一致の値を使っていた＝記事の側へ足す道が無かった。
+    ★その機種・その rateKey だけ★（注記・画面の名前の数字は入れない）。返すのは「設定 / 値」の並び
+    """
+    if not isinstance(rate_key, str) or not rate_key.strip() or not re.fullmatch(r"[a-z0-9_]+", slug or ""):
+        return None
+    try:
+        import pochipochi as _pc
+        data = _pc.load(path or None)
+        rates = ((data.get("configs") or {}).get(slug) or {}).get("rates") or {}
+        row = rates.get(rate_key)
+    except Exception:                                    # noqa: BLE001
+        return None
+    if not isinstance(row, dict) or not row:
+        return None
+    parts = []
+    for k, v in row.items():
+        if not isinstance(v, str) or not v.strip():
+            return None
+        parts += [str(k), v]
+    return " / ".join(parts)
+
+
 def _strip_kana(n: str) -> str:
     """★名指しの末尾のひらがなを落とす★（2026-10-29）＝ひらがなを単位と読まなくなる前に合意した
     決定は「397.2と」のように名指ししている。読み方を変えても、合意済みの決定を無駄にしない"""
@@ -1669,6 +1696,17 @@ def apply_decision(path: str, apply_it: bool = False, *,
                             "独立2出典で記録してから使ってください）")
                         return result
                     _from_conf = True
+                # ★★ポチポチくんの控え（独立2出典で照合済みの設定別の確率）も出どころにできる★★（2026-11-07）
+                _pk = a.get("numbers_from_pochipochi")
+                _from_pochi = False
+                if _pk and not src:
+                    src = pochipochi_source(str(dec.get("slug") or ""), _pk)
+                    if src is None:
+                        result["problems"].append(
+                            f"ポチポチくんの控えに {_pk!r} がありません（この機種の pochipochi.json に"
+                            "独立2出典で記録されている rateKey だけ使えます）")
+                        return result
+                    _from_conf = _from_pochi = True
                 if not src and not _claims:
                     result["problems"].append(
                         f"数値が変わる言い換えには出どころが要ります"
@@ -2807,6 +2845,42 @@ def _selftest() -> int:
             _cvt.for_slug_checked = _keep_fsc
         t("★確定値の記録を読むのはこの機種・完全一致の項目名だけ★（slug の形が違えば読まない）",
           confirmed_source("../x", "payout_rate") is None and confirmed_source("k2", "") is None)
+
+        # ★★出どころは「ポチポチくんの控え（独立2出典で確かめた設定別の確率）」でもよい★★（2026-11-07）＝
+        #   toaru_index2 の記事が「CZ確率の設定4〜6は未確認」と書いたまま、カウンターは2社一致の値を使っていた。
+        #   ★控えのその機種・その rateKey だけ★。数字は控えの中にあること
+        _keep_ps = globals().get("pochipochi_source")
+        try:
+            globals()["pochipochi_source"] = lambda s, k: (
+                "4 / 1/222.3 / 5 / 1/215.8" if (s, k) == ("k2", "czHit") else None)
+            _pact = dict(base_act, after="設定4は1/222.3、設定5は1/215.8です。",
+                         numbers_from_pochipochi="czHit",
+                         meaning_why="ポチポチくんの控えどおりに設定4と5の値を足す（試験）")
+            _rm = [{"n": "6.4", "why": "派生値"}, {"n": "1000", "why": "他にある"}]
+            t("★★ポチポチくんの控えを出どころにすれば、記事にまだ無い設定別の確率を足せる★★",
+              not apply_decision(dec_k2(_pact, removed=_rm))["problems"])
+            t("　控えに無い数字は足せない（数字を作らない）",
+              any("出どころに無い数値" in x for x in apply_decision(dec_k2(
+                  dict(_pact, after="設定4は1/199.9、設定5は1/215.8です。"), removed=_rm))["problems"]))
+            t("　控えの無い rateKey なら断る",
+              any("ポチポチくんの控え" in x for x in apply_decision(dec_k2(
+                  dict(_pact, numbers_from_pochipochi="bell"), removed=_rm))["problems"]))
+        finally:
+            if _keep_ps is not None:
+                globals()["pochipochi_source"] = _keep_ps
+            else:
+                globals().pop("pochipochi_source", None)
+        _pp = os.path.join(td, "pochi_t.json")
+        with io.open(_pp, "w", encoding="utf-8") as _f:
+            json.dump({"schema_version": 1, "no_diff": {}, "configs": {"k2": {
+                "settings": [1, 4], "fields": [{"id": "czHit", "label": "CZ", "sub": "初当り", "rateKey": "czHit"}], "rates": {"czHit": {"1": "1/235.6", "4": "1/222.3"}},
+                "note": "設定9 1/111.1"}}}, _f, ensure_ascii=False)
+        _sps = pochipochi_source("k2", "czHit", _pp)
+        t("★★控えから作る出どころは、その rateKey の設定と値だけ★★（注記の数字は入れない）",
+          bool(_sps) and "1/222.3" in _sps and "4" in _sps and "111.1" not in _sps)
+        t("　別の機種・無い rateKey・形の違う機種名は読まない",
+          pochipochi_source("k3", "czHit", _pp) is None and pochipochi_source("k2", "bb", _pp) is None
+          and pochipochi_source("../k2", "czHit", _pp) is None)
 
         # ── 2026-08-27・台帳#487 節の外（表・要約・リード文）────────
         #   ★実例（真打 吉宗）★＝基本情報表が「スルーカウントリセット」、

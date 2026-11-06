@@ -9066,6 +9066,22 @@ MUTATIONS = [
         "run": ["scripts/rumor_verdict.py"],
         "issues": [],
     },
+    {
+        "why": "★ポチポチくんの控えを出どころにしても、記事に無い数字として断る（★2社一致の設定別の確率を記事へ足せず、記事は未確認のまま・2026-11-07★）★",
+        "file": "scripts/decide_now.py",
+        "before": "                    _from_conf = _from_pochi = True\n",
+        "after": "                    _from_conf = _from_pochi = False\n",
+        "run": ["scripts/decide_now.py"],
+        "issues": [],
+    },
+    {
+        "why": "★ポチポチくんの控えの注記の数字まで出どころに入れる（★照合していない数字を記事に足せる・2026-11-07★）★",
+        "file": "scripts/decide_now.py",
+        "before": "        row = rates.get(rate_key)\n",
+        "after": "        row = dict(rates.get(rate_key) or {}, note=str(((data.get(\"configs\") or {}).get(slug) or {}).get(\"note\")))\n",
+        "run": ["scripts/decide_now.py"],
+        "issues": [],
+    },
 ]
 
 
