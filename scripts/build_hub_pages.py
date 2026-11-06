@@ -292,13 +292,21 @@ def hub_content_problems(built: dict, data_html: dict, *deny_pats,
         # ★ちょうど1回だけ除去する★（Codex 15巡目 (a)-2）
         #   replace は一致箇所を全部消すので、生成器の回帰で一覧が2回出ると
         #   両方が検査対象外になってしまう。
-        part = (data_html.get(f) or {}).get("list")
-        if part:
-            n = rest.count(part)
-            if n != 1:
-                bad.append(f"{f}: 機種一覧の描画が {n} 箇所あります（1箇所であるべき）")
-                continue
-            rest = rest.replace(part, "\n", 1)
+        # ★外すのは公開データを並べた一覧だけ★（"list" と、表の前に置く一覧 "pre"）。
+        #   "pre"＝朝一リセットの「最初から狙い目の機種」（2026-11-06）。中身はチェッカーの線から作る一覧で、
+        #   "list" と同じ性質なので同じ扱いにする（説明文・注記は今まで通り検査する）。
+        broken = False
+        for key in ("pre", "list"):
+            part = (data_html.get(f) or {}).get(key)
+            if part:
+                n = rest.count(part)
+                if n != 1:
+                    bad.append(f"{f}: 機種一覧（{key}）の描画が {n} 箇所あります（1箇所であるべき）")
+                    broken = True
+                    break
+                rest = rest.replace(part, "\n", 1)
+        if broken:
+            continue
         # ★data: URL は中身を読めない＝検査できない★（Codex 17巡目 (a)-5）
         #   画像に文字を描いて埋め込む等ができるので、そもそも使わせない。
         for hit in _DATA_URL.finditer(rest):
@@ -431,6 +439,7 @@ def load_rows(source: "Path | None" = None):
                 #   表だけでは交換条件の違う数字を並べていると分からなかった。
                 ratelabel=(_td.rate_label(c, _td.default_rate(c)) or _td.NORATE_PREFIX),
                 rline=mode_line(c, mode_conf(c, "reset")),
+                zero_rates=reset_zero_rates(c),
             )
         )
     return rows
@@ -504,6 +513,32 @@ def dataset_C(rows):
             c.append(dict(diff=r["nline"] - r["rline"], **r))
     c.sort(key=lambda r: -r["diff"])
     return c
+
+
+def reset_zero_rates(c) -> list:
+    """★リセット後の狙い目が0G（最初の1回転から）になる交換率の呼び名★（2026-11-06）
+
+    読者が機種ページで選べる交換率ごとに、記事・チェッカーと同じ重ね方
+    （`target_display.effective_good`）で reset の線を読む。数字は作らない。
+    ★交換率を持たない機種は「チェッカー基準」★（ランキングの行と同じ呼び名）。
+    ★画面から外した欄（_disabled）は使わない★（mode_line と同じ）。
+    """
+    conf = mode_conf(c, "reset")
+    if not isinstance(conf, dict) or _td.is_off(conf):
+        return []
+    keys = [str(r.get("key")) for r in (c.get("exchangeRates") or [])
+            if isinstance(r, dict) and r.get("key")]
+    if not keys:
+        return [_td.NORATE_PREFIX] if _td.effective_good(conf, "") == 0 else []
+    return [(_td.rate_label(c, k) or k) for k in keys if _td.effective_good(conf, k) == 0]
+
+
+def dataset_Z(c_rows):
+    """★表Cのうち、リセット後が0G〜になる交換率がある機種★（並びは表Cのまま）。
+
+    ★対象は表Cと同じ★（G数で数える・新台経路と先行記事は除く）＝別の範囲から拾わない。
+    """
+    return [r for r in c_rows if r.get("zero_rates")]
 
 
 def dataset_D(rows):
@@ -663,6 +698,17 @@ def build_page(file, prose, data_html):
     parts = [head]
     # 導入
     parts.append(render_blocks(prose.get("intro_blocks", [])))
+    # 表の前に置く一覧（朝一リセットの「最初から狙い目の機種」・2026-11-06）
+    #   ★見出しと説明は散文（pre_label / pre_caption）に置く★＝無ければ止める（黙って見出しなしで出さない）
+    if data_html.get("pre"):
+        pre_block = ['    <article class="article-block">']
+        pre_block.append(f'      <h2 class="block-label">▶ {md(prose["pre_label"])}</h2>')
+        pre_block.append(f'      <p class="hint-text">{md(prose["pre_caption"])}</p>')
+        pre_block.append(data_html["pre"])
+        if data_html.get("pre_note"):
+            pre_block.append(f'      <p class="list-note">{data_html["pre_note"]}</p>')
+        pre_block.append("    </article>")
+        parts.append("\n".join(pre_block))
     # 表（caption + data + note）
     table_block = ['    <article class="article-block">']
     table_block.append(f'      <p class="hint-text">{md(prose["table_caption"])}</p>')
@@ -751,6 +797,21 @@ def _build_pages(rows: list, prose_all: dict) -> tuple:
         f"チェッカーのデータで短縮を確認できる機種は全<span class=\"list-count\">{len(C)}</span>機種で、上位{len(C_top)}機種を掲載しています。"
     )
 
+    # ★表の前に置く一覧＝リセット後が最初から狙い目の機種★（2026-11-06・運営者「すすめて」・Codexと擦り合わせ）
+    #   検索語「朝一 スロット ランキング」へ直接答える。★順位は付けない★（並びは表Cのまま・番号なし）。
+    #   ★交換率を必ず添える★＝同じ機種でも交換率で0Gでなくなる（モンキーターンV：5.6枚0G・6.5枚100G）。
+    Z = dataset_Z(C)
+    zero_list = render_spec_list(
+        Z,
+        # 「0G〜」は zero_rates の定義そのもの（その交換率で reset の good が 0）
+        lambda r: f'{esc("・".join(r["zero_rates"]))} ／ {esc(r["rlabel"])} <strong>0G〜</strong>',
+    ) if Z else ""
+    zero_note = (
+        "書いてある交換率で、狙い目チェッカーのリセット後の狙い目が最初から始まる機種です。"
+        "「チェッカー基準」とある機種は、交換率を選ばない線です。"
+        "リセットかどうかの見分け方や、恩恵が付く条件は各機種ページで確認してください。"
+    )
+
     # --- suru ---
     suru_list = render_spec_list(D, lambda r: esc(yome(r)))
     suru_note = (
@@ -775,7 +836,8 @@ def _build_pages(rows: list, prose_all: dict) -> tuple:
 
     pages = {
         "guide-tenjo-ranking.html": (prose_all["tenjo"], {"list": tenjo_list, "note": tenjo_note}),
-        "guide-reset-ranking.html": (prose_all["reset"], {"list": reset_list, "note": reset_note}),
+        "guide-reset-ranking.html": (prose_all["reset"], {"pre": zero_list, "pre_note": zero_note if Z else "",
+                                                          "list": reset_list, "note": reset_note}),
         "guide-suru-tenjo.html": (prose_all["suru"], {"list": suru_list, "note": suru_note}),
         "guide-ichiran.html": (prose_all["ichiran"], {"list": ichiran_list, "note": ichiran_note}),
     }
@@ -1307,6 +1369,25 @@ def selftest() -> int:
       base_line({"checker": _ck}) == 590)
     t("★ランキング：リセット後も狙い目の線を出す★",
       mode_line(_ck, mode_conf(_ck, "reset")) == 100)
+    # ★★リセット後すぐ狙い目の一覧は、交換率ごとに読む★★（2026-11-06）
+    _ckz = {"unit": "G", "exchangeRates": [{"key": "eq56", "label": "5.6枚"},
+                                           {"key": "rate50", "label": "6.5枚"}],
+            "defaultRate": "eq56",
+            "reset": {"good": 0, "byRate": {"rate50": {"good": 100}}}}
+    t("★リセット0G：0Gになる交換率だけを挙げる（6.5枚は100Gなので外す）★",
+      reset_zero_rates(_ckz) == ["5.6枚"])
+    t("リセット0G：交換率の無い機種は「チェッカー基準」",
+      reset_zero_rates({"unit": "G", "reset": {"good": 0}}) == [_td.NORATE_PREFIX])
+    t("★リセット0G：画面から外した欄は使わない★",
+      reset_zero_rates({"unit": "G", "reset": {"good": 0, "_disabled": True}}) == [])
+    t("リセット0G：0Gでなければ挙げない",
+      reset_zero_rates({"unit": "G", "reset": {"good": 50}}) == [])
+    _zl = '<ul><li><a href="/machines/x/">機種x</a> 5.6枚 ／ リセット <strong>0G〜</strong></li></ul>'
+    _zpage = f"<html><body><p>説明</p>{_zl}</body></html>"
+    t("★リセット0G：表の前の一覧は公開データ由来として検査から外す★",
+      hub_content_problems({"a.html": _zpage}, {"a.html": {"pre": _zl}}, *deny) == [])
+    t("★リセット0G：表の前の一覧が2回出たら止める★",
+      hub_content_problems({"a.html": _zpage + _zl}, {"a.html": {"pre": _zl}}, *deny) != [])
     _ck2 = {"unit": "G", "normal": {"caution": 500, "good": 630}}
     t("ランキング：交換率の無い機種は直下の狙い目",
       base_line({"checker": _ck2}) == 630)

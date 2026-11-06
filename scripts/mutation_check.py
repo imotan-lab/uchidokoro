@@ -1896,6 +1896,22 @@ MUTATIONS = [
         "after": '    g = conf.get("caution")',
         "run": ["scripts/build_hub_pages.py"],
     },
+    # ─── 2026-11-06・朝一リセットの「リセット後すぐ狙い目に入る機種」 ─────────────
+    {
+        "why": "★リセット後0Gでない交換率まで「すぐ狙い目」として挙げる"
+               "（モンキーターンVの6.5枚は100G〜）★",
+        "file": "scripts/build_hub_pages.py",
+        "before": "    return [(_td.rate_label(c, k) or k) for k in keys if _td.effective_good(conf, k) == 0]",
+        "after": "    return [(_td.rate_label(c, k) or k) for k in keys]",
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
+        "why": "★表の前の一覧が何度描かれても気づかない★",
+        "file": "scripts/build_hub_pages.py",
+        "before": "        for key in (\"pre\", \"list\"):",
+        "after": "        for key in (\"list\",):",
+        "run": ["scripts/build_hub_pages.py"],
+    },
     {
         "why": "★ランキングが画面から外した欄の数字を出す★",
         "file": "scripts/build_hub_pages.py",
