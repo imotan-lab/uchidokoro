@@ -165,6 +165,31 @@ def _commands(step: str) -> tuple:
         open(WF, encoding="utf-8").read().splitlines(), step)
 
 
+# ★★壊して確かめる試験は、CIでは4台で分担している★★（2026-11-07）
+#   ★この道具も同じ分け方で回す★＝台ごとに1回ずつ、MUT_SHARD を入れて流す
+#   （1回で全部を流すと、1本の制限時間 1800秒 を必ず超える＝手元では52分かかった）。
+#   ★台の数は mutation_check.SHARDS から読む★（ここに書き写さない）。
+MUT_STEP = "Mutation checks"
+
+
+def mutation_groups(cmds: list, shards: int) -> tuple:
+    """分担の工程の行 → ([(環境変数, 台の番号)…], 問題の文)
+
+    ★分担つきの呼び出しがちょうど1本であること★＝無い・2本ある、は
+    この道具が CI と同じものを流せない形なので止める（黙って飛ばさない）。
+    """
+    names = []
+    for c in cmds:
+        m = re.search(r"--shard-env\s+(\S+)", c)
+        if m:
+            names.append(m.group(1))
+    if len(names) != 1:
+        return [], f"分担つきの呼び出しが {len(names)} 本あります（1本のはず）"
+    if not isinstance(shards, int) or shards < 1:
+        return [], "台の数が読めません"
+    return [(names[0], str(k)) for k in range(1, shards + 1)], ""
+
+
 # ★ワークフローの行は「シェルの文」★（2026-08-31・自分で踏んだ）
 #   `python x.py > cc.log 2>&1 || rc=1` をそのまま argv にしていたので、
 #   `>` `2>&1` `||` `rc=1` が**引数として**渡っていた。
@@ -260,8 +285,8 @@ def _parse(cmd: str) -> tuple:
 _LIMIT = 1800
 
 
-def _run(cmds: list, root: str, no_net: bool) -> list:
-    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+def _run(cmds: list, root: str, no_net: bool, extra_env=None) -> list:
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8", **(extra_env or {})}
     # ★★控えの有無という食い違い★★（2026-08-24・実際にCIが2回赤くなった）
     #   ★手元には控えがあり、CIの機械には無い★。
     #   OSの違いは手元では再現できないが、**これは再現できる**。
@@ -364,12 +389,28 @@ def selftest() -> int:
     #   （手作りの例だけで採点しない・罠①）
     _c1, _b1 = _commands("Self-tests")
     _c2, _b2 = _commands("Repository audits")
-    _lines = _c1 + _c2
+    _c3, _b3 = _commands(MUT_STEP)
+    _lines = _c1 + _c2 + _c3
     _ng = [c for c in _lines if argv_problem(c, argv_of(c))]
     t(f"★★いまのワークフローの {len(_lines)} 行が全部読める★★",
       bool(_lines) and not _ng)
     t("★★いまのワークフローに、読み取れない呼び出しが無い★★",
-      not (_b1 + _b2))
+      not (_b1 + _b2 + _b3))
+    # ★★分担の工程（2026-11-07）★★
+    import mutation_check as _mc
+    _g, _gw = mutation_groups(_c3, _mc.SHARDS)
+    t(f"★★いまのワークフローの分担の工程を {_mc.SHARDS} 台に分けて流せる★★",
+      _gw == "" and _g == [("MUT_SHARD", str(k)) for k in range(1, _mc.SHARDS + 1)])
+    def _mg_why(c):
+        # ★例外で落ちたのを「止めた」と数えない★（罠⑤）
+        try:
+            return mutation_groups(c, 4)[1]
+        except Exception:                 # noqa: BLE001
+            return ""
+    t("★分担つきの呼び出しが無い工程は止める（黙って飛ばさない）★",
+      _mg_why(["python scripts/a.py --selftest"]) != "")
+    t("★分担つきの呼び出しが2本ある工程も止める★",
+      _mg_why(["python a.py --shard-env A", "python b.py --shard-env B"]) != "")
     # ★★前置きのある呼び出しを「読み飛ばさない」★★（Codexの3回目のP2）
     #   ★直す前は `python ` で始まる行だけを拾っていたので、
     #     この形は _parse に届きもせず、黙って検査を飛ばしていた★
@@ -414,6 +455,13 @@ def main() -> int:
         os.environ["UCHI_EMPTY_DOCS"] = "1"
 
     cmds, unread = _commands("Self-tests")
+    mut_cmds, mut_unread = _commands(MUT_STEP)
+    unread += mut_unread
+    import mutation_check as _mc
+    groups, gwhy = mutation_groups(mut_cmds, _mc.SHARDS)
+    if gwhy:
+        print(f"★{MUT_STEP} の工程を再現できません: {gwhy}★")
+        return 2
     if a.audits:
         _c2, _b2 = _commands("Repository audits")
         cmds += _c2
@@ -430,6 +478,7 @@ def main() -> int:
               "ワークフローの書き方を戻すか、この道具を直してください）")
         return 2
     print(f"CIが流す検査: {len(cmds)} 本"
+          + f"＋分担の工程 {len(mut_cmds)} 本×{len(groups)} 台"
           + ("（通信あり）" if a.with_net else "（★通信なし★）"))
 
     root, tmp = BASE, None
@@ -452,6 +501,10 @@ def main() -> int:
     print()
     try:
         bad = _run(cmds, root, not a.with_net)
+        # ★CIと同じく、台ごとに別の機械として流す★（控えも台ごとに空から）
+        for name, k in groups:
+            print(f"--- {MUT_STEP}（{name}={k}）---")
+            bad += _run(mut_cmds, root, not a.with_net, {name: k})
     finally:
         if tmp:
             _rmtree_hard(tmp)

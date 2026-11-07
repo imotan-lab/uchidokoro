@@ -9364,6 +9364,79 @@ MUTATIONS = [
         "run": ["scripts/decide_now.py"],
         "issues": [],
     },
+    # ─── 2026-11-07・CIを5台に分けて同時に走らせる（壊し方の分担）──────
+    #   ★mutation_check.py 自身を壊すものは、目印を文字列の足し算で作る★
+    #   （そのまま書くと、この一覧の中の行が目印に当たって「目印が2件」になる）
+    {
+        "why": "★壊し方を台に配る式をずらす（4台目に何も配られず、4分の1が黙って試されない）★",
+        "file": "scripts/mutation_check.py",
+        "before": "    return (int(i) - 1) % SH" + "ARDS + 1\n",
+        "after": "    return (int(i) - 1) % (SH" + "ARDS - 1) + 1\n",
+        "run": ["scripts/mutation_check.py"],
+    },
+    {
+        "why": "★絞り込みで受け持ちの台を見ない（4台が全部を回し、40分の非常ベルで切られる）★",
+        "file": "scripts/mutation_check.py",
+        "before": "    if shard is not None and shard_" + "of(i) != shard:\n",
+        "after": "    if Fal" + "se:\n",
+        "run": ["scripts/mutation_check.py"],
+    },
+    {
+        "why": "★CIで分担の指定が無くても止めない（全部を回して非常ベルで切られ、原因が分からない）★",
+        "file": "scripts/mutation_check.py",
+        "before": '        if str(environ.get("GITHUB_ACT' + 'IONS") or "") == "true":\n',
+        "after": "        if Fal" + "se:\n",
+        "run": ["scripts/mutation_check.py"],
+    },
+    {
+        "why": "★ワークフローの台の並びを比べない（台を1つ消しても気づかない）★",
+        "file": "scripts/mutation_check.py",
+        "before": "        if got != wa" + "nt:\n",
+        "after": "        if Fal" + "se:\n",
+        "run": ["scripts/mutation_check.py"],
+    },
+    {
+        "why": "★自己試験の工程に壊し方の道具が残っていても見逃す（5台全部で回ってしまう）★",
+        "file": "scripts/mutation_check.py",
+        "before": '    elif "mutation_check.py" in m.gro' + 'up(1):\n',
+        "after": "    elif Fal" + "se:\n",
+        "run": ["scripts/mutation_check.py"],
+    },
+    {
+        "why": "★壊し方の道具を分担なしで呼んでいても見逃す★",
+        "file": "scripts/mutation_check.py",
+        "before": '    if len(calls) != 1 or "--shard-env MUT_SHARD" not in cal' + 'ls[0]:\n',
+        "after": "    if Fal" + "se:\n",
+        "run": ["scripts/mutation_check.py"],
+    },
+    {
+        "why": "★分担の工程が台0でも動く形を見逃す（台0で MUT_SHARD=0 になり止まる）★",
+        "file": "scripts/mutation_check.py",
+        "before": '    elif not re.search(r"^\\s*if:\\s*matrix\\.shard != 0\\s*$", m2.gro' + 'up(1), re.M):\n',
+        "after": "    elif Fal" + "se:\n",
+        "run": ["scripts/mutation_check.py"],
+    },
+    {
+        "why": "★本物のワークフローから台を1つ消す（その台の分が黙って試されなくなる）★",
+        "file": ".github/workflows/pages-rehearsal.yml",
+        "before": "        shard: [0, 1, 2, 3, 4]\n",
+        "after": "        shard: [0, 1, 2, 3]\n",
+        "run": ["scripts/mutation_check.py"],
+    },
+    {
+        "why": "★CI再現が、分担つきの呼び出しの本数を見ない（手元で分担の工程を流せない形を通す）★",
+        "file": "scripts/ci_repro.py",
+        "before": "    if len(names) != 1:\n",
+        "after": "    if False:\n",
+        "run": ["scripts/ci_repro.py"],
+    },
+    {
+        "why": "★matrix の exclude を見ない（台の並びはそのままで、台4の分が黙って試されない・Codexの指摘）★",
+        "file": "scripts/mutation_check.py",
+        "before": '    if re.search(r"(?i)(?<![A-Za-z0-9_-])(?:exclude|include)(?![A-Za-z0-9_-])", bo' + 'dy):\n',
+        "after": "    if Fal" + "se:\n",
+        "run": ["scripts/mutation_check.py"],
+    },
 ]
 
 
@@ -9457,6 +9530,106 @@ def _run_tests(root: str, scripts: list) -> tuple:
 SLOW = ("scripts/publish_new_machine.py",)
 
 
+# ★★CIで何台に分けて回すか★★（2026-11-07）
+#   ★なぜ分けるか★＝1台で全部回すと、CIの非常ベル（40分）のうち38分まで来た。
+#   ★非常ベルは上げない★（遅くなったことを隠すだけ）。台を増やして同時に走らせる。
+#   ★分け方は「番号を順に配る」★＝壊し方 i は (i-1) % SHARDS + 1 番の台。
+#   組（同じ試験を流す壊し方）ごとに丸ごと配ると、重い組（grow_machine の97件など）を
+#   受け持った台だけが遅くなる。順に配れば、どの組もほぼ等分になる
+#   （代わりに「壊す前が緑か」を台ごとに1回ずつ測る＝全体で1割ほど増えるだけ）。
+#   ★ワークフローの matrix の shard は [0, 1, …, SHARDS] と一致していること★
+#   （0 は自己試験と監査の台）。1つ消すと、その台の分が★黙って試されなくなる★ので
+#   selftest が workflow_shard_problems() で見る。
+SHARDS = 4
+WF = os.path.join(BASE, ".github", "workflows", "pages-rehearsal.yml")
+
+
+def shard_of(i: int) -> int:
+    """壊し方の番号（1から）→ 受け持つ台（1〜SHARDS）"""
+    return (int(i) - 1) % SHARDS + 1
+
+
+def shard_from_env(name: str, environ) -> tuple:
+    """分担の指定を環境変数から読む → (台の番号 or None, 問題の文)
+
+    ★CI（GITHUB_ACTIONS=true）で指定が無ければ止める★＝黙って全部を回すと
+    40分の非常ベルで切られ、何が起きたか分からなくなる。
+    ★手元で指定が無ければ全部を回す★（減らす方向には倒さない）。
+    """
+    raw = str(environ.get(name) or "").strip()
+    if not raw:
+        if str(environ.get("GITHUB_ACTIONS") or "") == "true":
+            return None, f"CIなのに分担の指定（{name}）がありません"
+        return None, ""
+    if not raw.isdigit() or not 1 <= int(raw) <= SHARDS:
+        return None, f"分担の指定（{name}={raw}）が 1〜{SHARDS} ではありません"
+    return int(raw), ""
+
+
+def _selected(i: int, m: dict, only_index, want, shard) -> bool:
+    """壊し方 i をこの回で試すか（check の絞り込みはここだけで決める）"""
+    if only_index is not None and i not in only_index:
+        return False
+    if want and not any(w in m["why"] for w in want):
+        return False
+    if shard is not None and shard_of(i) != shard:
+        return False
+    return True
+
+
+def workflow_shard_problems(text: str) -> list:
+    """★ワークフローの分担が、この道具の SHARDS とそろっているか★
+
+    見るもの＝①matrix の shard がちょうど1つで [0..SHARDS] ②分担の台は
+    MUT_SHARD を matrix から受け取り、--shard-env MUT_SHARD で呼ぶ
+    ③自己試験の台（0）は壊し方の道具を呼ばない（5台全部で回ってしまう）
+    ④fail-fast を切ってある（1台が落ちても残りの結果が出る）。
+    """
+    lines = []
+    for ln in str(text or "").replace("\r\n", "\n").split("\n"):
+        k = ln.find("#")
+        lines.append(ln if k < 0 else ln[:k])
+    body = "\n".join(lines)
+    bad = []
+    hits = re.findall(r"^\s*shard:\s*\[([^\]]*)\]\s*$", body, re.M)
+    want = list(range(0, SHARDS + 1))
+    if len(hits) != 1:
+        bad.append(f"matrix の shard がちょうど1つではありません（{len(hits)} 件）")
+    else:
+        try:
+            got = [int(x) for x in hits[0].split(",") if x.strip()]
+        except ValueError:
+            got = None
+        if got != want:
+            bad.append(f"matrix の shard が {got} です（正しくは {want}）")
+    if not re.search(r"^\s*fail-fast:\s*false\s*$", body, re.M):
+        bad.append("fail-fast: false がありません")
+    # ★matrix の exclude / include を使わない★（2026-11-07・Codexの指摘2回）＝
+    #   shard の並びを残したまま exclude で台を1つ外すと、その台の分が黙って試されない。
+    #   ★鍵の書き方で探さない★＝引用符つき（'exclude':）や {…} の形で何度でも抜けるので、
+    #   コメントを落とした本文に★語として在るだけで止める★（いまの本文には1つも無い）。
+    if re.search(r"(?i)(?<![A-Za-z0-9_-])(?:exclude|include)(?![A-Za-z0-9_-])", body):
+        bad.append("matrix に exclude / include があります（台が黙って外れうる）")
+    if len(re.findall(r"^\s*MUT_SHARD:\s*\$\{\{\s*matrix\.shard\s*\}\}\s*$", body, re.M)) != 1:
+        bad.append("MUT_SHARD を matrix.shard から受け取っていません")
+    calls = re.findall(r"^\s*python scripts/mutation_check\.py(.*)$", body, re.M)
+    if len(calls) != 1 or "--shard-env MUT_SHARD" not in calls[0]:
+        bad.append("壊し方の道具を、分担つきでちょうど1回呼んでいません")
+    m = re.search(r"- name: Self-tests\n(.*?)(?=\n\s*- name: |\Z)", body, re.S)
+    if not m:
+        bad.append("Self-tests の工程が見つかりません")
+    elif "mutation_check.py" in m.group(1):
+        bad.append("Self-tests の工程が、まだ壊し方の道具を呼んでいます")
+    elif not re.search(r"^\s*if:\s*matrix\.shard == 0\s*$", m.group(1), re.M):
+        bad.append("Self-tests の工程が台0だけに絞られていません")
+    m2 = re.search(r"- name: Mutation checks\n(.*?)(?=\n\s*- name: |\Z)", body, re.S)
+    if not m2:
+        bad.append("Mutation checks の工程が見つかりません")
+    elif not re.search(r"^\s*if:\s*matrix\.shard != 0\s*$", m2.group(1), re.M):
+        bad.append("Mutation checks の工程が分担の台だけに絞られていません")
+    return bad
+
+
 def _rmtree_hard(path) -> None:
     """★読み取り専用でも消す★（2026-08-28・実測で15GB溜まっていた）
 
@@ -9537,7 +9710,8 @@ def block_real_push(root: str) -> None:
         raise RuntimeError("★試験の写しの送り先を無効にできません（写しから本物へ送らないため、試験を止めます）★")
 
 
-def check(only: str = "", fast: bool = False, only_index=None) -> int:
+def check(only: str = "", fast: bool = False, only_index=None,
+          shard=None) -> int:
     tmp = tempfile.mkdtemp(prefix="mut_")
     ng, weak, skipped = [], [], []
     # ★★写しは1つだけ作って使い回す★★（2026-08-23）
@@ -9585,9 +9759,7 @@ def check(only: str = "", fast: bool = False, only_index=None) -> int:
         _pristine: dict = {}       # ★ファイルごとの「壊す前の中身」★
         _green: dict = {}          # ★試験の組ごとの「壊す前の結果」★
         for i, m in enumerate(MUTATIONS, 1):
-            if only_index is not None and i not in only_index:
-                continue
-            if _want and not any(w in m["why"] for w in _want):
+            if not _selected(i, m, only_index, _want, shard):
                 continue
             tried += 1
             if fast and any(x in SLOW for x in m["run"]):
@@ -9689,7 +9861,9 @@ def check(only: str = "", fast: bool = False, only_index=None) -> int:
     print(f"{done}/{tried} 試したものは、すべて試験が捕まえます"
           + (f"（★{len(skipped)}件は未確認★）" if skipped else "")
           + (f"／★全{len(MUTATIONS)}通りのうち絞り込み中★"
-             if tried != len(MUTATIONS) else ""))
+             if tried != len(MUTATIONS) else "")
+          + (f"（★{SHARDS}台のうち{shard}台目の受け持ち★）"
+             if shard is not None else ""))
     return 0
 
 
@@ -9725,6 +9899,8 @@ def main() -> int:
                          "＝push の直前に、触ったところだけ確かめる")
     ap.add_argument("--fast", action="store_true",
                     help="時間のかかる試験を飛ばす（CI用）")
+    ap.add_argument("--shard-env", default="",
+                    help="受け持つ台の番号（1〜SHARDS）を入れた環境変数の名前（CI用）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.list:
@@ -9805,6 +9981,75 @@ def main() -> int:
             return 1
         print("★写しの送り先は無効になっています★")
 
+        # ★★CIの分担★★（2026-11-07）＝4台を合わせると全部・どの台も空でない
+        _sh_bad = []
+        _by = {}
+        for _i in range(1, len(MUTATIONS) + 1):
+            _by.setdefault(shard_of(_i), []).append(_i)
+        if sorted(_by) != list(range(1, SHARDS + 1)):
+            _sh_bad.append(f"受け持ちのある台が {sorted(_by)} です")
+        if sum(len(v) for v in _by.values()) != len(MUTATIONS):
+            _sh_bad.append("台の受け持ちを合わせても全部になりません")
+        if _by and max(len(v) for v in _by.values()) - min(len(v) for v in _by.values()) > 1:
+            _sh_bad.append("台ごとの受け持ちの数が偏っています")
+        # 絞り込みの関数（check が使う唯一の場所）
+        _m0 = {"why": "あいう"}
+        if not (_selected(1, _m0, None, [], None)
+                and _selected(1 + SHARDS, _m0, None, [], 1)
+                and not _selected(2, _m0, None, [], 1)
+                and not _selected(1, _m0, {2}, [], None)
+                and not _selected(1, _m0, None, ["かき"], None)):
+            _sh_bad.append("絞り込み（_selected）が分担どおりに選びません")
+        _src_ck = open(os.path.abspath(__file__), encoding="utf-8").read()
+        if "if not _selected(i, m, only_index, _want, shard):" not in _src_ck:
+            _sh_bad.append("check が絞り込みの関数を通していません")
+        # 環境変数の読み方
+        if shard_from_env("X", {"X": "2"}) != (2, ""):
+            _sh_bad.append("分担の指定 2 を読めません")
+        if shard_from_env("X", {"GITHUB_ACTIONS": "true"})[1] == "":
+            _sh_bad.append("CIで分担の指定が無いのに止めません")
+        if shard_from_env("X", {}) != (None, ""):
+            _sh_bad.append("手元で分担の指定が無いとき、全部を回しません")
+        for _v in ("0", str(SHARDS + 1), "a", "-1"):
+            if shard_from_env("X", {"X": _v})[1] == "":
+                _sh_bad.append(f"分担の指定 {_v} を断りません")
+        # ワークフローとそろっているか（★本物★と、壊した写し）
+        try:
+            _wf = open(WF, encoding="utf-8").read().replace("\r\n", "\n")
+        except OSError:
+            _wf = ""
+        for _p in workflow_shard_problems(_wf):
+            _sh_bad.append("本物のワークフロー: " + _p)
+        _full = "shard: [" + ", ".join(str(x) for x in range(SHARDS + 1)) + "]"
+        _drop = _wf.replace(_full, "shard: [" + ", ".join(str(x) for x in range(SHARDS)) + "]")
+        if _drop == _wf or not workflow_shard_problems(_drop):
+            _sh_bad.append("台を1つ減らしたワークフローを見逃します")
+        _back = _wf.replace("          python scripts/check_duplicate.py",
+                            "          python scripts/mutation_check.py --fast\n"
+                            "          python scripts/check_duplicate.py", 1)
+        if _back == _wf or not workflow_shard_problems(_back):
+            _sh_bad.append("自己試験の工程に戻した壊し方の道具を見逃します")
+        _noenv = _wf.replace(" --shard-env MUT_SHARD", "")
+        if _noenv == _wf or not workflow_shard_problems(_noenv):
+            _sh_bad.append("分担なしで呼ぶワークフローを見逃します")
+        for _kw in ("exclude:", "'exclude':", '"exclude":', "include:"):
+            _excl = _wf.replace("        shard: [", "        " + _kw + "\n          - shard: 4\n        shard: [", 1)
+            if _excl == _wf or not workflow_shard_problems(_excl):
+                _sh_bad.append(f"{_kw} で台を1つ外したワークフローを見逃します")
+        _flow = _wf.replace("        shard: [0, 1, 2, 3, 4]",
+                            "        shard: [0, 1, 2, 3, 4]\n        x: {exclude: [{shard: 4}]}", 1)
+        if _flow == _wf or not workflow_shard_problems(_flow):
+            _sh_bad.append("{exclude: …} の形を見逃します")
+        _noif = _wf.replace("        if: matrix.shard != 0\n", "")
+        if _noif == _wf or not workflow_shard_problems(_noif):
+            _sh_bad.append("分担の台に絞っていない工程を見逃します")
+        for _b in _sh_bad:
+            print("❌ ★CIの分担が壊れています★: " + _b)
+        if _sh_bad:
+            return 1
+        print(f"★CIの分担はそろっています（{SHARDS}台・"
+              + "／".join(f"{k}台目 {len(v)}件" for k, v in sorted(_by.items())) + "）★")
+
         # ★この道具自身の試験★＝壊し方の目印が実在するか
         bad = []
         for m in MUTATIONS:
@@ -9825,7 +10070,15 @@ def main() -> int:
             print("★このファイルを壊す試験はありません★: " + ", ".join(sorted(want)))
             return 0
         return check("", fast=a.fast, only_index=set(idx))
-    return check(a.only, fast=a.fast)
+    shard = None
+    if a.shard_env:
+        shard, why = shard_from_env(a.shard_env, os.environ)
+        if why:
+            print("❌ ★" + why + "★")
+            return 2
+        if shard is None:
+            print("★分担の指定が無いので、全部を回します★")
+    return check(a.only, fast=a.fast, shard=shard)
 
 
 if __name__ == "__main__":

@@ -50,6 +50,18 @@ jobs:
     #   ★次にやること★＝どの工程に何分かかっているかを測る
     #   （測らずに分割や高速化へ進むと当てずっぽうになる）。
     timeout-minutes: 40
+    # ★★5台に分けて同時に走らせる★★（2026-11-07）
+    #   ★なぜ★＝1台で全部回していたら、40分の非常ベルのうち38分まで来た
+    #   （自己試験の工程が37分。大半は「守りを壊して確かめる試験」）。
+    #   ★非常ベルの時間は上げない★＝遅くなったことを隠すだけ（上の理由と同じ）。
+    #   shard 0 ＝ 今までの自己試験と監査／1〜4 ＝ 壊して確かめる試験を4等分。
+    #   ★試験は1件も減らしていない★＝4つを合わせると全部になる。
+    #   ★この並びは mutation_check.py の SHARDS と一致していること★
+    #   （1つ消すと4分の1が黙って試されなくなるので、mutation_check --selftest が見る）。
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4]
 
     # ★フォークからのPRでは走らせない★（2026-07-30・Codex 13巡目 (a)-4）
     #   pull_request はPR側のコードを実行する。つまりPRで
@@ -83,6 +95,7 @@ jobs:
           echo "UCHIDOKORO_LOG_KEY=$key" >> "$GITHUB_ENV"
 
       - name: Self-tests
+        if: matrix.shard == 0
         shell: bash
         run: |
           set -euo pipefail
@@ -181,13 +194,27 @@ jobs:
           #   本当の原因は grow_machine の samefile() だった。
           #   この4本は、置き場を存在しない場所へ向けても通ることを確認済み。
           python scripts/check_duplicate.py --name "存在しない機種テスト用XYZ"
-          # ★守りをわざと壊して、試験が赤くなるか確かめる★（2026-08-24）
-          #   ★試験が通ること自体は「守りが効いている」証拠にならない★＝
-          #   実際、根拠の保存を消しても全部緑のままだった時期がある。
-          #   時間のかかる1件は --fast で外す（飛ばしたことは出力に出る）。
-          python scripts/mutation_check.py --fast
+
+      # ★守りをわざと壊して、試験が赤くなるか確かめる★（2026-08-24）
+      #   ★試験が通ること自体は「守りが効いている」証拠にならない★＝
+      #   実際、根拠の保存を消しても全部緑のままだった時期がある。
+      #   時間のかかる1件は --fast で外す（飛ばしたことは出力に出る）。
+      #   ★4台で分担する★（2026-11-07）＝どの台がどれを受け持つかは
+      #   mutation_check.py が決める（MUT_SHARD が無いと CI では止まる）。
+      #   ★控えを初回として作ってから回す★＝1台目の自己試験と同じ条件にする。
+      - name: Mutation checks
+        if: matrix.shard != 0
+        shell: bash
+        env:
+          MUT_SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          trap 'echo "::error title=Mutation checks::★落ちた検査: ${BASH_COMMAND}★"' ERR
+          python scripts/confirmed_values.py --init --if-missing
+          python scripts/mutation_check.py --fast --shard-env MUT_SHARD
 
       - name: Repository audits
+        if: matrix.shard == 0
         shell: bash
         run: |
           # ★片方が落ちても両方走らせて、まとめて結果を出す★（Codex 17巡目 (b)-2）
