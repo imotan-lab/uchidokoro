@@ -2126,7 +2126,7 @@
    "title": "真打 吉宗 狙い目・天井・期待値まとめ"
   },
   "info": "スマスロAT",
-  "strategy": "5.6枚 CZ間400G〜 / AT間460G〜",
+  "strategy": "5.6枚 CZ間410G〜 / AT間470G〜",
   "aliases": [
    "真打吉宗",
    "しんうちよしむね",
@@ -2147,75 +2147,77 @@
    ],
    "normal": {
     "excellent": 700,
-    "good": 400,
+    "good": 410,
     "caution": 290,
     "note": "CZ間天井1000G+α（6周期）でCZ当選。液晶のゲーム数カウンターで確認。",
     "byRate": {
      "eq56": {
       "caution": 290,
-      "good": 400,
-      "target": 400,
+      "good": 410,
+      "target": 410,
       "excellent": 700,
-      "note": "5.6枚なら400G〜から狙い目に入ります。"
+      "note": "5.6枚ならCZ間410G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
      },
      "rate55": {
       "caution": 310,
       "good": 430,
       "target": 430,
       "excellent": 730,
-      "note": "6.0枚では430G〜が目安です。"
+      "note": "6.0枚では430G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
      },
      "rate50": {
       "caution": 360,
       "good": 480,
       "target": 480,
       "excellent": 780,
-      "note": "6.5枚では480G〜から見ます。"
+      "note": "6.5枚では480G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
      },
      "rate45": {
       "caution": 420,
       "good": 540,
       "target": 540,
       "excellent": 830,
-      "note": "7.0枚では540G〜が狙い目ラインです。"
+      "note": "7.0枚では540G〜が狙い目ラインです（AT後にCZをスルーしていない台の目安です）。"
      }
-    }
+    },
+    "target": 410
    },
    "at": {
     "excellent": 900,
-    "good": 460,
+    "good": 470,
     "caution": 360,
     "note": "AT間天井1500G+αでAT当選。CZ間とAT間、どちらの前提で見るかを明確にしてから狙い目を判断してください。",
     "byRate": {
      "eq56": {
       "caution": 360,
-      "good": 460,
-      "target": 460,
+      "good": 470,
+      "target": 470,
       "excellent": 900,
-      "note": "5.6枚ならAT間460G〜から狙い目に入ります。"
+      "note": "5.6枚ならAT間470G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
      },
      "rate55": {
       "caution": 390,
       "good": 490,
       "target": 490,
       "excellent": 930,
-      "note": "6.0枚ではAT間490G〜が目安です。"
+      "note": "6.0枚ではAT間490G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
      },
      "rate50": {
       "caution": 440,
       "good": 550,
       "target": 550,
       "excellent": 980,
-      "note": "6.5枚ではAT間550G〜から見ます。"
+      "note": "6.5枚ではAT間550G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
      },
      "rate45": {
       "caution": 510,
       "good": 620,
       "target": 620,
       "excellent": 1050,
-      "note": "7.0枚ではAT間620G〜が狙い目ラインです。"
+      "note": "7.0枚ではAT間620G〜が狙い目ラインです（AT後にCZをスルーしていない台の目安です）。"
      }
-    }
+    },
+    "target": 470
    },
    "defaultRate": "eq56",
    "exchangeRates": [
@@ -2241,7 +2243,7 @@
   "tenjo_display": "CZ間1000G+α／AT間1500G+α",
   "tenjo_games": 1000,
   "strategyByRate": {
-   "eq56": "CZ間400G〜 / AT間460G〜",
+   "eq56": "CZ間410G〜 / AT間470G〜",
    "rate55": "CZ間430G〜 / AT間490G〜",
    "rate50": "CZ間480G〜 / AT間550G〜",
    "rate45": "CZ間540G〜 / AT間620G〜"
