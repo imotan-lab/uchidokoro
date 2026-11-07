@@ -9549,6 +9549,44 @@ MUTATIONS = [
         "after": "    if Fal" + "se:\n",
         "run": ["scripts/mutation_check.py"],
     },
+    # ★★等価前提の印を外す決定（2026-11-08・karakuri2 で画面に「（等価）」が残った）★★
+    {
+        "why": "★等価前提の印を外すと決めても、機種行から印が消えない（画面に「（等価）」が残る）★",
+        "file": "scripts/checker_verdict.py",
+        "before": '        ck.pop("equivOnly", None)\n',
+        "after": "        pass\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★等価前提の印を付ける向き（true）も受け取る（外す道具が印を付ける道具になる）★",
+        "file": "scripts/checker_verdict.py",
+        "before": '    if _eq and dec.get("equiv_only") is not False:\n',
+        "after": "    if False:\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★0 や文字の \"false\" でも印を外せる（外す向きの false だけ受け取る決まりがゆるむ）★",
+        "file": "scripts/checker_verdict.py",
+        "before": '    if _eq and dec.get("equiv_only") is not False:\n',
+        "after": '    if _eq and dec.get("equiv_only") not in (False, 0, "false"):\n',
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★印がもう無い機種で同じ決定を断る（書いたあと作り直しで止まると、再実行で収束しない・Codex）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "    if not drops and not notes and not _eq:\n",
+        "after": ('    if _eq and ck.get("equivOnly") is not True:\n'
+                  '        ng.append("equiv_only: 印がありません")\n'
+                  "    if not drops and not notes and not _eq:\n"),
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★equiv_only を書かない決定でも等価前提の印を外す（関係のない注記の直しで画面が変わる）★",
+        "file": "scripts/checker_verdict.py",
+        "before": '    if dec.get("equiv_only") is False:\n        ck.pop("equivOnly", None)\n',
+        "after": '    if True:\n        ck.pop("equivOnly", None)\n',
+        "run": ["scripts/checker_verdict.py"],
+    },
 ]
 
 

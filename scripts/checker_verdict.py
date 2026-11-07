@@ -1296,6 +1296,8 @@ def revised(m: dict, dec: dict) -> dict:
         for node in _note_places(out, str(nt.get("key") or ""), str(nt.get("rate") or ""),
                                  nt.get("count")):
             node["note"] = str(nt.get("note") or "").strip()
+    if dec.get("equiv_only") is False:
+        ck.pop("equivOnly", None)
     if isinstance(dec.get("strategy"), str) and dec["strategy"].strip():
         out["strategy"] = dec["strategy"].strip()
     # ★新台は、線が変わったら機種行の指紋を外す★（merged と同じ線・書き方だけ変えてある＝
@@ -1356,9 +1358,16 @@ def revise_problems(dec, ms=None) -> list:
     drops, notes = dec.get("drop_modes") or [], dec.get("notes") or []
     if not isinstance(drops, list) or not isinstance(notes, list):
         return ng + ["drop_modes と notes は一覧で書いてください"]
-    if not drops and not notes:
-        return ng + ["drop_modes か notes のどちらかが要ります"]
+    # ★★等価前提の印（equivOnly）を外す★★（2026-11-08）＝画面は印があると判定文に「（等価）」を付ける。
+    #   ★外す向き（false）だけ受け取る★（0・null・文字の "false" も断る）。
+    #   ★印がもう無い機種でも断らない★（2026-11-08・Codex）＝書いたあと一覧の作り直しで止まっても、
+    #   同じ決定をもう一度流せば後続へ進んで収束する（ほかの REVISE の決まりと同じ）
     ck = m.get("checker") or {}
+    _eq = "equiv_only" in dec
+    if _eq and dec.get("equiv_only") is not False:
+        ng.append("equiv_only は false（等価前提の印を外す）だけ受け取ります")
+    if not drops and not notes and not _eq:
+        return ng + ["drop_modes か notes のどちらかが要ります"]
     have = [str(x.get("key") or "") for x in (ck.get("modes") or []) if isinstance(x, dict)]
     try:
         done = {(x["slug"], x["mode"]) for x in drops_all()}
@@ -1722,6 +1731,30 @@ def _revise_tests(t) -> None:
         finally:
             MACHINES, globals()["_rebuild_target_text"] = _bak_m, _bak_rb
             globals()["_machines"] = lambda: json.loads(json.dumps(_ms))
+        # ★★等価前提の印（equivOnly）を外す決定★★（2026-11-08・karakuri2）＝液晶800Gを交換率で
+        #   分けない目安と2AIが決めても、画面が判定文に「（等価）」を付け続け、外す道が無かった
+        _mse = [{"slug": "zzz_rev", "name": "試験機", "strategy": "液晶800G〜（当サイト目安）",
+                 "checker": {"unit": "G", "equivOnly": True,
+                             "modes": [{"key": "normal", "label": "通常（液晶G数）"}],
+                             "normal": {"good": 800, "caution": 800, "excellent": 1101,
+                                        "note": "液晶ゲーム数の当サイト目安です。"}}}]
+        _oke = {**base, "equiv_only": False}
+        t("★等価前提の印を外す決定を受け取る★（注記・欄の変更なしでも通る）",
+          revise_problems(_oke, _mse) == [])
+        t("　当てたあとは等価前提の印が消え、線と注記はそのまま",
+          "equivOnly" not in revised(_mse[0], _oke)["checker"]
+          and revised(_mse[0], _oke)["checker"]["normal"] == _mse[0]["checker"]["normal"])
+        t("★等価前提の印を付ける向き（true）は受け取らない★（外す道具にだけする）",
+          any("equiv_only" in x for x in revise_problems({**base, "equiv_only": True}, _mse)))
+        t("★0・null・文字の false も断る★（外す向きの false だけ）",
+          all(any("equiv_only" in x for x in revise_problems({**base, "equiv_only": v}, _mse))
+              for v in (0, None, "false")))
+        t("★印をもう外した姿でも、同じ決定は通る★（書いたあと作り直しで止まっても再実行で収束する・Codex）",
+          revise_problems(_oke, [revised(_mse[0], _oke)]) == [])
+        _okn = {**base, "notes": [{"key": "normal", "before": "液晶ゲーム数の当サイト目安です。",
+                                   "note": "液晶ゲーム数の当サイト目安です（暫定）。"}]}
+        t("★equiv_only を書かない決定では、等価前提の印を残す★",
+          revised(_mse[0], _okn)["checker"].get("equivOnly") is True)
         # ★消した欄の一覧★＝書き込みで残り、壊れていたら黙って0件と読まない
         io.open(DROPS_STORE, "w", encoding="utf-8").write("{")
         t("★消した欄の一覧が壊れていたら書かない★",
