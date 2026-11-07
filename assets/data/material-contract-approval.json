@@ -14,7 +14,7 @@
   "scripts/ceiling_dismiss.py": "7f8cd6b409e004625c6aafb5cd7ea739f13850a90883c97528526806bf92399b",
   "scripts/ceiling_lookup.py": "17cd802e6d8e5eb90bcc13354cef0d602f7c3693ab5419434643c4b1edac0118",
   "scripts/collect_evidence.py": "a3ca8a9f76f057886ad5ad6134b9841fb53eb6ed72b56aa23173f70434d4dbab",
-  "scripts/confirmed_values.py": "5892daad5298f04ee78b22bdeb1b7711ead474d620e3074b6a326799b09443ce",
+  "scripts/confirmed_values.py": "4ae5cb9bc6fd91b7834e3e559a7e5d022b848c0411c5abc04bb78681dca49184",
   "scripts/cz_lookup.py": "0af48b371f0800d956270a1b50a08a259520c53f24ca424cc2c719ae49a4fbaf",
   "scripts/directory_index.py": "5f8d9ae8689a3b57f6300607b8b5e35a4bf4a1f8f5436414171f71ecf73aa4b9",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
@@ -23,6 +23,7 @@
   "scripts/fetched_page.py": "825d7d5280e5dde535a271be76eac73bcb1e0c158552b6daf5e1ce0587e9a5ef",
   "scripts/html_check.py": "2d58882be96adbeb8710638ccb47d3f784ab3d1b091f5eff74894ca7bba1d112",
   "scripts/html_tables.py": "5d0f32d7e988ce0696e07b4ac118d119ea4c4e2280b57acee89e0c6ebaa78c3e",
+  "scripts/legacy_binding.py": "ffaee623cd2dccddf3300864bc9595ec53d0bb69fac047cec21a2e6eb8200089",
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
   "scripts/machine_sources.py": "a64a6c98f409cce1e33a2411d980696d0a64f751c37c638275f2f30aaaa1fa04",
   "scripts/maker_identity_cache.py": "758f7eb8856fa87648a97b6c7fde6b334c14078be2e386f07ec095069ccf0aa7",
@@ -125,6 +126,7 @@
    "claim_identity",
    "claim_inventory",
    "fetched_page",
+   "legacy_binding",
    "model_code_lookup",
    "new_machine_watch",
    "page_decision",
@@ -179,6 +181,12 @@
   ],
   "scripts/html_check.py": [],
   "scripts/html_tables.py": [],
+  "scripts/legacy_binding.py": [
+   "confirmed_values",
+   "fetched_page",
+   "legacy_binding",
+   "pending_machines"
+  ],
   "scripts/lineage_check.py": [
    "new_machine_watch",
    "spec_lookup"
@@ -284,5 +292,6 @@
    "page_reading",
    "read_failure"
   ]
- }
+ },
+ "_deps_changed_why": "confirmed_values.bind_machine が、昔からある機種（identity を持たない約120機種）の確定値を記録できるよう、2AIが控えたDMMの機種ページとの結び付け（scripts/legacy_binding.py）を読むようにした。どの機種の確定値かを決める部品なので、材料の契約の一覧（CONTRACT_INPUTS）にも入れた。夕方のランキングのタスクの初回（2026-11-07）で上位10の20機種すべてが記録できず、恩恵の一言を1件も書けなかったため。"
 }

@@ -1340,8 +1340,20 @@ def bind_machine(official_url: str) -> tuple:
         raise
     except Exception:                      # noqa: BLE001
         pass
+    # ③昔からある機種（identity を持たない）
+    #   ★2AIが「この機種のDMMのページはここ」と決めて控えた結び付けだけ★
+    #   （2026-11-07・legacy_binding）。★直す前は約120機種が1件も記録できず★、
+    #   夕方のランキングの一言が上位10のどれにも書けなかった。
+    #   ★控えが壊れている・使えない結び付けは例外で止める★（黙って「無い」にしない）。
+    import legacy_binding as _lb
+    try:
+        _hit_lb = _lb.slug_for_url(official_url)
+    except Exception as e:                 # noqa: BLE001
+        raise ConfirmedError(f"昔からある機種の結び付けを使えません: {str(e)[:120]}")
+    if _hit_lb:
+        return _hit_lb
     raise ConfirmedError(
-        f"その公式URLの機種が見つかりません（待ち行列にも一覧にも無い）: {official_url}")
+        f"その公式URLの機種が見つかりません（待ち行列にも一覧にも結び付けにも無い）: {official_url}")
 
 
 def record(slug: str, field: str, value, sources: list, by: list,
