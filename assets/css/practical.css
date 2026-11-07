@@ -763,6 +763,18 @@ button, input, select { font: inherit; }
   line-height: 1.55;
 }
 .rank-meta strong, .spec-meta strong { color: var(--soft); font-weight: 700; }
+/* ★ランキング上位10の恩恵の一言★（2026-11-07・ranking_note.py が書く・11位以下には出さない） */
+.rank-note {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--gold-line);
+  background: var(--gold-bg);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text);
+  font-size: var(--fs-sub);
+  line-height: 1.6;
+}
 .list-note { margin: 12px 0 0; color: var(--muted2); font-size: var(--fs-label); line-height: 1.6; }
 .list-count { color: var(--gold); font-weight: 700; }
 

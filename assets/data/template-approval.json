@@ -6,7 +6,7 @@
   "CNAME": "327a46d0a9fe00ef4a85721fec20aa84af66049b4a2e27029773bc1927b502fa",
   "about.html": "22b0e0645b22ac2649fc7f7669b67016304d83398214ffea65c99a182308f907",
   "ads.txt": "e652db9bd62edb46d3cb65ec2822cd510b7c1e76becce15c7e60575ddb693a52",
-  "assets/css/practical.css": "926b50236506d9b0e25c10bba0c9a3356cfe22ba3d66de8028781cc8e1621ccc",
+  "assets/css/practical.css": "0f30a15ed86542e82fda888065dc522f6331028e03e501b53fd5f39959ebdde6",
   "assets/data/claim-allowlist.json": "a9aa01b940b4f61925d176072290772e76911ae43b1cb7f39b112bdda65a8a01",
   "assets/data/ledger.json": "1d496682cc43b0c44b98b4a314f9286d50093c425568cec21d1bbf8d7dc6b886",
   "assets/data/source-registry.json": "04a755e507c115889e5b35a3c0206be3612f9dd3130113ae2c3f694b662a2341",
@@ -33,7 +33,7 @@
   "robots.txt": "67abd065d0da87ba5c2b13c375add509a3601669f21d6c53f48360d7f271ccf1",
   "scripts/apply_prose_dedup.py": "13c7636c1018db8c4de24d06edef76334e2bb7c1147b7a94958ffb76ca384937",
   "scripts/audit_public.py": "eff9994a488928e3568f6c344b569f6e8079f2ffa799399d5417f32103b444e3",
-  "scripts/build_hub_pages.py": "fa12584fc2b7ca16d864a40619946094e7c193164365bba3dda6ae8f5780a2f4",
+  "scripts/build_hub_pages.py": "c3ca74d2924c83a7376e3394fea421c0dfafd2214078b0375f4866c24ec84f54",
   "scripts/build_ledger.py": "c51b84e0a7a6dc9b97faf29003ab617291f9c93fe0378d2c9b19dd664f783e7d",
   "scripts/build_machine_pages.py": "baf40d15d3ec0ef8d855ffb8f76876dd1d2d3a67e44b46398f19d51e7bba0d60",
   "scripts/build_new_article.py": "198f7878f8eccc745fe0bd88b3167bb301a569a8018d3b29b3afc0f701e8ecd6",
@@ -64,7 +64,7 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "ecc07863430476c152cdd79dc300b6387d68b1b466deeb2e80f1a3449ce51b1a",
-  "service-worker.js": "6d339b986e87dc9228e9016529c3beb2abbc68902a4b5797dd118068f8122af8",
+  "service-worker.js": "acd576de76db7a1f748703f15dee362b21137eea4b993ed4af484fd1e51d3a29",
   "setting.html": "4a9c49193581a76308afcc63076357ba55a7486c3b2fd1658042a88b57625ada",
   "terms.html": "90fb80d690c26330ba3c696b8e29031e15da4007a6debc567fa068a4493479fe"
  }

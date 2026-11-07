@@ -390,7 +390,22 @@ def budget(path: str = BUDGET_PATH) -> dict:
     if d["writes_total"] and d["writes_fix"] and d["writes_grow"]:
         if d["writes_fix"] + d["writes_grow"] < d["writes_total"]:
             raise GuardError("内訳の合計が総枠に届きません（設定の誤り）")
+    # ★★タスクごとの締切★★（2026-11-07・ランキング専用タスク）＝共通の締切（朝11:00）は
+    #   「12:00〜翌11:59」を一晩と見るので、夕方17:00に始めたタスクは翌朝11:00まで相談を続けられ、
+    #   夜23:30の新台タスクとぶつかる（Codex review_ranking_task の1）。名簿に載ったタスクだけ別の締切で止める。
+    per = d.get("deadline_by_task", {})
+    if not isinstance(per, dict):
+        raise GuardError("予算の deadline_by_task が辞書ではありません")
+    for _t, _dl in per.items():
+        if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", str(_dl or "")):
+            raise GuardError(f"予算の deadline_by_task[{_t!r}] が時刻の形ではありません: {_dl!r}")
     return d
+
+
+def deadline_for(task: str, b: dict) -> str:
+    """★そのタスクの締切★（名簿に無ければ共通の締切）"""
+    per = b.get("deadline_by_task") or {}
+    return str(per.get(str(task)) or b.get("deadline_hhmm") or "")
 
 
 # ★予約の段階★（★決められた順にしか進めない★・Codex110回目の指摘7）
@@ -486,9 +501,9 @@ def reserve(task: str, slug: str, kind: str, path: str = STATE_PATH,
             _seen_today.append(slug)
         d["target_slug"] = slug
         # ★締切を過ぎたら新しい書き換えに着手しない★（途中で朝を迎えないため）
-        if past_deadline(b["deadline_hhmm"], now_hhmm):
+        if past_deadline(deadline_for(task, b), now_hhmm):
             raise GuardError(
-                f"新しい書き換えの締切（{b['deadline_hhmm']}）を過ぎています")
+                f"新しい書き換えの締切（{deadline_for(task, b)}）を過ぎています")
         # ★やりかけがあるなら、先にそれを片付ける★
         left = [r for r in open_reservations(data) if r["token"] != ""]
         if left:
@@ -678,7 +693,8 @@ def day_status(path: str = STATE_PATH) -> dict:
 
 
 def claim(task: str, slug: str, path: str = STATE_PATH,
-          finding=None, scheduled=None) -> dict:
+          finding=None, scheduled=None, budget_path: str = BUDGET_PATH,
+          now_hhmm: str = "") -> dict:
     """今日この機種を担当してよいか。★同じ日の2機種目は拒否★
 
     ★新台の追加だけは1日の機種数を数えない★（2026-08-07・運営者決定）
@@ -688,6 +704,11 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
       ★ただし暴走止めは残す★＝同じ晩に何十件も書き続けるのは、
       うまくいっている状態ではなく不具合の形。上限に当たったら止めて知らせる。
     """
+    # ★★タスクごとの締切を、担当の受け付けでも見る★★（2026-11-07・ランキング専用タスク）
+    #   ★名簿（deadline_by_task）に載ったタスクだけ★＝朝・夜のタスクの受け付けは今までどおり。
+    _bud = budget(budget_path)
+    if str(task) in (_bud.get("deadline_by_task") or {}) and past_deadline(deadline_for(task, _bud), now_hhmm):
+        raise GuardError(f"{task} の締切（{deadline_for(task, _bud)}）を過ぎているので、新しい機種を担当しません")
     with _Exclusive(path):
         if is_test_slug(slug):
             # ★試したときの架空機種は枠を使わない★（本番の1日1機種を守る）
@@ -917,7 +938,7 @@ def codex_round(task: str, path: str = STATE_PATH, lane: str = "main",
     #   ★回数の上限を外したので、締切だけが「必ず終わる」保証になった★。
     #   ところが締切の検査は**書き換えの予約のときにしか無かった**ので、
     #   相談だけを続ければ締切を越えられた。
-    _dl = str((budget(budget_path) or {}).get("deadline_hhmm") or "")
+    _dl = deadline_for(task, budget(budget_path) or {})
     if past_deadline(_dl, now_hhmm):
         raise GuardError(
             f"締切（{_dl}）を過ぎているので、これ以上は相談しません")
@@ -1171,7 +1192,9 @@ def _changed_files(sleep=None) -> tuple[list, str]:
 #   ★対話セッションは止めない★＝ここを通るのは無人タスクだけ。
 UNATTENDED_TASKS = ("add-machine", "update-machine", "quality-review",
                     "uchidokoro-add-machine", "uchidokoro-update-machine",
-                    "uchidokoro-quality-review")
+                    "uchidokoro-quality-review",
+                    # ★ランキング専用タスク★（2026-11-07・毎日17:00）
+                    "ranking-machine", "uchidokoro-ranking")
 
 
 def lock_is_live() -> bool:
@@ -2629,6 +2652,33 @@ def _selftest_body() -> int:
           "／★回数の上限を外したので、ここが唯一の歯止め★",
           raises(lambda: codex_round("t2", fp, budget_path=_bp2,
                                     now_hhmm="07:00"), "締切"))
+        # ★★タスクごとの締切★★（2026-11-07・ランキング専用タスク）
+        _bp3 = os.path.join(tmpdir, "budget_per_task.json")
+        with open(_bp3, "w", encoding="utf-8") as _f:
+            json.dump({"schema_version": "task-budget/v1",
+                       "writes_total": 0, "writes_fix": 0, "writes_grow": 0,
+                       "inspections": 0, "deadline_hhmm": "11:00",
+                       "deadline_by_task": {"ranking-machine": "22:00"}}, _f)
+        t("★★名簿のタスクは自分の締切で止まる（夜22:30は相談しない）★★",
+          raises(lambda: codex_round("ranking-machine", fp, budget_path=_bp3,
+                                    now_hhmm="22:30"), "締切"))
+        t("　名簿のタスクも締切前（17:00）なら相談できる",
+          not raises(lambda: codex_round("ranking-machine", fp, budget_path=_bp3,
+                                        now_hhmm="17:00")))
+        t("★名簿に無いタスクは共通の締切のまま（夜22:30でも相談できる）★",
+          not raises(lambda: codex_round("t3", fp, budget_path=_bp3, now_hhmm="22:30")))
+        t("★★名簿のタスクは締切を過ぎたら新しい機種を担当しない★★",
+          raises(lambda: claim("ranking-machine", "hokuto", path=fp, budget_path=_bp3,
+                               now_hhmm="22:30"), "締切"))
+        t("deadline_for：名簿に無ければ共通の締切",
+          deadline_for("t3", budget(_bp3)) == "11:00"
+          and deadline_for("ranking-machine", budget(_bp3)) == "22:00")
+        with open(_bp3, "w", encoding="utf-8") as _f:
+            json.dump({"schema_version": "task-budget/v1",
+                       "writes_total": 0, "writes_fix": 0, "writes_grow": 0,
+                       "inspections": 0, "deadline_hhmm": "11:00",
+                       "deadline_by_task": {"ranking-machine": "夜"}}, _f)
+        t("★タスクごとの締切が時刻の形でなければ止める★", raises(lambda: budget(_bp3), "時刻"))
         # ★★締切は「一晩」の中で見る★★（2026-08-28・本番で実害）
         #   ★夜11時半に始まるタスクが、朝7時20分の締切を
         #   「もう過ぎた」と判定して、毎晩30分なにもできなかった★

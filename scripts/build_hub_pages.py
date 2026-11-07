@@ -545,6 +545,38 @@ def dataset_D(rows):
     return [r for r in rows if r["has_suru"]]
 
 
+# ★★ランキングの上位10★★（2026-11-07・運営者「ベスト10にしよう」）
+#   上位10機種には、ランキング専用タスク（毎日17:00）が2AIで確かめた恩恵の一言を添える。
+#   11位以下は今の行のまま（名前と数字）。★タスクが確かめる対象もここから取る★（ranking_queue）。
+TOP_DETAIL = 10
+
+
+def ranked_rows(rows):
+    """★ランキングに載せてよい機種★（先行記事と新台経路を除く・_build_pages と ranking_top の1か所）"""
+    return [r for r in rows if r.get("status") != "preview"
+            and r.get("mclass", "LEGACY_COMPLETE") == "LEGACY_COMPLETE"]
+
+
+def ranking_top(rows, ranking):
+    """★ページと同じ並べ方の上位10★（ranking_queue が読む）"""
+    ranked = ranked_rows(rows)
+    if ranking == "reset":
+        return dataset_C(ranked)[:TOP_DETAIL]
+    if ranking == "tenjo":
+        return dataset_A(ranked)[:TOP_DETAIL]
+    raise ValueError(f"知らないランキングです: {ranking!r}")
+
+
+def load_rank_notes() -> dict:
+    """★恩恵の一言★（assets/data/ranking-notes.json・書くのは ranking_note.py だけ）
+
+    ★読む側でも一言の形を検査する★（Codex review_ranking_task の2）＝道具を通さずに置かれた文を
+    そのまま出さない。形が違えば例外で止める（黙って出さない・黙って捨てない）。
+    """
+    import ranking_note as _rn
+    return _rn.read_notes()["notes"]
+
+
 # ---- 散文ブロック → HTML ----
 
 def render_blocks(blocks):
@@ -559,7 +591,7 @@ def render_blocks(blocks):
     return "\n".join(html)
 
 
-def render_rank_list(items, meta_fn):
+def render_rank_list(items, meta_fn, note_fn=None):
     html = ['      <ol class="rank-list">']
     for i, r in enumerate(items, 1):
         href = f"/machines/{r['slug']}/"
@@ -568,6 +600,10 @@ def render_rank_list(items, meta_fn):
         html.append('          <span class="rank-body">')
         html.append(f'            <a class="rank-name" href="{href}">{esc(r["name"])}</a>')
         html.append(f'            <span class="rank-meta">{meta_fn(r)}</span>')
+        # ★恩恵の一言は上位10だけ★（11位以下は一言があっても出さない）
+        note = note_fn(r) if (note_fn and i <= TOP_DETAIL) else None
+        if note:
+            html.append(f'            <span class="rank-note">{esc(note)}</span>')
         html.append("          </span>")
         html.append("        </li>")
     html.append("      </ol>")
@@ -735,12 +771,16 @@ def _meta_len_of(file: str, prose_all: dict) -> str:
     return (prose_all.get(key) or {}).get("meta_description", "")
 
 
-def _build_pages(rows: list, prose_all: dict) -> tuple:
+def _build_pages(rows: list, prose_all: dict, notes: "dict | None" = None) -> tuple:
     """機種データと散文から、ハブ4ページのHTMLを組み立てる（書き込みはしない）。"""
     # ランキング系は先行記事を除く（未確定の数値で順位を付けない）
     # ★新台経路(AUTO_*)も明示除外★（checker無しの自然除外に頼らない・Codex72回目）
-    ranked = [r for r in rows if r.get("status") != "preview"
-              and r.get("mclass", "LEGACY_COMPLETE") == "LEGACY_COMPLETE"]
+    ranked = ranked_rows(rows)
+    if notes is None:
+        notes = load_rank_notes()
+
+    def _note(ranking):
+        return lambda r: (notes.get(r["slug"]) or {}).get(ranking)
     A = dataset_A(ranked)
     C = dataset_C(ranked)
     D = dataset_D(ranked)
@@ -770,8 +810,10 @@ def _build_pages(rows: list, prose_all: dict) -> tuple:
 
     # --- tenjo ---
     tenjo_list = render_rank_list(
-        A, lambda r: f'天井 <strong>{esc(tenjo_disp(r))}</strong> ／ 狙い目 {esc(yome(r))}'
+        A, lambda r: f'天井 <strong>{esc(tenjo_disp(r))}</strong> ／ 狙い目 {esc(yome(r))}',
+        _note("tenjo"),
     )
+    tenjo_noted = any(_note("tenjo")(r) for r in A[:TOP_DETAIL])
     tenjo_note = (
         "※天井の欄はG数の天井です。スルー回数・周期・ポイントなど、ほかの天井は各機種ページで確認してください。"
         "同じ天井ゲーム数の機種は、狙い目ゲーム数が浅い順に掲載しています。"
@@ -781,6 +823,8 @@ def _build_pages(rows: list, prose_all: dict) -> tuple:
         f"G数でカウントする天井が{SHALLOW_TENJO_LIMIT}G"
         f"未満の機種は全<span class=\"list-count\">{len(A)}</span>機種です"
         "（G数で数えない天井だけの機種と、チェッカーに狙い目が無い機種は集計対象外です）。"
+        + ("上位の機種のうち、天井の恩恵と、それが付く条件を確かめ終えた機種には、その内容を添えています。"
+           if tenjo_noted else "")
     )
 
     # --- reset ---
@@ -790,11 +834,15 @@ def _build_pages(rows: list, prose_all: dict) -> tuple:
         # ★差（短縮幅）は書かない★（2026-10-25・運営者「リセット後の狙い目ゲーム数があるのに要る？」）
         #   並び順の説明は表の下の注記だけ。
         lambda r: f'{esc(r["ratelabel"])} ／ {esc(r["nlabel"])} <strong>{r["nline"]}G〜</strong> → {esc(r["rlabel"])} <strong>{r["rline"]}G〜</strong>',
+        _note("reset"),
     )
+    reset_noted = any(_note("reset")(r) for r in C_top[:TOP_DETAIL])
     reset_note = (
         "※リセット後に浅くから狙える幅（通常時の狙い目 − リセット後の狙い目）が大きい順。比較の基準は各機種の主要カウンターモード（通常時・CZ間・ST間など）です。"
         "狙い目は各機種の狙い目チェッカーの線で、交換率を選べる機種は最初に表示される交換率の線です。"
         f"チェッカーのデータで短縮を確認できる機種は全<span class=\"list-count\">{len(C)}</span>機種で、上位{len(C_top)}機種を掲載しています。"
+        + ("上位の機種のうち、リセット後の恩恵と、それが付く条件を確かめ終えた機種には、その内容を添えています。"
+           if reset_noted else "")
     )
 
     # ★表の前に置く一覧＝リセット後が最初から狙い目の機種★（2026-11-06・運営者「すすめて」・Codexと擦り合わせ）
@@ -1388,6 +1436,23 @@ def selftest() -> int:
       hub_content_problems({"a.html": _zpage}, {"a.html": {"pre": _zl}}, *deny) == [])
     t("★リセット0G：表の前の一覧が2回出たら止める★",
       hub_content_problems({"a.html": _zpage + _zl}, {"a.html": {"pre": _zl}}, *deny) != [])
+    # ★★上位10の恩恵の一言★★（2026-11-07）
+    _rows11 = [{"slug": f"s{i}", "name": f"機種{i}"} for i in range(1, 12)]
+    _rl = render_rank_list(_rows11, lambda r: "m", lambda r: "恩恵の一言です。")
+    t("★一言は上位10だけに出る（11位には出さない）★",
+      _rl.count('class="rank-note"') == TOP_DETAIL)
+    t("一言が無い機種には何も足さない",
+      'rank-note' not in render_rank_list(_rows11, lambda r: "m", lambda r: None))
+    t("★一言は文字として出す（タグにしない）★",
+      "&lt;b&gt;" in render_rank_list(_rows11[:1], lambda r: "m", lambda r: "<b>x</b>"))
+    _rk_rows = [dict(slug=f"r{i}", name=f"R{i}", unit="G", status="complete",
+                     mclass="LEGACY_COMPLETE", nline=600, rline=600 - i * 10,
+                     rank_limit=None, has_cycle=False) for i in range(1, 13)]
+    t("★ranking_top はページと同じ並び（短縮幅の大きい順）の上位10★",
+      [r["slug"] for r in ranking_top(_rk_rows, "reset")] == [f"r{i}" for i in range(12, 2, -1)])
+    t("★ranking_top は新台経路・先行記事を入れない★",
+      ranking_top([dict(_rk_rows[0], mclass="AUTO_PENDING")], "reset") == []
+      and ranking_top([dict(_rk_rows[0], status="preview")], "reset") == [])
     _ck2 = {"unit": "G", "normal": {"caution": 500, "good": 630}}
     t("ランキング：交換率の無い機種は直下の狙い目",
       base_line({"checker": _ck2}) == 630)

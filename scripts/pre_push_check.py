@@ -218,7 +218,9 @@ def _warn_unreported() -> None:
 _HUB_SRC = ("assets/data/machines.json", "scripts/hub_prose.json",
             "scripts/build_hub_pages.py", "scripts/page_decision.py",
             "scripts/safe_json.py", "scripts/target_display.py", "guide-",
-            "index.html")
+            "index.html",
+            # ★ランキング上位10の恩恵の一言★（2026-11-07）＝一言の置き場と、その形を決める道具
+            "assets/data/ranking-notes.json", "scripts/ranking_note.py")
 
 
 def _touches(paths, srcs) -> bool:
@@ -1211,6 +1213,11 @@ def _selftest() -> int:
       touches_hub(["scripts/target_display.py"]) is True)
     t("★印のあるトップページを触ったら見る★",
       touches_hub(["index.html"]) is True)
+    # ★ランキング上位10の恩恵の一言★（2026-11-07）＝置き場も、形を決める道具も早見表の材料
+    t("★ランキングの一言の置き場を触ったら見る★",
+      touches_hub(["assets/data/ranking-notes.json"]) is True)
+    t("★ランキングの一言の形を決める道具を変えたら見る★",
+      touches_hub(["scripts/ranking_note.py"]) is True)
     # ★この生成器は機種の記事データを読んでいない★（実装で確認）
     t("★早見表：記事データは材料ではないので見ない★",
       touches_hub(["assets/data/machine-details/hokuto.json"]) is False)
