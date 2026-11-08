@@ -1074,10 +1074,10 @@
    },
    "reset": {
     "excellent": 250,
-    "good": 45,
+    "good": 50,
     "caution": 45,
     "note": "リセット時は天井650G+α。88G・250G前後に前兆発生ポイント。",
-    "target": 45
+    "target": 50
    }
   },
   "limit": {
