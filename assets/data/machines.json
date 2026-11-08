@@ -12767,11 +12767,12 @@
    "claims": [
     "at:MAIN_AT",
     "bonus_prob",
+    "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-18",
-   "input_digest": "sha256:4b5fa9ec7e467c8f195584fdb2eb9a9f3f3bfb3c6dd4ad054ec567064cc7f933"
+   "decided_at": "2026-11-09",
+   "input_digest": "sha256:d192120114633d640ed9075b89c55b402642e7b5d100360d36cbdaa6bff012d3"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-16",
@@ -12783,10 +12784,10 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5090 型式=未掲載 メーカー=パイオニア 導入=2026-11 確認日=2026-08-28",
    "market_release_date": "2026-11-16",
+   "observed_model_code": "LハイハイシオサイReTC",
    "_observed_model_code_sources": [
     "p-town.dmm.com"
-   ],
-   "observed_model_code": "LハイハイシオサイReTC"
+   ]
   }
  },
  {
