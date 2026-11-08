@@ -1254,7 +1254,9 @@ def _real_file_tests(t):
         # (4) 外してある機種から、未確定の断り書きを消す
         _k = _by2.get("karakuri2")
         _keep_k = str(_k.get("strategy") or "")
-        _k["strategy"] = _keep_k.replace("（個別ライン未確定）", "")
+        # ★いまの一覧の書き方に頼らない★（2026-11-08）＝2AIが一覧の文を言い換えると
+        #   置き換えが何も消さずに赤くなった。断り書きの語だけを持たない文を自前で置く
+        _k["strategy"] = "液晶800G〜（%s）" % NORATE_KEEP["karakuri2"]["must"][0]
         _write_machines()
         t("★★外してある機種から「未確定」の断り書きが消えたら止める★★"
           "／★名簿に載せるだけだと、断り書きを消しても誰も気づかない★",
