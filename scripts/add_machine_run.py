@@ -1955,7 +1955,7 @@ def _blocker_code(res: dict) -> str:
 def _verify_dmm(name: str, official_url: str, maker: str,
                 release: str, expect_maker: str = "",
                 release_is_cache: bool = False,
-                require_recent: bool = True) -> dict:
+                require_recent: bool = True, my_tags=None) -> dict:
     """★DMMの機種ページで身元を確かめる★（2026-08-16・台帳#376）
 
     返す形は verify_official と同じ（呼ぶ側を変えないため）。
@@ -1994,7 +1994,8 @@ def _verify_dmm(name: str, official_url: str, maker: str,
         if _q3:
             out.setdefault("read_questions", []).append(_q3)
         return _ng(str(e)[:220])
-    ok, why = _dm.name_matches(got["heading"], name)
+    # ★自機種のタグを渡されたらそれを使う★（2026-11-09・型式名L…の機種。無ければ今までどおり名前から読む）
+    ok, why = _dm.name_matches(got["heading"], name, my_tags=my_tags)
     if not ok:
         return _ng(f"機種名が機種ページと合いません: {why[:180]}")
     page_maker = str(got.get("maker") or "")
@@ -2076,7 +2077,7 @@ def verify_official(name: str, official_url: str,
                     maker: str = "", release: str = "",
                     release_is_cache: bool = False,
                     expect_maker: str = "",
-                    require_recent: bool = True) -> dict:
+                    require_recent: bool = True, my_tags=None) -> dict:
     """★公式ページが本当にその機種か確かめる★（Codex指摘1・実際に再現した穴）
 
     以前は名前とURLを別々に受け取り、照合していなかった。
@@ -2109,7 +2110,7 @@ def verify_official(name: str, official_url: str,
     if _dmm_machine_id(official_url):
         # ★最初に確かめた表示名があれば、そちらと完全一致させる★（台帳#335の項目5）
         return _verify_dmm(name, official_url, maker, release,
-                           expect_maker=expect_maker,
+                           expect_maker=expect_maker, my_tags=my_tags,
                            release_is_cache=release_is_cache,
                            require_recent=require_recent)
     if _pw_machine_url(official_url):
@@ -5454,6 +5455,31 @@ def _selftest_body() -> int:
               not _v_garo["problems"])
             t("　（対照）表示名が違えばメーカーの食い違いで止まる（推測で結ばない）",
               any("メーカーが食い違います" in x for x in _v_garo_ng["problems"]))
+            # ★★自機種のタグを渡されたら見出しの照合まで届ける★★（2026-11-09・更新タスクの自己修正）
+            #   ★直す前★＝名前にスマスロ・Lが無い機種（モグモグ風林火山 大海戦の巻）は、
+            #   DMMの見出しに「スマスロ」が付いた日から本人性の確かめ直しで毎朝止まった。
+            _dm_fm.fetch = lambda mid, **_k: {
+                "id": mid, "heading": "モグモグ風林火山 大海戦の巻 スマスロ パチスロ",
+                "maker": "ネット", "release_date": "2026-09-07",
+                "release_precision": "day",
+                "model_code": "Lモグモグ風林火山 大海戦の巻ZB", "has_model_code": True,
+                "url": f"https://p-town.dmm.com/machines/{mid}"}
+            try:
+                _v_mogu = _verify_dmm(
+                    "モグモグ風林火山 大海戦の巻", "https://p-town.dmm.com/machines/5059",
+                    "net", "2026-09-07", expect_maker="ネット",
+                    require_recent=False, my_tags={"smart"})
+                _v_mogu_ng = _verify_dmm(
+                    "モグモグ風林火山 大海戦の巻", "https://p-town.dmm.com/machines/5059",
+                    "net", "2026-09-07", expect_maker="ネット",
+                    require_recent=False)
+            finally:
+                _dm_fm.fetch = _real_dm_fetch
+            t("★★自機種のタグ（型式名からスマスロ）を渡せば、見出しに『スマスロ』があっても通る★★"
+              "（pw_10523 が毎朝止まっていた）",
+              not any("機種名が機種ページと合いません" in x for x in _v_mogu["problems"]))
+            t("　（対照）タグを渡さなければ今までどおり名前だけで判定して止まる",
+              any("機種名が機種ページと合いません" in x for x in _v_mogu_ng["problems"]))
             # ★★DMMで日まで分かった導入日と「未定」を、待ち行列に残す★★
             #   （2026-10-02。日が無いと番兵が月の1日で読んで誤って知らせ、
             #     未定の機種は毎朝「作れていない」と出ていた）

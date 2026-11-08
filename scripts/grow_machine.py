@@ -2274,6 +2274,12 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     # ★★新台の範囲（導入月）は当てない★★（2026-10-01・更新タスクの自己修正）
     #   ここは公開済みの機種の本人性を確かめ直すだけ。★当てていた★ので、
     #   導入2か月目から毎朝「新台の範囲外」で止まり、何も育てられなかった。
+    # ★★自機種のタグも渡す★★（2026-11-09・更新タスクの自己修正）＝名前にスマスロ・Lが無く info も空の機種は、
+    #   DMMの見出しに「スマスロ」が付いた日から「タイトルはスマスロ版だが自機種はスマスロではない」で毎朝止まった
+    #   （pw_10523・pw_10501）。型式名（DMMで確かめた L…）からスマスロと分かれば smart を足す。
+    import claim_identity as _ci_v
+    import functools as _ft_v
+    verify = _ft_v.partial(verify, my_tags=_ci_v.verify_tags(cur, name))
     vo = verify(name, url, maker, old_release, require_recent=False)
     if vo.get("problems"):
         out["problems"] += [f"本人性を確かめ直せません: {p}" for p in vo["problems"]]
@@ -3683,6 +3689,9 @@ def selftest() -> int:
     t("★★育成は本人性の確認に新台の範囲を当てない（require_recent=False）★★"
       "（★導入2か月目から育成が毎朝止まっていた★）",
       _vkw.get("require_recent") is False)
+    t("★★育成は本人性の確認に自機種のタグ（型式名から読んだスマスロ）を渡す★★"
+      "（★渡さないと、名前にスマスロ表記の無いL機が毎朝止まる＝pw_10523★）",
+      isinstance(_vkw.get("my_tags"), set))
 
     # ★★止める判断のほうが先にあると、問いが1つも作られない★★
     #   （2026-09-08・Codexの指摘）★新台側は直したが育成側が残っていた★

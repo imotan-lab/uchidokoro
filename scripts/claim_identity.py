@@ -298,7 +298,29 @@ def machine_tags(machine: dict) -> set[str]:
         tags.add("smart_name")
     elif is_smart_text(machine.get("info") or ""):
         tags.add("smart")
+    elif _L_MODEL_CODE_RE.match(unicodedata.normalize(
+            "NFKC", str(((machine.get("identity") or {}).get("regulatory_model_code")) or ""))):
+        # ★★DMMで確かめた型式名が L… ならスマスロ★★（2026-11-09）＝新台経路は info が空で、
+        #   名前にスマスロ・Lが無い機種が、DMMの題に「スマスロ」が付くと毎朝止まった。
+        #   ★smart_name は付けない★（名前に表記が無いので、題に世代表記を要求しない）
+        tags.add("smart")
     return tags
+
+
+def verify_tags(machine: dict, name: str) -> set[str]:
+    """★DMMの機種ページで本人性を確かめ直すときの自機種のタグ★（2026-11-09）
+
+    今までどおり名前から読む（detect_tags）。★それに、型式名などからスマスロと分かれば smart を足す★。
+    ★smart_name は足さない★＝確かめ直しの判定を今までより厳しくしない（名前から読む形を保つ）。
+    """
+    tags = set(detect_tags(name or ""))
+    if "smart" in machine_tags(machine or {}):
+        tags.add("smart")
+    return tags
+
+
+# ★型式名の先頭の L（スマスロの型式）★＝直後が英字でないこと（LBは型式の接頭辞として扱う）
+_L_MODEL_CODE_RE = re.compile(r"^[lｌ][bｂ]?(?=[^a-z]|$)", re.IGNORECASE)
 
 
 def title_tokens(title: str, cores=()) -> list[str]:
@@ -917,6 +939,29 @@ def selftest() -> int:
        "LB機の題に『スマスロ』があっても自己不合格しない（dmm_5089の実例）")
     eq(is_smart_text("Lbaby"), False, "L+英単語（Lbaby）は接頭辞にしない")
     eq(is_smart_text("LBX"), False, "LBの直後が英字なら接頭辞にしない")
+    # ★★DMMで確かめた型式名（L…）もスマスロの手がかりにする★★（2026-11-09・更新タスクの自己修正）
+    #   新台経路の機種は info が空で、名前にスマスロ・Lが無い機種（モグモグ風林火山 大海戦の巻・
+    #   パチスロ見える子ちゃん）は、DMMの題に「スマスロ」が付いた日から
+    #   「タイトルはスマスロ版だが自機種はスマスロではない」で毎朝止まった（11/07〜）。
+    #   型式名は DMM の機種ページで確かめた本人性の値（identity.regulatory_model_code）。
+    mogu = {"slug": "zzz_mogu", "name": "モグモグ風林火山 大海戦の巻", "info": "",
+            "identity": {"regulatory_model_code": "Lモグモグ風林火山 大海戦の巻ZB"}}
+    eq(machine_tags(mogu), {"smart"}, "型式名がL…ならスマスロ扱い（名前に表記が無いので smart_name は付けない）")
+    eq(check_tags("モグモグ風林火山 大海戦の巻 スマスロ パチスロ", machine_tags(mogu))[0], True,
+       "型式名L…の機種は、DMMの題に『スマスロ』があっても自己不合格しない（pw_10523の実例）")
+    mogu_nocode = {"slug": "zzz_mogu2", "name": "モグモグ風林火山 大海戦の巻", "info": "", "identity": {}}
+    eq(machine_tags(mogu_nocode), set(), "型式名が無ければ今までどおり（スマスロと決めない）")
+    eq(machine_tags({"slug": "zzz_p", "name": "見える子ちゃん", "info": "",
+                     "identity": {"regulatory_model_code": "P見える子ちゃん"}}), set(),
+       "型式名がL…でなければスマスロ扱いにしない")
+    eq(verify_tags(mogu, "モグモグ風林火山 大海戦の巻"), {"smart"},
+       "確かめ直しのタグにも型式名のスマスロが入る（smart_name は入れない）")
+    eq(verify_tags(mogu_nocode, "スマスロ 北斗の拳"), {"smart"},
+       "名前から読むタグは今までどおり（detect_tags と同じ）")
+    import dmm_machine as _dm_t
+    eq(_dm_t.name_matches("モグモグ風林火山 大海戦の巻 スマスロ パチスロ", "モグモグ風林火山 大海戦の巻",
+                          my_tags=verify_tags(mogu, "モグモグ風林火山 大海戦の巻"))[0], True,
+       "DMMの見出しの照合まで型式名のタグが届けば通る（pw_10523の実例の呼び出し口）")
     # 括弧の外の比較・続編（Codex指摘3・4）
     eq(check_title("【スマスロ北斗の拳】VS L吉宗 天井比較", ["北斗の拳"], ["吉宗"])[0], False,
        "括弧の外の他機種併記は不合格")

@@ -6,7 +6,7 @@
   "assets/data/directory-catalogs.json": "71ca214aa172045200b80c05b650052b3d1349aabc1259d008ff74a5492d7f7b",
   "assets/data/maker-catalogs.json": "c1bfaa9377e999f95bcefc5d1958a88e07356d2dbb40f2e1f6ef2a68e2952308",
   "assets/data/source-registry.json": "04a755e507c115889e5b35a3c0206be3612f9dd3130113ae2c3f694b662a2341",
-  "scripts/add_machine_run.py": "26dafc57fa4e9f42a1ac4d8ea1974cfbc08d7d4b4ae23ff5f207ce166ddba222",
+  "scripts/add_machine_run.py": "be0fd25da5c62ab08094918065dd66f485b8ad8926ce26c18fd9a774a90be730",
   "scripts/adoption_basis.py": "b816e9cabae59738572420fbf6d77b888ad70fc5d6585aacf6e783ac9188c2d0",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "308cf1510e49f3cc57354e66ad2acef887c60fca87c7b09b536d6b011a6c8169",
@@ -292,6 +292,5 @@
    "page_reading",
    "read_failure"
   ]
- },
- "_deps_changed_why": "confirmed_values.bind_machine が、昔からある機種（identity を持たない約120機種）の確定値を記録できるよう、2AIが控えたDMMの機種ページとの結び付け（scripts/legacy_binding.py）を読むようにした。どの機種の確定値かを決める部品なので、材料の契約の一覧（CONTRACT_INPUTS）にも入れた。夕方のランキングのタスクの初回（2026-11-07）で上位10の20機種すべてが記録できず、恩恵の一言を1件も書けなかったため。"
+ }
 }

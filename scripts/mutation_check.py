@@ -307,6 +307,35 @@ MUTATIONS = [
         "issues": [],
     },
     {
+        "why": "★DMMで確かめた型式名（L…）をスマスロの手がかりにしない"
+               "（★名前にスマスロ・Lが無い新台経路の機種が、DMMの題に『スマスロ』が付いた日から"
+               "本人性の確認で毎朝止まる＝pw_10523・pw_10501 の実例★）★",
+        "file": "scripts/claim_identity.py",
+        "before": "    elif _L_MODEL_CODE_RE.match(unicodedata.normalize(",
+        "after": "    elif False and _L_MODEL_CODE_RE.match(unicodedata.normalize(",
+        "run": ["scripts/claim_identity.py"],
+        "issues": [],
+    },
+    {
+        "why": "★DMMの見出しの照合に自機種のタグを渡さない"
+               "（★型式名からスマスロと分かっても名前だけで判定され、pw_10523・pw_10501 の"
+               "本人性の確かめ直しが毎朝止まる★＝Codexの指摘P1）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '    ok, why = _dm.name_matches(got["heading"], name, my_tags=my_tags)',
+        "after": '    ok, why = _dm.name_matches(got["heading"], name)',
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [],
+    },
+    {
+        "why": "★育成の本人性の確かめ直しに自機種のタグを渡さない"
+               "（★名前にスマスロ表記の無いL機の育成が毎朝止まる＝pw_10523★＝Codexの指摘P1）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    verify = _ft_v.partial(verify, my_tags=_ci_v.verify_tags(cur, name))",
+        "after": "    pass",
+        "run": ["scripts/grow_machine.py"],
+        "issues": [],
+    },
+    {
         "why": "★AIごとの判断がそろっているかを見ない"
                "（★1つだけの実行が「2AIで決めた」ことになる＝"
                "実行漏れ・配線切れに気づけない★＝Codexの指摘1）★",
