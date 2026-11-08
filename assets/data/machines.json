@@ -1485,13 +1485,14 @@
     "ceiling:GAME:CZ間",
     "ceiling:GAME:ボーナス間",
     "ceiling:POINT:思春期ポイント",
+    "ceiling:THROUGH:CZ",
     "cz:エピソードチャンス",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-29",
-   "input_digest": "sha256:45f6a74ba62edd94348f5dce5429a1c637624ce5317136247a450cd00ae9f68c"
+   "decided_at": "2026-11-09",
+   "input_digest": "sha256:1ece240def29200d46fbe50e2c21a448aeae45cca185b9357c5286d52c735d90"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
