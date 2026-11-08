@@ -38,8 +38,11 @@ _LINE_KEYS = ("caution", "good", "excellent", "target", "ceiling")
 
 
 def _good_ok(v) -> bool:
-    """★使える線か★＝正の整数・番兵未満・真偽値でない（400.0 は使わない＝Python と JS の差を作らない）"""
-    return type(v) is int and 0 < v < NO_TARGET
+    """★使える線か★＝0以上の整数・番兵未満・真偽値でない（400.0 は使わない＝Python と JS の差を作らない）
+
+    ★0Gも使える線★（2026-11-08）＝リセット直後から狙える機種がある。checker_verdict も 0 を受け取る。
+    """
+    return type(v) is int and 0 <= v < NO_TARGET
 
 
 def _rows(conf: dict):
@@ -243,6 +246,14 @@ def selftest() -> int:
     t("★数字でない good（400.0・文字・真偽値）は線に数えない★",
       not renderable(mm(normal={"good": 400.0})) and not renderable(mm(normal={"good": "400"}))
       and not renderable(mm(normal={"good": True})))
+    # ★★0Gの線も使える線★★（2026-11-08・checker_verdict が 0G を受け取るようにしたので、
+    #   こちらが断ると新台の狙い目が4か所とも隠れる＝Codex の指摘）
+    _z = mm(modes=[{"key": "normal", "label": "通常"}, {"key": "reset", "label": "リセット後"}],
+            reset={"ceiling": 600, "caution": 0, "good": 0, "excellent": 100})
+    t("★★0Gの線（リセット直後から狙える）も出せる★★（直す前は 1〜 しか使えなかった）",
+      renderable(_z) and projection_id(_z) and "0G" in box_text(_z))
+    t("　負の線は今までどおり出さない",
+      not renderable(mm(normal={"good": -1})))
     t("★番兵（99999）・停止中の欄は出さない★",
       not renderable(mm(normal={"good": 99999}))
       and not renderable(mm(normal={"good": 400, "_disabled": True})))

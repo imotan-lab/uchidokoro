@@ -163,6 +163,28 @@ MUTATIONS = [
         "run": ["scripts/checker_verdict.py"],
         "issues": [],
     },
+    {
+        "why": "★2AIが決めた0Gの線（リセット直後から狙える）を、線を書く道具が断る"
+               "（★2026-11-08 まどマギ フォルテが 100G のまま直せなかった★）★",
+        "file": "scripts/checker_verdict.py",
+        "before": ("            v = _int(md.get(lv))\n"
+                   "            # ★線は0Gも受け取る★（リセット直後から狙える機種がある・2026-11-08）。天井は1以上のまま\n"
+                   "            if v is None or not (0 <= v <= MAX_VALUE):"),
+        "after": ("            v = _int(md.get(lv))\n"
+                  "            if v is None or not (0 < v <= MAX_VALUE):"),
+        "run": ["scripts/checker_verdict.py"],
+        "issues": [],
+    },
+    {
+        "why": "★交換率ごとの線で、2AIが決めた0Gを断る（直下の線と同じ穴が交換率の側に残る）★",
+        "file": "scripts/checker_verdict.py",
+        "before": ("            v = _int(rv.get(lv))\n"
+                   "            if v is None or not (0 <= v <= MAX_VALUE):"),
+        "after": ("            v = _int(rv.get(lv))\n"
+                  "            if v is None or not (0 < v <= MAX_VALUE):"),
+        "run": ["scripts/checker_verdict.py"],
+        "issues": [],
+    },
     # ★★名簿に無いメーカーで新台を止めない（2026-10-10・L牙狼が12晩止まった）★★
     {
         "why": "★名簿に無いメーカーの新台を、見つけた段で待たせる"
@@ -8329,6 +8351,13 @@ MUTATIONS = [
         "file": "scripts/target_projection.py",
         "before": "    if not all(_good_ok(s[\"good\"]) for s in st):\n",
         "after": "    if not any(_good_ok(s[\"good\"]) for s in st):\n",
+        "run": ["scripts/target_projection.py"],
+    },
+    {
+        "why": "★新台の狙い目：2AIが決めた0Gの線を『使えない線』と読み、狙い目を4か所とも隠す（2026-11-08・Codexの指摘）★",
+        "file": "scripts/target_projection.py",
+        "before": "    return type(v) is int and 0 <= v < NO_TARGET\n",
+        "after": "    return type(v) is int and 0 < v < NO_TARGET\n",
         "run": ["scripts/target_projection.py"],
     },
     {

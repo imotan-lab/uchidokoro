@@ -388,8 +388,9 @@ def decision_problems(dec, ms=None) -> list:
             if lv not in md:
                 continue
             v = _int(md.get(lv))
-            if v is None or not (0 < v <= MAX_VALUE):
-                ng.append(f"{tag}: {lv} が 1〜{MAX_VALUE} の整数ではありません")
+            # ★線は0Gも受け取る★（リセット直後から狙える機種がある・2026-11-08）。天井は1以上のまま
+            if v is None or not (0 <= v <= MAX_VALUE):
+                ng.append(f"{tag}: {lv} が 0〜{MAX_VALUE} の整数ではありません")
                 continue
             vals[lv] = v
         if "good" not in vals and not ((md.get("byRate") or "rows" in md) and key in _have):
@@ -508,8 +509,8 @@ def by_rate_problems(tag, md, rates, limit, why, m, key, nums) -> list:
             if lv not in rv:
                 continue
             v = _int(rv.get(lv))
-            if v is None or not (0 < v <= MAX_VALUE):
-                ng.append(f"{rt}: {lv} が 1〜{MAX_VALUE} の整数ではありません")
+            if v is None or not (0 <= v <= MAX_VALUE):
+                ng.append(f"{rt}: {lv} が 0〜{MAX_VALUE} の整数ではありません")
                 continue
             vals[lv] = v
         old = old_by.get(rk) if isinstance(old_by.get(rk), dict) else {}
@@ -2322,6 +2323,27 @@ def selftest() -> int:
           not decision_problems(
               dec(modes=[{"key": "reset", "label": "リセット後",
                           "good": 400}]), base_ms))
+        # ★★0Gの線も受け取る★★（2026-11-08・ランキングのタスクが まどマギ フォルテの
+        #   リセットを 100G→0G と2AIで決めたのに、1〜20000 しか受け取らず直せなかった。
+        #   0Gの線は既に10機種のチェッカーにある＝読む側は 0 を扱える）
+        t("★★リセットの線を0Gにする決定を受け取る★★（直す前は 1〜 しか通らなかった）",
+          not decision_problems(
+              dec(modes=[{"key": "reset", "label": "リセット後",
+                          "caution": 0, "good": 0}]), base_ms))
+        t("　0Gを書くと、その欄の good・caution が 0 になる",
+          (lambda c: c.get("good") == 0 and c.get("caution") == 0)(
+              merged(base_ms[1], dec(slug="zzz_legacy",
+                                     modes=[{"key": "reset", "label": "リセット後",
+                                             "caution": 0, "good": 0}])
+                     )["checker"].get("reset") or {}))
+        t("★負の線は今までどおり受け取らない★",
+          any("整数ではありません" in x for x in decision_problems(
+              dec(modes=[{"key": "reset", "label": "リセット後",
+                          "good": -1}]), base_ms)))
+        t("★天井は今までどおり0を受け取らない★（0Gの天井は天井ではない）",
+          any("ceiling が" in x for x in decision_problems(
+              dec(modes=[{"key": "normal", "label": "通常", "ceiling": 0,
+                          "good": 0}]), base_ms)))
         # ★★欄ごとに天井が違う機種★★（2026-09-18・Codexの2回目の指摘）
         #   ★直す前★＝「全部の天井のいちばん深いところ」だけを見ていたので、
         #   浅い欄に深い線を入れても通り、★書いたあとは good > その欄の天井★。
@@ -2480,6 +2502,11 @@ def selftest() -> int:
               for x in decision_problems(_rd({"eq56": {"good": 450}}), _rate_m)))
         t("　元から逆転していない試験機である（上の試験が元の姿で赤くなっていない）",
           not decision_problems(_rd({"eq56": {"good": 390}}), _rate_m))
+        t("★★交換率ごとの線も0Gを受け取る★★（2026-11-08）",
+          not decision_problems(_rd({"eq56": {"caution": 0, "good": 0}}), _rate_m))
+        t("　交換率ごとの線も、負は受け取らない",
+          any("整数ではありません" in x
+              for x in decision_problems(_rd({"eq56": {"good": -1}}), _rate_m)))
         import copy as _cp
         # ★等価が先頭の機種★＝等価の線は直下の値（byRate に行が無い）
         _eq_m = _cp.deepcopy(_rate_m)
