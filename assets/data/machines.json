@@ -738,7 +738,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-02",
+   "decided_at": "2026-11-09",
    "input_digest": "sha256:dcf2495482b81c81f2abb067d53c97a79a05537ed0fe6e533e4a7d27a9ed5551"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -766,9 +766,12 @@
     }
    ],
    "normal": {
-    "ceiling": 999
+    "ceiling": 999,
+    "good": 660,
+    "target": 660
    }
-  }
+  },
+  "targetProjection": "1c082c0cdc071eef"
  },
  {
   "slug": "dmm_5095",
