@@ -180,7 +180,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-03",
+   "decided_at": "2026-11-09",
    "input_digest": "sha256:5c2fed8e3d2862c5cb5c2cee3ff82b6243379ddec03195727c69cb0d8045c94b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -205,12 +205,27 @@
     {
      "key": "normal",
      "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット後"
     }
    ],
    "normal": {
-    "ceiling": 975
+    "ceiling": 975,
+    "caution": 700,
+    "good": 800,
+    "excellent": 900,
+    "target": 800
+   },
+   "reset": {
+    "caution": 150,
+    "good": 200,
+    "excellent": 250,
+    "target": 200
    }
-  }
+  },
+  "targetProjection": "6a7d10edf22193c9"
  },
  {
   "slug": "dmm_5079",
