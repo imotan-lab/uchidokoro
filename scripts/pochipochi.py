@@ -11,6 +11,14 @@
   ・2AIが決めたことを決定ファイルで受け取る（`--apply <決定ファイル>`）
       ADD     … 設定差のある小役の確率表を足す（カウンターが使えるようになる）
       NO_DIFF … 小役による設定差が無い（「小役による設定差なし」と出す）
+      EXTEND  … ★自動で足した機種に、小役などの表を足す★（今ある表は残す・2026-11-10）
+      KO_CHECK… ★小役の差を探した結果だけを控える★（HAS＝もう入っている／NONE＝見つからない）
+  ・★★小役の確認（ko_checked）★★（2026-11-10・運営者「ほとんどがゲーム数と当たり数で意味がない」）
+      初当たり回数だけでも1度入れると「使える」になり、STEP 1-P が二度と見直さなかった
+      （自動で足した77機種のうち61機種が当たり回数だけだった）。
+      ★自動の機種は、2AIが小役の差を探した記録が無ければ STEP 1-P の対象に戻す★。
+      ★NONE は KO_RECHECK_DAYS 日たったらもう一度探す★（解析はあとから出る）。
+      ★どれが小役かを機械に判定させない★（項目名の名簿を作らない＝鉄則0z）。決めるのは2AIの記録だけ。
   ・機械が見るのは形と照合だけ（★意味の判断はしない★＝鉄則0z）
       判断者の組／理由15字以上／設定の段階を明示し、全部の表がちょうどその段階を持つ
       （★存在しない設定の欄を埋めない★）／値は 1/x の形／
@@ -58,6 +66,9 @@ SCHEMA = 1
 BEGIN = "  // ★POCHI-AUTO-BEGIN★（scripts/pochipochi.py が控えから作る・手で書かない）"
 END = "  // ★POCHI-AUTO-END★"
 NO_DIFF_REASON = "小役による設定差なし"
+KO_RESULTS = ("HAS", "NONE")
+KO_RECHECK_DAYS = 60
+_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MIN_WHY = 15
 _ID = re.compile(r"^[A-Za-z][A-Za-z0-9]{0,31}$")
 _SLUG = re.compile(r"^[a-z0-9_]{1,64}$")
@@ -70,7 +81,7 @@ class PochiError(RuntimeError):
 
 # ── 控え ────────────────────────────────────────────────────────────
 def empty() -> dict:
-    return {"schema_version": SCHEMA, "configs": {}, "no_diff": {}}
+    return {"schema_version": SCHEMA, "configs": {}, "no_diff": {}, "ko_checked": {}}
 
 
 def load(path: str = None) -> dict:
@@ -98,6 +109,24 @@ def load(path: str = None) -> dict:
     for slug in d["no_diff"]:
         if not _SLUG.match(str(slug)):
             raise PochiError(f"控えの機種名が壊れています: {slug!r}")
+    # ★小役の確認の記録★（無い控えは古い形＝空として読む）
+    kc = d.setdefault("ko_checked", {})
+    if not isinstance(kc, dict):
+        raise PochiError("控えの ko_checked が組（辞書）ではありません")
+    extra_top = set(d) - {"schema_version", "configs", "no_diff", "ko_checked"}
+    if extra_top:
+        raise PochiError(f"控えに知らない項目があります: {sorted(extra_top)}")
+    for slug, rec in kc.items():
+        if slug not in d["configs"]:
+            raise PochiError(f"表の無い機種に小役の確認の記録があります: {slug!r}")
+        if (not isinstance(rec, dict) or set(rec) != {"result", "checked"}
+                or rec.get("result") not in KO_RESULTS
+                or not _DATE.match(str(rec.get("checked") or ""))):
+            raise PochiError(f"控えの小役の確認の記録が壊れています: {slug!r}")
+        try:
+            datetime.date.fromisoformat(rec["checked"])
+        except ValueError:
+            raise PochiError(f"控えの小役の確認の日付が壊れています: {slug!r}")
     return d
 
 
@@ -129,6 +158,25 @@ def status_override(slug: str, store: dict = None):
         return (True, "")
     if slug in d.get("no_diff", {}):
         return (False, NO_DIFF_REASON)
+    return None
+
+
+def ko_due(slug: str, store: dict, today: datetime.date = None):
+    """★自動で足した機種の、小役の差をもう一度探す番か★（理由の文 か None）
+
+    ★見るのは2AIの記録だけ★（どの項目が小役かを機械は判定しない）。
+    手で書いた機種・控えに表の無い機種は None（ここでは扱わない）。
+    """
+    if slug not in store.get("configs", {}):
+        return None
+    rec = (store.get("ko_checked") or {}).get(slug)
+    if not rec:
+        return "小役の差を2AIでまだ探していない"
+    if rec["result"] == "NONE":
+        today = today or datetime.date.today()
+        days = (today - datetime.date.fromisoformat(rec["checked"])).days
+        if days >= KO_RECHECK_DAYS:
+            return f"小役の差が見つからなかった日から{days}日たった（{KO_RECHECK_DAYS}日でもう一度探す）"
     return None
 
 
@@ -242,19 +290,35 @@ def shape_problems(d: dict, rows: dict, static: set) -> list:
     if not _SLUG.match(slug) or slug not in rows:
         return [f"機種一覧に無い slug です: {slug!r}"]
     kind = d.get("decision")
-    if kind not in ("ADD", "NO_DIFF"):
-        return ["decision は ADD か NO_DIFF です"]
+    if kind not in ("ADD", "NO_DIFF", "EXTEND", "KO_CHECK"):
+        return ["decision は ADD / NO_DIFF / EXTEND / KO_CHECK のどれかです"]
     if _cv.judges_pair(d.get("by") or []) is None:
         p.append("判断者の組がそろっていません（claude と codex、または代役の2人）")
     if len(str(d.get("why") or "").strip()) < MIN_WHY:
         p.append(f"理由（why）は{MIN_WHY}字以上で書きます")
     if slug in static:
         p.append("手で書いた対応がある機種です（ここでは上書きしません）")
+    if "ko" in d and d.get("ko") not in KO_RESULTS:
+        p.append("ko は HAS か NONE です")
+    if kind == "KO_CHECK":
+        # ★表を変えないので出典は任意★（「見つからない」は引用できない）。何を探したかは why に書く
+        if d.get("ko") not in KO_RESULTS:
+            p.append("KO_CHECK には ko（HAS か NONE）が要ります")
+        extra = set(d) & {"settings", "fields", "rates", "note", "resultNote", "settingLabels"}
+        if extra:
+            p.append(f"KO_CHECK では表を書きません: {sorted(extra)}")
+        if not isinstance(d.get("sources", []), list):
+            p.append("出典（sources）は並びで書きます")
+        return p
+    if kind in ("NO_DIFF", "EXTEND") and "ko" in d:
+        p.append(f"{kind} には ko を書きません")
     srcs = d.get("sources") or []
     if not isinstance(srcs, list) or not srcs:
         p.append("出典（sources）が要ります")
     if kind == "NO_DIFF":
         return p
+    if kind == "EXTEND" and "settingLabels" in d:
+        p.append("EXTEND では settingLabels を変えません")
     return p + config_problems(d)
 
 
@@ -374,6 +438,28 @@ def _parse_sources(raw: list) -> list:
     return out
 
 
+def extend_problems(d: dict, cur: dict) -> list:
+    """★EXTEND は今ある表に足すだけ★（今ある表を書き換えない・消さない）"""
+    p = []
+    if d.get("settings") != cur.get("settings"):
+        p.append(f"EXTEND の settings は今の表と同じにします: {cur.get('settings')}")
+    # ★今ある項目との重なりは、足したあとの表で見る★（id・rateKey の重なりを config_problems が断る
+    #   ＝確かめた表を別の値で上書きできない）
+    p += config_problems(merged_config(cur, d))
+    return p
+
+
+def merged_config(cur: dict, d: dict) -> dict:
+    """今ある表＋足す表（note・resultNote は書いてあれば置き換える）"""
+    m = json.loads(json.dumps(cur))
+    m["fields"] = m["fields"] + json.loads(json.dumps(d.get("fields") or []))
+    m["rates"].update(json.loads(json.dumps(d.get("rates") or {})))
+    for k in ("note", "resultNote"):
+        if d.get(k):
+            m[k] = d[k]
+    return m
+
+
 def _rows() -> dict:
     return {m["slug"]: m for m in _sj.read_rows(MACHINES)}
 
@@ -389,10 +475,18 @@ def plan(d: dict, fetch=None, store: dict = None, html: str = None,
     if p:
         return {"ok": False, "problems": p}
     try:
-        sources = _parse_sources(d["sources"])
+        sources = _parse_sources(d.get("sources") or [])
     except Exception as e:                 # noqa: BLE001
         return {"ok": False, "problems": [f"出典を読めません: {e}"]}
-    if d["decision"] == "ADD":
+    slug = d["slug"]
+    cur = store["configs"].get(slug)
+    if d["decision"] in ("EXTEND", "KO_CHECK") and cur is None:
+        return {"ok": False, "problems": [f"{d['decision']} は、自動で足した表がある機種にだけ使えます"]}
+    if d["decision"] == "EXTEND":
+        p += extend_problems(d, cur)
+        if p:
+            return {"ok": False, "problems": p}
+    if d["decision"] in ("ADD", "EXTEND"):
         p += support_problems(d, sources)
         if p:
             return {"ok": False, "problems": p}
@@ -402,7 +496,8 @@ def plan(d: dict, fetch=None, store: dict = None, html: str = None,
     except _cv.ConfirmedError as e:
         return {"ok": False, "problems": [f"出典を確かめられません: {e}"]}
     new = json.loads(json.dumps(store))
-    slug = d["slug"]
+    new.setdefault("ko_checked", {})
+    today = datetime.date.today().isoformat()
     if d["decision"] == "ADD":
         cfg = {"settings": d["settings"], "fields": d["fields"], "rates": d["rates"]}
         for k in ("note", "resultNote", "settingLabels"):
@@ -410,12 +505,24 @@ def plan(d: dict, fetch=None, store: dict = None, html: str = None,
                 cfg[k] = d[k]
         new["configs"][slug] = cfg
         new["no_diff"].pop(slug, None)
+        # ★小役の確認は、書いたときだけ記録★（書かなければ次に担当したときにまた探す）
+        if d.get("ko") in KO_RESULTS:
+            new["ko_checked"][slug] = {"result": d["ko"], "checked": today}
+        else:
+            new["ko_checked"].pop(slug, None)
+    elif d["decision"] == "EXTEND":
+        new["configs"][slug] = merged_config(cur, d)
+        new["ko_checked"][slug] = {"result": "HAS", "checked": today}
+    elif d["decision"] == "KO_CHECK":
+        new["ko_checked"][slug] = {"result": d["ko"], "checked": today}
     else:
         if slug in new["configs"]:
             return {"ok": False, "problems": ["対応済みの機種を「設定差なし」にはしません"
                                               "（表を消す道具にしない）"]}
         new["no_diff"][slug] = {"reason": NO_DIFF_REASON}
     basis = {"decision": d["decision"], "by": sorted(_cv._judge_names(d["by"])),
+             **({"ko": new["ko_checked"][slug]["result"]} if slug in new["ko_checked"]
+                and d["decision"] != "NO_DIFF" else {}),
              "why": str(d["why"]).strip()[:300],
              "decided_at": datetime.date.today().isoformat(),
              "sources": verified}
@@ -836,6 +943,116 @@ def selftest() -> int:
       bool(check_problems(r["html"].replace("1/210.1", "1/200.0", 1), r["store"])))
     # ★本物の setting.html と控えが今そろっているか★（作り直し忘れを止める）
     t("★★本物の setting.html と控えがそろっている★★", check_problems() == [])
+
+    # ★★小役の確認（ko_checked）と EXTEND / KO_CHECK★★（2026-11-10）
+    _today = datetime.date(2026, 11, 10)
+    st_a = r["store"]                      # zzz_a に cherry の表がある控え（記録なし）
+    t("★★自動で足した機種は、小役の差を探した記録が無ければ探す番★★",
+      ko_due("zzz_a", st_a, _today) is not None)
+    t("　手で書いた機種・表の無い機種は扱わない",
+      ko_due("hokuto", st_a, _today) is None and ko_due("zzz_none", st_a, _today) is None)
+    _sh = json.loads(json.dumps(st_a))
+    _sh["ko_checked"]["zzz_a"] = {"result": "HAS", "checked": "2026-01-01"}
+    t("　HAS と記録した機種は探し直さない（日がたっても）", ko_due("zzz_a", _sh, _today) is None)
+    _sn = json.loads(json.dumps(st_a))
+    _sn["ko_checked"]["zzz_a"] = {"result": "NONE", "checked": "2026-09-11"}
+    t("★NONE は60日たったらもう一度探す★", ko_due("zzz_a", _sn, _today) is not None)
+    _sn["ko_checked"]["zzz_a"]["checked"] = "2026-09-12"
+    t("　（対照）59日なら探さない", ko_due("zzz_a", _sn, _today) is None)
+
+    qk1 = "試験機A 弱スイカ 設定1 1/99.1 設定6 1/80.2 の確率です。"
+    qk2 = "試験機Aの弱スイカは設定1が1/99.1、設定6が1/80.2となっています。"
+    page_k = page.replace("</body>", "<p>%s</p><p>%s</p></body>" % (qk1, qk2))
+    ext = {"slug": "zzz_a", "decision": "EXTEND", "by": ["claude", "codex"],
+           "why": "2つの出典の弱スイカの設定別の表を突き合わせて一致しました",
+           "settings": [1, 6],
+           "fields": [{"id": "weakWm", "label": "弱スイカ", "sub": "通常時", "rateKey": "weakWm"}],
+           "rates": {"weakWm": {"1": "1/99.1", "6": "1/80.2"}},
+           "sources": [{"url": "https://chonborista.com/slot/zzz/", "quote": qk1},
+                       {"url": "https://nana-press.com/kaiseki/zzz/", "quote": qk2}]}
+    re_ = plan(json.loads(json.dumps(ext)), fetch=lambda u: page_k, store=st_a, html=r["html"], rows=rows)
+    t("★★EXTEND は今ある表を残したまま小役の表を足す★★",
+      re_["ok"] and [f["id"] for f in re_["store"]["configs"]["zzz_a"]["fields"]] == ["cherry", "weakWm"]
+      and re_["store"]["configs"]["zzz_a"]["rates"]["cherry"] == {"1": "1/210.1", "6": "1/190.5"}
+      and "weakWm: {1:1/99.1,6:1/80.2}" in re_["html"])
+    t("　EXTEND したら小役の確認は HAS（もう探さない）",
+      re_["ok"] and re_["store"]["ko_checked"]["zzz_a"]["result"] == "HAS"
+      and ko_due("zzz_a", re_["store"]) is None)
+    t("　EXTEND の控えは読む段の検査も通る（区画とそろう）",
+      re_["ok"] and check_problems(re_["html"], re_["store"]) == [])
+
+    def ext_bad(mut, why, must, store=None):
+        d = json.loads(json.dumps(ext))
+        mut(d)
+        try:                               # ★落ちたら不合格として数える★
+            rr = plan(d, fetch=lambda u: page_k, store=store or st_a, html=r["html"], rows=rows)
+        except Exception as e:             # noqa: BLE001
+            rr = {"ok": True, "problems": [f"例外 {type(e).__name__}"]}
+        t(why, (not rr["ok"]) and any(must in x for x in rr["problems"]))
+    ext_bad(lambda d: d["fields"][0].update(id="cherry", rateKey="cherry")
+            or d.update(rates={"cherry": d["rates"]["weakWm"]}),
+            "★★EXTEND で今ある項目を書き換えない★★", "重なっています")
+    ext_bad(lambda d: d.update(settings=[1, 2, 6]) or d["rates"]["weakWm"].update({"2": "1/90.0"}),
+            "★EXTEND の段階は今の表と同じ★", "今の表と同じ")
+    ext_bad(lambda d: d.update(slug="hokuto"), "　EXTEND は手で書いた機種には使えない", "手で書いた")
+    ext_bad(lambda d: None, "★EXTEND は表の無い機種には使えない★", "自動で足した表がある機種", store=empty())
+    ext_bad(lambda d: d["rates"]["weakWm"].update({"6": "1/80.3"}),
+            "★★EXTEND でも足す表の値は独立2出典の逐語に在ること★★", "独立した2つの出典")
+    ext_bad(lambda d: d.update(ko="NONE"), "　EXTEND に ko は書かない", "ko を書きません")
+
+    kchk = {"slug": "zzz_a", "decision": "KO_CHECK", "ko": "NONE", "by": ["claude", "codex"],
+            "why": "2サイトとも初当たり確率しか設定差を載せていないと確かめた"}
+    rk = plan(json.loads(json.dumps(kchk)), fetch=lambda u: page, store=st_a, html=r["html"], rows=rows)
+    t("★★KO_CHECK は表を変えずに記録だけ残す（出典なしで通る）★★",
+      rk["ok"] and rk["store"]["configs"] == st_a["configs"] and rk["html"] == r["html"]
+      and rk["store"]["ko_checked"]["zzz_a"]["result"] == "NONE"
+      and rk["basis"]["ko"] == "NONE")
+
+    def kc_bad(mut, why, must, store=None):
+        d = json.loads(json.dumps(kchk))
+        mut(d)
+        try:                               # ★落ちたら不合格として数える★
+            rr = plan(d, fetch=lambda u: page, store=store or st_a, html=r["html"], rows=rows)
+        except Exception as e:             # noqa: BLE001
+            rr = {"ok": True, "problems": [f"例外 {type(e).__name__}"]}
+        t(why, (not rr["ok"]) and any(must in x for x in rr["problems"]))
+    kc_bad(lambda d: d.pop("ko"), "　KO_CHECK に ko が無ければ断る", "ko（HAS か NONE）")
+    kc_bad(lambda d: d.update(ko="MAYBE"), "　ko は HAS か NONE だけ", "HAS か NONE")
+    kc_bad(lambda d: d.update(by=["claude"]), "　KO_CHECK も判断者の組が要る", "判断者の組")
+    kc_bad(lambda d: d.update(why="短い"), "　KO_CHECK も理由15字以上", "理由")
+    kc_bad(lambda d: d.update(rates={"cherry": {"1": "1/2.0", "6": "1/2.0"}}),
+           "★KO_CHECK で表を書き換えない★", "表を書きません")
+    kc_bad(lambda d: None, "★KO_CHECK は表の無い機種には使えない★", "自動で足した表がある機種", store=empty())
+    _add_ko = json.loads(json.dumps(good))
+    _add_ko["ko"] = "HAS"
+    _rak = plan(_add_ko, fetch=lambda u: page, store=empty(), html=html, rows=rows)
+    t("★ADD に ko を書けば一緒に記録する★",
+      _rak["ok"] and _rak["store"]["ko_checked"]["zzz_a"]["result"] == "HAS")
+    _rak2 = plan(json.loads(json.dumps(good)), fetch=lambda u: page, store=_rak["store"], html=_rak["html"],
+                 rows=rows)
+    t("★ko の無い ADD で表を書き直したら、記録を消して探し直す★",
+      _rak2["ok"] and "zzz_a" not in _rak2["store"]["ko_checked"])
+    # ★読む段の検査★
+    for _why, _mut in (("表の無い機種の記録", lambda s: s["ko_checked"].update(
+                            zzz_q={"result": "HAS", "checked": "2026-11-10"})),
+                       ("知らない結果", lambda s: s["ko_checked"].update(
+                            zzz_a={"result": "MAYBE", "checked": "2026-11-10"})),
+                       ("壊れた日付", lambda s: s["ko_checked"].update(
+                            zzz_a={"result": "NONE", "checked": "2026-13-40"})),
+                       ("知らない項目", lambda s: s.update(extra={}))):
+        _s = json.loads(json.dumps(re_["store"]))
+        _mut(_s)
+        _write_json(_bp, _s)
+        try:
+            load(_bp)
+            _ok = False
+        except PochiError:
+            _ok = True
+        t(f"★控えに{_why}があれば読む段で止める★", _ok)
+    _old = json.loads(json.dumps(r["store"]))
+    _old.pop("ko_checked", None)
+    _write_json(_bp, _old)
+    t("　（対照）記録の無い古い形の控えも読める", load(_bp).get("ko_checked") == {})
     print(f"{ok[0]}/{sum(ok)} 合格")
     return 0 if ok[1] == 0 else 1
 
@@ -875,20 +1092,28 @@ def main() -> int:
         reasons = _b.extract_pochipochi_reasons(io.open(
             os.path.join(BASE, "machine.html"), encoding="utf-8").read())
         rows = _rows()
+        store = load()
         for slug in a.status:
             if slug not in rows:
                 print(f"{slug}: 機種一覧にありません")
                 continue
             ok, why = _b.pochipochi_state(rows[slug], reasons)
             # ★対象＝使えない、かつ「設定差なし」と決まっていない★
+            #   ＋★自動で足した機種で、小役の差をまだ探していない（または探し直す番）★
             target = (not ok) and why != NO_DIFF_REASON
-            print(f"{slug}: {'使える' if ok else '使えない（' + why + '）'}"
-                  f" → STEP 1-P {'対象' if target else '対象外'}")
+            ko = ko_due(slug, store) if ok else None
+            head = f"{slug}: {'使える' if ok else '使えない（' + why + '）'}"
+            if ko:
+                print(head + f" → STEP 1-P 対象（小役：{ko}）")
+            else:
+                print(head + f" → STEP 1-P {'対象' if target else '対象外'}")
         return 0
     if a.list:
         d = load()
         print(f"対応（自動）: {len(d['configs'])} 機種 {sorted(d['configs'])}")
         print(f"設定差なし（自動）: {len(d['no_diff'])} 機種 {sorted(d['no_diff'])}")
+        due = sorted(s for s in d["configs"] if ko_due(s, d))
+        print(f"小役の差を探す番（自動）: {len(due)} 機種 {due}")
         return 0
     if a.apply:
         r = apply(a.apply, dry=a.dry_run)

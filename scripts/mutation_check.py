@@ -9917,6 +9917,55 @@ MUTATIONS = [
         "after": "            )\n",
         "run": ["scripts/pre_push_check.py"],
     },
+    {
+        "why": "★ポチポチくん：小役の差を探した記録が無くても、自動の機種を探す番にしない（当たり回数だけで固まる）★",
+        "file": "scripts/pochipochi.py",
+        "before": "    if not rec:\n        return \"小役の差を2AIでまだ探していない\"\n",
+        "after": "    if not rec:\n        return None\n",
+        "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★ポチポチくん：「見つからない」と控えた機種を二度と探し直さない（解析があとから出ても入らない）★",
+        "file": "scripts/pochipochi.py",
+        "before": "        if days >= KO_RECHECK_DAYS:\n",
+        "after": "        if False:\n",
+        "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★ポチポチくん：EXTEND で今ある項目を上書きできる（確かめた表を別の値に差し替えられる）★",
+        "file": "scripts/pochipochi.py",
+        "before": "    p += config_problems(merged_config(cur, d))\n",
+        "after": "    pass\n",
+        "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★ポチポチくん：EXTEND で足す表を独立2出典と照合しない（数字を作れる）★",
+        "file": "scripts/pochipochi.py",
+        "before": "    if d[\"decision\"] in (\"ADD\", \"EXTEND\"):\n        p += support_problems(d, sources)\n",
+        "after": "    if d[\"decision\"] == \"ADD\":\n        p += support_problems(d, sources)\n",
+        "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★ポチポチくん：KO_CHECK で表を書き換えられる★",
+        "file": "scripts/pochipochi.py",
+        "before": "        if extra:\n            p.append(f\"KO_CHECK では表を書きません: {sorted(extra)}\")\n",
+        "after": "        pass\n",
+        "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★ポチポチくん：表の無い機種に EXTEND / KO_CHECK を通す★",
+        "file": "scripts/pochipochi.py",
+        "before": "    if d[\"decision\"] in (\"EXTEND\", \"KO_CHECK\") and cur is None:\n",
+        "after": "    if False:\n",
+        "run": ["scripts/pochipochi.py"],
+    },
+    {
+        "why": "★ポチポチくん：控えの小役の確認の記録が壊れていても読む★",
+        "file": "scripts/pochipochi.py",
+        "before": "                or rec.get(\"result\") not in KO_RESULTS\n",
+        "after": "                or False\n",
+        "run": ["scripts/pochipochi.py"],
+    },
 ]
 
 
