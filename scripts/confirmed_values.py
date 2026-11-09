@@ -893,6 +893,12 @@ def token_in_quote(token: str, quote: str) -> bool:
     forms = [t]
     if _re.fullmatch(r"\d{4,}", t):
         forms.append(f"{int(t):,}")
+    # ★★「97.8%」は、数と%のあいだに空白がある書き方（97.8 %）でも探す★★（2026-11-10・朝タスクの自己修正）＝
+    #   パチ7は機械割の表を「97.8 %」と書くので、2AIが2社一致を確かめても出玉率を記録できなかった
+    #   （喰霊-零-Re）。引用は page_form で空白を1つに詰めてあるので、空白1つの形だけ足す。
+    #   境目の判定は今までどおり（197.8 % ／ 7.8 % は断る）
+    if _re.fullmatch(r"\d+(?:\.\d+)?%", t):
+        forms.append(t[:-1] + " %")
     return any(_token_form_in_quote(f, q) for f in forms)
 
 
@@ -3283,6 +3289,15 @@ def selftest() -> int:
               not token_in_quote("1200", "天井は11,200G")
               and not token_in_quote("1200", "天井は1,2000G")
               and not token_in_quote("200", "天井は1,200G"))
+            t("★★「97.8%」は、数と%のあいだに空白のある書き方（97.8 %）でも見つける★★"
+              "（2026-11-10・喰霊-零-Re の出玉率＝パチ7は表で「97.8 %」と書く）",
+              token_in_quote("97.8%", "機械割 1 1/468.6 97.8 % 2 1/451.2 98.9 %")
+              and token_in_quote("110.0%", "6 1/279.8 110.0 % 打ち方")
+              and token_in_quote("97.8%", "機械割 1 97.8% 2 98.9%"))
+            t("　空白のある書き方でも別の数の一部には一致しない（197.8 % ／ 7.8 % は断る）",
+              not token_in_quote("97.8%", "機械割 197.8 %")
+              and not token_in_quote("7.8%", "機械割 97.8 %")
+              and not token_in_quote("97.8%", "機械割 97.8 G"))
             # ★★公開前の取り直しも、一覧の並びに頼らず全角入りで確かめる★★
             _fw_ov = verify_source({"url": "https://chonborista.com/slot/fw",
                                     "quote": _fw_q,

@@ -9966,6 +9966,16 @@ MUTATIONS = [
         "after": "                or False\n",
         "run": ["scripts/pochipochi.py"],
     },
+    # ─── 2026-11-10・朝タスクの自己修正（出玉率の「97.8 %」） ───
+    {
+        "why": "★確定値：「97.8%」を、数と%のあいだに空白のある書き方（97.8 %）で探さない"
+               "（★2AIが2社一致を確かめても喰霊-零-Reの出玉率を記録できなかった＝2026-11-10★）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "        forms.append(t[:-1] + \" %\")",
+        "after": "        pass",
+        "run": ["scripts/confirmed_values.py"],
+        "issues": [],
+    },
 ]
 
 
