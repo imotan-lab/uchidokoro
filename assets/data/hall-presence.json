@@ -2,6 +2,128 @@
  "schema": "hall-presence/v1",
  "line": 100,
  "line_why": "打てる機種をランキングで紹介するため、DMMぱちタウンに載っている全国の設置店舗が100店より少ない機種を載せない。全国的に設置が少ないことを見る編集上の基準（2026-11-09・運営者の決定を受けて Claude と Codex が決めた線。全国の営業所は2025年末で6,464店）",
- "machines": {},
- "tries": {}
+ "machines": {
+  "azurlane": {
+   "stores": 3142,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/4847"
+  },
+  "basilisk_tenzen": {
+   "stores": 2683,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/4466"
+  },
+  "dmm_5073": {
+   "stores": 2938,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/5073"
+  },
+  "dmm_5095": {
+   "stores": 4189,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/5095"
+  },
+  "dmm_5113": {
+   "stores": 2274,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/5113"
+  },
+  "dmm_5119": {
+   "stores": 3596,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/5119"
+  },
+  "dmm_5120": {
+   "stores": 2960,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/5120"
+  },
+  "enen2": {
+   "stores": 4279,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/4926"
+  },
+  "kengan_ashura": {
+   "stores": 3,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/4434"
+  },
+  "koukaku": {
+   "stores": 3473,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/4931"
+  },
+  "nangoku_special": {
+   "stores": 1726,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/5031"
+  },
+  "onepunchman": {
+   "stores": 49,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/4623"
+  },
+  "pw_10503": {
+   "stores": 4594,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/5033"
+  },
+  "pw_10523": {
+   "stores": 1314,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/5059"
+  },
+  "sao": {
+   "stores": 596,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/4352"
+  },
+  "sao2": {
+   "stores": 3640,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/5025"
+  },
+  "ssb1": {
+   "stores": 3268,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/5064"
+  },
+  "takt_opus": {
+   "stores": 1711,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/5000"
+  },
+  "umineko2": {
+   "stores": 989,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/4925"
+  },
+  "youjitsu": {
+   "stores": 118,
+   "checked": "2026-11-09",
+   "url": "https://p-town.dmm.com/machines/4770"
+  }
+ },
+ "tries": {
+  "azurlane": "2026-11-09",
+  "basilisk_tenzen": "2026-11-09",
+  "dmm_5073": "2026-11-09",
+  "dmm_5095": "2026-11-09",
+  "dmm_5113": "2026-11-09",
+  "dmm_5119": "2026-11-09",
+  "dmm_5120": "2026-11-09",
+  "enen2": "2026-11-09",
+  "kengan_ashura": "2026-11-09",
+  "koukaku": "2026-11-09",
+  "nangoku_special": "2026-11-09",
+  "onepunchman": "2026-11-09",
+  "pw_10503": "2026-11-09",
+  "pw_10523": "2026-11-09",
+  "sao": "2026-11-09",
+  "sao2": "2026-11-09",
+  "ssb1": "2026-11-09",
+  "takt_opus": "2026-11-09",
+  "umineko2": "2026-11-09",
+  "youjitsu": "2026-11-09"
+ }
 }
