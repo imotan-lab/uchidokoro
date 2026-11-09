@@ -83,6 +83,11 @@ def decision_problems(dec, machines: list, records: dict) -> list:
     m = next((x for x in machines if isinstance(x, dict) and x.get("slug") == slug), None)
     if m is None:
         return [f"{slug} は機種一覧にありません"]
+    # ★新台経路の機種は断る★（2026-11-09）＝ランキングの天井はチェッカーの基準欄の天井（build_hub_pages.auto_rank）で、
+    #   tenjo_games は使わない。しかも育成が機種行を材料から作り直すので書いても翌朝消える。直すのは checker_verdict。
+    if "publication_policy" in m:
+        return [f"{slug} は新台です。天井は checker_verdict でチェッカーの欄の天井を直してください"
+                "（ランキングはその欄の天井を使います）"]
     out = []
     by = dec.get("by")
     judges = frozenset(x.strip() for x in str(by or "").split(",") if x.strip())
@@ -222,6 +227,8 @@ def selftest() -> int:
             "before": {"tenjo_games": 999, "tenjo_display": "999G"},
             "records": ["ceiling#cz"], "by": "claude,codex", "why": "出典2つの原文でCZ間600Gを確かめた"}
     t("決まりどおりの決定は通る", decision_problems(good, ms, recs) == [])
+    t("★新台経路の機種は断る★（ランキングはチェッカーの欄の天井を使う）",
+      decision_problems(good, [dict(ms[0], publication_policy="page-decision/v1"), ms[1]], recs) != [])
     t("★直す前の値がいまと違えば断る★",
       decision_problems(dict(good, before={"tenjo_games": 800, "tenjo_display": "999G"}), ms, recs) != [])
     t("★無かった欄は __absent__ で書く★",

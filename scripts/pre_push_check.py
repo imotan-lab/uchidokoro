@@ -213,8 +213,7 @@ def _warn_unreported() -> None:
 #   index.html         … データの印を埋めるページ（guide- と同じ・2026-10-25〜）
 #   guide-*            … 手で書き換えたのを捕まえる
 #
-#   ★machine-details/ は入れない★＝この生成器は読んでいない
-#   （直す前のコメントは事実と違っていた）。
+#   machine-details/   … ★2026-11-09〜読む★（新台を入れるかを記事の指紋で決める＝auto_rank）
 _HUB_SRC = ("assets/data/machines.json", "scripts/hub_prose.json",
             "scripts/build_hub_pages.py", "scripts/page_decision.py",
             "scripts/safe_json.py", "scripts/target_display.py", "guide-",
@@ -222,7 +221,10 @@ _HUB_SRC = ("assets/data/machines.json", "scripts/hub_prose.json",
             # ★ランキング上位10の恩恵の一言★（2026-11-07）＝一言の置き場と、その形を決める道具
             "assets/data/ranking-notes.json", "scripts/ranking_note.py",
             # ★ホールにほとんど無い機種をランキングから外す控えと道具★（2026-11-09）
-            "assets/data/hall-presence.json", "scripts/hall_presence.py")
+            "assets/data/hall-presence.json", "scripts/hall_presence.py",
+            # ★新台をランキングに入れる判定（記事データと指紋）★（2026-11-09・Codex）＝
+            #   記事に狙い目が出ているかで新台が入る・外れるので、記事データと判定の道具も引き金
+            "assets/data/machine-details/", "scripts/target_projection.py")
 
 
 def _touches(paths, srcs) -> bool:
@@ -1225,9 +1227,11 @@ def _selftest() -> int:
       touches_hub(["assets/data/hall-presence.json"]) is True)
     t("★設置の道具が変わったら早見表を見る★",
       touches_hub(["scripts/hall_presence.py"]) is True)
-    # ★この生成器は機種の記事データを読んでいない★（実装で確認）
-    t("★早見表：記事データは材料ではないので見ない★",
-      touches_hub(["assets/data/machine-details/hokuto.json"]) is False)
+    # ★記事データも材料（2026-11-09〜）＝新台は記事に狙い目が出ているかでランキングに入る・外れる★
+    t("★記事データが変わったら早見表を見る（新台が入る・外れる）★",
+      touches_hub(["assets/data/machine-details/hokuto.json"]) is True)
+    t("★新台を入れる判定の道具が変わったら早見表を見る★",
+      touches_hub(["scripts/target_projection.py"]) is True)
     t("　早見表そのものを手で書き換えたときも見る",
       touches_hub(["guide-ichiran.html"]) is True)
     t("★早見表：関係ない変更では見ない★",

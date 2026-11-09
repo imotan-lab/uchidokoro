@@ -1232,6 +1232,14 @@ def check_27_hub_counts(machines: list) -> list[str]:
             _lim = _lim["normal"] if _lim.get("normal") is not None else next(iter(_lim.values()), None)
         if "tenjo_games" in m:  # ★天井ランキングは tenjo_games で数える（build_hub_pages と同じ・2026-10-25）★
             _lim = m["tenjo_games"]
+        # ★新台は、記事に狙い目が出ている機種だけランキングに入る★（2026-11-09・判定は build_hub_pages.auto_rank の1か所）
+        _mc27 = _pd.machine_class(m)
+        _ar27 = {"ok": False, "ceiling": None}
+        if str(_mc27).startswith("AUTO_"):
+            import build_hub_pages as _bh27
+            _ar27 = _bh27.auto_rank(m, _bh27._detail_of(m.get("slug"), _bh27.MACHINE_DETAILS))
+            if _ar27["ok"]:
+                _lim = _ar27["ceiling"]
         rows.append(dict(
             slug=m.get("slug"),
             unit=c.get("unit"),
@@ -1239,10 +1247,11 @@ def check_27_hub_counts(machines: list) -> list[str]:
             # ★status を入れ忘れていて preview 除外が効いていなかった★（Codex 17巡目 (b)-1）
             status=m.get("status", "complete"),
             # ★新台経路(AUTO_*)はランキング母集団から明示除外★（2026-08-04・Codex72回目）
-            mclass=_pd.machine_class(m),
+            mclass=_mc27,
+            auto_ok=_ar27["ok"],
             has_suru=bool(c.get("hasSuru") or "suru" in modes or "through" in modes),
             has_cycle=bool(c.get("hasCycle") or "cycle" in modes),
-            games_set=("tenjo_games" in m),
+            games_set=(_ar27["ceiling"] is not None if _ar27["ok"] else "tenjo_games" in m),
             ncau=ncau,
             rcau=_line(_mode_conf(c, "reset")),
         ))
@@ -1254,7 +1263,8 @@ def check_27_hub_counts(machines: list) -> list[str]:
     #   authoring の数値で分類すると「件数が合わない」という誤警告になる。
     rows = [r for r in rows
             if r.get("status") != "preview"
-            and r.get("mclass") == "LEGACY_COMPLETE"]
+            and (r.get("mclass") == "LEGACY_COMPLETE"
+                 or (str(r.get("mclass")).startswith("AUTO_") and r.get("auto_ok") is True))]
     D_rows = rows
     # ★ホールにほとんど無い機種は天井・リセットのランキングから外す★（2026-11-09・
     #   build_hub_pages.ranking_pool と同じ。スルー天井の一覧は外さない）

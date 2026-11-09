@@ -390,6 +390,68 @@ def _around(text: str, pos: int, width: int = 24) -> str:
     return f"«…{s}…»"
 
 
+# ★★新台（新台経路）をランキングに入れる★★（2026-11-09・運営者「それは修正したい」）
+#   直す前は新台を2つのランキングから丸ごと外していた（線を持たなかった頃の決まり）。
+#   ★入れるのは、記事に狙い目が出ている新台だけ★＝`target_projection.synced`（機種行と記事の
+#   指紋がそろい、記事の文・箱がいまの線から作ったものと同じ）。そろっていない新台は今まで通り外す。
+#   ★天井は「通常時の狙い目と同じ欄」の天井★（基準欄の checker.<欄>.ceiling＝ランキングの行は
+#   天井とその欄の狙い目を並べるので、同じ数え方の天井を使う）。どの欄かを表に書く（AT間など）。
+#   ★その天井が記事の「天井・恩恵」の欄に「：<数>G」の形で在ることを確かめる★（在る形の文字の照合だけ・
+#   意味の対応は2AI）。「+α」が付いていれば表にも付ける（Codex review・+α が落ちる道）。
+#   ★同じ数で +α 付きと無しが両方あるときは決めずに天井ランキングへ入れない★。
+#   ★旧形式の tenjo_games は新台には使わない★（育成が機種行を材料から作り直すので消える。
+#   新台の天井を直すのは checker_verdict）。
+AUTO_CEILING_SECTION = "天井・恩恵"
+MACHINE_DETAILS = BASE / "assets" / "data" / "machine-details"
+
+
+def _ceiling_text(detail) -> str:
+    """記事の「天井・恩恵」の欄の本文（照合用・見出しが1つだけのとき）。"""
+    secs = [s for s in ((detail or {}).get("sections") or [])
+            if isinstance(s, dict) and s.get("title") == AUTO_CEILING_SECTION]
+    if len(secs) != 1:
+        return ""
+    return "\n".join(str(x) for x in (secs[0].get("body") or []) if isinstance(x, str))
+
+
+def auto_rank(m: dict, detail) -> dict:
+    """★新台をランキングに入れてよいか・入れるならどの値か★（唯一の判定箇所・監査27も使う）
+
+    → {"ok": 入れてよいか, "target": 狙い目の文, "ceiling": 天井の数 or None, "display": 表の天井の書き方 or None}
+    """
+    import target_projection as _tp
+    out = {"ok": False, "target": "", "ceiling": None, "display": None}
+    if not _tp.synced(m, detail):
+        return out
+    out["ok"] = True
+    out["target"] = _tp.box_text(m)
+    c = m.get("checker") or {}
+    key = base_pick(m)[0]
+    conf = mode_conf(c, key) if key else None
+    n = conf.get("ceiling") if isinstance(conf, dict) else None
+    if type(n) is not int or n <= 0 or str(c.get("unit") or "G") != "G":
+        return out
+    hits = re.findall(r"[：:]\s*%d(\+α)?G(\+α)?(?![0-9])" % n, _ceiling_text(detail))
+    plus = {bool(a or b) for a, b in hits}
+    if len(plus) != 1:
+        return out                      # ★記事に無い・+α の有無が決まらない＝天井では並べない★
+    out["ceiling"] = n
+    out["display"] = "%s%dG%s" % (mode_label(c, key, ""), n, "+α" if True in plus else "")
+    return out
+
+
+def _detail_of(slug: str, details_dir: "Path | None"):
+    """記事データ（読めなければ None＝その新台はランキングに入れない）。"""
+    if details_dir is None or not re.fullmatch(r"[a-z0-9_]+", str(slug or "")):
+        return None
+    p = details_dir / f"{slug}.json"
+    try:
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:                   # noqa: BLE001
+        return None
+
+
 def load_rows(source: "Path | None" = None):
     """一覧のもとになる機種データを読む。
 
@@ -401,12 +463,21 @@ def load_rows(source: "Path | None" = None):
     _s2.path.insert(0, str(BASE / "scripts"))
     import safe_json as _sj
     machines = _sj.read_rows(source or MACHINES)
+    # ★新台の記事データの置き場★＝材料の隣（作業フォルダの写しを読むときもそこの記事を読む）
+    _src = Path(source) if source else MACHINES
+    details_dir = _src.parent / "machine-details"
+    if not details_dir.is_dir():
+        details_dir = None
     rows = []
     for m in machines:
         c = m.get("checker") or {}
         if not isinstance(c, dict):
             c = {}
         modes = [mode_key(x) for x in (c.get("modes") or [])]
+        _mc = _pd.machine_class(m)
+        ar = (auto_rank(m, _detail_of(m.get("slug"), details_dir))
+              if str(_mc).startswith("AUTO_")
+              else {"ok": False, "target": "", "ceiling": None, "display": None})
         rows.append(
             dict(
                 slug=m["slug"],
@@ -417,13 +488,17 @@ def load_rows(source: "Path | None" = None):
                 # ★天井ランキングの並びと対象は tenjo_games で決める★（2026-10-25・Codex review246）＝
                 #   limit はチェッカーの入力の上限で、天井とは限らなかった（番長4 700／記事699G+α、
                 #   マギアレコード 633／記事950pt）。鍵が在って null なら G数で数えない天井＝対象外。
-                rank_limit=(m["tenjo_games"] if "tenjo_games" in m
+                rank_limit=(ar["ceiling"] if ar["ok"]
+                            else m["tenjo_games"] if "tenjo_games" in m
                             else _scalar_limit(m.get("limit"))),
-                tenjo_display=m.get("tenjo_display"),
+                tenjo_display=(ar["display"] if ar["ok"] else m.get("tenjo_display")),
+                # ★記事に狙い目が出ている新台か★（ranked_rows が見る・auto_rank）
+                auto_ok=ar["ok"],
+                auto_target=ar["target"],
                 status=m.get("status", "complete"),
                 # ★新台経路(AUTO_*)の区分★（2026-08-04・Codex72回目。
                 #   status欠落を complete に化けさせない）
-                mclass=_pd.machine_class(m),
+                mclass=_mc,
                 unit=c.get("unit"),
                 # スルー天井はモードキー'suru'に加え'through'表記の機種がある
                 # （バジ天膳/からくり/まどマギフォルテ/沖ドキDUOアンコールが漏れていた・2026-07-13修正）
@@ -431,7 +506,7 @@ def load_rows(source: "Path | None" = None):
                 has_cycle=bool(c.get("hasCycle") or "cycle" in modes),
                 # ★G数天井を tenjo_games で決めた機種は、周期の天井も持っていても対象★（2026-10-25・Codex review251）
                 #   ＝モンキーターンV（795G＋6周期）・ヴァルヴレイヴ2（CZ間999G＋周期）が漏れていた。
-                games_set=("tenjo_games" in m),
+                games_set=(ar["ceiling"] is not None if ar["ok"] else "tenjo_games" in m),
                 nline=base_line(m),
                 nlabel=mode_label(c, base_pick(m)[0], "通常"),
                 rlabel=mode_label(c, "reset", "リセット後"),
@@ -454,7 +529,8 @@ def yome(r) -> str:
     #   載っているのに「解析待ち」と出ていた。新台の狙い目は指紋がそろったときだけ記事に出る
     #   （target_projection）ので、表では値を写さず記事へ案内する。
     if r.get("mclass", "LEGACY_COMPLETE") != "LEGACY_COMPLETE":
-        return AUTO_ROW_TEXT
+        # ★記事に狙い目が出ている新台は、記事の狙い目の箱と同じ文★（2026-11-09・auto_rank）
+        return (r.get("auto_target") or AUTO_ROW_TEXT) if r.get("auto_ok") else AUTO_ROW_TEXT
     s = (r.get("strategy") or "").strip()
     if s:
         return s
@@ -552,9 +628,13 @@ TOP_DETAIL = 10
 
 
 def ranked_rows(rows):
-    """★ランキングに載せてよい機種★（先行記事と新台経路を除く・_build_pages と ranking_top の1か所）"""
+    """★ランキングに載せてよい機種★（_build_pages と ranking_top の1か所）
+
+    先行記事は除く。★新台経路は、記事に狙い目が出ている機種だけ★（2026-11-09・auto_rank）。
+    """
     return [r for r in rows if r.get("status") != "preview"
-            and r.get("mclass", "LEGACY_COMPLETE") == "LEGACY_COMPLETE"]
+            and (r.get("mclass", "LEGACY_COMPLETE") == "LEGACY_COMPLETE"
+                 or (str(r.get("mclass")).startswith("AUTO_") and r.get("auto_ok") is True))]
 
 
 # ★リセットランキングに載せる数★（表の下の注記と hall_presence が同じ数を使う）
@@ -841,6 +921,8 @@ def _build_pages(rows: list, prose_all: dict, notes: "dict | None" = None,
     tenjo_noted = any(_note("tenjo")(r) for r in A[:TOP_DETAIL])
     tenjo_note = (
         "※天井の欄はG数の天井です。スルー回数・周期・ポイントなど、ほかの天井は各機種ページで確認してください。"
+        # ★新台は狙い目と同じ数え方の天井で並べ、その数え方を天井の欄に書く★（2026-11-09・auto_rank）
+        "天井の欄に「AT間」などと書いた機種は、その数え方の天井で並べています（ほかの天井は各機種ページで確認してください）。"
         "同じ天井ゲーム数の機種は、狙い目ゲーム数が浅い順に掲載しています。"
         # ★list-count は「機種数」の印★（2026-07-31）
         #   ここに付けると監査が 1000 を機種数と読み違える（実際に起きた）。
@@ -1557,6 +1639,46 @@ def selftest() -> int:
       _raises('<span data-dv="target:h:eq56:cz">x</span>')
       and _raises('<span data-dv="target:zz:eq56:normal">x</span>')
       and _raises('<span data-dv="price:h">x</span>'))
+    # ★★新台をランキングに入れる（2026-11-09・auto_rank）★★
+    import target_projection as _tpt
+
+    def _auto(body_lines, ceiling=699, good=400, synced=True):
+        m = {"slug": "zz_auto", "publication_policy": "page-decision/v1",
+             "checker": {"unit": "G", "modes": [{"key": "normal", "label": "AT間"}],
+                         "normal": {"good": good, "ceiling": ceiling}}}
+        pid = _tpt.projection_id(m)
+        m[_tpt.KEY] = pid
+        d = {"sections": [{"title": _tpt.SECTION_TITLE, "body": [_tpt.article_text(m)]},
+                          {"title": AUTO_CEILING_SECTION, "body": body_lines}],
+             "summaryBoxes": [{"label": _tpt.BOX_LABEL, "value": _tpt.box_text(m), "role": "target"}],
+             _tpt.KEY: pid if synced else ""}
+        return m, d
+    _m1, _d1 = _auto(["**ゲーム数天井（AT間）**：699G ／ 恩恵：CZに当選"])
+    _a1 = auto_rank(_m1, _d1)
+    t("★記事に狙い目が出ている新台は入れてよい・天井は数え方つきで書く★",
+      _a1["ok"] and _a1["ceiling"] == 699 and _a1["display"] == "AT間699G"
+      and _a1["target"] == _tpt.box_text(_m1))
+    t("★記事に狙い目が出ていない新台は入れない★", auto_rank(*_auto(["：699G"], synced=False))["ok"] is False)
+    t("★天井が記事の天井の欄に無ければ、天井では並べない（狙い目は出す）★",
+      auto_rank(*_auto(["**ゲーム数天井**：999G ／ 恩恵：AT"]))["ceiling"] is None
+      and auto_rank(*_auto(["**ゲーム数天井**：999G ／ 恩恵：AT"]))["ok"] is True
+      and auto_rank(*_auto(["**ゲーム数天井**：1699G ／ 恩恵：AT"]))["ceiling"] is None)
+    t("★記事の天井に +α が付いていれば表にも付ける（どちらの書き方でも）★",
+      auto_rank(*_auto(["**ゲーム数天井**：699+αG ／ 恩恵：AT"]))["display"] == "AT間699G+α"
+      and auto_rank(*_auto(["**ゲーム数天井**：699G+α ／ 恩恵：AT"]))["display"] == "AT間699G+α")
+    t("★同じ数で +α 付きと無しが両方あれば、天井では並べない★",
+      auto_rank(*_auto(["**A**：699G ／ 恩恵：x", "**B**：699+αG ／ 恩恵：y"]))["ceiling"] is None)
+    _arow = dict(slug="zz_auto", unit="G", status="complete", mclass="AUTO_INDEXABLE",
+                 nline=400, rline=None, rank_limit=699, has_cycle=False, games_set=True,
+                 tenjo_display="AT間699G", auto_ok=True, auto_target="AT間400G〜")
+    t("★ranking_pool：記事に狙い目が出ている新台は入る・出ていない新台は入らない★",
+      [r["slug"] for r in ranked_rows([_arow])] == ["zz_auto"]
+      and ranked_rows([dict(_arow, auto_ok=False)]) == []
+      and ranked_rows([dict(_arow, auto_ok="yes")]) == [])
+    t("★入った新台の行は記事の狙い目の箱と同じ文・数え方つきの天井★",
+      yome(_arow) == "AT間400G〜" and tenjo_disp(_arow) == "AT間699G"
+      and yome(dict(_arow, auto_ok=False)) == AUTO_ROW_TEXT)
+    t("★天井ランキングに入る（G数の天井を決めた扱い）★", [r["slug"] for r in dataset_A([_arow])] == ["zz_auto"])
     t("★新台経路の行は「機種ページで確認」（解析待ちと言わない）★",
       yome({"mclass": "AUTO_INDEXABLE", "strategy": ""}) == AUTO_ROW_TEXT
       and tenjo_disp({"mclass": "AUTO_PENDING", "limit": None}) == AUTO_ROW_TEXT)

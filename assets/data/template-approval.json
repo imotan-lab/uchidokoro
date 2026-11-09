@@ -33,7 +33,7 @@
   "robots.txt": "67abd065d0da87ba5c2b13c375add509a3601669f21d6c53f48360d7f271ccf1",
   "scripts/apply_prose_dedup.py": "13c7636c1018db8c4de24d06edef76334e2bb7c1147b7a94958ffb76ca384937",
   "scripts/audit_public.py": "eff9994a488928e3568f6c344b569f6e8079f2ffa799399d5417f32103b444e3",
-  "scripts/build_hub_pages.py": "c96c99bf24e5fbbfaeee4da4b47ca524b55f89cefe0134cedd280be5c015de7e",
+  "scripts/build_hub_pages.py": "2243a9da11fa2607748c1f36357b6a09e23b15e1903c2359d4f918907b77bdcd",
   "scripts/build_ledger.py": "c51b84e0a7a6dc9b97faf29003ab617291f9c93fe0378d2c9b19dd664f783e7d",
   "scripts/build_machine_pages.py": "baf40d15d3ec0ef8d855ffb8f76876dd1d2d3a67e44b46398f19d51e7bba0d60",
   "scripts/build_new_article.py": "198f7878f8eccc745fe0bd88b3167bb301a569a8018d3b29b3afc0f701e8ecd6",
@@ -53,7 +53,7 @@
   "scripts/gates.py": "cac0e6550280c2e552ad4e41cf6799d7b549a3e77a367afef134d01f8cf48e65",
   "scripts/grow_legacy.py": "e4d9bd2939367f92b5fd6167c19f53eb0baefd6d4ef87732250f21aba2c70094",
   "scripts/grow_machine.py": "9f00aeda6502e8a10c44377e71816aa9486c4dce301cab4d829638ff4f5eb61b",
-  "scripts/hall_presence.py": "7a5da143249a7d5c832398bb4dc4b529869903710b08743682eb9bf225e7b1a9",
+  "scripts/hall_presence.py": "e7bb60b60c6b4dc32c6c199f3d2ff6c1fadb0a92f2227f595a0bde18e954190e",
   "scripts/hub_prose.json": "9f876f627c10d86776a341a4fad8017b41fbce667367df30cbb1079a8a6bbbd6",
   "scripts/note_text.py": "a2b48bed0a3c49514a100432dc759ea7700ce6c3559289583375a33977671ca6",
   "scripts/page_decision.py": "295022979c68ca3756963b44934600a41f35c004f12bcee453859ff0370e8f15",
@@ -65,7 +65,7 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "4a40e30d6fc0093895ff9c36d8bc8c1069b7b9b3f8ef96c36c318c3e4bfaff79",
-  "service-worker.js": "17da7013c01667e7fc66b74a71f77fd40790306b5170c7f490419359eadd1063",
+  "service-worker.js": "0ddeb46b9a941977c24058539f01f5770008bdfe0e1778b51d0cf206e41ec7c7",
   "setting.html": "4a9c49193581a76308afcc63076357ba55a7486c3b2fd1658042a88b57625ada",
   "terms.html": "90fb80d690c26330ba3c696b8e29031e15da4007a6debc567fa068a4493479fe"
  }

@@ -15,6 +15,8 @@
 ★どこまでを機械がやるか★
   ・どの機種がDMMのどのページかは★2AIが決めた結び付け★（legacy_binding）だけを使う。
     機械は機種を推測しない（結び付けの無い機種は確かめず、今までどおり載せる）。
+  ・★新台経路の機種は、記事を作るときにDMMの機種ページで確かめた identity を使う★（2026-11-09）
+    （identity_binding が DMM_MACHINE_PAGE で、URLが機種ページの形のときだけ）。legacy_binding へは結ばない。
   ・件数はDMMのページが決まった形で出している数字を読むだけ（意味の判断ではない）。
     ★2か所（説明文の【N件掲載中】と本文の「設置店舗一覧 N件」）がちょうど1回ずつ・同じ数・
     題がパチスロの設置店のページ★のときだけ受け取る。どれか外れたら書かない（前の記録は残す）。
@@ -45,6 +47,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STORE = os.path.join(BASE, "assets", "data", "hall-presence.json")
+MACHINES = os.path.join(BASE, "assets", "data", "machines.json")
 SCHEMA = "hall-presence/v1"
 PURPOSE = "hall_presence"
 STALE_DAYS = 21
@@ -214,6 +217,35 @@ def bound_url(slug: str):
     return url
 
 
+def auto_urls(machines=None) -> dict:
+    """★新台経路の機種 → DMMの機種ページ★（2026-11-09・新台もランキングに入るため）
+
+    記事を作るときにDMMの機種ページで確かめた identity を使う。★形が違えば None★
+    （＝使えない・壊れとして扱う。推測しない）。旧形式の機種は入れない。
+    """
+    import safe_json as _sj
+    import legacy_binding as _lb
+    ms = _sj.read_rows(MACHINES) if machines is None else machines
+    out = {}
+    for m in ms:
+        if not isinstance(m, dict) or "publication_policy" not in m:
+            continue
+        idt = m.get("identity") if isinstance(m.get("identity"), dict) else {}
+        u = _lb.norm_url(idt.get("official_product_url"))
+        ok = idt.get("identity_binding") == "DMM_MACHINE_PAGE" and bool(DMM_URL_RE.match(u or ""))
+        out[str(m.get("slug") or "")] = u if ok else None
+    return out
+
+
+def page_url(slug: str, autos: dict):
+    """★その機種のDMMの機種ページ★（取り直しと点検が同じ道を通る・無ければ None）"""
+    if slug in autos:
+        if not autos[slug]:
+            raise HallPresenceError("%s の識別（DMMの機種ページ）が使えない形です" % slug)
+        return autos[slug]
+    return bound_url(slug)
+
+
 # ───────────────────────── 取り直す ─────────────────────────
 
 def refresh(n: int, apply: bool, fetch=None, today: str = None, rows=None,
@@ -230,10 +262,11 @@ def refresh(n: int, apply: bool, fetch=None, today: str = None, rows=None,
     import pending_machines as _pm
     _lb.load()
     _pm.load()
+    autos = auto_urls()
     bound, broken = [], []
     for s in cands:
         try:
-            u = bound_url(s)
+            u = page_url(s, autos)
         except Exception as ex:                              # noqa: BLE001
             broken.append((s, str(ex)[:100]))
             continue
@@ -276,9 +309,10 @@ def unbound(rows=None) -> list:
     """★まだ結び付けていない対象機種★（ページに出る機種が先・外した機種を含む残りの候補が後）"""
     import legacy_binding as _lb
     b = _lb.load()["bindings"]
+    autos = auto_urls()                  # ★新台は結ばない★（identity を使う）
     vis = visible(rows)
     rest = [s for s in candidates(rows) if s not in vis]
-    return [s for s in vis + rest if s not in b]
+    return [s for s in vis + rest if s not in b and s not in autos]
 
 
 def check(today: str = None, rows=None, path: str = None) -> tuple:
@@ -292,24 +326,33 @@ def check(today: str = None, rows=None, path: str = None) -> tuple:
         data = read(path)
         import legacy_binding as _lb
         binds = _lb.load()["bindings"]
+        autos = auto_urls()
     except Exception as ex:                                  # noqa: BLE001
         return 2, ["設置の控えか結び付けが読めません: %s" % str(ex)[:150]]
     lines, stale = [], []
     cands = candidates(rows)
     for s in cands:
-        if s not in binds:
+        # ★取り直しと同じ道でURLを決める★（Codex＝新台も点検する）
+        if s in autos:
+            want = autos[s]
+            if not want:
+                stale.append("%s（識別のDMMページが使えない形）" % s)
+                continue
+        elif s in binds:
+            want = _lb.norm_url((binds.get(s) or {}).get("url"))
+        else:
             continue
         e = data["machines"].get(s)
         if not e:
             stale.append("%s（まだ一度も確かめていない）" % s)
             continue
-        if e["url"] != _lb.norm_url((binds.get(s) or {}).get("url")):
+        if e["url"] != want:
             stale.append("%s（結び付けと記録のページが違う）" % s)
             continue
         age = (today - datetime.date.fromisoformat(e["checked"])).days
         if age > STALE_DAYS:
             stale.append("%s（%d日前）" % (s, age))
-    nb = len([s for s in cands if s not in binds])
+    nb = len([s for s in cands if s not in binds and s not in autos])
     lines.append("ランキングの対象機種 %d（DMMと結び付け済み %d・まだ %d）／外している機種 %d（線＝全国%d店未満）"
                  % (len(cands), len(cands) - nb, nb, len(excluded(data)), data["line"]))
     if stale:
@@ -477,6 +520,43 @@ def selftest() -> int:
             put({"schema": "x"})
             code, _ = check(today="2026-11-20", path=p)
             t("読めなければ2", code == 2)
+            # ── 新台（記事を作るときに確かめたDMMの機種ページを使う・結ばない）2026-11-09 ──
+            keepa = globals()["auto_urls"]
+            try:
+                put(dict(good, machines={}))
+                u13 = "https://p-town.dmm.com/machines/13"
+                globals()["auto_urls"] = lambda machines=None: {"s3": u13}
+                got3 = dict(got2)
+                got3[u13] = page(40, 40)
+                r = refresh(5, True, fetch=lambda u: got3[u], today="2026-11-20", path=p, log=lambda *_: None)
+                t("★新台は識別のDMMページで確かめる（結び付けなし）★",
+                  "s3" in [x[0] for x in r["done"]] and "s3" in excluded(read(p)))
+                t("★新台は結び付けの候補に出さない★", "s3" not in unbound())
+                code, _ = check(today="2026-11-21", path=p)
+                t("確かめた新台は古くなければ0", code == 0)
+                globals()["auto_urls"] = lambda machines=None: {"s3": "https://p-town.dmm.com/machines/14"}
+                code, _ = check(today="2026-11-21", path=p)
+                t("★点検も新台を見る（識別のページと記録のページが違えば1）★", code == 1)
+                globals()["auto_urls"] = lambda machines=None: {"s3": None}
+                r = refresh(5, True, fetch=lambda u: got3[u], today="2026-11-21", path=p, log=lambda *_: None)
+                code, _ = check(today="2026-11-21", path=p)
+                t("★識別のページが使えない形の新台は確かめず、点検で1★",
+                  [x[0] for x in r["broken"]] == ["s3"] and code == 1)
+            finally:
+                globals()["auto_urls"] = keepa
+            ms_t = [{"slug": "a1", "publication_policy": "page-decision/v1",
+                     "identity": {"official_product_url": "https://p-town.dmm.com/machines/5104/",
+                                  "identity_binding": "DMM_MACHINE_PAGE"}},
+                    {"slug": "a2", "publication_policy": "page-decision/v1",
+                     "identity": {"official_product_url": "https://p-town.dmm.com/machines/5105",
+                                  "identity_binding": "LIST_CARD"}},
+                    {"slug": "a3", "publication_policy": "page-decision/v1",
+                     "identity": {"official_product_url": "https://example.com/machines/1",
+                                  "identity_binding": "DMM_MACHINE_PAGE"}},
+                    {"slug": "old", "identity": {"official_product_url": "https://p-town.dmm.com/machines/1",
+                                                 "identity_binding": "DMM_MACHINE_PAGE"}}]
+            t("★新台の識別：DMMの機種ページで確かめた形だけ使う・旧形式は入れない★",
+              auto_urls(ms_t) == {"a1": "https://p-town.dmm.com/machines/5104", "a2": None, "a3": None})
         finally:
             _lb.load, _lb.slug_for_url, globals()["candidates"] = keep
 

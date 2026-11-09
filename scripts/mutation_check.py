@@ -1979,11 +1979,12 @@ MUTATIONS = [
         "run": ["scripts/build_hub_pages.py"],
     },
     {
-        "why": "★ランキングに新台経路の機種を入れる★",
+        "why": "★ランキングに新台経路の機種を入れる★（記事に狙い目が出ていないものまで）",
         "file": "scripts/build_hub_pages.py",
         "before": "    return [r for r in rows if r.get(\"status\") != \"preview\"\n"
-                  "            and r.get(\"mclass\", \"LEGACY_COMPLETE\") == \"LEGACY_COMPLETE\"]",
-        "after": "    return [r for r in rows if r.get(\"status\") != \"preview\"]",
+                  "            and (r.get(\"mclass\", \"LEGACY_COMPLETE\") == \"LEGACY_COMPLETE\"\n",
+        "after": "    return [r for r in rows if r.get(\"status\") != \"preview\"\n"
+                  "            and (True\n",
         "run": ["scripts/build_hub_pages.py"],
     },
     {
@@ -2071,11 +2072,89 @@ MUTATIONS = [
         "after": "    if False:",
         "run": ["scripts/hall_presence.py"],
     },
+    # ★★新台をランキングに入れる（2026-11-09）★★
+    {
+        "why": "★記事に狙い目が出ていない新台もランキングに入る★",
+        "file": "scripts/build_hub_pages.py",
+        "before": "    if not _tp.synced(m, detail):\n        return out\n    out[\"ok\"] = True",
+        "after": "    out[\"ok\"] = True",
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
+        "why": "★「入れてよい」の印が真偽値でなくても新台が入る★",
+        "file": "scripts/build_hub_pages.py",
+        "before": "                 or (str(r.get(\"mclass\")).startswith(\"AUTO_\") and r.get(\"auto_ok\") is True))]",
+        "after": "                 or (str(r.get(\"mclass\")).startswith(\"AUTO_\") and r.get(\"auto_ok\")))]",
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
+        "why": "★新台の天井の +α が表で落ちる★",
+        "file": "scripts/build_hub_pages.py",
+        "before": "n, \"+α\" if True in plus else \"\")",
+        "after": "n, \"\")",
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
+        "why": "★記事の天井の欄に無い数で新台を天井ランキングに並べる★",
+        "file": "scripts/build_hub_pages.py",
+        "before": "    if len(plus) != 1:\n        return out",
+        "after": "    if len(plus) > 1:\n        return out",
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
+        "why": "★+α 付きと無しが両方ある新台の天井を決めつけて並べる★",
+        "file": "scripts/build_hub_pages.py",
+        "before": "    if len(plus) != 1:\n        return out",
+        "after": "    if not plus:\n        return out",
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
+        "why": "★新台を2AIの結び付けの候補に出す（識別のページを使わない）★",
+        "file": "scripts/hall_presence.py",
+        "before": "    return [s for s in vis + rest if s not in b and s not in autos]",
+        "after": "    return [s for s in vis + rest if s not in b]",
+        "run": ["scripts/hall_presence.py"],
+    },
+    {
+        "why": "★番人が新台の設置の古さ・ページの食い違いを見ない★",
+        "file": "scripts/hall_presence.py",
+        "before": "        if s in autos:\n            want = autos[s]",
+        "after": "        if False:\n            want = autos[s]",
+        "run": ["scripts/hall_presence.py"],
+    },
+    {
+        "why": "★DMMの機種ページで確かめていない識別で新台の設置を数える★",
+        "file": "scripts/hall_presence.py",
+        "before": "        ok = idt.get(\"identity_binding\") == \"DMM_MACHINE_PAGE\" and bool(DMM_URL_RE.match(u or \"\"))",
+        "after": "        ok = bool(DMM_URL_RE.match(u or \"\"))",
+        "run": ["scripts/hall_presence.py"],
+    },
+    {
+        "why": "★新台の天井を tenjo_verdict で書ける（育成で消える・ランキングは使わない）★",
+        "file": "scripts/tenjo_verdict.py",
+        "before": "    if \"publication_policy\" in m:\n        return [f\"{slug} は新台です",
+        "after": "    if False:\n        return [f\"{slug} は新台です",
+        "run": ["scripts/tenjo_verdict.py"],
+    },
+    {
+        "why": "★記事データが変わっても、早見表の点検が呼ばれない★",
+        "file": "scripts/pre_push_check.py",
+        "before": "            \"assets/data/machine-details/\", \"scripts/target_projection.py\")",
+        "after": "            \"scripts/target_projection.py\")",
+        "run": ["scripts/pre_push_check.py"],
+    },
+    {
+        "why": "★新台を入れる判定の道具が変わっても、早見表の点検が呼ばれない★",
+        "file": "scripts/pre_push_check.py",
+        "before": "            \"assets/data/machine-details/\", \"scripts/target_projection.py\")",
+        "after": "            \"assets/data/machine-details/\")",
+        "run": ["scripts/pre_push_check.py"],
+    },
     {
         "why": "★番人が外した機種の古さを見ない（増えても戻らない）★",
         "file": "scripts/hall_presence.py",
-        "before": "    cands = candidates(rows)\n    for s in cands:\n        if s not in binds:",
-        "after": "    cands = visible(rows)\n    for s in cands:\n        if s not in binds:",
+        "before": "    cands = candidates(rows)\n    for s in cands:\n        # ★取り直しと同じ道でURLを決める★",
+        "after": "    cands = visible(rows)\n    for s in cands:\n        # ★取り直しと同じ道でURLを決める★",
         "run": ["scripts/hall_presence.py"],
     },
     {
@@ -2102,8 +2181,8 @@ MUTATIONS = [
     {
         "why": "★設置の控えを変えても、早見表の点検が呼ばれない★",
         "file": "scripts/pre_push_check.py",
-        "before": '            "assets/data/hall-presence.json", "scripts/hall_presence.py")',
-        "after": '            )',
+        "before": '            "assets/data/hall-presence.json", "scripts/hall_presence.py",\n',
+        "after": '\n',
         "run": ["scripts/pre_push_check.py"],
     },
     {
@@ -2551,8 +2630,8 @@ MUTATIONS = [
     {
         "why": "★新台の行を「解析待ち」と言う（記事には天井・狙い目が載っている）★",
         "file": "scripts/build_hub_pages.py",
-        "before": "        return AUTO_ROW_TEXT\n    s = (r.get(\"strategy\") or \"\").strip()",
-        "after": "        return \"解析待ち\"\n    s = (r.get(\"strategy\") or \"\").strip()",
+        "before": "        return (r.get(\"auto_target\") or AUTO_ROW_TEXT) if r.get(\"auto_ok\") else AUTO_ROW_TEXT\n",
+        "after": "        return (r.get(\"auto_target\") or AUTO_ROW_TEXT) if r.get(\"auto_ok\") else \"解析待ち\"\n",
         "run": ["scripts/build_hub_pages.py"],
     },
     {
