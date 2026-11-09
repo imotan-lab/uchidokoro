@@ -36,7 +36,7 @@
   "scripts/audit_public.py": "eff9994a488928e3568f6c344b569f6e8079f2ffa799399d5417f32103b444e3",
   "scripts/build_hub_pages.py": "3a8c6704f3042dd2a91c78fe61a6509141f324469b8dc8c6635904bbf9f8e62a",
   "scripts/build_ledger.py": "c51b84e0a7a6dc9b97faf29003ab617291f9c93fe0378d2c9b19dd664f783e7d",
-  "scripts/build_machine_pages.py": "baf40d15d3ec0ef8d855ffb8f76876dd1d2d3a67e44b46398f19d51e7bba0d60",
+  "scripts/build_machine_pages.py": "93fa4e23b2e1e22fe732ce168c20df150b7feb06581c9273ea8af9258f370ba4",
   "scripts/build_new_article.py": "198f7878f8eccc745fe0bd88b3167bb301a569a8018d3b29b3afc0f701e8ecd6",
   "scripts/build_pages_artifact.py": "f246c718c687f1728eb489a6c5995d59550935301cbca6776f24b2f29a1bbedd",
   "scripts/check_duplicate.py": "d5c8221444105553cca1894ff8d44eb255ad6534cafcd0e0af8a5a8e23c16c36",
@@ -67,7 +67,7 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "4a40e30d6fc0093895ff9c36d8bc8c1069b7b9b3f8ef96c36c318c3e4bfaff79",
-  "service-worker.js": "fafe2529c0b539b4cc2a86892ce1646660c3720e9e5f4baca1939ba2f357dfac",
+  "service-worker.js": "a8c2fed63cbfa8c99cb389796d3d5a972b8b37a20e420824af5a1ed675d887ce",
   "setting.html": "f153be6008c6d44989bff6b440253abea27460872ea7cd482c32ad9bd03618c9",
   "terms.html": "cfb07f039c9a57ad5c451118e31abfb7031fd9a4c98d4c0f88f76fd016711a65"
  }

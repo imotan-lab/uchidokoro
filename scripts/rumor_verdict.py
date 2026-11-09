@@ -752,6 +752,14 @@ def _selftest_body(tmp, t, T):
       "<del>噂の文です。</del>（2026年11月1日 メーカー公式Xで否定）")
     js = io.open(os.path.join(BASE, "machine.html"), encoding="utf-8").read()
     t("JS の描画も同じ置き換え", ".replace(/~~([^~]+?)~~/g, '<del>$1</del>')" in js)
+    # 17-b) ★記事データの改行の印は、事前に作るページでも改行にする★（2026-11-09）
+    #   JS は innerHTML で描くので改行になる。ここが文字のままだと「<br>」が読者とGoogleに見える。
+    t("事前に作るページも改行の印を改行にする",
+      _bmp.md("**周期天井**：5周期<br>スルー天井") ==
+      "<strong>周期天井</strong>：5周期<br>スルー天井")
+    t("要約の箱・基本情報の印も同じ", _bmp.safe_tags(_bmp.esc("A<br/>B")) == "A<br>B")
+    t("属性つきの印は文字のまま", _bmp.md('A<br class="x">B') == "A&lt;br class=&quot;x&quot;&gt;B")
+    t("許していない印は文字のまま", _bmp.md("A<i>B</i>") == "A&lt;i&gt;B&lt;/i&gt;")
     # 18) 文体の見張りが、否定の注記を文として数えない
     import style_check as _sc
     o = []

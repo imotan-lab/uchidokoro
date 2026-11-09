@@ -9661,6 +9661,22 @@ MUTATIONS = [
         "issues": [],
     },
     {
+        "why": "★事前に作るページで記事データの改行の印を文字のまま出す（★読者とGoogleに「<br>」が見え、JSが描いた後と表示が変わる★）★",
+        "file": "scripts/build_machine_pages.py",
+        "before": "    out = safe_tags(esc(text))",
+        "after": "    out = esc(text)",
+        "run": ["scripts/rumor_verdict.py"],
+        "issues": [],
+    },
+    {
+        "why": "★要約の箱・基本情報で使う、改行の印を戻す部品を空にする（★31機種の要約の箱に「<br>」の文字が出る★）★",
+        "file": "scripts/build_machine_pages.py",
+        "before": "    return _SAFE_TAG_ESC.sub(_one, escaped)",
+        "after": "    return escaped",
+        "run": ["scripts/rumor_verdict.py"],
+        "issues": [],
+    },
+    {
         "why": "★否定の印の行を、取り消した本文に戻さず文体を見る（★否定を付けるたびに古い違反が消えて新しい違反が出る・Codex review290★）★",
         "file": "scripts/style_check.py",
         "before": "    if _rf.is_denied(line):\n        line = _rf.denied_body(line)",

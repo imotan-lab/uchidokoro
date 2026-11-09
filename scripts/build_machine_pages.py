@@ -48,11 +48,33 @@ def esc(s) -> str:
     return html.escape("" if s is None else str(s), quote=True)
 
 
+# ★★記事データに許した印は、ブラウザと同じく印として描く★★（2026-11-09）
+#   machine.html は記事の本文・要約の箱を innerHTML で描くので、データの `<br>` は改行になる。
+#   ここは esc() で文字にしていたので、★事前に作るページ（Googleが読む・JSが動く前の画面）
+#   には「<br>」という文字がそのまま出ていた★（31機種の要約の箱・ジャシンちゃんの本文）。
+#   許す印の名簿は gates._ALLOWED_TAGS（公開の関所が、これ以外の「<」と属性を拒否している）。
+#   ★属性つきの形は戻さない★（文字のまま＝関所が先に止める形）。
+import gates as _gates  # noqa: E402
+
+_SAFE_TAG_ESC = re.compile(r"&lt;\s*(/?)\s*(%s)\s*/?\s*&gt;"
+                           % "|".join(_gates._ALLOWED_TAGS), re.I)
+
+
+def safe_tags(escaped: str) -> str:
+    """esc() 済みの文字のうち、許した印（属性なし）だけを印に戻す。"""
+    def _one(m):
+        name = m.group(2).lower()
+        if name == "br":
+            return "<br>"
+        return f"<{m.group(1)}{name}>"
+    return _SAFE_TAG_ESC.sub(_one, escaped)
+
+
 def md(text) -> str:
     """簡易Markdown：エスケープ後に **xxx** → <strong>xxx</strong>（machine.html の md() 相当）。"""
     if not isinstance(text, str):
         return esc(text)
-    out = esc(text)
+    out = safe_tags(esc(text))
     # esc後でも ** は不変なので強調変換できる
     out = re.sub(r"\*\*([^*]+?)\*\*", r"<strong>\1</strong>", out)
     # ★~~x~~ は公式が否定した噂の取り消し線だけ★（machine.html の md() と同じ・2026-11-05）
@@ -494,7 +516,7 @@ def render_page(template: str, machine: dict, detail: dict | None,
             '<div id="articleSections"></div>',
             f'<div id="articleSections">{sections_html}</div>')
     fact = detail.get("factTable") or [["機種名", machine["name"]]]
-    rows_html = "".join(f"<tr><th>{esc(r[0])}</th><td>{esc(r[1])}</td></tr>"
+    rows_html = "".join(f"<tr><th>{safe_tags(esc(r[0]))}</th><td>{safe_tags(esc(r[1]))}</td></tr>"
                         for r in fact if len(r) >= 2)
     html_out = replace_once(html_out, 
         '<tbody id="infoTableBody"></tbody>',
@@ -508,11 +530,11 @@ def render_page(template: str, machine: dict, detail: dict | None,
     for i in range(0, len(summary_boxes), 2):
         a = summary_boxes[i]
         cell_a = (f'<span class="s-label">{esc(a.get("label",""))}</span>'
-                  f'<span class="s-value">{esc(a.get("value",""))}</span>')
+                  f'<span class="s-value">{safe_tags(esc(a.get("value","")))}</span>')
         if i + 1 < len(summary_boxes):
             b = summary_boxes[i + 1]
             cell_b = (f'<span class="s-label">{esc(b.get("label",""))}</span>'
-                      f'<span class="s-value">{esc(b.get("value",""))}</span>')
+                      f'<span class="s-value">{safe_tags(esc(b.get("value","")))}</span>')
             srows += f"<tr><td>{cell_a}</td><td>{cell_b}</td></tr>"
         else:
             srows += f"<tr><td>{cell_a}</td><td></td></tr>"
