@@ -50,6 +50,7 @@ APPROVED_INPUTS = frozenset({
     "guide-pochipochi.html",
     "guide-rate.html",
     "guide-reset.html",
+    "guide-site.html",
     "guide-yamedoki.html",
     "manifest.json",
     # 全ページで読み込まれる見た目と動き

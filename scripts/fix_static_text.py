@@ -52,14 +52,14 @@ except Exception:
 # ★直せるページ★＝機種ページ以外で、検索から人が入ってくるもの
 PAGES = ("index.html", "about.html", "contact.html", "privacy.html", "terms.html", "404.html",
          "guide-haena.html", "guide-rate.html", "guide-reset.html",
-         "guide-yamedoki.html", "guide-pochipochi.html",
+         "guide-yamedoki.html", "guide-pochipochi.html", "guide-site.html",
          "scripts/hub_prose.json")
 
 # ★1日1ページずつ読む順番★（朝の更新タスク STEP 1-S）。ランキング4ページは生成物なので、
 #   直す先は scripts/hub_prose.json（表の中身は機種データから作られる）。
 ROTATION = ("index.html", "guide-tenjo-ranking.html", "guide-reset-ranking.html",
             "guide-suru-tenjo.html", "guide-ichiran.html", "guide-haena.html", "guide-rate.html",
-            "guide-reset.html", "guide-yamedoki.html", "guide-pochipochi.html",
+            "guide-reset.html", "guide-yamedoki.html", "guide-pochipochi.html", "guide-site.html",
             "about.html", "privacy.html", "terms.html", "contact.html", "404.html")
 HUB_PAGES = ("guide-tenjo-ranking.html", "guide-reset-ranking.html",
              "guide-suru-tenjo.html", "guide-ichiran.html")

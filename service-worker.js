@@ -1,4 +1,4 @@
-const CACHE_NAME = 'uchidokoro-v653';
+const CACHE_NAME = 'uchidokoro-v654';
 
 // ★先読みするのは「中身が機種に依存しない」ファイルだけ★
 //   （2026-07-28・Codex 11巡目 手順7）
@@ -10,11 +10,6 @@ const STATIC_CACHE = [
   '/about.html',
   '/contact.html',
   '/privacy.html',
-  '/guide-haena.html',
-  '/guide-rate.html',
-  '/guide-pochipochi.html',
-  '/guide-yamedoki.html',
-  '/guide-reset.html',
   '/404.html',
   '/meta-auto.js',
   '/assets/css/practical.css',
@@ -61,7 +56,14 @@ self.addEventListener('fetch', event => {
     || url.pathname === '/guide-tenjo-ranking.html'
     || url.pathname === '/guide-reset-ranking.html'
     || url.pathname === '/guide-suru-tenjo.html'
-    || url.pathname === '/guide-ichiran.html';
+    || url.pathname === '/guide-ichiran.html'
+    // ★狙い目の数字の印（data-dv）を持つガイド★（2026-11-09・Codex）＝通信できないときに古い数字を出さない
+    || url.pathname === '/guide-haena.html'
+    || url.pathname === '/guide-rate.html'
+    || url.pathname === '/guide-pochipochi.html'
+    || url.pathname === '/guide-yamedoki.html'
+    || url.pathname === '/guide-reset.html'
+    || url.pathname === '/guide-site.html';
   if (isClaimDependent) {
     event.respondWith(
       fetch(event.request).catch(() =>

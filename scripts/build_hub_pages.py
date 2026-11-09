@@ -759,7 +759,7 @@ HEAD_TPL = """<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">
 <link rel="stylesheet" href="assets/css/practical.css">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#f6f7fa">
+<meta name="theme-color" content="#17191e">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1216,7 +1216,7 @@ def _build_legacy() -> int:
 #   ★4ページの生成（_build_pages）には混ぜない★＝新台公開が4ページの集合を要求している（Codex review247）。
 #   ★読めない印は例外で止める★（無い機種・選べない交換率・無い欄・画面から外した欄・狙い目なし）。
 MARK_PAGES = ("index.html", "guide-haena.html", "guide-rate.html", "guide-reset.html",
-              "guide-yamedoki.html", "guide-pochipochi.html")
+              "guide-yamedoki.html", "guide-pochipochi.html", "guide-site.html")
 _MARK_RE = re.compile(r'(<span data-dv="([^"]+)">)(.*?)(</span>)', re.S)
 
 

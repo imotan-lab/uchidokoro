@@ -1,17 +1,19 @@
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap');
 
 :root {
-  /* ★明るい色（A）★ 2026-10-25・運営者が決定。文字に使う色は白地で読める濃さ（明るさの差4.5以上）にしてある */
-  --bg: #f6f7fa;
-  --bg2: #eef1f6;
+  /* ★墨の帯＋白（B）★ 2026-11-09・運営者が試し版から選んだ（10-25の明るい色Aの次）。
+     上の帯（ヘッダー・トップの検索まで）だけ墨色、本文は白。差し色は朱（--accent）を少しだけ。
+     文字に使う色は白地で明るさの差4.5以上（朱は約6） */
+  --bg: #ffffff;
+  --bg2: #f3f4f6;
   --panel: #ffffff;
-  --panel2: #f3f5f9;
-  --line: #dde3ec;
-  --line2: #c9d2df;
-  --text: #1c2533;
-  --soft: #3c4a5e;
-  --muted: #5a6676;
-  --muted2: #66727f;
+  --panel2: #f5f6f8;
+  --line: #e3e5e9;
+  --line2: #c9cdd4;
+  --text: #15181d;
+  --soft: #363b44;
+  --muted: #555c67;
+  --muted2: #626a75;
   --gold: #8a5f0c;
   --gold-bg: rgba(176,122,18,.08);
   --gold-bg-strong: rgba(176,122,18,.15);
@@ -34,7 +36,12 @@
   /* ★札の文字は背景を重ねた姿で4.5以上★（review264・強い札でも約5.5） */
   --settei-text: #6b4808;
   --settei-ok-text: #11613a;
-  --header-bg: rgba(255,255,255,.94);
+  --header-bg: #17191e;
+  --band: #17191e;           /* 上の帯の墨色（theme-color と manifest も同じ） */
+  --band-text: #f4f1ea;
+  --band-soft: #c4bfb3;
+  --accent: #b3321e;         /* 朱（トップの日付・新台の札・文字のリンク） */
+  --accent-bg: rgba(179,50,30,.08);
   --wrap: min(680px, calc(100% - 24px));
   --radius: 12px;
   --radius-sm: 8px;
@@ -73,10 +80,7 @@ button, input, select { font: inherit; }
   position: sticky;
   top: 0;
   z-index: 50;
-  backdrop-filter: blur(12px);
   background: var(--header-bg);
-  box-shadow: 0 1px 0 var(--line);
-  border-bottom: 1px solid var(--line);
 }
 .header-inner {
   width: var(--wrap);
@@ -94,16 +98,16 @@ button, input, select { font: inherit; }
   gap: 14px;
   flex-shrink: 0;
 }
-.header-nav a { color: var(--muted); font-size: var(--fs-body); font-weight: 700; white-space: nowrap; }
-.header-nav a:hover { color: var(--soft); }
-.header-nav a[aria-current="page"] { color: var(--soft); pointer-events: none; }
+.header-nav a { color: var(--band-soft); font-size: var(--fs-body); font-weight: 700; white-space: nowrap; }
+.header-nav a:hover { color: var(--band-text); }
+.header-nav a[aria-current="page"] { color: var(--band-text); pointer-events: none; }
 .header-link {
-  color: var(--muted);
+  color: var(--band-soft);
   font-size: var(--fs-body);
   font-weight: 700;
   white-space: nowrap;
 }
-.header-link:hover { color: var(--soft); }
+.header-link:hover { color: var(--band-text); }
 
 .header-search-wrap {
   position: relative;
@@ -567,7 +571,7 @@ button, input, select { font: inherit; }
 .quick-link--x:hover { background: var(--gold-bg-strong); }
 
 .header-x {
-  color: var(--gold) !important;
+  color: var(--band-text) !important;
   font-size: var(--fs-body);
   font-weight: 700;
   white-space: nowrap;
@@ -835,3 +839,72 @@ button, input, select { font: inherit; }
 .data-table th { background: var(--panel); color: var(--muted); font-size: var(--fs-min); font-weight: 700; padding: 7px 8px; border: 1px solid var(--line2); text-align: left; }
 .data-table td { color: var(--text); font-size: var(--fs-sub); font-weight: 700; padding: 6px 8px; border: 1px solid var(--line2); line-height: 1.5; vertical-align: top; }
 .data-table td:first-child { color: var(--soft); width: 38%; }
+
+/* TOP PAGE (2026-11-09・運営者が試し版Bを選んだ) ★トップだけ（body.page-top）に効かせる★
+   並び＝見出しと1文→検索→近日導入3件→人気TOP10→ランキング・早見表→はじめての方へ→掲載機種の一覧（折りたたみ）→短い説明。
+   長い説明は guide-site.html へ移した。★角丸の箱を並べない★（線で区切った行）／★絵文字・記号を飾りにしない★ */
+::selection { background: var(--accent); color: #fff; }
+.page-top .header-inner { justify-content: space-between; padding: 6px 0; flex-wrap: nowrap; }
+.page-top .header-nav.header-nav--icon { width: auto; padding-top: 0; }
+.page-top .header-x { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; }
+.x-icon { width: 20px; height: 20px; fill: var(--band-text); }
+
+.page-top .top-intro {
+  background: var(--band);
+  box-shadow: 0 0 0 100vmax var(--band);
+  clip-path: inset(0 -100vmax);
+  padding: 18px 0 22px;
+}
+.page-top .top-h1 { font-size: 22px; font-weight: 800; line-height: 1.35; letter-spacing: .01em; color: var(--band-text); margin: 0 0 6px; text-wrap: balance; }
+.page-top .top-lead { font-size: var(--fs-sub); color: var(--band-soft); margin: 0 0 14px; line-height: 1.7; }
+.page-top .search-input { border-radius: 6px; border: 1.5px solid #ffffff; background: #ffffff; }
+.page-top .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+
+.page-top .sec-head {
+  display: flex; align-items: baseline; gap: 10px;
+  font-size: var(--fs-strong); font-weight: 800; color: var(--text);
+  margin: 0; padding: 30px 0 8px;
+  border-bottom: 2px solid var(--text);
+}
+.page-top .sec-sub { font-size: var(--fs-label); font-weight: 500; color: var(--muted); }
+
+.page-top .upcoming-section { background: none; border: none; padding: 0; margin: 0; }
+.page-top .upcoming-section.is-searching { display: none; }
+.page-top .list-header { padding: 0; }
+.page-top .machine-list { background: none; border: none; border-radius: 0; }
+.page-top .list-row { background: transparent; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.page-top .list-row:last-child { border-bottom: 1px solid var(--line); }
+.page-top .list-row:hover { background: var(--bg2); }
+.page-top .machine-name { font-size: 17px; font-weight: 700; }
+.page-top .list-row-main--date { flex-direction: row; align-items: baseline; gap: 14px; }
+.page-top .release-day { flex: 0 0 auto; width: 6.4em; font-size: var(--fs-sub); font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.page-top .badge--new { background: var(--accent); color: #fff; border: none; border-radius: 3px; }
+
+.page-top .show-all-wrap { padding: 0; text-align: left; }
+.page-top .text-more {
+  display: block; width: 100%;
+  background: none; border: none; border-bottom: 1px solid var(--line);
+  padding: 14px 0; text-align: left; cursor: pointer;
+  color: var(--accent); font-weight: 700; font-size: var(--fs-body);
+}
+.page-top .text-more:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.page-top .link-rows { list-style: none; margin: 0; padding: 0; }
+.page-top .link-row { display: flex; flex-direction: column; gap: 2px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.page-top .link-row-title { font-weight: 700; font-size: var(--fs-body); color: var(--text); }
+.page-top .link-row-desc { font-size: var(--fs-sub); color: var(--muted); }
+.page-top .link-row:hover .link-row-title { color: var(--accent); }
+
+.page-top .text-links { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 12px 0 0; }
+.page-top .text-links a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; font-size: var(--fs-body); }
+
+.page-top .all-machines-fold summary { cursor: pointer; list-style: none; }
+.page-top .all-machines-fold summary::-webkit-details-marker { display: none; }
+.page-top .sec-head--fold::after { content: "開く"; margin-left: auto; font-size: var(--fs-label); color: var(--accent); font-weight: 700; }
+.page-top .all-machines-fold[open] .sec-head--fold::after { content: "閉じる"; }
+.page-top .all-machines-item { background: none; border: 1px solid var(--line); border-radius: 4px; color: var(--soft); }
+.page-top .all-machines-item:hover { border-color: var(--accent); color: var(--accent); background: none; }
+
+.page-top .top-about { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--line); font-size: var(--fs-sub); color: var(--muted); line-height: 1.8; }
+.page-top .top-about p { margin: 0 0 8px; }
+.page-top .top-about-note { font-size: var(--fs-label); }
