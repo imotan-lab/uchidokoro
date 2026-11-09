@@ -557,9 +557,26 @@ def ranked_rows(rows):
             and r.get("mclass", "LEGACY_COMPLETE") == "LEGACY_COMPLETE"]
 
 
+# ★リセットランキングに載せる数★（表の下の注記と hall_presence が同じ数を使う）
+RESET_SHOWN = 30
+
+
+def ranking_pool(rows, excluded=None):
+    """★2つのランキング（天井・朝一リセット）に並べる機種★（2026-11-09・運営者の決定）
+
+    `ranked_rows` から、★ホールにほとんど無い機種★（全国の設置店舗数が線より少ない・
+    hall_presence）を外す。★スルー天井の一覧と早見表は外さない★（ランキングではない一覧）。
+    ★控えが読めなければ例外で止める★（黙って外さない・黙って全部載せない）。
+    """
+    if excluded is None:
+        import hall_presence as _hp
+        excluded = _hp.excluded()
+    return [r for r in ranked_rows(rows) if r["slug"] not in excluded]
+
+
 def ranking_top(rows, ranking):
     """★ページと同じ並べ方の上位10★（ranking_queue が読む）"""
-    ranked = ranked_rows(rows)
+    ranked = ranking_pool(rows)
     if ranking == "reset":
         return dataset_C(ranked)[:TOP_DETAIL]
     if ranking == "tenjo":
@@ -771,19 +788,27 @@ def _meta_len_of(file: str, prose_all: dict) -> str:
     return (prose_all.get(key) or {}).get("meta_description", "")
 
 
-def _build_pages(rows: list, prose_all: dict, notes: "dict | None" = None) -> tuple:
+def _build_pages(rows: list, prose_all: dict, notes: "dict | None" = None,
+                 excluded: "set | None" = None) -> tuple:
     """機種データと散文から、ハブ4ページのHTMLを組み立てる（書き込みはしない）。"""
     # ランキング系は先行記事を除く（未確定の数値で順位を付けない）
     # ★新台経路(AUTO_*)も明示除外★（checker無しの自然除外に頼らない・Codex72回目）
     ranked = ranked_rows(rows)
+    # ★ホールにほとんど無い機種は2つのランキングから外す★（2026-11-09・ranking_pool）
+    pool = ranking_pool(rows, excluded)
     if notes is None:
         notes = load_rank_notes()
 
     def _note(ranking):
         return lambda r: (notes.get(r["slug"]) or {}).get(ranking)
-    A = dataset_A(ranked)
-    C = dataset_C(ranked)
-    D = dataset_D(ranked)
+    A = dataset_A(pool)
+    C = dataset_C(pool)
+    D = dataset_D(ranked)      # スルー天井の一覧はランキングではないので外さない
+    # ★外した機種があるランキングだけ、そう書く★（どこから採ったかは書かない）
+    _pool_slugs = {r["slug"] for r in pool}
+    a_cut = any(r["slug"] not in _pool_slugs for r in dataset_A(ranked))
+    c_cut = any(r["slug"] not in _pool_slugs for r in dataset_C(ranked))
+    CUT_NOTE = "設置しているお店がほとんど無くなった機種は、ランキングにも件数にも入れていません。"
     ALL = rows  # 早見表は全機種（先行記事は「解析待ち」表記）
 
     # 散文内の件数はプレースホルダで持ち、生成時に実数を埋める
@@ -823,12 +848,13 @@ def _build_pages(rows: list, prose_all: dict, notes: "dict | None" = None) -> tu
         f"G数でカウントする天井が{SHALLOW_TENJO_LIMIT}G"
         f"未満の機種は全<span class=\"list-count\">{len(A)}</span>機種です"
         "（G数で数えない天井だけの機種と、チェッカーに狙い目が無い機種は集計対象外です）。"
+        + (CUT_NOTE if a_cut else "")
         + ("上位の機種のうち、天井の恩恵と、それが付く条件を確かめ終えた機種には、その内容を添えています。"
            if tenjo_noted else "")
     )
 
     # --- reset ---
-    C_top = C[:30]
+    C_top = C[:RESET_SHOWN]
     reset_list = render_rank_list(
         C_top,
         # ★差（短縮幅）は書かない★（2026-10-25・運営者「リセット後の狙い目ゲーム数があるのに要る？」）
@@ -841,6 +867,7 @@ def _build_pages(rows: list, prose_all: dict, notes: "dict | None" = None) -> tu
         "※リセット後に浅くから狙える幅（通常時の狙い目 − リセット後の狙い目）が大きい順。比較の基準は各機種の主要カウンターモード（通常時・CZ間・ST間など）です。"
         "狙い目は各機種の狙い目チェッカーの線で、交換率を選べる機種は最初に表示される交換率の線です。"
         f"チェッカーのデータで短縮を確認できる機種は全<span class=\"list-count\">{len(C)}</span>機種で、上位{len(C_top)}機種を掲載しています。"
+        + (CUT_NOTE if c_cut else "")
         + ("上位の機種のうち、リセット後の恩恵と、それが付く条件を確かめ終えた機種には、その内容を添えています。"
            if reset_noted else "")
     )
@@ -914,7 +941,10 @@ def render_all(source_root: "Path") -> dict:
         raise RuntimeError(f"公開データがありません: {pub}")
     rows = load_rows(pub)
     prose_all = _sj.read_json(source_root / "scripts" / "hub_prose.json", expect=dict)
-    built, data_html, allowed = _build_pages(rows, prose_all)
+    # ★外す機種も、指定された作業フォルダの控えから読む★（2026-11-09・Codex）
+    import hall_presence as _hp
+    cut = _hp.excluded(_hp.read(str(source_root / "assets" / "data" / "hall-presence.json")))
+    built, data_html, allowed = _build_pages(rows, prose_all, excluded=cut)
     bad = hub_content_problems(built, data_html,
                                ("公開できない表現", _g.ABSOLUTE_DENY_PAT),
                                ("要人手確認の語（損得・設定の話）", _g.RISK_PAT),
@@ -1453,6 +1483,37 @@ def selftest() -> int:
     t("★ranking_top は新台経路・先行記事を入れない★",
       ranking_top([dict(_rk_rows[0], mclass="AUTO_PENDING")], "reset") == []
       and ranking_top([dict(_rk_rows[0], status="preview")], "reset") == [])
+    # ★★ホールにほとんど無い機種を外す（2026-11-09）★★
+    t("★ranking_pool は外す機種を除く★",
+      [r["slug"] for r in ranking_pool(_rk_rows[:3], {"r2"})] == ["r1", "r3"])
+    try:
+        _rows_real = load_rows()
+        import safe_json as _sj_t
+        _prose_real = _sj_t.read_json(PROSE, expect=dict)
+        _pool0 = ranked_rows(_rows_real)
+        _a0, _c0 = dataset_A(_pool0), dataset_C(_pool0)
+        _shown_c = {x["slug"] for x in _c0[:RESET_SHOWN]}
+        _both = sorted((r for r in _a0 if r["slug"] in _shown_c),
+                       key=lambda r: not r["has_suru"])          # スルー天井の一覧にも居る機種を先に
+        _both = [r["slug"] for r in _both]
+        _cut = _both[0]
+        _b0, _, _ = _build_pages(_rows_real, _prose_real, excluded=set())
+        _b1, _, _ = _build_pages(_rows_real, _prose_real, excluded={_cut})
+        _href = f'href="/machines/{_cut}/"'
+        t("★外した機種は天井ランキングに出ない★",
+          _href in _b0["guide-tenjo-ranking.html"] and _href not in _b1["guide-tenjo-ranking.html"])
+        t("★外した機種はリセットランキングに出ない★",
+          _href in _b0["guide-reset-ranking.html"] and _href not in _b1["guide-reset-ranking.html"])
+        t("★外した機種があるランキングだけ、そう書く★",
+          "ほとんど無くなった" not in _b0["guide-tenjo-ranking.html"]
+          and "ほとんど無くなった" in _b1["guide-tenjo-ranking.html"]
+          and "ほとんど無くなった" in _b1["guide-reset-ranking.html"])
+        t("★スルー天井の一覧と早見表は外さない★",
+          _b0["guide-suru-tenjo.html"] == _b1["guide-suru-tenjo.html"]
+          and _b0["guide-ichiran.html"] == _b1["guide-ichiran.html"])
+    except Exception as _ex:                                 # noqa: BLE001
+        print("  外す試験が動きません:", _ex)
+        t("★外す試験が動く★", False)
     _ck2 = {"unit": "G", "normal": {"caution": 500, "good": 630}}
     t("ランキング：交換率の無い機種は直下の狙い目",
       base_line({"checker": _ck2}) == 630)

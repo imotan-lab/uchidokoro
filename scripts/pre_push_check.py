@@ -220,7 +220,9 @@ _HUB_SRC = ("assets/data/machines.json", "scripts/hub_prose.json",
             "scripts/safe_json.py", "scripts/target_display.py", "guide-",
             "index.html",
             # ★ランキング上位10の恩恵の一言★（2026-11-07）＝一言の置き場と、その形を決める道具
-            "assets/data/ranking-notes.json", "scripts/ranking_note.py")
+            "assets/data/ranking-notes.json", "scripts/ranking_note.py",
+            # ★ホールにほとんど無い機種をランキングから外す控えと道具★（2026-11-09）
+            "assets/data/hall-presence.json", "scripts/hall_presence.py")
 
 
 def _touches(paths, srcs) -> bool:
@@ -1218,6 +1220,11 @@ def _selftest() -> int:
       touches_hub(["assets/data/ranking-notes.json"]) is True)
     t("★ランキングの一言の形を決める道具を変えたら見る★",
       touches_hub(["scripts/ranking_note.py"]) is True)
+    # ★設置の控えと道具（2026-11-09）＝ランキングから外す機種が変わる★
+    t("★設置の控えが変わったら早見表を見る★",
+      touches_hub(["assets/data/hall-presence.json"]) is True)
+    t("★設置の道具が変わったら早見表を見る★",
+      touches_hub(["scripts/hall_presence.py"]) is True)
     # ★この生成器は機種の記事データを読んでいない★（実装で確認）
     t("★早見表：記事データは材料ではないので見ない★",
       touches_hub(["assets/data/machine-details/hokuto.json"]) is False)

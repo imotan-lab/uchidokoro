@@ -1233,6 +1233,7 @@ def check_27_hub_counts(machines: list) -> list[str]:
         if "tenjo_games" in m:  # ★天井ランキングは tenjo_games で数える（build_hub_pages と同じ・2026-10-25）★
             _lim = m["tenjo_games"]
         rows.append(dict(
+            slug=m.get("slug"),
             unit=c.get("unit"),
             limit=_lim,
             # ★status を入れ忘れていて preview 除外が効いていなかった★（Codex 17巡目 (b)-1）
@@ -1254,6 +1255,12 @@ def check_27_hub_counts(machines: list) -> list[str]:
     rows = [r for r in rows
             if r.get("status") != "preview"
             and r.get("mclass") == "LEGACY_COMPLETE"]
+    D_rows = rows
+    # ★ホールにほとんど無い機種は天井・リセットのランキングから外す★（2026-11-09・
+    #   build_hub_pages.ranking_pool と同じ。スルー天井の一覧は外さない）
+    import hall_presence as _hp27
+    _cut27 = _hp27.excluded()
+    rows = [r for r in rows if r.get("slug") not in _cut27]
     A = [r for r in rows
          if r["unit"] == "G" and isinstance(r["limit"], (int, float))
          and (r["games_set"] or not r["has_cycle"]) and r["limit"] < 1000
@@ -1262,7 +1269,7 @@ def check_27_hub_counts(machines: list) -> list[str]:
          if r["unit"] == "G"  # ★ゲーム数で数える機種だけ★（build_hub_pages.dataset_C と同じ・2026-10-25）
          and isinstance(r["rcau"], (int, float)) and isinstance(r["ncau"], (int, float))
          and r["ncau"] - r["rcau"] > 0]
-    D = [r for r in rows if r["has_suru"]]
+    D = [r for r in D_rows if r["has_suru"]]
     # ★全機種一覧は件数ではなく「載っている機種の集合」で見る★
     #   （2026-07-31・全体件数の表示をやめたので、数字では確かめられない。
     #     そもそも件数が合っていても、中身が欠けていれば意味がない）
