@@ -1959,8 +1959,8 @@ MUTATIONS = [
     {
         "why": "★表の前の一覧が何度描かれても気づかない★",
         "file": "scripts/build_hub_pages.py",
-        "before": "        for key in (\"pre\", \"ev\", \"list\"):",
-        "after": "        for key in (\"ev\", \"list\"):",
+        "before": "        for key in (\"pre\", \"list\"):",
+        "after": "        for key in (\"list\",):",
         "run": ["scripts/build_hub_pages.py"],
     },
     # ─── 2026-11-07・ランキング上位10の恩恵の一言・ランキング専用タスク ─────────────
@@ -9897,17 +9897,17 @@ MUTATIONS = [
         "run": ["scripts/build_hub_pages.py"],
     },
     {
-        "why": "★お得な順の一覧を、手書きの文として検査する（並べた数値で止まる）★",
+        "why": "★ランキングの一覧（期待値ランキングを含む）を、手書きの文として検査する（並べた数値で止まる）★",
         "file": "scripts/build_hub_pages.py",
-        "before": '        for key in ("pre", "ev", "list"):\n',
-        "after": '        for key in ("pre", "list"):\n',
+        "before": '        for key in ("pre", "list"):\n',
+        "after": '        for key in ("pre",):\n',
         "run": ["scripts/build_hub_pages.py"],
     },
     {
-        "why": "★お得な順の欄をページに出さない★",
+        "why": "★期待値ランキングで、確かめた機種が無いときに何も書かない（空の表だけのページになる）★",
         "file": "scripts/build_hub_pages.py",
-        "before": '    if data_html.get("ev"):\n',
-        "after": "    if False:\n",
+        "before": '        table_block.append(f\'      <p class="hint-text">{md(prose["empty_text"])}</p>\')\n',
+        "after": "        pass\n",
         "run": ["scripts/build_hub_pages.py"],
     },
     {

@@ -1270,6 +1270,7 @@ def check_machine(slug: str, machine: dict) -> list:
 COUNT_FILES = ()
 # ★一覧・ランキングの4ページ★（機種の行を実際に持つ生成物）
 HUB_FILES = ("guide-tenjo-ranking.html", "guide-reset-ranking.html",
+             "guide-reset-ev-ranking.html",
              "guide-suru-tenjo.html", "guide-ichiran.html")
 
 

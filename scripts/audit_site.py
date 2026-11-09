@@ -3128,6 +3128,7 @@ def check_52_test_residue(machines: list) -> list:
     #   ★機種一覧だけ見ても足りない★＝公開の関所は
     #   早見表の変更も「許していないファイル」として数える。
     for rel in ("guide-tenjo-ranking.html", "guide-reset-ranking.html",
+                "guide-reset-ev-ranking.html",
                 "guide-suru-tenjo.html", "guide-ichiran.html"):
         f = os.path.join(BASE, rel)
         if not os.path.isfile(f):

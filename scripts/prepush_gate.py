@@ -124,6 +124,7 @@ def allowed_for(slug: str) -> set:
         "assets/data/machines.json",
         # ★早見表も変わる★（手順書の add 一覧から漏れていた）
         "guide-tenjo-ranking.html", "guide-reset-ranking.html",
+        "guide-reset-ev-ranking.html",
         "guide-suru-tenjo.html", "guide-ichiran.html",
         # ★★service-worker.js は許可しない★★（2026-08-25・Codexの25回目）
         #   ★新台の公開経路は、このファイルを1文字も書いていない★
@@ -494,7 +495,8 @@ def selftest() -> int:
 
     t("★早見表4ページも許した範囲に入っている★（手順書のadd一覧から漏れていた）",
       {"guide-ichiran.html", "guide-tenjo-ranking.html",
-       "guide-reset-ranking.html", "guide-suru-tenjo.html"} <= allowed_for("x"))
+       "guide-reset-ranking.html", "guide-reset-ev-ranking.html",
+       "guide-suru-tenjo.html"} <= allowed_for("x"))
     t("　その機種のファイルだけを許す",
       "machines/x/index.html" in allowed_for("x")
       and "machines/y/index.html" not in allowed_for("x"))

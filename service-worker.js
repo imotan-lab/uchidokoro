@@ -1,4 +1,4 @@
-const CACHE_NAME = 'uchidokoro-v655';
+const CACHE_NAME = 'uchidokoro-v656';
 
 // ★先読みするのは「中身が機種に依存しない」ファイルだけ★
 //   （2026-07-28・Codex 11巡目 手順7）
@@ -55,6 +55,7 @@ self.addEventListener('fetch', event => {
     || url.pathname === '/setting.html'
     || url.pathname === '/guide-tenjo-ranking.html'
     || url.pathname === '/guide-reset-ranking.html'
+    || url.pathname === '/guide-reset-ev-ranking.html'
     || url.pathname === '/guide-suru-tenjo.html'
     || url.pathname === '/guide-ichiran.html'
     // ★狙い目の数字の印（data-dv）を持つガイド★（2026-11-09・Codex）＝通信できないときに古い数字を出さない
