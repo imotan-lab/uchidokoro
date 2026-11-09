@@ -224,7 +224,9 @@ _HUB_SRC = ("assets/data/machines.json", "scripts/hub_prose.json",
             "assets/data/hall-presence.json", "scripts/hall_presence.py",
             # ★新台をランキングに入れる判定（記事データと指紋）★（2026-11-09・Codex）＝
             #   記事に狙い目が出ているかで新台が入る・外れるので、記事データと判定の道具も引き金
-            "assets/data/machine-details/", "scripts/target_projection.py")
+            "assets/data/machine-details/", "scripts/target_projection.py",
+            # ★リセット時お得な順の並び順と、それを作る道具★（2026-11-09）
+            "assets/data/reset-ev-order.json", "scripts/reset_ev.py")
 
 
 def _touches(paths, srcs) -> bool:
@@ -1228,6 +1230,10 @@ def _selftest() -> int:
     t("★設置の道具が変わったら早見表を見る★",
       touches_hub(["scripts/hall_presence.py"]) is True)
     # ★記事データも材料（2026-11-09〜）＝新台は記事に狙い目が出ているかでランキングに入る・外れる★
+    t("★お得な順の並び順が変わったら早見表を見る★",
+      touches_hub(["assets/data/reset-ev-order.json"]) is True)
+    t("★お得な順の道具が変わったら早見表を見る★",
+      touches_hub(["scripts/reset_ev.py"]) is True)
     t("★記事データが変わったら早見表を見る（新台が入る・外れる）★",
       touches_hub(["assets/data/machine-details/hokuto.json"]) is True)
     t("★新台を入れる判定の道具が変わったら早見表を見る★",

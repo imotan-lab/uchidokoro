@@ -78,6 +78,8 @@ APPROVED_INPUTS = frozenset({
     # ★2つのランキングから外す機種を決める側★（2026-11-09）＝build_hub_pages が読む。
     #   ここを直せばランキングから何でも消せる（同じ見出しが当てはまる）。
     "scripts/hall_presence.py",
+    # ★リセット時お得な順の並び順を作る側★（2026-11-09）＝build_hub_pages が読む
+    "scripts/reset_ev.py",
     "scripts/build_ledger.py",
     # ★★毎朝すべての機種の記事データを書き換える側★★（2026-08-21・台帳#438）
     #   grow_machine / grow_legacy は machine-details/{slug}.json と

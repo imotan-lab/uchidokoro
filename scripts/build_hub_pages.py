@@ -296,7 +296,8 @@ def hub_content_problems(built: dict, data_html: dict, *deny_pats,
         #   "pre"＝朝一リセットの「最初から狙い目の機種」（2026-11-06）。中身はチェッカーの線から作る一覧で、
         #   "list" と同じ性質なので同じ扱いにする（説明文・注記は今まで通り検査する）。
         broken = False
-        for key in ("pre", "list"):
+        # "ev"＝リセット時お得な順（2026-11-09）。表Cと同じ行を並べ替えた一覧なので同じ扱い
+        for key in ("pre", "ev", "list"):
             part = (data_html.get(f) or {}).get(key)
             if part:
                 n = rest.count(part)
@@ -842,6 +843,17 @@ def build_page(file, prose, data_html):
             pre_block.append(f'      <p class="list-note">{data_html["pre_note"]}</p>')
         pre_block.append("    </article>")
         parts.append("\n".join(pre_block))
+    # ★リセット時お得な順★（2026-11-09・運営者の決定・reset_ev）＝お得さを確かめた機種が1つでもあるときだけ
+    #   ★見出しと説明は散文（ev_label / ev_caption）＝無ければ止める★
+    if data_html.get("ev"):
+        ev_block = ['    <article class="article-block">']
+        ev_block.append(f'      <h2 class="block-label">▶ {md(prose["ev_label"])}</h2>')
+        ev_block.append(f'      <p class="hint-text">{md(prose["ev_caption"])}</p>')
+        ev_block.append(data_html["ev"])
+        if data_html.get("ev_note"):
+            ev_block.append(f'      <p class="list-note">{data_html["ev_note"]}</p>')
+        ev_block.append("    </article>")
+        parts.append("\n".join(ev_block))
     # 表（caption + data + note）
     table_block = ['    <article class="article-block">']
     table_block.append(f'      <p class="hint-text">{md(prose["table_caption"])}</p>')
@@ -868,9 +880,19 @@ def _meta_len_of(file: str, prose_all: dict) -> str:
     return (prose_all.get(key) or {}).get("meta_description", "")
 
 
+def ev_rows(C: list, order: list) -> list:
+    """★リセット時お得な順★＝表Cの行を、公開の並び順（slugの列）のとおりに並べる（表Cに無い機種は飛ばす）。
+    ★上限は表Cと同じ数（RESET_SHOWN）★"""
+    by = {r["slug"]: r for r in C}
+    return [by[s] for s in order if s in by][:RESET_SHOWN]
+
+
 def _build_pages(rows: list, prose_all: dict, notes: "dict | None" = None,
-                 excluded: "set | None" = None) -> tuple:
+                 excluded: "set | None" = None, ev_order: "list | None" = None) -> tuple:
     """機種データと散文から、ハブ4ページのHTMLを組み立てる（書き込みはしない）。"""
+    if ev_order is None:
+        import reset_ev as _re
+        ev_order = _re.read_order()
     # ランキング系は先行記事を除く（未確定の数値で順位を付けない）
     # ★新台経路(AUTO_*)も明示除外★（checker無しの自然除外に頼らない・Codex72回目）
     ranked = ranked_rows(rows)
@@ -991,9 +1013,25 @@ def _build_pages(rows: list, prose_all: dict, notes: "dict | None" = None,
     ichiran_note = ("機種名をタップすると各詳細ページへ移動します。"
                     "天井の欄はG数の天井です。スルー回数・周期・ポイントなど、ほかの天井は各機種ページで確認してください。")
 
+    # ★リセット時お得な順★（2026-11-09・運営者の決定）＝表Cの機種のうち、お得さを確かめた機種を
+    #   公開の並び順（reset-ev-order.json・slugだけ）のとおりに番号つきで並べる。★金額は出さない★。
+    #   ★表C（狙える幅の大きい順）はそのまま残す★（運営者「そういうランキングも良いかもね」）。
+    #   ★並び順は控え（金額）を読まない★＝CIでも同じページになる。並び順が読めなければ例外で止める。
+    EV = ev_rows(C, ev_order)
+    ev_list = render_rank_list(
+        EV,
+        lambda r: f'{esc(r["ratelabel"])} ／ {esc(r["nlabel"])} <strong>{r["nline"]}G〜</strong> → {esc(r["rlabel"])} <strong>{r["rline"]}G〜</strong>',
+    ) if EV else ""
+    ev_note = (
+        "狙い目は、ここから打つとお得になる当サイトの目安です。"
+        "交換率を選べる機種は、最初に表示される交換率の狙い目です。"
+        "リセットかどうかの見分け方や、恩恵が付く条件は各機種ページで確認してください。"
+    )
+
     pages = {
         "guide-tenjo-ranking.html": (prose_all["tenjo"], {"list": tenjo_list, "note": tenjo_note}),
         "guide-reset-ranking.html": (prose_all["reset"], {"pre": zero_list, "pre_note": zero_note if Z else "",
+                                                          "ev": ev_list, "ev_note": ev_note if EV else "",
                                                           "list": reset_list, "note": reset_note}),
         "guide-suru-tenjo.html": (prose_all["suru"], {"list": suru_list, "note": suru_note}),
         "guide-ichiran.html": (prose_all["ichiran"], {"list": ichiran_list, "note": ichiran_note}),
@@ -1026,7 +1064,9 @@ def render_all(source_root: "Path") -> dict:
     # ★外す機種も、指定された作業フォルダの控えから読む★（2026-11-09・Codex）
     import hall_presence as _hp
     cut = _hp.excluded(_hp.read(str(source_root / "assets" / "data" / "hall-presence.json")))
-    built, data_html, allowed = _build_pages(rows, prose_all, excluded=cut)
+    import reset_ev as _re
+    evo = _re.read_order(str(source_root / "assets" / "data" / "reset-ev-order.json"))
+    built, data_html, allowed = _build_pages(rows, prose_all, excluded=cut, ev_order=evo)
     bad = hub_content_problems(built, data_html,
                                ("公開できない表現", _g.ABSOLUTE_DENY_PAT),
                                ("要人手確認の語（損得・設定の話）", _g.RISK_PAT),
@@ -1568,6 +1608,37 @@ def selftest() -> int:
     # ★★ホールにほとんど無い機種を外す（2026-11-09）★★
     t("★ranking_pool は外す機種を除く★",
       [r["slug"] for r in ranking_pool(_rk_rows[:3], {"r2"})] == ["r1", "r3"])
+    # ★★リセット時お得な順（2026-11-09）★★
+    _evc = dataset_C(_rk_rows)
+    t("★お得な順は並び順のとおり・表Cに無い機種は飛ばす★",
+      [r["slug"] for r in ev_rows(_evc, ["r3", "zzz", "r12", "r1"])] == ["r3", "r12", "r1"])
+    _evl = '<ol><li><a href="/machines/x/">機種x</a> 5.6枚 ／ 通常時 <strong>600G〜</strong></li></ol>'
+    t("★お得な順の一覧は公開データ由来として検査から外す★",
+      hub_content_problems({"a.html": f"<html><body><p>説明</p>{_evl}</body></html>"},
+                           {"a.html": {"ev": _evl}}, *deny) == [])
+    t("★お得な順も載せる数は表Cと同じ上限★",
+      len(ev_rows(_evc * 3, [r["slug"] for r in _evc] * 3)) <= RESET_SHOWN)
+    try:
+        _rows_e = load_rows()
+        _pr_e = __import__("safe_json").read_json(PROSE, expect=dict)
+        _ce = dataset_C(ranking_pool(_rows_e, set()))
+        _e0, _de0, _ = _build_pages(_rows_e, _pr_e, excluded=set(), ev_order=[])
+        _pick = [_ce[3]["slug"], _ce[0]["slug"]]
+        _e1, _de1, _ = _build_pages(_rows_e, _pr_e, excluded=set(), ev_order=_pick)
+        _p0, _p1 = _e0["guide-reset-ranking.html"], _e1["guide-reset-ranking.html"]
+        _lab = esc(_pr_e["reset"]["ev_label"])
+        t("★お得さを確かめた機種が無ければ、お得な順の欄を出さない★", _lab not in _p0)
+        _ev_html = _de1["guide-reset-ranking.html"]["ev"]
+        t("★お得な順の欄は並び順のとおり（4番目の機種が1位）★",
+          _lab in _p1 and _ev_html.index(f'/machines/{_pick[0]}/"') < _ev_html.index(f'/machines/{_pick[1]}/"'))
+        t("★表C（狙える幅の大きい順）は変わらない★",
+          _de0["guide-reset-ranking.html"]["list"] == _de1["guide-reset-ranking.html"]["list"])
+        t("★お得な順の欄に金額（円）を出さない★", "円" not in _ev_html)
+        t("★お得な順の一覧も公開データ由来として扱い、2回出たら止める★",
+          hub_content_problems({"a.html": _p1 + _ev_html}, {"a.html": _de1["guide-reset-ranking.html"]},
+                               *deny) != [])
+    except Exception as e:                                   # noqa: BLE001
+        t(f"★お得な順の通し試験が動かない★ {type(e).__name__}: {e}", False)
     try:
         _rows_real = load_rows()
         import safe_json as _sj_t
