@@ -5,9 +5,15 @@
   "seo": {
    "title": "Ｌパチスロ ゴジラ対エヴァンゲリオン ２ 天井・狙い目"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "ゴジエヴァ2",
+   "ゴジエバ2",
+   "ごじえば2",
+   "ゴジラ対エヴァ2",
+   "ゴジラ対エヴァンゲリオン2"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -68,7 +74,8 @@
     "target": 600
    }
   },
-  "targetProjection": "deb3b0bf03305c8f"
+  "targetProjection": "deb3b0bf03305c8f",
+  "series": "ゴジラ"
  },
  {
   "slug": "dmm_5104",
