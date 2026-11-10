@@ -299,7 +299,7 @@
   "slug": "dmm_5120",
   "name": "スロット Vivy -Fluorite Eye’s Song-",
   "seo": {
-   "title": "スロット Vivy -Fluorite Eye’s Song- スペック・基本情報"
+   "title": "スロット Vivy -Fluorite Eye’s Song- 天井・狙い目"
   },
   "info": "",
   "strategy": "",
@@ -331,7 +331,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-02",
+   "decided_at": "2026-11-11",
    "input_digest": "sha256:6722ee8e16f18eeb224b308500dc43f7ef7b78f5f9330009c1d5e4448acd428a"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
