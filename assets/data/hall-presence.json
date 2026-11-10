@@ -3,15 +3,25 @@
  "line": 100,
  "line_why": "打てる機種をランキングで紹介するため、DMMぱちタウンに載っている全国の設置店舗が100店より少ない機種を載せない。全国的に設置が少ないことを見る編集上の基準（2026-11-09・運営者の決定を受けて Claude と Codex が決めた線。全国の営業所は2025年末で6,464店）",
  "machines": {
+  "animal_dotch": {
+   "stores": 1392,
+   "checked": "2026-11-10",
+   "url": "https://p-town.dmm.com/machines/4964"
+  },
   "azurlane": {
-   "stores": 3142,
-   "checked": "2026-11-09",
+   "stores": 3145,
+   "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/4847"
   },
   "basilisk_tenzen": {
-   "stores": 2683,
-   "checked": "2026-11-09",
+   "stores": 2682,
+   "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/4466"
+  },
+  "chibaryo2": {
+   "stores": 980,
+   "checked": "2026-11-10",
+   "url": "https://p-town.dmm.com/machines/4530"
   },
   "dmm_5073": {
    "stores": 2938,
@@ -38,49 +48,89 @@
    "checked": "2026-11-09",
    "url": "https://p-town.dmm.com/machines/5120"
   },
+  "dmm_5121": {
+   "stores": 1869,
+   "checked": "2026-11-10",
+   "url": "https://p-town.dmm.com/machines/5121"
+  },
   "enen2": {
    "stores": 4279,
    "checked": "2026-11-09",
    "url": "https://p-town.dmm.com/machines/4926"
   },
+  "garei_zero_re": {
+   "stores": 1935,
+   "checked": "2026-11-10",
+   "url": "https://p-town.dmm.com/machines/5028"
+  },
   "kengan_ashura": {
    "stores": 3,
-   "checked": "2026-11-09",
+   "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/4434"
   },
   "koukaku": {
    "stores": 3473,
-   "checked": "2026-11-09",
+   "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/4931"
+  },
+  "madomagi_forte": {
+   "stores": 14,
+   "checked": "2026-11-10",
+   "url": "https://p-town.dmm.com/machines/4420"
+  },
+  "midoridon_viva": {
+   "stores": 291,
+   "checked": "2026-11-10",
+   "url": "https://p-town.dmm.com/machines/4763"
   },
   "nangoku_special": {
    "stores": 1726,
    "checked": "2026-11-09",
    "url": "https://p-town.dmm.com/machines/5031"
   },
+  "okidoki_gorgeous": {
+   "stores": 670,
+   "checked": "2026-11-10",
+   "url": "https://p-town.dmm.com/machines/4674"
+  },
   "onepunchman": {
    "stores": 49,
-   "checked": "2026-11-09",
+   "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/4623"
+  },
+  "prskkm": {
+   "stores": 2631,
+   "checked": "2026-11-10",
+   "url": "https://p-town.dmm.com/machines/5057"
   },
   "pw_10503": {
    "stores": 4594,
    "checked": "2026-11-09",
    "url": "https://p-town.dmm.com/machines/5033"
   },
+  "pw_10521": {
+   "stores": 3943,
+   "checked": "2026-11-10",
+   "url": "https://p-town.dmm.com/machines/5061"
+  },
   "pw_10523": {
    "stores": 1314,
    "checked": "2026-11-09",
    "url": "https://p-town.dmm.com/machines/5059"
   },
+  "pw_10543": {
+   "stores": 2879,
+   "checked": "2026-11-10",
+   "url": "https://p-town.dmm.com/machines/5065"
+  },
   "sao": {
    "stores": 596,
-   "checked": "2026-11-09",
+   "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/4352"
   },
   "sao2": {
-   "stores": 3640,
-   "checked": "2026-11-09",
+   "stores": 3639,
+   "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/5025"
   },
   "ssb1": {
@@ -89,41 +139,51 @@
    "url": "https://p-town.dmm.com/machines/5064"
   },
   "takt_opus": {
-   "stores": 1711,
-   "checked": "2026-11-09",
+   "stores": 1719,
+   "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/5000"
   },
   "umineko2": {
-   "stores": 989,
-   "checked": "2026-11-09",
+   "stores": 990,
+   "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/4925"
   },
   "youjitsu": {
-   "stores": 118,
-   "checked": "2026-11-09",
+   "stores": 119,
+   "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/4770"
   }
  },
  "tries": {
-  "azurlane": "2026-11-09",
-  "basilisk_tenzen": "2026-11-09",
+  "animal_dotch": "2026-11-10",
+  "azurlane": "2026-11-10",
+  "basilisk_tenzen": "2026-11-10",
+  "chibaryo2": "2026-11-10",
   "dmm_5073": "2026-11-09",
   "dmm_5095": "2026-11-09",
   "dmm_5113": "2026-11-09",
   "dmm_5119": "2026-11-09",
   "dmm_5120": "2026-11-09",
+  "dmm_5121": "2026-11-10",
   "enen2": "2026-11-09",
-  "kengan_ashura": "2026-11-09",
-  "koukaku": "2026-11-09",
+  "garei_zero_re": "2026-11-10",
+  "kengan_ashura": "2026-11-10",
+  "koukaku": "2026-11-10",
+  "madomagi_forte": "2026-11-10",
+  "midoridon_viva": "2026-11-10",
   "nangoku_special": "2026-11-09",
-  "onepunchman": "2026-11-09",
+  "okidoki_gorgeous": "2026-11-10",
+  "onepunchman": "2026-11-10",
+  "prskkm": "2026-11-10",
   "pw_10503": "2026-11-09",
+  "pw_10521": "2026-11-10",
   "pw_10523": "2026-11-09",
-  "sao": "2026-11-09",
-  "sao2": "2026-11-09",
+  "pw_10543": "2026-11-10",
+  "sao": "2026-11-10",
+  "sao2": "2026-11-10",
   "ssb1": "2026-11-09",
-  "takt_opus": "2026-11-09",
-  "umineko2": "2026-11-09",
-  "youjitsu": "2026-11-09"
+  "takt_opus": "2026-11-10",
+  "umineko2": "2026-11-10",
+  "youjitsu": "2026-11-10"
  }
 }
