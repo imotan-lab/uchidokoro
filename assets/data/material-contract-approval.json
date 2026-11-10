@@ -11,7 +11,7 @@
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "308cf1510e49f3cc57354e66ad2acef887c60fca87c7b09b536d6b011a6c8169",
   "scripts/blocked_hosts.py": "4ceaea818d61bff2571542622b695fb67295d523ba015667ba89d9829425c2d9",
-  "scripts/ceiling_dismiss.py": "486af733f520f68e92a3c08aa5890ddbe80a1761983dda506f2fa0edbbff15c7",
+  "scripts/ceiling_dismiss.py": "a0e9bee6afbea29cbc97e3be9ea58239fc3bf47036d001206aa90f999605e9d8",
   "scripts/ceiling_lookup.py": "17cd802e6d8e5eb90bcc13354cef0d602f7c3693ab5419434643c4b1edac0118",
   "scripts/collect_evidence.py": "a3ca8a9f76f057886ad5ad6134b9841fb53eb6ed72b56aa23173f70434d4dbab",
   "scripts/confirmed_values.py": "37620cc16ca72bf4b1db8fd72cf72533494ccbd90176127726cf5bec108bd208",
