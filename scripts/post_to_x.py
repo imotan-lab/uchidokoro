@@ -257,6 +257,9 @@ def main():
     parser.add_argument("--detach", action="store_true",
                         help="実投稿処理をバックグラウンドプロセスで実行し親は即終了（タスクがブロックされるのを防ぐ）")
     parser.add_argument("--_child", action="store_true", help=argparse.SUPPRESS)  # 内部利用
+    # ★投稿待ちの控え（x_post_queue）から呼ぶときは待たない★（2026-11-10）＝待つ時刻は控えが決めている
+    parser.add_argument("--skip-jitter", action="store_true",
+                        help="投稿前のランダム待機をしない（x_post_queue から呼ぶとき）")
     args = parser.parse_args()
 
     # --detach 指定時は自身を detached 子プロセスとして起動し親は即終了
@@ -318,7 +321,9 @@ def main():
         return 0
 
     # 投稿時刻のランダム化（bot検出対策：0〜180分）
-    if not args.dry_run:
+    if not args.dry_run and args.skip_jitter:
+        _log("ランダム待機スキップ（--skip-jitter・投稿待ちの控えから）")
+    if not args.dry_run and not args.skip_jitter:
         jitter_sec = random.randint(0, 10800)
         h, rem = divmod(jitter_sec, 3600)
         m, s = divmod(rem, 60)

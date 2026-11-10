@@ -42,7 +42,7 @@ DELAY_MIN, DELAY_MAX = 5, 60          # 投稿してよい時刻までの分（�
 RETRY_MIN = 30
 MAX_TRIES = 3
 STALE_HOURS = 30                      # 時刻を過ぎてこれだけ投稿されなければ見張り番が知らせる（次のタスクまで最長約15時間）
-MODES = ("promotion", "correction")
+MODES = ("promotion", "correction", "new")   # new＝新台の告知（post_to_x.py・change に導入日の表示）
 _SLUG = re.compile(r"^[a-z0-9_]{1,60}$")
 _IN_SELFTEST = False
 
@@ -111,11 +111,23 @@ def add(mode: str, slug: str, change: str = "", now=None, rng=None, path: str = 
     return update(_add, path)
 
 
-def _post(it: dict) -> int:
+def post_args(it: dict) -> list:
+    """★控えの1件を、投稿する道具の呼び方にする★（新台は post_to_x.py・ほかは post_update_to_x.py）"""
+    if it["mode"] == "new":
+        # ★新台の告知も控えを通す★（2026-11-10・洗い出し3回目）＝--detach の子は呼んだタスクが終わると消えうる
+        args = [sys.executable, os.path.join(HERE, "post_to_x.py"), "--skip-jitter"]
+        if it.get("change"):
+            args += ["--dates", json.dumps({it["slug"]: it["change"]}, ensure_ascii=False)]
+        return args
     args = [sys.executable, os.path.join(HERE, "post_update_to_x.py"), it["mode"], "--slug", it["slug"],
             "--skip-jitter"]
     if it["mode"] == "correction" and it.get("change"):
         args += ["--change", it["change"]]
+    return args
+
+
+def _post(it: dict) -> int:
+    args = post_args(it)
     try:
         r = subprocess.run(args, cwd=os.path.dirname(HERE), capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=900)
@@ -321,6 +333,13 @@ def selftest() -> int:
     except TimeoutError:
         _blocked = True
     t("★★書き込みロックを持っているあいだ、ほかは取れない★★", _blocked)
+    # ★★新台の告知も控えを通す（post_to_x.py を待たずに呼ぶ・導入日を渡す）★★
+    _na = post_args({"mode": "new", "slug": "zzz_n", "change": "11/12（木）"})
+    t("★★新台の告知は post_to_x.py を待ち時間なしで呼び、導入日を渡す★★",
+      _na[1].endswith("post_to_x.py") and "--skip-jitter" in _na
+      and json.loads(_na[_na.index("--dates") + 1]) == {"zzz_n": "11/12（木）"})
+    t("　更新の告知は今までどおり post_update_to_x.py",
+      post_args({"mode": "correction", "slug": "zzz_n"})[1].endswith("post_update_to_x.py"))
     slept = []
     add("promotion", "zzz_c", now=now, rng=_R(), path=p)
     add("promotion", "zzz_d", now=now, rng=_R(), path=p)
@@ -348,6 +367,7 @@ def main() -> int:
     ap.add_argument("--mode", choices=MODES)
     ap.add_argument("--slug")
     ap.add_argument("--change-file")
+    ap.add_argument("--date", default="", help="new のとき：導入日の表示（例 11/12（木））")
     ap.add_argument("--max", type=int, default=10)
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--selftest", action="store_true")
@@ -364,6 +384,8 @@ def main() -> int:
             if a.change_file:
                 with io.open(a.change_file, encoding="utf-8") as f:
                     change = f.read().strip()
+            if a.mode == "new":
+                change = a.date
             it = add(a.mode, a.slug, change)
             print(f"投稿待ちに入れました: {it['mode']} {it['slug']}（{it['due']} 以降・次の自動タスクで投稿）")
             return 0
