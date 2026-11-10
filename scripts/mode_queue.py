@@ -38,6 +38,7 @@ STALL_DAYS = 3           # これだけ1件も進まなければ番人が知ら�
 NEW_DAYS = 60            # 導入からこの日数までは「新台」として早めに見直す
 RECHECK_NEW = 7          # 新台の済んだ機種を見直すまでの日数（解析は導入後に出そろう）
 RECHECK_OLD = 60         # それ以外の済んだ機種を見直すまでの日数
+RECHECK_PER_DAY = 1      # 先頭に置く見直しの件数（残りの枠は、まだやっていない機種へ）
 JST = _dt.timezone(_dt.timedelta(hours=9))
 
 
@@ -104,7 +105,9 @@ def recheck_days(m: dict, today: str) -> int:
         age = (_dt.date.fromisoformat(today) - _dt.date.fromisoformat(rel[:10])).days
     except ValueError:
         return RECHECK_OLD
-    return RECHECK_NEW if age <= NEW_DAYS else RECHECK_OLD
+    # ★導入前は新台の周期にしない★（2026-11-10・洗い出し2回目）＝解析は導入後に出そろうので、
+    #   導入前に7日おきで見直しても証拠はほとんど変わらず、枠だけを使う
+    return RECHECK_NEW if 0 <= age <= NEW_DAYS else RECHECK_OLD
 
 
 def pick(n: int, machines: list, decided: set, tried: dict, today: str) -> list:
@@ -136,7 +139,30 @@ def pick(n: int, machines: list, decided: set, tried: dict, today: str) -> list:
     #   100機種以上あり、後ろに置くと新台の見直しが何か月も回ってこない
     due_new = [s for s in due if recheck_days(rows.get(s), today) == RECHECK_NEW]
     due_old = [s for s in due if s not in due_new]
-    return (due_new + never + old + due_old)[:max(0, n)]
+    # ★★見直しは1日 RECHECK_PER_DAY 件まで★★（2026-11-10・洗い出し2回目＝新台の見直しが1日約3件出て、
+    #   1日2件の枠を埋め、一度も見ていない昔の機種が進まなくなっていた）。
+    #   新台の見直しを1件だけ先頭に置き、残りの枠はまだやっていない機種へ回す。
+    head = due_new[:RECHECK_PER_DAY]
+    rest_due = due_new[RECHECK_PER_DAY:] + due_old
+    return (head + never + old + rest_due)[:max(0, n)]
+
+
+NEW_STALL_DAYS = 7       # まだ一度も済んでいない機種が、これだけ1件も済まなければ止まっている
+
+
+def record_tried(prev: dict, today: str, result: str) -> dict:
+    """★やった結果の記録★（初めて済んだ日 first_done_at は残す）
+
+    ★なぜ★（2026-11-10・洗い出し2回目）＝見直しで済んだ結果が毎日記録されると「進んでいる」に見え、
+    一度も見ていない機種が進んでいなくても番人が気づけない。初めて済んだ日を別に持つ。
+    """
+    rec = {"at": today, "result": result}
+    first = str((prev or {}).get("first_done_at") or "")
+    if not first and result in DONE_RESULTS:
+        first = today
+    if first:
+        rec["first_done_at"] = first
+    return rec
 
 
 def progress(machines: list, decided: set, tried: dict, today: str) -> dict:
@@ -154,6 +180,14 @@ def progress(machines: list, decided: set, tried: dict, today: str) -> dict:
         else:
             gap = (_dt.date.fromisoformat(today) - _dt.date.fromisoformat(last)).days
             stalled = gap >= STALL_DAYS
+        # ★★見直しばかりで、まだ一度も済んでいない機種が進んでいなければ止まっている★★（2026-11-10）
+        #   初めて済んだ日（first_done_at）が無い古い記録は、済んだ日（at）で代える
+        _firsts = [str(v.get("first_done_at") or (v.get("at") if str(v.get("result", "")) in DONE_RESULTS else ""))
+                   for v in tried.values()]
+        _first_last = max((x for x in _firsts if x), default="")
+        if _first_last:
+            _gap_new = (_dt.date.fromisoformat(today) - _dt.date.fromisoformat(_first_last[:10])).days
+            stalled = stalled or _gap_new >= NEW_STALL_DAYS
     # ★欄が入った機種★＝反映まで済んだうち、記事に欄が出たもの（NO_BOX は決まったが欄は出ない）
     applied = len({s for s in alive & done if str(tried[s].get("result", "")) == "APPLIED"})
     return {"decided": len(alive & done), "applied": applied, "total": len(alive), "remaining": remaining,
@@ -210,6 +244,24 @@ def selftest() -> int:
           and "b" not in pick(4, _ms2, {"a", "b"}, _tr2, "2026-10-30"))
         t("★★新台の見直しは先頭、それ以外の見直しは、まだやっていない機種と決まらなかった機種のあと★★",
           pick(4, _ms2, {"a", "b"}, _tr2, "2026-11-20") == ["a", "d", "c", "b"])
+        # ★★見直しは1日1件まで先頭（残りの枠はまだやっていない機種へ）★★（2026-11-10・洗い出し2回目）
+        _ms3 = [{"slug": s, "release_date": "2026-11-02"} for s in ("n1", "n2", "n3")] + [{"slug": "o1"}]
+        _tr3 = {s: {"at": "2026-11-03", "result": "APPLIED"} for s in ("n1", "n2", "n3")}
+        t("★★新台の見直しが3件あっても先頭は1件、2件目の枠はまだやっていない機種★★",
+          pick(2, _ms3, {"n1", "n2", "n3"}, _tr3, "2026-11-20") == ["n1", "o1"])
+        t("★導入前の機種は7日おきの見直しにしない★",
+          recheck_days({"release_date": "2026-12-07"}, "2026-11-20") == RECHECK_OLD)
+        # ★★見直しばかりで、まだやっていない機種が進まなければ止まっている★★（2026-11-10）
+        _r1 = record_tried(None, "2026-11-01", "APPLIED")
+        _r2 = record_tried(_r1, "2026-11-12", "APPLIED")
+        t("　初めて済んだ日は、見直しで記録し直しても残る",
+          _r1["first_done_at"] == "2026-11-01" and _r2["first_done_at"] == "2026-11-01" and _r2["at"] == "2026-11-12")
+        _pr = progress([{"slug": "a"}, {"slug": "b"}], {"a"}, {"a": _r2}, "2026-11-12")
+        t("★★見直しで毎日済んでいても、まだやっていない機種が7日以上進まなければ止まっている★★",
+          _pr["stalled"] and _pr["remaining"] == 1)
+        t("　（対照）まだやっていない機種が最近済んでいれば止まっていない",
+          not progress([{"slug": "a"}, {"slug": "b"}], {"a"}, {"a": record_tried(None, "2026-11-10", "APPLIED")},
+                       "2026-11-12")["stalled"])
         t("　導入日の書き方が月だけでも読める・読めなければ60日",
           recheck_days({"release_date": "2026-11"}, "2026-11-10") == RECHECK_NEW
           and recheck_days({}, "2026-11-10") == RECHECK_OLD)
@@ -269,7 +321,7 @@ def _main() -> int:
         if a.tried not in {str(m.get("slug")) for m in machines if isinstance(m, dict)}:
             print(f"★機種一覧に無い機種です: {a.tried}★")
             return 1
-        tried[a.tried] = {"at": today, "result": a.result}
+        tried[a.tried] = record_tried(tried.get(a.tried), today, a.result)
         store["tried"] = tried
         _write_store(store)
         print(f"記録しました: {a.tried} {a.result}（{today}）")
