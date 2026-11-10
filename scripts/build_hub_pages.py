@@ -280,6 +280,13 @@ def hub_content_problems(built: dict, data_html: dict, *deny_pats,
                          allowed_counts: dict | None = None) -> list:
     """出来上がったハブ4ページのうち、**データ由来でない部分**を検査する。
 
+    ★★本番の道（--legacy・--check・夜の新台公開）からは呼ばない★★（2026-11-10・洗い出し2回目で確かめた）＝
+      呼んでいたのは撤去した検査スイッチの組み立て（render_all・公開データ machines.public.json）だけ。
+      いまの文章に当てると「期待値」「設定」「お得」などの正しい文92か所で止まり、
+      配線すると早見表の作り直しが全部止まる（鉄則0z＝語の名簿で意味を決めない・文章は2AIの STEP 1-S が読む）。
+      ★配線しないこと★。いまはどこからも使われていない（自己試験だけが呼ぶ）。
+      消していないのは、件数の書き方（_counts_allowed・HUB_FIXED_NUMERALS）の試験と絡んでいるため。
+
     ★機種一覧そのものは検査しない★（Codex 14巡目 (b)-1）
       一覧は公開データをそのまま並べた部分なので、ここの数値は裏取り済み。
       以前は一覧も含めて「単位つき数値は全部未検証」と見ていたため、
@@ -458,9 +465,8 @@ def _detail_of(slug: str, details_dir: "Path | None"):
 def load_rows(source: "Path | None" = None):
     """一覧のもとになる機種データを読む。
 
-    ★公開時は必ず公開データ（assets/data/public/machines.public.json）から★
-      （2026-07-30・Codex 13巡目 (a)-1）
-      authoring を直接読むと、ランキングやスペック欄に射影で消えるはずの値が出る。
+    ★読むのは assets/data/machines.json★（検査スイッチの撤去で公開データの射影は無くなった・2026-10-01）。
+      source を渡せば、その機種一覧と隣の machine-details/ を読む（作業フォルダの写し用）。
     """
     import sys as _s2
     _s2.path.insert(0, str(BASE / "scripts"))
@@ -1045,37 +1051,6 @@ def _build_pages(rows: list, prose_all: dict, notes: "dict | None" = None,
              for f, (prose, data_html) in pages.items()}
     return (built, {f: d for f, (_p, d) in pages.items()},
             _counts_allowed(len(A), len(C), len(C_top), len(D), len(ALL)))
-
-
-def render_all(source_root: "Path") -> dict:
-    """公開用のハブ4ページを**描くだけ**（書き込みはしない）。
-
-    ★条件7の設計★（2026-07-30・Codex 23巡目）
-    """
-    import sys as _s
-    _s.path.insert(0, str(BASE / "scripts"))
-    import gates as _g
-    import safe_json as _sj
-
-    pub = source_root / "assets" / "data" / "public" / "machines.public.json"
-    if not pub.is_file():
-        raise RuntimeError(f"公開データがありません: {pub}")
-    rows = load_rows(pub)
-    prose_all = _sj.read_json(source_root / "scripts" / "hub_prose.json", expect=dict)
-    # ★外す機種も、指定された作業フォルダの控えから読む★（2026-11-09・Codex）
-    import hall_presence as _hp
-    cut = _hp.excluded(_hp.read(str(source_root / "assets" / "data" / "hall-presence.json")))
-    import reset_ev as _re
-    evo = _re.read_order(str(source_root / "assets" / "data" / "reset-ev-order.json"))
-    built, data_html, allowed = _build_pages(rows, prose_all, excluded=cut, ev_order=evo)
-    bad = hub_content_problems(built, data_html,
-                               ("公開できない表現", _g.ABSOLUTE_DENY_PAT),
-                               ("要人手確認の語（損得・設定の話）", _g.RISK_PAT),
-                               prose_all=prose_all,
-                               allowed_counts=allowed)
-    if bad:
-        raise RuntimeError("ハブに出せない内容があります:\n  " + "\n  ".join(bad))
-    return built
 
 
 # ★★トップページの「掲載機種の一覧」★★（2026-10-29）

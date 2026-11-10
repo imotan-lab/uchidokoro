@@ -1826,6 +1826,17 @@ def _carry_meta_tests(t) -> None:
     t("　（対照）同じ題名なら理由にしない",
       "検索向けの題名が変わります" not in machine_row_drift(
           {"seo": {"title": "a"}}, {"seo": {"title": "a"}}))
+    # ★★導入日が変わって書けたら、Xの訂正告知を投稿待ちへ入れる★★（2026-11-10）
+    _q = []
+    _r1 = queue_release_correction("zzz_x", "2026-11-04", "2026-12-01", add=lambda m, s: _q.append((m, s)))
+    _r2 = queue_release_correction("zzz_x", "2026-11-04", "2026-11-04", add=lambda m, s: _q.append((m, s)))
+    _r3 = queue_release_correction("zzz_x", "", "2026-12-01", add=lambda m, s: _q.append((m, s)))
+    t("★★導入日が変わったら、Xの訂正告知（数値なし）を投稿待ちに入れる★★"
+      "（直す前は延期しても、導入日を書いた告知が直らないまま残った）",
+      _r1 is True and _q == [("correction", "zzz_x")])
+    t("　導入日が同じ・前の導入日が無いなら入れない", _r2 is False and _r3 is False and len(_q) == 1)
+    t("　（配線）書けたあとに呼んでいる",
+      "queue_release_correction(slug, got.get(\"old_release\")" in inspect.getsource(apply_one))
 
 
 def _carry_written_tests(t) -> None:
@@ -2537,6 +2548,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
         return out
     try:
         out["was"] = _pdz.machine_class(cur)
+        out["old_release"] = str((cur or {}).get("release_date") or "")
     except _pdz.DecisionError as e:
         out["problems"].append(f"いまの判定書が壊れています: {e}")
         return out
@@ -3387,7 +3399,31 @@ def apply_one(got: dict) -> dict:
             _pub.mark_done()
             return out
         _pub.mark_done()                   # ★全部そろってから消す★
+        out["x_queued"] = queue_release_correction(slug, got.get("old_release"),
+                                                   (machine or {}).get("release_date"))
     return out
+
+
+def queue_release_correction(slug: str, old_release, new_release, add=None) -> bool:
+    """★導入日が変わって書けたら、Xの訂正告知を投稿待ちの控えへ入れる★（2026-11-10・洗い出し2回目）
+
+    なぜ＝新台の告知は導入日を書いて投稿し（Xは直せない）、延期しても誰も知らせなかった。
+    ★本文に数値は書かない★（post_update_to_x の correction＝サイトへの誘導だけ）。
+    ★失敗しても育成は止めない★（書けた記事は正しい）。前の導入日が無い・同じなら何もしない。
+    """
+    o, n = str(old_release or ""), str(new_release or "")
+    if not o or not n or o == n:
+        return False
+    try:
+        if add is None:
+            import x_post_queue as _xq
+            add = _xq.add
+        add("correction", slug)
+        _log(f"{slug}: 導入日が {o} → {n} に変わったので、Xの訂正告知を投稿待ちに入れました")
+        return True
+    except Exception as e:                # noqa: BLE001
+        _log(f"{slug}: Xの訂正告知を投稿待ちに入れられません: {type(e).__name__}: {e}")
+        return False
 
 
 # ------------------------------------------------------------------ selftest

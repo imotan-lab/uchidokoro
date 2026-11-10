@@ -195,7 +195,7 @@ def build_post_text(entry: dict, release_date: str | None) -> str:
         if is_auto:
             lines = ["【新台情報】", nm]
             if release_date:
-                lines.append(f"登場時期: {release_date}（公式確認）")
+                lines.append(f"登場時期: {release_date}")
             lines += ["", "確認が取れた項目のみ掲載（判明次第更新）", url, "", hashtags]
         elif is_preview:
             # 解析待ちの早期告知
