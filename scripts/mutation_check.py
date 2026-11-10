@@ -10561,6 +10561,13 @@ MUTATIONS = [
         "after": "        self._g = _tl._Guard(path + \".write\" + str(id(self)), timeout=timeout)\n",
         "run": ["scripts/x_post_queue.py"],
     },
+    {
+        "why": "★Xの投稿待ち：run どうしの排他を外す（同じ告知を二重に投稿する・Codex再々指摘）★",
+        "file": "scripts/x_post_queue.py",
+        "before": "        self._g = _tl._Guard(LOCK, timeout=timeout)\n",
+        "after": "        self._g = _tl._Guard(LOCK + str(id(self)), timeout=timeout)\n",
+        "run": ["scripts/x_post_queue.py"],
+    },
 ]
 
 

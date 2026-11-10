@@ -178,26 +178,28 @@ def _same(a: dict, b: dict) -> bool:
 
 
 class _Lock:
-    """★2つの run を同時に走らせない★（古い印は60分で奪う）"""
+    """★2つの run を同時に走らせない★（OSのファイルロック＝task_lock._Guard）
+
+    ★2026-11-10・Codexの指摘で作り直した★＝直す前はファイルを作って古ければ（60分）消す形で、
+    2つが同時に古いロックを片付けると両方が投稿へ進み、同じ告知を二重に投稿できた。
+    OSのロックはプロセスが死ねば外れ、持ち主しか外せないので、片付けそのものが要らない。
+    取れなければすぐ「ほかの run が投稿中です」で止まる（待たない）。
+    """
+
+    def __init__(self, timeout: float = 1.0):
+        import task_lock as _tl
+        self._g = _tl._Guard(LOCK, timeout=timeout)
 
     def __enter__(self):
         os.makedirs(os.path.dirname(LOCK), exist_ok=True)
         try:
-            fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            if time.time() - os.path.getmtime(LOCK) < 3600:
-                raise RuntimeError("ほかの run が投稿中です")
-            os.remove(LOCK)
-            fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.close(fd)
+            self._g.__enter__()
+        except TimeoutError:
+            raise RuntimeError("ほかの run が投稿中です")
         return self
 
     def __exit__(self, *exc):
-        try:
-            os.remove(LOCK)
-        except OSError:
-            pass
-        return False
+        return self._g.__exit__(*exc)
 
 
 def run_due(now=None, post=None, sleep=None, rng=None, path: str = None, max_n: int = 10) -> dict:
@@ -333,6 +335,13 @@ def selftest() -> int:
     except TimeoutError:
         _blocked = True
     t("★★書き込みロックを持っているあいだ、ほかは取れない★★", _blocked)
+    try:
+        with _Lock():
+            with _Lock(timeout=0.2):
+                _run_blocked = False
+    except RuntimeError:
+        _run_blocked = True
+    t("★★投稿の実行（run）も、ほかが実行中なら取れない（二重に投稿しない）★★", _run_blocked)
     # ★★新台の告知も控えを通す（post_to_x.py を待たずに呼ぶ・導入日を渡す）★★
     _na = post_args({"mode": "new", "slug": "zzz_n", "change": "11/12（木）"})
     t("★★新台の告知は post_to_x.py を待ち時間なしで呼び、導入日を渡す★★",
