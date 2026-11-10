@@ -95,19 +95,20 @@ def add(mode: str, slug: str, change: str = "", now=None, rng=None, path: str = 
         raise ValueError("slug が不正です")
     now = now or _now()
     rng = rng or random
-    d = read(path)
-    # ★同じ機種・同じ種類がまだ投稿待ちなら足さない★（同じ機種へ続けて告知しない）
-    for it in d["items"]:
-        if it["slug"] == slug and it["mode"] == mode:
-            _log(f"もう投稿待ちなので足しません: {mode} {slug}")
-            return it
-    due = now + _dt.timedelta(minutes=rng.randint(DELAY_MIN, DELAY_MAX))
-    it = {"mode": mode, "slug": slug, "change": str(change or "")[:200],
-          "added": now.isoformat(), "due": due.isoformat(), "tries": 0}
-    d["items"].append(it)
-    _save(d, path)
-    _log(f"投稿待ちに入れました: {mode} {slug}（{due:%m/%d %H:%M} 以降）")
-    return it
+
+    def _add(d):
+        # ★同じ機種・同じ種類がまだ投稿待ちなら足さない★（同じ機種へ続けて告知しない）
+        for it in d["items"]:
+            if it["slug"] == slug and it["mode"] == mode:
+                _log(f"もう投稿待ちなので足しません: {mode} {slug}")
+                return it
+        due = now + _dt.timedelta(minutes=rng.randint(DELAY_MIN, DELAY_MAX))
+        it = {"mode": mode, "slug": slug, "change": str(change or "")[:200],
+              "added": now.isoformat(), "due": due.isoformat(), "tries": 0}
+        d["items"].append(it)
+        _log(f"投稿待ちに入れました: {mode} {slug}（{due:%m/%d %H:%M} 以降）")
+        return it
+    return update(_add, path)
 
 
 def _post(it: dict) -> int:
@@ -122,6 +123,58 @@ def _post(it: dict) -> int:
     except Exception as e:                                       # noqa: BLE001
         _log(f"投稿を呼べませんでした: {it['slug']}: {type(e).__name__}: {e}")
         return 99
+
+
+GAVE_UP_KEEP = 20
+GAVE_UP_ALERT_DAYS = 3
+
+
+class _WriteLock:
+    """★控えを読み直して書くあいだだけ取る短いロック★（2026-11-10・Codexの指摘＝実害）
+
+    なぜ＝run は投稿のあいだ（数分）一覧を持ったままで、そのあいだに add した告知を古い一覧で上書きして消した。
+    add と run の保存は、毎回これを取って読み直してから直す。古い印（2分）は奪う。
+    """
+
+    def __init__(self, path: str):
+        self.path = path + ".write.lock"
+
+    def __enter__(self):
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        for _ in range(300):
+            try:
+                os.close(os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+                return self
+            except FileExistsError:
+                try:
+                    if time.time() - os.path.getmtime(self.path) > 120:
+                        os.remove(self.path)
+                        continue
+                except OSError:
+                    continue
+                time.sleep(0.1)
+        raise RuntimeError("投稿待ちの控えの書き込みロックを取れません")
+
+    def __exit__(self, *exc):
+        try:
+            os.remove(self.path)
+        except OSError:
+            pass
+        return False
+
+
+def update(fn, path: str = None):
+    """★書き込みロックの中で読み直し、fn で直して保存する★（add と run の保存の唯一の入口）"""
+    p = path or QUEUE
+    with _WriteLock(p):
+        d = read(p)
+        out = fn(d)
+        _save(d, p)
+        return out
+
+
+def _same(a: dict, b: dict) -> bool:
+    return (a.get("mode"), a.get("slug"), a.get("added")) == (b.get("mode"), b.get("slug"), b.get("added"))
 
 
 class _Lock:
@@ -161,28 +214,45 @@ def run_due(now=None, post=None, sleep=None, rng=None, path: str = None, max_n: 
         if i:
             sleep(rng.randint(30, 120))       # ★投稿の間をあける★（bot検知対策）
         rc = post(it)
-        if rc == 0:
-            d["items"].remove(it)
+
+        def _apply(d2, it=it, rc=rc):
+            cur = next((x for x in d2["items"] if _same(x, it)), None)
+            if cur is None:
+                return "gone"
+            if rc == 0:
+                d2["items"].remove(cur)
+                return "done"
+            cur["tries"] = int(cur.get("tries", 0)) + 1
+            if cur["tries"] >= MAX_TRIES:
+                d2["items"].remove(cur)
+                # ★あきらめた告知は控えに残し、見張り番が知らせる★（2026-11-10・Codexの指摘＝
+                #   投稿側のメールまで届かない失敗〈起動の例外・時間切れ〉は誰にも知らされずに消えた）
+                d2.setdefault("gave_up", []).append(
+                    {"mode": cur["mode"], "slug": cur["slug"], "at": now.isoformat(), "rc": rc})
+                d2["gave_up"] = d2["gave_up"][-GAVE_UP_KEEP:]
+                return "gave_up"
+            cur["due"] = (now + _dt.timedelta(minutes=RETRY_MIN)).isoformat()
+            return "failed"
+        res = update(_apply, path)
+        if res == "done":
             done.append(it["slug"])
             _log(f"投稿しました: {it['mode']} {it['slug']}")
-            continue
-        it["tries"] = int(it.get("tries", 0)) + 1
-        if it["tries"] >= MAX_TRIES:
-            d["items"].remove(it)
+        elif res == "gave_up":
             gave_up.append(it["slug"])
             _log(f"★{MAX_TRIES}回失敗したので投稿をあきらめました★: {it['mode']} {it['slug']}（終了コード {rc}）")
-        else:
-            it["due"] = (now + _dt.timedelta(minutes=RETRY_MIN)).isoformat()
+        elif res == "failed":
             failed.append(it["slug"])
-            _log(f"投稿に失敗しました（{it['tries']}回目・{RETRY_MIN}分あけて再挑戦）: {it['slug']}（終了コード {rc}）")
-        _save(d, path)
-    if done:
-        _save(d, path)
-    return {"done": done, "failed": failed, "gave_up": gave_up, "left": len(d["items"])}
+            _log(f"投稿に失敗しました（{RETRY_MIN}分あけて再挑戦）: {it['slug']}（終了コード {rc}）")
+    return {"done": done, "failed": failed, "gave_up": gave_up, "left": len(read(path)["items"])}
 
 
 def stale_problem(d: dict, now=None):
     now = now or _now()
+    recent = [g for g in (d.get("gave_up") or [])
+              if (now - _dt.datetime.fromisoformat(g["at"])).total_seconds() < GAVE_UP_ALERT_DAYS * 86400]
+    if recent:
+        return f"{MAX_TRIES}回失敗して投稿をあきらめた告知が{len(recent)}件あります（" + "・".join(
+            g["slug"] for g in recent[:5]) + "）＝post_update_to_x のログを見てください"
     old = [it for it in d["items"]
            if (now - _dt.datetime.fromisoformat(it["due"])).total_seconds() >= STALE_HOURS * 3600]
     if old:
@@ -226,11 +296,28 @@ def selftest() -> int:
     for k in range(1, MAX_TRIES):
         run_due(now=later + _dt.timedelta(hours=k), post=lambda x: 1, sleep=lambda s: None, rng=_R(), path=p)
     t(f"★失敗したら30分あけて再挑戦し、{MAX_TRIES}回で控えから外す（ずっと居座らない）★", read(p)["items"] == [])
-    add("promotion", "zzz_c", now=now, rng=_R(), path=p)
+    _gu = stale_problem(read(p), later + _dt.timedelta(hours=3))
+    t("★★あきらめた告知は控えに残し、見張り番が知らせる★★（直す前は誰にも知らされずに消えた）",
+      [g["slug"] for g in read(p).get("gave_up", [])] == ["zzz_b"] and _gu and "あきらめた" in _gu)
+    t("　あきらめてから3日たったら知らせない",
+      stale_problem(read(p), later + _dt.timedelta(days=4)) is None)
+    p3 = os.path.join(os.path.dirname(p), "q3.json")
+    add("promotion", "zzz_c", now=now, rng=_R(), path=p3)
     t("★★時刻を30時間以上過ぎて投稿されない告知があれば、見張り番が知らせる★★",
-      stale_problem(read(p), now + _dt.timedelta(hours=31)) is not None
-      and stale_problem(read(p), now + _dt.timedelta(hours=10)) is None)
+      stale_problem(read(p3), now + _dt.timedelta(hours=31)) is not None
+      and stale_problem(read(p3), now + _dt.timedelta(hours=10)) is None)
+    # ★★投稿しているあいだに足された告知を消さない★★（2026-11-10・Codexの指摘＝実害）
+    p4 = os.path.join(os.path.dirname(p), "q4.json")
+    add("correction", "zzz_e", now=now, rng=_R(), path=p4)
+
+    def _post_and_add(x):
+        add("promotion", "zzz_f", now=later, rng=_R(), path=p4)   # ★投稿中に別のタスクが足す★
+        return 0
+    run_due(now=later, post=_post_and_add, sleep=lambda s: None, rng=_R(), path=p4)
+    t("★★投稿しているあいだに足された告知を、古い一覧で上書きして消さない★★",
+      [x["slug"] for x in read(p4)["items"]] == ["zzz_f"])
     slept = []
+    add("promotion", "zzz_c", now=now, rng=_R(), path=p)
     add("promotion", "zzz_d", now=now, rng=_R(), path=p)
     run_due(now=later, post=lambda x: 0, sleep=lambda s: slept.append(s), rng=_R(), path=p)
     t("　2件続けて投稿するときは間をあける", slept == [30])

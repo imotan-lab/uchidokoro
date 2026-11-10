@@ -158,6 +158,10 @@ def record_tried(prev: dict, today: str, result: str) -> dict:
     """
     rec = {"at": today, "result": result}
     first = str((prev or {}).get("first_done_at") or "")
+    # ★first_done_at の無い古い記録で、前に済んでいたなら、その済んだ日を引き継ぐ★（2026-11-10・Codexの指摘＝
+    #   直す前は見直しの日を「初めて済んだ日」にし、まだやっていない機種が進まないことを隠した・28件）
+    if not first and str((prev or {}).get("result", "")) in DONE_RESULTS:
+        first = str((prev or {}).get("at") or "")[:10]
     if not first and result in DONE_RESULTS:
         first = today
     if first:
@@ -256,6 +260,9 @@ def selftest() -> int:
         _r2 = record_tried(_r1, "2026-11-12", "APPLIED")
         t("　初めて済んだ日は、見直しで記録し直しても残る",
           _r1.get("first_done_at") == "2026-11-01" and _r2.get("first_done_at") == "2026-11-01" and _r2["at"] == "2026-11-12")
+        t("　first_done_at の無い古い記録は、前に済んだ日を引き継ぐ（見直しの日を初めて済んだ日にしない）",
+          record_tried({"at": "2026-10-01", "result": "APPLIED"}, "2026-11-12", "APPLIED").get("first_done_at")
+          == "2026-10-01")
         _pr = progress([{"slug": "a"}, {"slug": "b"}], {"a"}, {"a": _r2}, "2026-11-12")
         t("★★見直しで毎日済んでいても、まだやっていない機種が7日以上進まなければ止まっている★★",
           _pr["stalled"] and _pr["remaining"] == 1)

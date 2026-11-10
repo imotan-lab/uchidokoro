@@ -1076,6 +1076,23 @@ def machine_row_drift(old_row: dict, new_machine: dict) -> list:
     return out
 
 
+def seo_title_drift(cur: dict, detail: dict) -> bool:
+    """★いまの題名が、狙い目が出ているかと食い違っているか★（見送りの判定用・材料は読まない）
+
+    狙い目が出ているのに「天井・狙い目」でない／出ていないのに「天井・狙い目」、のどちらか。
+    天井だけの違いは材料が変わった日に直る（見送られない）ので、ここでは見ない。
+    """
+    import target_projection as _tp
+    name = (cur or {}).get("name") or ""
+    t = ((cur or {}).get("seo") or {}).get("title")
+    full = _ba.seo_title(name, True, True)
+    try:
+        shown = _tp.synced(cur or {}, detail or {})
+    except Exception:                     # noqa: BLE001
+        return False
+    return (t != full) if shown else (t == full)
+
+
 def set_seo_title(machine: dict, detail: dict, mat: dict) -> None:
     """★機種行の題名を、載っている中身から決め直す★（決まりは build_new_article.seo_title の1か所）"""
     import target_projection as _tp
@@ -1837,6 +1854,19 @@ def _carry_meta_tests(t) -> None:
     t("　導入日が同じ・前の導入日が無いなら入れない", _r2 is False and _r3 is False and len(_q) == 1)
     t("　（配線）書けたあとに呼んでいる",
       "queue_release_correction(slug, got.get(\"old_release\")" in inspect.getsource(apply_one))
+    try:
+        _tpx.synced = lambda m, d: True
+        _d1 = seo_title_drift({"name": "機Z", "seo": {"title": "機Z 天井・スペック"}}, {})
+        _d2 = seo_title_drift({"name": "機Z", "seo": {"title": "機Z 天井・狙い目"}}, {})
+        _tpx.synced = lambda m, d: False
+        _d3 = seo_title_drift({"name": "機Z", "seo": {"title": "機Z 天井・狙い目"}}, {})
+        _d4 = seo_title_drift({"name": "機Z", "seo": {"title": "機Z 天井・スペック"}}, {})
+    finally:
+        _tpx.synced = _orig
+    t("★★題名が狙い目の表示と食い違っていれば、見送らない★★（Codexの指摘＝既にある新台の題名が直らなかった）",
+      _d1 and not _d2 and _d3 and not _d4)
+    t("　（配線）見送りの判定が題名の食い違いを見ている",
+      "and not _td" in inspect.getsource(plan_one))
     t("　（配線）育成が題名を決め直している（狙い目の指紋を付けたあと）",
       "set_seo_title(machine, detail, mat)" in inspect.getsource(plan_one))
 
@@ -2608,8 +2638,12 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
                         _rd = f"導入日の変化を確かめられません（{type(e).__name__}）"
                     if _rd:
                         out.setdefault("notes", []).append(f"見送りません: {_rd}")
+                # ★★題名が中身と食い違っていれば見送らない★★（2026-11-10・Codexの指摘＝既にある新台の題名が直らなかった）
+                _td = seo_title_drift(cur, _od0)
+                if _pr.get("skip") and _td:
+                    out.setdefault("notes", []).append("見送りません: 検索向けの題名が中身と食い違っています")
                 if (_pr.get("skip") and not template_drift(cur, _od0)
-                        and not confirmed_drift(slug) and not _rd):
+                        and not confirmed_drift(slug) and not _rd and not _td):
                     out["problems"].append(
                         "出典の顔ぶれも中身も前回から変わっていません"
                         "／2AIの確定値も増えていません（今日は見送ります）")

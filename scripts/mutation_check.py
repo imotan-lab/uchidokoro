@@ -953,9 +953,9 @@ MUTATIONS = [
         "file": "scripts/grow_machine.py",
         "before": ("                if (_pr.get(\"skip\") "
                    "and not template_drift(cur, _od0)\n"
-                   "                        and not confirmed_drift(slug) and not _rd):"),
+                   "                        and not confirmed_drift(slug) and not _rd and not _td):"),
         "after": ("                if (_pr.get(\"skip\")\n"
-                  "                        and not confirmed_drift(slug) and not _rd):"),
+                  "                        and not confirmed_drift(slug) and not _rd and not _td):"),
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -5202,10 +5202,10 @@ MUTATIONS = [
         "file": "scripts/grow_machine.py",
         "before": ("                if (_pr.get(\"skip\") "
                    "and not template_drift(cur, _od0)\n"
-                   "                        and not confirmed_drift(slug) and not _rd):"),
+                   "                        and not confirmed_drift(slug) and not _rd and not _td):"),
         "after": ("                if (_pr.get(\"skip\") "
                   "and not template_drift(cur, _od0)\n"
-                  "                        and not _rd):"),
+                  "                        and not _rd and not _td):"),
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -10270,8 +10270,8 @@ MUTATIONS = [
     {
         "why": "★育成：見送りの判定に導入日の変化を入れない★",
         "file": "scripts/grow_machine.py",
-        "before": "                        and not confirmed_drift(slug) and not _rd):\n",
-        "after": "                        and not confirmed_drift(slug)):\n",
+        "before": "                        and not confirmed_drift(slug) and not _rd and not _td):\n",
+        "after": "                        and not confirmed_drift(slug) and not _td):\n",
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -10375,15 +10375,15 @@ MUTATIONS = [
     {
         "why": "★Xの投稿待ち：失敗しても30分あけずにすぐ再挑戦する★",
         "file": "scripts/x_post_queue.py",
-        "before": "            it[\"due\"] = (now + _dt.timedelta(minutes=RETRY_MIN)).isoformat()\n",
-        "after": "            it[\"due\"] = now.isoformat()\n",
+        "before": "            cur[\"due\"] = (now + _dt.timedelta(minutes=RETRY_MIN)).isoformat()\n",
+        "after": "            cur[\"due\"] = now.isoformat()\n",
         "run": ["scripts/x_post_queue.py"],
     },
     {
         "why": "★Xの投稿待ち：何回失敗してもあきらめない★",
         "file": "scripts/x_post_queue.py",
-        "before": "        if it[\"tries\"] >= MAX_TRIES:\n",
-        "after": "        if False:\n",
+        "before": "            if cur[\"tries\"] >= MAX_TRIES:\n",
+        "after": "            if False:\n",
         "run": ["scripts/x_post_queue.py"],
     },
     {
@@ -10511,6 +10511,48 @@ MUTATIONS = [
         "before": "    bad = [x for x in who if x not in JUDGES and x not in _cvj.STANDIN_JUDGES]\n",
         "after": "    bad = [x for x in who if x not in JUDGES]\n",
         "run": ["scripts/machine_sources.py"],
+    },
+    {
+        "why": "★通称・タイプ：一覧をロックの外で読む（別機種の更新を古い値へ戻す・Codex指摘）★",
+        "file": "scripts/machine_meta.py",
+        "before": "    try:\n        with _pub._OnlyOne():\n            rows = _rows()\n            row = next((m for m in rows if isinstance(m, dict) and m.get(\"slug\") == slug), None)\n            if row is None:\n",
+        "after": "    try:\n        rows = _rows()\n        with _pub._OnlyOne():\n            row = next((m for m in rows if isinstance(m, dict) and m.get(\"slug\") == slug), None)\n            if row is None:\n",
+        "run": ["scripts/machine_meta.py"],
+    },
+    {
+        "why": "★通称・タイプ：作り直しの例外で機種行を戻さない（Codex指摘）★",
+        "file": "scripts/machine_meta.py",
+        "before": "        ok = False\n        _log(f\"{slug}: 作り直しで例外: {type(e).__name__}: {e}\")\n",
+        "after": "        raise\n",
+        "run": ["scripts/machine_meta.py"],
+    },
+    {
+        "why": "★Xの投稿待ち：投稿中に足された告知を古い一覧で上書きする（Codex指摘）★",
+        "file": "scripts/x_post_queue.py",
+        "before": "        res = update(_apply, path)\n",
+        "after": "        res = _apply(d)\n        _save(d, path or QUEUE)\n",
+        "run": ["scripts/x_post_queue.py"],
+    },
+    {
+        "why": "★Xの投稿待ち：あきらめた告知を控えに残さない（誰にも知らされず消える・Codex指摘）★",
+        "file": "scripts/x_post_queue.py",
+        "before": "    if recent:\n",
+        "after": "    if False:\n",
+        "run": ["scripts/x_post_queue.py"],
+    },
+    {
+        "why": "★育成：題名が中身と食い違っていても見送る（Codex指摘）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    return (t != full) if shown else (t == full)\n",
+        "after": "    return False\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★モードの記録：古い記録の済んだ日を引き継がない（見直しが停滞を隠す・Codex指摘）★",
+        "file": "scripts/mode_queue.py",
+        "before": "        first = str((prev or {}).get(\"at\") or \"\")[:10]\n",
+        "after": "        pass\n",
+        "run": ["scripts/mode_queue.py"],
     },
 ]
 

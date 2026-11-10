@@ -117,6 +117,26 @@ def _rebuild(slug: str) -> bool:
     return r.returncode == 0
 
 
+def restore_row(slug: str, got: dict, old: tuple) -> bool:
+    """★この機種の通称・タイプだけを元へ戻す★（一覧全体を書き戻さない＝別機種の更新を消さない）
+
+    自分が書いた値のままのときだけ戻す（そのあいだに別の処理が書いていれば触らない）。
+    """
+    import publish_new_machine as _pub
+    try:
+        with _pub._OnlyOne():
+            rows = _rows()
+            row = next((m for m in rows if isinstance(m, dict) and m.get("slug") == slug), None)
+            if row is None or row.get("aliases") != got["aliases"] or row.get("info") != got["info"]:
+                return False
+            row["aliases"], row["info"] = old
+            _write_rows(rows)
+            return True
+    except Exception as e:                                       # noqa: BLE001
+        _log(f"{slug}: 元に戻せません: {type(e).__name__}: {e}")
+        return False
+
+
 def apply_decision(path: str, apply_it: bool) -> dict:
     import safe_json as _sj
     try:
@@ -126,24 +146,41 @@ def apply_decision(path: str, apply_it: bool) -> dict:
     slug = dec.get("slug")
     if not isinstance(slug, str) or not _SLUG.match(slug):
         return {"problems": ["slug が不正です"]}
-    raw = io.open(MACHINES, encoding="utf-8", newline="").read()
-    rows = json.loads(raw)
-    row = next((m for m in rows if isinstance(m, dict) and m.get("slug") == slug), None)
-    if row is None:
-        return {"problems": ["機種一覧にありません"]}
-    got = plan(row, dec)
-    if got["problems"] or not apply_it:
-        if got["problems"]:
-            _log(f"{slug}: 断りました: " + " ／ ".join(got["problems"])[:500])
-        return got
-    row["aliases"] = got["aliases"]
-    row["info"] = got["info"]
-    _write_rows(rows)
-    keep_pages = {}
-    if not _rebuild(slug):
-        io.open(MACHINES, "w", encoding="utf-8", newline="").write(raw)
-        _rebuild(slug)
-        got["problems"] = ["ページ・早見表を作り直せなかったので、機種行を元に戻しました"]
+    import publish_new_machine as _pub
+    # ★★読んでから書くまでを公開ロックの中で行う★★（2026-11-10・Codexの指摘＝実害）＝
+    #   ロックの外で一覧全体を読み書きすると、そのあいだに別の処理が直した別機種の値を古い値へ戻す。
+    #   作り直し（_rebuild_auto）は自分でロックを取るので、ロックの外で呼ぶ。
+    try:
+        with _pub._OnlyOne():
+            rows = _rows()
+            row = next((m for m in rows if isinstance(m, dict) and m.get("slug") == slug), None)
+            if row is None:
+                return {"problems": ["機種一覧にありません"]}
+            got = plan(row, dec)
+            if got["problems"] or not apply_it:
+                if got["problems"]:
+                    _log(f"{slug}: 断りました: " + " ／ ".join(got["problems"])[:500])
+                return got
+            old = (json.loads(json.dumps(row.get("aliases"))), row.get("info"))
+            row["aliases"] = got["aliases"]
+            row["info"] = got["info"]
+            _write_rows(rows)
+    except _pub.PublishError as e:
+        return {"problems": [f"公開ロックを取れないので書きません: {e}"]}
+    try:
+        ok = _rebuild(slug)
+    except Exception as e:                                       # noqa: BLE001
+        # ★例外でも元に戻す★（2026-11-10・Codexの指摘＝ロック競合などで機種行が変わったまま残った）
+        ok = False
+        _log(f"{slug}: 作り直しで例外: {type(e).__name__}: {e}")
+    if not ok:
+        back = restore_row(slug, got, old)
+        try:
+            _rebuild(slug)
+        except Exception as e:                                   # noqa: BLE001
+            _log(f"{slug}: 戻したあとの作り直しで例外: {type(e).__name__}: {e}")
+        got["problems"] = ["ページ・早見表を作り直せなかったので、機種行を元に戻しました" if back
+                           else "★ページ・早見表を作り直せず、機種行も戻せませんでした（手で確かめてください）★"]
         _log(f"{slug}: {got['problems'][0]}")
         return got
     _log(f"{slug}: 通称 {got['aliases']}・タイプ {got['info']!r} を書きました（{','.join(dec['by'])}）")
@@ -196,6 +233,51 @@ def selftest() -> int:
     rows = [row, dict(row, slug="zzz_n", aliases=["a"], info="x"), dict(row, slug="zzz_o", info="x")]
     t("★通称かタイプが空の新台だけを選ぶ★", pick(5, rows, {}, "2026-11-10") == ["zzz_m", "zzz_o"])
     t("　断って7日たたない機種は外す", pick(5, rows, {"zzz_m": "2026-11-05"}, "2026-11-10") == ["zzz_o"])
+    # ★★書き込み：ロックの中で読み直す・作り直しが例外でもこの機種だけ戻す★★（2026-11-10・Codexの指摘）
+    import tempfile
+    import publish_new_machine as _pubx
+    g = globals()
+    keep = {k: g[k] for k in ("MACHINES", "_rebuild")}
+    keep_lock = _pubx._OnlyOne
+    tmp = tempfile.mkdtemp(prefix="mmeta_")
+    try:
+        g["MACHINES"] = os.path.join(tmp, "machines.json")
+        other = dict(row, slug="zzz_other", aliases=[], info="")
+        io.open(g["MACHINES"], "w", encoding="utf-8").write(json.dumps([row, other], ensure_ascii=False))
+
+        class _Lock:                     # ★ロックを取った瞬間に、別の処理が別機種を直し終えた形★
+            def __enter__(self):
+                rs = json.loads(io.open(g["MACHINES"], encoding="utf-8").read())
+                for m in rs:
+                    if m["slug"] == "zzz_other" and not m["info"]:
+                        m["info"] = "別の処理が書いた"
+                io.open(g["MACHINES"], "w", encoding="utf-8").write(json.dumps(rs, ensure_ascii=False))
+                return self
+
+            def __exit__(self, *a):
+                return False
+        _pubx._OnlyOne = _Lock
+        dp = os.path.join(tmp, "dec.json")
+        io.open(dp, "w", encoding="utf-8").write(json.dumps(good, ensure_ascii=False))
+        g["_rebuild"] = lambda s: True
+        r1 = apply_decision(dp, True)
+        rs1 = {m["slug"]: m for m in json.loads(io.open(g["MACHINES"], encoding="utf-8").read())}
+        t("★★書き込みはロックの中で読み直す（そのあいだに別の処理が直した別機種の値を消さない）★★",
+          r1.get("written") and rs1["zzz_m"]["info"] == "スマスロAT"
+          and rs1["zzz_other"]["info"] == "別の処理が書いた")
+        io.open(g["MACHINES"], "w", encoding="utf-8").write(json.dumps([row, other], ensure_ascii=False))
+
+        def _boom(s):
+            raise RuntimeError("ロック競合")
+        g["_rebuild"] = _boom
+        r2 = apply_decision(dp, True)
+        rs2 = {m["slug"]: m for m in json.loads(io.open(g["MACHINES"], encoding="utf-8").read())}
+        t("★★作り直しが例外でも、この機種の通称・タイプを元に戻す（別機種はそのまま）★★",
+          r2["problems"] and not r2.get("written") and rs2["zzz_m"]["aliases"] == []
+          and rs2["zzz_m"]["info"] == "" and rs2["zzz_other"]["info"] == "別の処理が書いた")
+    finally:
+        g.update(keep)
+        _pubx._OnlyOne = keep_lock
     import inspect
     import grow_machine as _gm
     t("★★毎朝の育成が、通称とタイプを空に戻さない（持ち越しが配線されている）★★",
