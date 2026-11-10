@@ -2099,6 +2099,24 @@ def _carry_meta_tests(t) -> None:
         _dm_rt._CALENDAR_DAYS.update(_keep_rt)
     t("★★育成：機種ページが「未定」なら、カレンダーの日付を渡して1回だけ確かめ直す★★",
       _r1 == {"problems": [], "release": "2026-12-07"} and _h1 == {"5118": "2026-12-07"})
+    # ★★見送りの前の導入日確認も、機種ページが「未定」ならカレンダーを見る★★（2026-11-11・Codexの指摘）
+    import add_machine_run as _amr_rn
+    _keep_f, _keep_l = _dm_rt.fetch, _amr_rn.calendar_lookup
+
+    def _tbd_f(mid, get=None):
+        raise _dm_rt.ReleaseUndecided(_dm_rt.RELEASE_UNDECIDED_MARK + ": 未定")
+    try:
+        _dm_rt.fetch = _tbd_f
+        _amr_rn.calendar_lookup = lambda mid, near: "2027-01-12" if (mid, near) == ("5118", "2026-12-07") else ""
+        _rn = dmm_release_now({"release_date": "2026-12-07",
+                               "identity": {"official_product_url": "https://p-town.dmm.com/machines/5118"}})
+        _amr_rn.calendar_lookup = lambda mid, near: ""
+        _rn2 = dmm_release_now({"release_date": "2026-12-07",
+                                "identity": {"official_product_url": "https://p-town.dmm.com/machines/5118"}})
+    finally:
+        _dm_rt.fetch, _amr_rn.calendar_lookup = _keep_f, _keep_l
+    t("★★見送りの前の導入日確認：機種ページが未定なら、カレンダーの日付で延期に気づく★★",
+      _rn == "2027-01-12" and _rn2 == "")
     t("　カレンダーで見つからなければ止まったまま・未定以外の失敗では探さない",
       _r2 is _und and _r3 == {"problems": ["別の理由"]} and _calls_rt == [1])
     # ★昔の機種も載っている中身だけを名乗る★（2026-11-11・運営者の判断）＝判定はチェッカーのデータだけ
@@ -2812,6 +2830,11 @@ def dmm_release_now(cur: dict) -> str:
         return ""
     try:
         return str(_dmr.fetch(m.group(1)).get("release_date") or "")
+    except _dmr.ReleaseUndecided:
+        # ★★機種ページが「未定」なら、DMMの導入カレンダーの日付を見る★★（2026-11-11・Codexの指摘＝実害）＝
+        #   出典が変わらない日は見送りで、カレンダーだけの延期に気づけなかった
+        import add_machine_run as _amr_r
+        return _amr_r.calendar_lookup(m.group(1), str((cur or {}).get("release_date") or ""))
     except Exception:                     # noqa: BLE001
         return ""
 

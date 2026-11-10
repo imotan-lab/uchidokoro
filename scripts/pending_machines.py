@@ -255,6 +255,21 @@ def add(data: dict, name: str, url: str, maker: str, release: str,
     return data["items"][qid]
 
 
+def note_calendar(item, day: str) -> bool:
+    """★DMMの導入カレンダーで見た日付と、見た日を専用の欄に残す★（2026-11-11・Codexの指摘＝実害）
+
+    release_seen は機種ページから取った日付でも更新されるので、「カレンダーで見た」根拠にならない。
+    機種ページが「未定」のときに使ってよいのは calendar_day（日まで）・calendar_seen（見た日）だけ。
+    """
+    import re as _rec
+    d = str(day or "")
+    if not isinstance(item, dict) or not _rec.fullmatch(r"20\d\d-\d\d-\d\d", d):
+        return False
+    item["calendar_day"] = d
+    item["calendar_seen"] = _today()
+    return True
+
+
 def fetch_url(item: dict) -> str:
     """★取りに行ってよいURL★（移行前のURLは絶対に返さない）
 
@@ -753,6 +768,15 @@ def selftest() -> int:
       _a == "2026-10-19")
     t("　月だけの導入日に変わり、古い日と月が違えば古い日を捨てる",
       release_of(d12["items"]["q_0001"]) == "2026-12")
+    # ★★カレンダーで見た日付は専用の欄に残す★★（2026-11-11・Codexの指摘＝release_seen は機種ページの日付でも更新される）
+    _it_c = {}
+    _nc = [note_calendar(_it_c, "2026-12-07"), note_calendar({}, "2026-12"), note_calendar(None, "2026-12-07")]
+    t("★★カレンダーで見た日付（日まで）と見た日を calendar_day・calendar_seen に残す★★",
+      _nc == [True, False, False] and _it_c == {"calendar_day": "2026-12-07", "calendar_seen": _today()})
+    import inspect as _ins_c
+    import dmm_discover as _ddc
+    t("　（配線）DMMの巡回は、待ち行列へ入れた2か所とも カレンダーの日付を残す",
+      _ins_c.getsource(_ddc).count("_pend.note_calendar(_pend.add(") == 2)
     d10 = _empty()
     add(d10, "覚えている機種", DMM + "10", "maker_x", "2026-10-19",
         source_machine_id="10")

@@ -11471,6 +11471,27 @@ MUTATIONS = [
         "after": "             and (not m.get(\"aliases\") or not m.get(\"info\"))]\n    never = ",
         "run": ["scripts/machine_meta.py"],
     },
+    {
+        "why": "★未定の新台：見送りの前の導入日確認で、機種ページが未定ならカレンダーを見ない（カレンダーだけの延期に気づかない・Codex）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        return _amr_r.calendar_lookup(m.group(1), str((cur or {}).get(\"release_date\") or \"\"))\n",
+        "after": "        return \"\"\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★未定の新台：カレンダーで見た日付を専用の欄に残さない（機種ページの日付と区別できない・Codex）★",
+        "file": "scripts/pending_machines.py",
+        "before": "    item[\"calendar_day\"] = d\n    item[\"calendar_seen\"] = _today()\n    return True\n",
+        "after": "    return True\n",
+        "run": ["scripts/pending_machines.py"],
+    },
+    {
+        "why": "★未定の新台：カレンダー専用の欄でなく、機種ページの日付（release_seen）でも代用する（Codex）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "    seen = str(work.get(\"calendar_seen\") or \"\")\n",
+        "after": "    seen = str(work.get(\"calendar_seen\") or work.get(\"release_seen\") or \"\")\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
 ]
 
 

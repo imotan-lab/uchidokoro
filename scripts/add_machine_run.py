@@ -2960,18 +2960,16 @@ CALENDAR_FRESH_DAYS = 2
 def calendar_day(work: dict, today: str = "") -> str:
     """★2日以内にDMMの導入カレンダーで見た日付★（無ければ空）
 
-    待ち行列は、カレンダーで見つけた日付を release（日まで）か release_day に、見た日を release_seen に持つ。
+    待ち行列は、カレンダーで見た日付を calendar_day、見た日を calendar_seen に持つ（dmm_discover が書く・pending_machines.note_calendar）。
     ★古い日付は使わない★＝カレンダーから消えた・延びた機種の日付で記事を作らない（番兵の🔴と同じ線）。
     """
     import datetime as _dtc
     import re as _rec
-    day = ""
-    for k in ("release_day", "release"):
-        v = str(work.get(k) or "")
-        if _rec.fullmatch(r"20\d\d-\d\d-\d\d", v):
-            day = v
-            break
-    seen = str(work.get("release_seen") or "")
+    # ★カレンダー専用の欄だけを見る★（Codexの指摘＝release_seen は機種ページから取った日付でも更新される）
+    day = str(work.get("calendar_day") or "")
+    if not _rec.fullmatch(r"20\d\d-\d\d-\d\d", day):
+        day = ""
+    seen = str(work.get("calendar_seen") or "")
     if not day or not _rec.fullmatch(r"20\d\d-\d\d-\d\d", seen):
         return ""
     try:
@@ -5585,26 +5583,27 @@ def _selftest_body() -> int:
             t("★★DMMが「未定」と書いていれば印を付ける★★（番兵が知らせないため）",
               _w_tbd.get("release_tbd") is True)
             # ★★カレンダーの日付（2日以内に見たものだけ）を、機種ページが未定のときに使う★★（2026-11-11・運営者の判断「2A」）
-            _cdk = [calendar_day({"release": "2026-12-07", "release_seen": "2026-11-10"}, "2026-11-11"),
-                   calendar_day({"release": "2026-12-07", "release_seen": "2026-11-08"}, "2026-11-11"),
-                   calendar_day({"release": "2026-12", "release_seen": "2026-11-11"}, "2026-11-11"),
-                   calendar_day({"release_day": "2026-12-21", "release": "2026-12",
+            _cdk = [calendar_day({"calendar_day": "2026-12-07", "calendar_seen": "2026-11-10"}, "2026-11-11"),
+                   calendar_day({"calendar_day": "2026-12-07", "calendar_seen": "2026-11-08"}, "2026-11-11"),
+                   calendar_day({"calendar_day": "2026-12", "calendar_seen": "2026-11-11"}, "2026-11-11"),
+                   calendar_day({"release_day": "2026-12-21", "calendar_day": "2026-12-21",
                                  "release_seen": "2026-11-11"}, "2026-11-11"),
-                   calendar_day({"release": "2026-12-07"}, "2026-11-11")]
-            t("★★カレンダーの日付は、日まであって2日以内に見たものだけ使う★★",
-              _cdk == ["2026-12-07", "", "", "2026-12-21", ""])
+                   calendar_day({"calendar_day": "2026-12-07"}, "2026-11-11")]
+            t("★★カレンダーの日付は、カレンダー専用の欄で日まであって2日以内に見たものだけ使う★★"
+              "（機種ページから取った日付と release_seen では使わない・Codexの指摘）",
+              _cdk == ["2026-12-07", "", "", "", ""])
             _keep_cal = dict(_dm_fm._CALENDAR_DAYS)
             try:
                 _dm_fm._CALENDAR_DAYS.clear()
                 _dm_fm.fetch = _tbd
                 fill_missing({"name": "LB試験機X-300", "maker": "seiryu_japan",
                               "identity_url": "https://p-town.dmm.com/machines/5089",
-                              "release": "2026-12-07", "release_seen": _pend._today()})
+                              "calendar_day": "2026-12-07", "calendar_seen": _pend._today()})
                 _hint = dict(_dm_fm._CALENDAR_DAYS)
                 _dm_fm._CALENDAR_DAYS.clear()
                 fill_missing({"name": "LB試験機X-300", "maker": "seiryu_japan",
                               "identity_url": "https://p-town.dmm.com/machines/5089",
-                              "release": "2026-12-07", "release_seen": "2000-01-01"})
+                              "calendar_day": "2026-12-07", "calendar_seen": "2000-01-01"})
                 _hint_old = dict(_dm_fm._CALENDAR_DAYS)
             finally:
                 _dm_fm.fetch = _real_dm_fetch

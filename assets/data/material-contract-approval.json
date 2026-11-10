@@ -6,7 +6,7 @@
   "assets/data/directory-catalogs.json": "71ca214aa172045200b80c05b650052b3d1349aabc1259d008ff74a5492d7f7b",
   "assets/data/maker-catalogs.json": "c1bfaa9377e999f95bcefc5d1958a88e07356d2dbb40f2e1f6ef2a68e2952308",
   "assets/data/source-registry.json": "04a755e507c115889e5b35a3c0206be3612f9dd3130113ae2c3f694b662a2341",
-  "scripts/add_machine_run.py": "01896240f12fcee635da0b181bc4bbfd6bdbf2914e9bed09b67febf41ac49e9e",
+  "scripts/add_machine_run.py": "9c9a2c6e8d9377ccb0308cd5d05047eee6430ec928777946da101686a5eada10",
   "scripts/adoption_basis.py": "b816e9cabae59738572420fbf6d77b888ad70fc5d6585aacf6e783ac9188c2d0",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "241d46b1c2e2415534547c129fcae88c16456e0890df8d4129bee74fbdab9f59",
@@ -18,7 +18,7 @@
   "scripts/cz_lookup.py": "0af48b371f0800d956270a1b50a08a259520c53f24ca424cc2c719ae49a4fbaf",
   "scripts/directory_index.py": "5f8d9ae8689a3b57f6300607b8b5e35a4bf4a1f8f5436414171f71ecf73aa4b9",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
-  "scripts/dmm_discover.py": "9f383b2fc427e566cf5e77590b573bfe18c4b00191134ed56598c4cb888c186c",
+  "scripts/dmm_discover.py": "d063ca427d6d477ff7d5464f73f8a369d44d592f277aec1723375bf9b67815ac",
   "scripts/dmm_machine.py": "702b317e3d87b5d69fa2facfbb5334a2dd0eab933bd9757e5964caedc2d9e414",
   "scripts/fetched_page.py": "825d7d5280e5dde535a271be76eac73bcb1e0c158552b6daf5e1ce0587e9a5ef",
   "scripts/html_check.py": "2d58882be96adbeb8710638ccb47d3f784ab3d1b091f5eff74894ca7bba1d112",
@@ -35,7 +35,7 @@
   "scripts/page_corpus.py": "7019d1e19ec774a228111b7f5271324d7d5f7e6c92db8c025998f90642affa02",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/page_reading.py": "d993398c2b658fa06753f45262b5b8795e9591a739d1b1d75d2e35f273642589",
-  "scripts/pending_machines.py": "34bd3d7ef01671c4449303bc3b5676b26c8c1b36c9fbc2ec828ba1bde77d7c30",
+  "scripts/pending_machines.py": "0cf9e81133729f5cd4a81374ee19453ad7c8c52dbf3058e0e65542757ff2ba16",
   "scripts/read_failure.py": "be1280280387ea03708afdd281a97289c311a9aa70ef53a62dffd438de9b96fe",
   "scripts/selftest_log_guard.py": "0de496b6ac4774489492a6c66f47c80ca3c546aa30f77209bbd0c69fee8b3aab",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
@@ -266,7 +266,8 @@
   ],
   "scripts/pending_machines.py": [
    "blocked_hosts",
-   "claim_identity"
+   "claim_identity",
+   "dmm_discover"
   ],
   "scripts/read_failure.py": [],
   "scripts/selftest_log_guard.py": [],
@@ -295,5 +296,5 @@
    "read_failure"
   ]
  },
- "_deps_changed_why": "add_machine_run が dmm_calendar を取り込むようになった（2026-11-11・運営者の判断「2A」）。機種ページが「未定」の公開済み新台の導入日を、DMMの導入カレンダーで探し直すため（calendar_lookup）。dmm_calendar は新台の発見の入口として既に材料の契約の集合に入っている（DMM側の取得器）。"
+ "_deps_changed_why": "pending_machines の自己試験が dmm_discover を取り込むようになった（2026-11-11・Codexの指摘の修正）。巡回が待ち行列へ入れる2か所とも、カレンダーで見た日付を専用の欄（calendar_day・calendar_seen）に残しているかを確かめる配線の試験のため。dmm_discover は既に材料の契約の集合に入っている（DMM側の取得器）。"
 }

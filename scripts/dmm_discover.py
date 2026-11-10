@@ -313,12 +313,12 @@ def run(apply_it: bool = False, today=None) -> dict:
             if apply_it:
                 # ★あとで引き直せない手掛かりを必ず残す★（台帳#335の項目4）
                 # ★カレンダーの導入日は渡す★（2026-10-02・Codex review201）
-                _pend.add(data, row["name"], row["url"], "",
+                _pend.note_calendar(_pend.add(data, row["name"], row["url"], "",
                           row.get("release_date") or "",
                           reason=got["reason"],
                           source_machine_id=row["id"], identity_source="dmm",
                           extra={"dmm_maker": got.get("dmm_maker", ""),
-                                 "dmm_id": row["id"]})
+                                 "dmm_id": row["id"]}), row.get("release_date") or "")
             continue
         out["queued"].append({"name": row["name"], "url": got["url"],
                               "maker": got["maker_id"],
@@ -328,12 +328,12 @@ def run(apply_it: bool = False, today=None) -> dict:
             # ★最初に確かめた表示名を覚える★（台帳#335の項目5）
             #   公開直前の再確認で内部IDしか無いと、同じIDにぶら下がる
             #   別名（ミズホ／メーシー…）のどれでも通ってしまう。
-            _pend.add(data, row["name"], got["url"], got["maker_id"],
+            _pend.note_calendar(_pend.add(data, row["name"], got["url"], got["maker_id"],
                       row["release_date"], reason="DMMのカレンダーから",
                       source_machine_id=row["id"], identity_source="dmm",
                       extra={"dmm_maker": got.get("dmm_maker", ""),
                              "dmm_id": row["id"],
-                             "dmm_model_code": got.get("model_code", "")})
+                             "dmm_model_code": got.get("model_code", "")}), row["release_date"])
     if apply_it:
         _pend.save(data)
     return out
