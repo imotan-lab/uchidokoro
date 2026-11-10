@@ -297,6 +297,13 @@ def check_stuck(today=None) -> list:
         #   ★見るのは印だけ★＝符丁（RELEASE_TBD）は導入日が決まった晩も
         #   次に止まるまで古いまま残るので、符丁で黙ると決まった機種まで隠れる。
         if it.get("release_tbd"):
+            # ★★ただし DMMのカレンダーが日付まで出しているなら、導入3日前から🔴★★（2026-11-10・代役の指摘＝
+            #   機種ページは「未定」のまま、カレンダーには 12/7 導入と載っている新台が3機種あり、毎晩「未定」の印が
+            #   付き直って記事づくりにも🔴にも乗らなかった）。カレンダーの日付は毎晩の発見（dmm_discover）が取り直している
+            if len(str(rel)) == 10 and not far_from_release(rel, today):
+                ng.append(
+                    f"{RED}{it.get('name')} は機種ページの導入日が「未定」のままですが、DMMのカレンダーでは"
+                    f"{rel} 導入で、{OWNER_ALERT_DAYS}日前を過ぎても記事にできていません（{it.get('identity_url')}）")
             continue
         # ★★一度外して、30日ごとの試し直しで戻した機種は🔴にしない★★（2026-11-10・Codexの指摘）＝
         #   導入から60日以上たった機種なので、ここを通すと戻した翌朝に毎回🔴になる。
@@ -565,6 +572,14 @@ def selftest() -> int:
         t("★★DMMが導入日を「未定」と書いている機種は知らせない★★"
           "（ゴジラ対エヴァ2・アサルトリリィが毎朝出ていた）",
           check_stuck(_T7) == [])
+        _fake({"q_1": {"name": "カレンダーでは日付が出ている未定の機種", "state": "READY",
+                       "release": "2026-10-19", "tries": 30,
+                       "last_blocker": "RELEASE_TBD", "blocker_streak": 11,
+                       "release_tbd": True,
+                       "identity_url": "https://p-town.dmm.com/machines/1"}})
+        _rt = check_stuck("2026-10-17")
+        t("★★機種ページは未定でも、カレンダーに日付があれば導入3日前から🔴★★（代役の指摘＝12/7導入の新台が見張りから外れていた）",
+          len(_rt) == 1 and _rt[0].startswith(RED) and check_stuck("2026-10-01") == [])
         _fake({"q_1": {"name": "試し直しで戻した機種", "state": "READY",
                        "release": "2026-07", "release_day": "2026-07-06", "runs": 0,
                        "revived_at": "2026-10-16",

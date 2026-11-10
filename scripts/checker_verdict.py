@@ -1816,20 +1816,54 @@ def _revise_tests(t) -> None:
 COIN = "COIN_RATE"
 
 
-def _coin_allowed(slug: str, m: dict) -> set:
-    """★50枚あたりG数として受け取れる数★＝この機種の公開データ（記事＋機種行）の数と、確定値 games_per_50 の照合済みの値"""
+COIN_BASIS = _lp.doc("coin_rate_basis.json")
+
+
+def _article_strings(slug: str) -> list:
+    """記事データの文字を全部（読者に出るもの）"""
+    p = os.path.join(DETAILS, f"{slug}.json")
+    if not os.path.isfile(p):
+        return []
+    out = []
+
+    def walk(o):
+        if isinstance(o, str):
+            out.append(o)
+        elif isinstance(o, dict):
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+    walk(_sj.read_json(p, expect=dict))
+    return out
+
+
+def coin_basis_problems(slug: str, dec: dict) -> list:
+    """★数字を作らない★＝2AIが挙げた記事の逐語（quote）に「その数G」がそのまま在るか、確定値 games_per_50 の照合済みの値か
+
+    （2026-11-10・代役の指摘＝直す前は記事と機種行の数を単位を見ずに全部受け取り、交換率の名前の 50 や線の数字・機械割まで通した）
+    """
     import add_items as _ai
-    got = {_ai._canon(n) for n, _u in _published_numbers(slug, m)}
-    try:
-        import confirmed_values as _cv
-        rec = (_cv.for_slug(slug) or {}).get("games_per_50")
-        if isinstance(rec, dict):
-            import decide_now as _dn_c
-            for st in _ai.record_strings("games_per_50", rec.get("value")):
-                got |= {_ai._canon(n) for n, _u in _dn_c.numbers_with_unit(st)}
-    except Exception:                                        # noqa: BLE001
-        pass
-    return got
+    import decide_now as _dn_c
+    v = _ai._canon(str(dec.get("coinRate")))
+    q = dec.get("quote")
+    if dec.get("field") == "games_per_50":
+        try:
+            import confirmed_values as _cv
+            rec = (_cv.for_slug(slug) or {}).get("games_per_50")
+            toks = {_ai._canon(n) for st in _ai.record_strings("games_per_50", (rec or {}).get("value"))
+                    for n, _u in _dn_c.numbers_with_unit(st)} if isinstance(rec, dict) else set()
+        except Exception:                                    # noqa: BLE001
+            toks = set()
+        return [] if v in toks else [f"{slug}: 確定値 games_per_50 に {dec.get('coinRate')} がありません"]
+    if not isinstance(q, str) or not 4 <= len(q) <= 120:
+        return ["記事の逐語（quote・4〜120字）か field: games_per_50 で、数の出どころを言います"]
+    if not any(q in s9 for s9 in _article_strings(slug)):
+        return [f"{slug}: quote が記事にそのまま見当たりません（{q[:40]}）"]
+    if not any(_ai._canon(n) == v and u == "G" for n, u in _dn_c.numbers_with_unit(q)):
+        return [f"{slug}: quote の中に「{dec.get('coinRate')}G」がありません（数字を作らない）"]
+    return []
 
 
 def coin_problems(dec, ms=None) -> list:
@@ -1848,9 +1882,7 @@ def coin_problems(dec, ms=None) -> list:
     if isinstance(v, bool) or not isinstance(v, (int, float)) or not 10 <= v <= 100:
         ng.append("coinRate は 10〜100 の数で書きます")
     else:
-        import add_items as _ai
-        if _ai._canon(str(v)) not in _coin_allowed(slug, m):
-            ng.append(f"{slug}: {v} は記事・機種行・確定値（games_per_50）にありません（数字を作らない）")
+        ng += coin_basis_problems(slug, dec)
     return ng
 
 
@@ -1871,6 +1903,19 @@ def apply_coin(dec: dict, ms: list, dry_run: bool = False) -> int:
     if dry_run:
         print(f"{slug}: 50枚あたりG数を {dec['coinRate']} と書きます")
         return 0
+    # ★★判断の控えを先に残す★★（代役の指摘＝どの記録から採ったか残らず、確定値を直しても気づけなかった）
+    try:
+        _bas = _sj.read_json(COIN_BASIS, expect=list) if os.path.isfile(COIN_BASIS) else []
+        import datetime as _dtc
+        _bas.append({"at": _dtc.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), "slug": slug,
+                     "coinRate": dec["coinRate"], "quote": dec.get("quote"), "field": dec.get("field"),
+                     "judges": sorted(str(x).lower() for x in dec.get("judges") or []), "why": dec.get("why")})
+        with open(COIN_BASIS + ".tmp", "w", encoding="utf-8") as f:
+            f.write(json.dumps(_bas, ensure_ascii=False, indent=1) + "\n")
+        os.replace(COIN_BASIS + ".tmp", COIN_BASIS)
+    except Exception as e:                                   # noqa: BLE001
+        print(f"★書きません★: 判断の控えを残せません（{type(e).__name__}: {e}）")
+        return 1
     ms[i] = new
     # ★書式はほかの書き手と同じ（字下げ1・LF）★
     _body = json.dumps(ms, ensure_ascii=False, indent=1) + "\n"
@@ -2004,8 +2049,16 @@ def show(slug: str) -> int:
     _ck_s = m.get("checker") if isinstance(m.get("checker"), dict) else {}
     if _ck_s.get("modes") and str(_ck_s.get("unit") or "G") == "G" and "coinRate" not in _ck_s \
             and "publication_policy" not in m:
-        print("★50枚あたりG数（coinRate）がありません★＝記事・確定値に値があれば "
-              '{"decision": "COIN_RATE", "coinRate": 31.0, ...} で書く（ゲーム数別の早見表に「直行なら投入」が出る）')
+        print("★50枚あたりG数（coinRate）がありません★（天井と両方そろうと、ゲーム数別の早見表に「天井まで・直行なら投入」の表が出る）＝記事・確定値に値があれば "
+              '{"decision": "COIN_RATE", "coinRate": 31.0, "quote": "<記事の逐語（その数G を含む）>", ...}（または "field": "games_per_50"）で書く（ゲーム数別の早見表に「直行なら投入」が出る）')
+    if _ck_s.get("modes") and str(_ck_s.get("unit") or "G") == "G" and "publication_policy" not in m:
+        _noc = [str(x.get("key")) for x in (_ck_s.get("modes") or []) if isinstance(x, dict)
+                and str(x.get("key")) not in ("suru", "cycle") and mode_ceiling(m, str(x.get("key"))) is None]
+        if _noc:
+            # ★★欄の天井が無いと、早見表の「天井まで何G・直行なら投入」の表が出ない★★（2026-11-10・代役の指摘＝
+            #   昔の機種109機種のうち1機種にしか無かった）。天井は確かめた記録からしか受け取らない
+            print(f"★欄の天井（ceiling）がありません★: {'・'.join(_noc)}＝ゲーム数別の早見表の「天井まで・直行なら投入」の表が出ない。"
+                  "天井を confirmed_values へ記録（独立2出典）してから、決定の modes にその欄の ceiling を書く")
     _lim = m.get("limit")
     if isinstance(_lim, (int, float)) and not isinstance(_lim, bool):
         _over = sorted({v for v in _strs_num(_ck_s) if v > _lim})
@@ -2905,18 +2958,30 @@ def _coin_tests(t) -> None:
          "info": "50枚あたり約31.0G"}
     ms = [m]
     base = {"slug": "zzz_c", "decision": COIN, "judges": ["claude", "codex"], "why": "基本情報表の50枚あたりの値を入れる"}
-    keep = globals()["_published_numbers"]
+    import tempfile
+    global DETAILS
+    keep = DETAILS
     try:
-        globals()["_published_numbers"] = lambda s9, m9: {("31.0", "G")}
-        t("★★昔の機種のチェッカーに、記事にある50枚あたりG数を書ける★★（代役の指摘＝108機種に書く道が無かった）",
-          coin_problems(dict(base, coinRate=31), ms) == [])
-        t("　記事・確定値に無い数は書かない（数字を作らない）",
-          any("ありません" in x for x in coin_problems(dict(base, coinRate=33.5), ms)))
+        DETAILS = tempfile.mkdtemp(prefix="coin_")
+        with open(os.path.join(DETAILS, "zzz_c.json"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"factTable": [["コイン持ち", "約31.0G/50枚（設定1）"], ["機械割", "97.9%"]],
+                                "sections": [{"title": "基本スペック", "body": ["交換率は5.0枚と5.6枚を想定しています。"]}]},
+                               ensure_ascii=False))
+        q = "約31.0G/50枚"
+        t("★★昔の機種のチェッカーに、記事の逐語にある50枚あたりG数を書ける★★（代役の指摘＝108機種に書く道が無かった）",
+          coin_problems(dict(base, coinRate=31, quote=q), ms) == [])
+        t("★★逐語に「その数G」が無ければ断る（機械割・交換率の数は使えない）★★（代役の指摘＝何でも通っていた）",
+          any("ありません" in x for x in coin_problems(dict(base, coinRate=97.9, quote="97.9%"), ms))
+          and any("ありません" in x for x in coin_problems(dict(base, coinRate=50, quote="約31.0G/50枚"), ms)))
+        t("　記事に無い逐語は断る", any("見当たりません" in x for x in coin_problems(dict(base, coinRate=33, quote="約33G/50枚"), ms)))
+        t("　出どころを言わなければ断る", any("出どころ" in x for x in coin_problems(dict(base, coinRate=31), ms)))
         t("　新台は育成が作るので断る",
-          any("新台" in x for x in coin_problems(dict(base, coinRate=31), [dict(m, publication_policy="page-decision/v2")])))
-        t("　判断者の組が要る", any("判断者" in x for x in coin_problems(dict(base, judges=["claude"], coinRate=31), ms)))
+          any("新台" in x for x in coin_problems(dict(base, coinRate=31, quote=q),
+                                                 [dict(m, publication_policy="page-decision/v2")])))
+        t("　判断者の組が要る",
+          any("判断者" in x for x in coin_problems(dict(base, judges=["claude"], coinRate=31, quote=q), ms)))
     finally:
-        globals()["_published_numbers"] = keep
+        DETAILS = keep
     t("★入力の上限を超える線を数える（byRate の中も）★",
       sorted(_strs_num({"normal": {"good": 420, "byRate": {"rate45": {"excellent": 760}}}})) == [420, 760])
 

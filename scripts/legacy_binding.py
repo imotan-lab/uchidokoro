@@ -57,6 +57,10 @@ class BindingError(Exception):
     pass
 
 
+class PendingUnreadable(BindingError):
+    """★待ち行列が読めない★（結び付けそのものの不具合ではない＝呼ぶ側は止めてよい）"""
+
+
 def norm_url(url) -> str:
     return str(url or "").strip().rstrip("/")
 
@@ -150,7 +154,9 @@ def slug_for_url(official_url: str):
         if _pm.find_by_url(_pm.load(), want):
             bad.append("%s: そのURLは待ち行列の新台が使っています" % slug)
     except Exception as ex:                                  # noqa: BLE001
-        bad.append("待ち行列が読めないので結び付けを使えません（%s）" % str(ex)[:60])
+        # ★待ち行列が読めないのは「この結び付けが使えない」ではない★＝別の種類で返す（代役の指摘＝
+        #   呼ぶ側が1件の不具合と読み、導入日の控えを捨てていた）
+        raise PendingUnreadable("待ち行列が読めないので結び付けを使えません（%s）" % str(ex)[:60])
     if bad:
         raise BindingError("／".join(bad[:3]))
     return slug, name

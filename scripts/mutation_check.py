@@ -2293,8 +2293,8 @@ MUTATIONS = [
     {
         "why": "★待ち行列が読めなくても、結び付けを使う★",
         "file": "scripts/legacy_binding.py",
-        "before": '        bad.append("待ち行列が読めないので結び付けを使えません（%s）" % str(ex)[:60])',
-        "after": '        pass',
+        "before": "        raise PendingUnreadable(\"待ち行列が読めないので結び付けを使えません（%s）\" % str(ex)[:60])",
+        "after": "        pass",
         "run": ["scripts/legacy_binding.py"],
     },
     {
@@ -8087,8 +8087,8 @@ MUTATIONS = [
         "why": "★導入日が未定の機種でも、番兵が知らせる"
                "（★毎朝おなじ機種が出て、本物の警告が埋もれる★）★",
         "file": "scripts/add_machine_health.py",
-        "before": '        if it.get("release_tbd"):\n            continue\n',
-        "after": "        if False:\n            continue\n",
+        "before": '        if it.get("release_tbd"):\n            # ★★ただし DMMのカレンダーが',
+        "after": "        if False:\n            # ★★ただし DMMのカレンダーが",
         "run": ["scripts/add_machine_health.py"],
     },
     {
@@ -11180,8 +11180,8 @@ MUTATIONS = [
     {
         "why": "★チェッカー：50枚あたりG数を、記事・確定値に無い数でも書く（代役8回目）★",
         "file": "scripts/checker_verdict.py",
-        "before": "        if _ai._canon(str(v)) not in _coin_allowed(slug, m):\n",
-        "after": "        if False:\n",
+        "before": "        ng += coin_basis_problems(slug, dec)\n",
+        "after": "        pass\n",
         "run": ["scripts/checker_verdict.py"],
     },
     {
@@ -11197,6 +11197,34 @@ MUTATIONS = [
         "before": "        if c.get(\"status\") == APPROVED and rb and rb <= lim:\n",
         "after": "        if False:\n",
         "run": ["scripts/automation_policy.py"],
+    },
+    {
+        "why": "★チェッカー：50枚あたりG数の逐語に「その数G」が無くても書く（代役9回目）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "    if not any(_ai._canon(n) == v and u == \"G\" for n, u in _dn_c.numbers_with_unit(q)):\n",
+        "after": "    if False:\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★チェッカー：50枚あたりG数の逐語が記事に無くても書く（代役9回目）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "    if not any(q in s9 for s9 in _article_strings(slug)):\n",
+        "after": "    if False:\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：待ち行列が読めない種類の例外を、1件の不具合として捨てる（代役9回目）★",
+        "file": "scripts/legacy_release.py",
+        "before": "        except _lb.PendingUnreadable as e:\n",
+        "after": "        except ZeroDivisionError as e:\n",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★新台の見張り：機種ページが未定でもカレンダーに日付がある新台を、導入3日前に知らせない（代役9回目）★",
+        "file": "scripts/add_machine_health.py",
+        "before": "            if len(str(rel)) == 10 and not far_from_release(rel, today):\n",
+        "after": "            if False:\n",
+        "run": ["scripts/add_machine_health.py"],
     },
 ]
 

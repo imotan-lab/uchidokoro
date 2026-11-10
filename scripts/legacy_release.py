@@ -153,6 +153,10 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
     for s in list(d["machines"]):
         try:
             u = bound(s)
+        except _lb.PendingUnreadable as e:
+            # ★★待ち行列が読めないのは「この1件の不具合」ではない★★＝何も捨てずに止める（代役の指摘＝一瞬だけ読めなかったとき、
+            #   あとから読み直すと読めてしまい、控えを捨てていた）
+            raise LegacyReleaseError(f"待ち行列を読めないので、導入日の控えを確かめられません（{s}: {str(e)[:60]}）")
         except _lb.BindingError:
             # ★★この1件の結び付けが使えない（機種名が変わった・URLが重なった・封が合わない）なら、その控えだけ捨てる★★
             #   （代役の指摘＝例外で全体を止めると、1件の不具合で全機種の取り直しが毎日止まった）
@@ -584,6 +588,16 @@ def selftest() -> int:
       _r10 is not None and _mid == "2024-03-04")
     t("★★取り直しの途中で待ち行列が読めなくなっても、控えを捨てずに止める★★（代役の指摘＝最初の確認しか守っていなかった）",
       _r12 is not None and _mid2 == "2024-03-04")
+    _save({"machines": {"b": {"release": "2024-03-04", "url": U % 2, "checked": "2026-09-01"}}, "tries": {}}, p2)
+    _r13 = None
+    try:
+        refresh(0, True, rows=rows, fetch=lambda u: "2025-06-02",
+                bound=lambda s9: (_ for _ in ()).throw(_lbx.PendingUnreadable("待ち行列が読めない")),
+                today="2026-11-12", path=p2, log=lambda *a: None)
+    except LegacyReleaseError as e:
+        _r13 = str(e)
+    t("★★待ち行列が読めない種類の例外なら、あとで読めても控えを捨てずに止める★★（代役の指摘＝一瞬だけの失敗を守れなかった）",
+      _r13 is not None and release_for("b", p2) == "2024-03-04")
     t("　結び付けの控えのファイルが無いのに導入日の控えがあれば止める（消えたのか取り消したのか分からない）",
       _r11 is not None and release_for("b", p2) == "2024-03-04")
     refresh(1, True, rows=rows, fetch=lambda u: "2025-06-02", bound=bound, today="2026-11-12",
