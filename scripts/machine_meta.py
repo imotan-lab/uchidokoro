@@ -270,7 +270,10 @@ def selftest() -> int:
         def _boom(s):
             raise RuntimeError("ロック競合")
         g["_rebuild"] = _boom
-        r2 = apply_decision(dp, True)
+        try:
+            r2 = apply_decision(dp, True)
+        except Exception:                                        # noqa: BLE001
+            r2 = {"problems": [], "crashed": True}
         rs2 = {m["slug"]: m for m in json.loads(io.open(g["MACHINES"], encoding="utf-8").read())}
         t("★★作り直しが例外でも、この機種の通称・タイプを元に戻す（別機種はそのまま）★★",
           r2["problems"] and not r2.get("written") and rs2["zzz_m"]["aliases"] == []

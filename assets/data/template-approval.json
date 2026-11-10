@@ -57,7 +57,7 @@
   "scripts/grow_machine.py": "ec5afb4d0356651259ae2a9aef3e7225763303e715a364f72b13a8aac84eff0b",
   "scripts/hall_presence.py": "e7bb60b60c6b4dc32c6c199f3d2ff6c1fadb0a92f2227f595a0bde18e954190e",
   "scripts/hub_prose.json": "ae05aaed0b50d1e1cf0edbc44ac4af5239405621742e6af41489ee013ad6e0f9",
-  "scripts/machine_meta.py": "02f7aaec87d768420bb750b871616847b34941abcfa17fcc6d33d5cf707a4714",
+  "scripts/machine_meta.py": "85ee0f7c045abdd2e562fc8acaa34d5199dbf8528229dbfcabfe08b973ba4742",
   "scripts/note_text.py": "a2b48bed0a3c49514a100432dc759ea7700ce6c3559289583375a33977671ca6",
   "scripts/page_decision.py": "295022979c68ca3756963b44934600a41f35c004f12bcee453859ff0370e8f15",
   "scripts/pending_machines.py": "9fd4c3af93cb546a64e1eccde3fdf082577208763942bb974e4665ad510de1fc",
