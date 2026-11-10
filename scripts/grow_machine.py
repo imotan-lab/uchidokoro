@@ -248,7 +248,15 @@ def grow_scope_problem(m: dict) -> str:
             return ""
         if in_new_window(str(m.get("release_date") or ""), _dt.date.today()):
             return ""
-        return "育てる対象ではありません（中身の無い欄が残っていません）"
+        # ★★確定値が変わった新台は、空欄が無くても育てる★★（2026-11-10・Codexの5回目の洗い出し）＝
+        #   担当の点検表（STEP 1-T）で値を直すときは確定値へ記録して育成に任せるので、ここで断ると
+        #   全欄が埋まった新台では訂正が記事へ届かなかった。読めないときも育てる側へ倒す（confirmed_drift と同じ）
+        try:
+            if confirmed_drift(str(m.get("slug") or "")):
+                return ""
+        except Exception:                 # noqa: BLE001
+            return ""
+        return "育てる対象ではありません（中身の無い欄が残っていません・確定値も変わっていません）"
     return f"育てる対象ではありません（いまの区分: {cls}）"
 
 
@@ -1716,6 +1724,9 @@ def _added_numbers_ok(sec: dict, detail: dict, row: dict, slug: str, confirmed=N
     import derived_sections as _ds
     import decide_now as _dn
     texts = [sec.get("title") or ""] + [b for b in (sec.get("body") or []) if isinstance(b, str)]
+    # ★★足したときに確定値から来た数字は、今の名指しした確定値に在ること★★（2026-11-10・Codexの指摘＝
+    #   記事のほかの欄に同じ数字があると、確定値が直っても古い数字の欄が持ち越されていた）。控えが無ければ今までどおり
+    srcs, fields = added_basis(slug, sec.get("title"))
     for tb in (sec.get("tables") or []):
         if isinstance(tb, dict):
             texts += [h for h in (tb.get("headers") or []) if isinstance(h, str)]
@@ -1735,7 +1746,40 @@ def _added_numbers_ok(sec: dict, detail: dict, row: dict, slug: str, confirmed=N
                     rec.add(_ai._canon(tok))
         except Exception:                 # noqa: BLE001
             continue
+    if srcs:
+        import decide_now as _dn1
+        frec = set()
+        for f in fields:
+            try:
+                for st in _ai.record_strings(f, ((conf or {}).get(f) or {}).get("value")):
+                    for tok, _u in _dn1.numbers_with_unit(st):
+                        frec.add(tok)
+                        frec.add(_ai._canon(tok))
+            except Exception:             # noqa: BLE001
+                continue
+        for sv in srcs:
+            num, _, src = str(sv).rpartition("|")
+            if src == "fields":
+                toks = [nu[0] for nu in _dn1.numbers_with_unit(num)]
+                if not toks or not any(tk in frec or _ai._canon(tk) in frec for tk in toks):
+                    return False
     return not _ai._numbers_ok(texts, pool, frozenset(rec))
+
+
+def added_basis(slug: str, title, basis=None) -> tuple:
+    """★add_items の控えから、その欄を最後に足したときの数字の出どころと名指しした確定値★ → (出どころ, 項目名)"""
+    try:
+        import add_items as _ai
+        basis = _ai._read_json_or(_ai.BASIS, [], list) if basis is None else basis
+    except Exception:                     # noqa: BLE001
+        return [], []
+    for b in reversed(basis or []):
+        if not isinstance(b, dict) or b.get("slug") != slug:
+            continue
+        for a in b.get("additions") or []:
+            if isinstance(a, dict) and a.get("op") == "add_section" and a.get("title") == title:
+                return list(a.get("_number_sources") or []), list(a.get("fields") or [])
+    return [], []
 
 
 def carry_added_sections(old_detail: dict, detail: dict, slug: str, titles=None, row: dict = None,
@@ -1925,6 +1969,18 @@ def _carry_meta_tests(t) -> None:
         _ba.added_section_titles = _keep_ast
     t("★持ち越さなかった足した欄の免除は、節の本文・表・注記だけ（同じ名前の基本情報表・要約は今までどおり比べる）★（Codexの指摘）",
       _kept_d == [("fact", "有利区間", "3000G"), ("box", "有利区間", "x")])
+    _keep_ab = globals()["added_basis"]
+    try:
+        globals()["added_basis"] = lambda s, ti, basis=None: (["50%|fields"], ["payout_rate"])
+        _old_f = {"sections": [{"title": "天井・恩恵", "body": ["機械割は50%です。"]},
+                               {"title": "有利区間", "body": ["有利区間の割合は50%です。"]}]}
+        _new_f = {"sections": [{"title": "天井・恩恵", "body": ["機械割は50%です。"]}]}
+        _got_f = carry_added_sections(_old_f, _new_f, "zzz_a", titles={"有利区間"},
+                                      confirmed={"payout_rate": {"value": {"1": "60%"}}})
+    finally:
+        globals()["added_basis"] = _keep_ab
+    t("★★確定値から来た数字は、記事のほかの欄に同じ数字があっても、今の確定値に無ければ持ち越さない★★（Codexの指摘）",
+      _got_f == [])
     t("　確定値にまだ在れば持ち越す",
       carry_added_sections(_old_n, _new_n, "zzz_a", titles={"有利区間"}, confirmed=_conf_n) == ["有利区間"])
     t("　（配線）育成が足した欄を持ち越している",
@@ -4210,8 +4266,10 @@ def selftest() -> int:
     _sc_has = {"has": True}
     _sc_bak = globals()["has_unconfirmed"]
     _sc_cls = _pdz.machine_class
+    _sc_cd = globals()["confirmed_drift"]
     try:
         globals()["has_unconfirmed"] = lambda *a, **k: _sc_has["has"]
+        globals()["confirmed_drift"] = lambda s: False
         _pdz.machine_class = lambda m: "AUTO_INDEXABLE"
         t("★★検索に載っていても、空の欄が残っていれば対象★★"
           "（★直す前はここで外れ、中身を足す道が無くなっていた★）",
@@ -4228,8 +4286,12 @@ def selftest() -> int:
           grow_scope_problem(_st_row((_td - _dtm.timedelta(days=5)).isoformat())) == "")
         t("　（対照）導入後31日を過ぎたら外れる",
           "中身の無い欄" in grow_scope_problem(_st_row((_td - _dtm.timedelta(days=31)).isoformat())))
+        globals()["confirmed_drift"] = lambda s: True
+        t("★★全欄が埋まって新台期間を過ぎても、確定値が変わっていれば対象（訂正を記事へ届ける）★★（Codexの指摘）",
+          grow_scope_problem(_st_row((_td - _dtm.timedelta(days=31)).isoformat())) == "")
     finally:
         globals()["has_unconfirmed"] = _sc_bak
+        globals()["confirmed_drift"] = _sc_cd
         _pdz.machine_class = _sc_cls
     # ★呼び出しの配線★（罠③＝関数だけ試すと、呼び出しを消しても緑）
     t("　候補を選ぶ側が、その1か所を通る",

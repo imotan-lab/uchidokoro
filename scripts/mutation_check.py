@@ -10925,6 +10925,55 @@ MUTATIONS = [
         "after": "        t = t[:19]\n        if False:\n",
         "run": ["scripts/owner_questions.py"],
     },
+    {
+        "why": "★育成：確定値が変わっても、全欄が埋まった新台は育てない（訂正が届かない・Codex5回目）★",
+        "file": "scripts/grow_machine.py",
+        "before": "            if confirmed_drift(str(m.get(\"slug\") or \"\")):\n                return \"\"\n",
+        "after": "            if False:\n                return \"\"\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★育成：足した欄の確定値由来の数字を、今の確定値と照らさない（Codex5回目）★",
+        "file": "scripts/grow_machine.py",
+        "before": "            if src == \"fields\":\n",
+        "after": "            if False:\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★大手との差：足した数字の出どころを控えない★",
+        "file": "scripts/add_items.py",
+        "before": "                a[\"_number_sources\"] = sorted({\n",
+        "after": "                a[\"_number_sources_x\"] = sorted({\n",
+        "run": ["scripts/add_items.py"],
+    },
+    {
+        "why": "★大手との差：前に足した欄を同じ名前で直せない（Codex5回目）★",
+        "file": "scripts/add_items.py",
+        "before": "                    _replace = title in _bna.added_section_titles(row.get(\"slug\") or detail.get(\"slug\") or \"\")\n",
+        "after": "                    _replace = False\n",
+        "run": ["scripts/add_items.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：写したことを控えない★",
+        "file": "scripts/legacy_release.py",
+        "before": "    d.setdefault(\"applied\", {})[slug] = rel\n    _save(d, path)\n",
+        "after": "",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：結び付けを取り消しても写した導入日を見ない（Codex5回目）★",
+        "file": "scripts/legacy_release.py",
+        "before": "        if s9 in applied and s9 not in (d.get(\"machines\") or {}) \\\n",
+        "after": "        if False and s9 not in (d.get(\"machines\") or {}) \\\n",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★担当機種：点検済みの印と点検表を突き合わせない（Codex5回目）★",
+        "file": "scripts/machine_turn.py",
+        "before": "        if not tr or tr[\"started\"] > day or (tr[\"started\"] < day and _stale_turn(tr, day)):\n",
+        "after": "        if False:\n",
+        "run": ["scripts/machine_turn.py"],
+    },
 ]
 
 

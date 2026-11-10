@@ -263,8 +263,17 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
             title = a.get("title")
             p += _text_ng(title, f"{w} 欄の名前", 2, TITLE_MAX)
             texts.append(title if isinstance(title, str) else "")   # ★見出しの数字も作らない★（Codexの指摘）
+            # ★この道具で前に足した欄なら、同じ名前で置き換えられる★（2026-11-10・Codexの指摘＝新台は行・文を足せないので、
+            #   確定値が直っても足した欄を直す道が無かった）。それ以外の既存の欄は今までどおり断る
+            _replace = False
             if title in titles:
-                p.append(f"{w}: 「{title}」はもう記事にあります（add_rows か add_line で足す）")
+                try:
+                    import build_new_article as _bna
+                    _replace = title in _bna.added_section_titles(row.get("slug") or detail.get("slug") or "")
+                except Exception:                                # noqa: BLE001
+                    _replace = False
+                if not _replace:
+                    p.append(f"{w}: 「{title}」はもう記事にあります（add_rows か add_line で足す）")
             if title == RUMOR_TITLE or (isinstance(title, str) and title.startswith("噂")):
                 p.append(f"{w}: 噂の欄は rumor_verdict で書きます")
             has_body, has_tbl = bool(a.get("body")), bool(a.get("table"))
@@ -288,8 +297,18 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
                 new = {"title": title, "type": "table",
                        "tables": [{k: tb[k] for k in ("headers", "rows", "note", "label") if k in tb}]}
             if not p:
-                secs.insert(_place(secs, title), new)
-                done.append(f"欄「{title}」")
+                if _replace:
+                    secs[[s.get("title") if isinstance(s, dict) else None for s in secs].index(title)] = new
+                    done.append(f"欄「{title}」を直した")
+                else:
+                    secs.insert(_place(secs, title), new)
+                    done.append(f"欄「{title}」")
+                # ★足した数字の出どころを控える★（確定値から来た数字は、持ち越すとき今の確定値と照らす）
+                import decide_now as _dn0
+                a["_number_sources"] = sorted({
+                    f"{nu[0]}{nu[1]}|" + ("article" if (nu in base_pool[0] or (nu[1] == "" and nu[0] in base_pool[1]))
+                                          else "fields")
+                    for t0 in texts for nu in _dn0.numbers_with_unit(t0)})
         else:
             sec = next((s for s in secs if isinstance(s, dict) and s.get("title") == a.get("section")), None)
             if sec is None:
@@ -691,6 +710,24 @@ def selftest() -> int:
           r.get("written") and "有利区間" in [s["title"] for s in now["sections"]]
           and added_titles("zzz_g", json.loads(io.open(g["BASIS"], encoding="utf-8").read())) >= {"有利区間"}
           and json.loads(io.open(g["ADDED"], encoding="utf-8").read()) == {"zzz_g": ["有利区間"]})
+        _bas = json.loads(io.open(g["BASIS"], encoding="utf-8").read())
+        t("★足した数字の出どころ（確定値から・記事から）を控えに残す★（持ち越すときに今の確定値と照らす）",
+          _bas[-1]["additions"][0].get("_number_sources") == ["3000G|fields"])
+        import build_new_article as _bna2
+        _keep_as = _bna2.ADDED_SECTIONS
+        try:
+            _bna2.ADDED_SECTIONS = g["ADDED"]
+            _now2 = json.loads(io.open(dp, encoding="utf-8").read())
+            r = plan(_now2, row, dec({"op": "add_section", "title": "有利区間",
+                                      "body": ["有利区間は最大3000Gまでで、終わると通常へ戻ります。"],
+                                      "fields": ["ceiling#yuuri"]}), conf)
+            r2 = plan(_now2, row, dec({"op": "add_section", "title": "ゲーム性", "body": ["置き換える文です。"]}), conf)
+        finally:
+            _bna2.ADDED_SECTIONS = _keep_as
+        t("★★この道具で足した欄は、同じ名前で直し直せる（新台で確定値が直ったとき）★★（Codexの指摘）",
+          not r["problems"] and [s["title"] for s in r["sections"]].count("有利区間") == 1
+          and any("終わると通常" in b for s in r["sections"] if s["title"] == "有利区間" for b in s["body"]))
+        t("　足していない既存の欄は、同じ名前でも置き換えない", any("もう記事にあります" in x for x in r2["problems"]))
     finally:
         g.update(keep)
         _cvx.for_slug = keep_fs

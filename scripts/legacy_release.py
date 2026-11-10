@@ -68,6 +68,8 @@ def read(path: str = None) -> dict:
                 or not _DATE_RE.match(str(e.get("checked") or ""))):
             raise LegacyReleaseError(f"legacy-release.json の {s} が壊れています")
     d.setdefault("tries", {})
+    if not isinstance(d.setdefault("applied", {}), dict):
+        raise LegacyReleaseError("legacy-release.json の applied が壊れています")
     return d
 
 
@@ -80,7 +82,9 @@ def _save(d: dict, path: str = None) -> None:
     p = path or STORE
     tmp = p + ".tmp"
     d = {"schema": SCHEMA, "machines": dict(sorted(d["machines"].items())),
-         "tries": dict(sorted(d.get("tries", {}).items()))}
+         "tries": dict(sorted(d.get("tries", {}).items())),
+         # ★機種一覧へ写した導入日★（結び付けを取り消したら、残っていないか見張り番が見る）
+         "applied": dict(sorted((d.get("applied") or {}).items()))}
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(d, ensure_ascii=False, indent=1) + "\n")
     os.replace(tmp, p)
@@ -175,6 +179,23 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
             "purged": purged}
 
 
+def applied_orphans(rows, d: dict) -> list:
+    """★機種一覧へ写した導入日のうち、控えの記録（＝いまの結び付け）が無くなったのに機種一覧に残っているもの★
+
+    （2026-11-10・Codexの5回目の洗い出し＝誤った結び付けを取り消しても、そのページから写した日付が読者に残った）
+    """
+    out = []
+    applied = d.get("applied") or {}
+    for m in rows:
+        if not isinstance(m, dict):
+            continue
+        s9 = str(m.get("slug") or "")
+        if s9 in applied and s9 not in (d.get("machines") or {}) \
+                and str(m.get("release_date") or "") == str(applied[s9]):
+            out.append(s9)
+    return out
+
+
 def mismatches(rows, d: dict) -> list:
     """★machines.json の導入日が、控え（DMMの値）と食い違う昔の機種★ → [(slug, machines.json の値, 控えの値)]
 
@@ -242,6 +263,8 @@ def apply_release(slug: str, by, why: str, path: str = None, machines_path: str 
         old = row.get("release_date")
         row["release_date"] = rel
         _pub.write_atomic(mp, json.dumps(rows, ensure_ascii=False, indent=1) + "\n")
+    d.setdefault("applied", {})[slug] = rel
+    _save(d, path)
     try:
         ok = (rebuild or _rebuild_pages)(slug)
     except Exception:                                            # noqa: BLE001
@@ -260,6 +283,9 @@ def apply_release(slug: str, by, why: str, path: str = None, machines_path: str 
             (rebuild or _rebuild_pages)(slug)
         except Exception:                                        # noqa: BLE001
             pass
+        d2 = read(path)
+        (d2.get("applied") or {}).pop(slug, None)
+        _save(d2, path)
         return ["ページ・早見表を作り直せなかったので、導入日を元に戻しました"]
     return []
 
@@ -442,6 +468,12 @@ def selftest() -> int:
       any("結び付け" in x for x in r5))
     t("★★2AIが決めたとき、控えの導入日（DMMの値）を機種一覧の release_date へ写す★★（ページの登場時期に出る）",
       r4 == [] and after_ok[0].get("release_date") == "2025-06-02")
+    _da = read(pz)
+    t("★写した導入日を控えに残す（applied）★", _da.get("applied", {}).get("a") == "2025-06-02")
+    _da["machines"].pop("a", None)
+    t("★★結び付けを取り消して控えが消えたのに、写した導入日が機種一覧に残っていれば挙げる★★（Codexの指摘）",
+      applied_orphans(after_ok, _da) == ["a"]
+      and applied_orphans([{"slug": "a", "release_date": "2024-01-01"}], _da) == [])
     t("★★機種一覧の導入日がDMMの値と食い違う昔の機種を挙げる（月だけの書き方は食い違いにしない）★★",
       mismatches([{"slug": "a", "release_date": "2025-07-01"}, {"slug": "b", "release_date": "2025-06"}],
                  {"machines": {"a": {"release": "2025-06-02"}, "b": {"release": "2025-06-20"}}})
@@ -498,6 +530,11 @@ def main() -> int:
         return 10 if (a.apply and r["changed"]) else 0
     if a.check:
         pr = stall_problem(rows, d, datetime.date.today().isoformat())
+        _orph = applied_orphans(rows, d)
+        if _orph:
+            pr = ((pr + " ／ ") if pr else "") + (
+                f"結び付けを取り消したのに、機種一覧へ写した導入日が残っている機種が{len(_orph)}件: "
+                + "・".join(_orph[:5]) + "（2AIで正しい導入日を確かめ直す）")
         print(("🟡 " + pr) if pr else f"🟢 昔からの機種の導入日：控え {len(d['machines'])}件")
         return 1 if pr else 0
     if a.unbound:

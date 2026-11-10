@@ -44,6 +44,8 @@ NEED_NOTE = ("NA", "LATER")
 _IN_SELFTEST = False
 # ★人気機種の「今週見終わった」印と突き合わせ始める週★（この週より前の印は点検表ができる前のもの）
 TURN_SINCE_WEEK = "2026-11-16"
+# ★「点検済み」の日付（state.json の quality_review.last_reviewed）と突き合わせ始める日★
+TURN_SINCE_DAY = "2026-11-11"
 
 # ★項目の一覧★（キー → 何をするか・手順書のどの段の流れで）。並びは記事の上から下＋道具の順
 COMMON_ITEMS = (
@@ -201,6 +203,29 @@ def popular_without_turn(today: str, done_this_week: list, week: str, path: str 
     return out
 
 
+def reviewed_without_turn(last_reviewed: dict, path: str = None) -> list:
+    """★「点検済み」にしたのに、その日に点検表を始めていない機種★（2026-11-10・Codexの5回目の洗い出し）
+
+    なぜ＝その他の機種は mark_reviewed で点検済みにでき、点検表を一度も使わなくても見張り番は🟢だった。
+    """
+    d = read(path)
+    out = []
+    for s9, day in (last_reviewed or {}).items():
+        day = str(day or "")[:10]
+        if day < TURN_SINCE_DAY:
+            continue
+        tr = d["turns"].get(s9)
+        if not tr or tr["started"] > day or (tr["started"] < day and _stale_turn(tr, day)):
+            out.append(s9)
+    return sorted(out)
+
+
+def _stale_turn(tr: dict, day: str) -> bool:
+    """その点検表が、点検済みにした日より前に始めて、その日までに1項目も記録していないか"""
+    return not any(str(v.get("at") or "") >= tr["started"] and str(v.get("at") or "") <= day
+                   for v in (tr.get("items") or {}).values())
+
+
 def check_problem(today: str = None, rows=None, path: str = None):
     """★見張り番：前の日までに始めたのに、そろっていない担当★
 
@@ -231,6 +256,16 @@ def check_problem(today: str = None, rows=None, path: str = None):
     if nt:
         msgs.append(f"人気機種を今週見終わったと印したのに、点検表（STEP 1-T）を始めていない機種が{len(nt)}件: "
                     + "・".join(nt[:8]))
+    try:
+        import json as _js2
+        _sp = _lp.doc("state.json")
+        _st = _js2.loads(io.open(_sp, encoding="utf-8").read()) if os.path.isfile(_sp) else {}
+        rv = reviewed_without_turn(((_st.get("quality_review") or {}).get("last_reviewed") or {}), path)
+    except Exception as e:                                   # noqa: BLE001
+        rv = []
+        msgs.append(f"点検済みの記録を読めません（{type(e).__name__}）")
+    if rv:
+        msgs.append(f"点検済みにしたのに、その日に点検表（STEP 1-T）を始めていない機種が{len(rv)}件: " + "・".join(rv[:8]))
     return " ／ ".join(msgs) if msgs else None
 
 
@@ -310,6 +345,9 @@ def selftest() -> int:
       popular_without_turn("2026-11-18", ["zzz_l", "zzz_x"], "2026-11-16", p) == ["zzz_x"]
       and popular_without_turn("2026-11-24", ["zzz_l"], "2026-11-23", p) == ["zzz_l"])
     t("　点検表ができる前の週の印は見ない", popular_without_turn("2026-11-10", ["zzz_x"], "2026-11-10", p) == [])
+    t("★★点検済みにしたのに、その日に点検表を始めていない機種を挙げる★★（Codexの指摘＝その他の機種は印だけ付けられた）",
+      reviewed_without_turn({"zzz_l": "2026-11-17", "zzz_y": "2026-11-12", "zzz_old": "2026-11-01"}, p)
+      == ["zzz_y"])
     with io.open(p, "w", encoding="utf-8") as f:
         f.write('{"turns": {"zzz_l": {"started": "", "items": {}}}}')
     try:
