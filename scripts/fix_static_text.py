@@ -230,10 +230,10 @@ def stale_problem(state: dict, today: str = None):
     if not last or last < stall_cut:
         return f"固定ページの読み直しが{STALL_DAYS}日以上進んでいません（最後に読んだ日: {last or 'なし'}）"
     first = (state.get(FIRST_TRIED_KEY) or {}) if isinstance(state, dict) else {}
-    old = [pg for pg in ROTATION if seen.get(pg) and seen[pg] < cut]
+    old = [pg for pg in ROTATION if seen.get(pg) and seen[pg] <= cut]   # ★40日目で知らせる★（Codexの指摘）
     # ★★一度も読み終えていないページも、初めて試した日から数える★★（2026-11-10・Codexの指摘＝
     #   同じページだけ毎回失敗し続けても、読んだ日が無いので古さの検査から外れていた）
-    old += [pg for pg in ROTATION if not seen.get(pg) and (first.get(pg) or "9999") < cut]
+    old += [pg for pg in ROTATION if not seen.get(pg) and (first.get(pg) or "9999") <= cut]
     if old:
         return (f"固定ページの読み直しが止まっています（{STALE_DAYS}日以上読んでいないページ {len(old)}件: "
                 + "・".join(old[:5]) + "）")
@@ -394,6 +394,11 @@ def selftest() -> int:
                      FIRST_TRIED_KEY: {"about.html": "2026-09-20"}}, "2026-11-10") is not None
       and stale_problem({STATE_KEY: {pg: "2026-11-08" for pg in ROTATION if pg != "about.html"},
                          FIRST_TRIED_KEY: {"about.html": "2026-11-01"}}, "2026-11-10") is None)
+    t("　ちょうど40日目で知らせる（39日目は知らせない）",
+      stale_problem({STATE_KEY: {pg: "2026-11-08" for pg in ROTATION if pg != "about.html"},
+                     FIRST_TRIED_KEY: {"about.html": "2026-10-01"}}, "2026-11-10") is not None
+      and stale_problem({STATE_KEY: {pg: "2026-11-08" for pg in ROTATION if pg != "about.html"},
+                         FIRST_TRIED_KEY: {"about.html": "2026-10-02"}}, "2026-11-10") is None)
     t("　まだ読んでいないページだけなら鳴らさない（先に読まれる）／巡回が5日進まなければ鳴らす",
       stale_problem({STATE_KEY: {pg: "2026-11-08" for pg in ROTATION if pg != "about.html"}}, "2026-11-10") is None
       and stale_problem({STATE_KEY: {pg: "2026-11-01" for pg in ROTATION}}, "2026-11-10") is not None)

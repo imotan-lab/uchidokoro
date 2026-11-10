@@ -10641,8 +10641,8 @@ MUTATIONS = [
     {
         "why": "★大手との差：確定値にも記事にも無い数字を足せる★",
         "file": "scripts/add_items.py",
-        "before": "            if nu not in pairs and not (nu[1] == \"\" and nu[0] in toks):\n",
-        "after": "            if False:\n",
+        "before": "            if nu in pairs or (nu[1] == \"\" and nu[0] in toks) or nu[0] in rec_toks:\n",
+        "after": "            if True:\n",
         "run": ["scripts/add_items.py"],
     },
     {
@@ -10725,15 +10725,15 @@ MUTATIONS = [
     {
         "why": "★大手との差：確定値の覚え書きの数字まで使う（Codex）★",
         "file": "scripts/add_items.py",
-        "before": "            keys = [k for k in o if not str(k).startswith(\"_\")]\n",
-        "after": "            keys = list(o)\n",
+        "before": "    return [str(x) for x in _cv.check_shape(field, value)]\n",
+        "after": "    return [json.dumps(value, ensure_ascii=False)]\n",
         "run": ["scripts/add_items.py"],
     },
     {
         "why": "★大手との差：確定値の数と単位を組み立てない（777G が使えない・Codex）★",
         "file": "scripts/add_items.py",
-        "before": "                out.append(_scalar(o[\"amount\"]) + _scalar(o[\"unit\"]))\n",
-        "after": "                pass\n",
+        "before": "            for tok, _unit in _dn.numbers_with_unit(st):\n                toks.add(tok)\n",
+        "after": "            pass\n",
         "run": ["scripts/add_items.py"],
     },
     {
@@ -10746,7 +10746,7 @@ MUTATIONS = [
     {
         "why": "★固定ページ：一度も読み終えていないページの停滞を見ない（Codex）★",
         "file": "scripts/fix_static_text.py",
-        "before": "    old += [pg for pg in ROTATION if not seen.get(pg) and (first.get(pg) or \"9999\") < cut]\n",
+        "before": "    old += [pg for pg in ROTATION if not seen.get(pg) and (first.get(pg) or \"9999\") <= cut]\n",
         "after": "",
         "run": ["scripts/fix_static_text.py"],
     },

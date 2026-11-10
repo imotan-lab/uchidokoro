@@ -102,87 +102,51 @@ def _text_ng(t, where: str, lo: int, hi: int) -> list:
     return out
 
 
-def _numbers_ok(texts: list, pool: tuple) -> list:
-    """★足す数字は、名指しした確定値か、いまの記事・機種行に同じ単位で在るものだけ★"""
+def _numbers_ok(texts: list, pool: tuple, rec_toks=frozenset()) -> list:
+    """★足す数字は、いまの記事・機種行に同じ単位で在るか、名指しした確定値の照合済みの値に在るものだけ★"""
     import decide_now as _dn
     pairs, toks = pool
     bad = []
     for t in texts:
         for nu in _dn.numbers_with_unit(t):
-            if nu not in pairs and not (nu[1] == "" and nu[0] in toks):
-                bad.append(f"{nu[0]}{nu[1]}")
+            if nu in pairs or (nu[1] == "" and nu[0] in toks) or nu[0] in rec_toks:
+                continue
+            bad.append(f"{nu[0]}{nu[1]}")
     return sorted(set(bad))
 
 
-def _scalar(o) -> str:
-    if isinstance(o, bool):
-        return ""
-    if isinstance(o, (int, float)):
-        return str(int(o)) if float(o).is_integer() else str(o)
-    return o if isinstance(o, str) else ""
-
-
 def record_strings(field: str, value) -> list:
-    """★確定値の記録のうち、出典の逐語で確かめた値だけを文字にする★（2026-11-10・Codexの指摘）
+    """★確定値の記録のうち、出典の逐語と照合した表示値だけ★（2026-11-10・Codexの指摘2回）
 
-    ・覚え書き（`_` で始まる鍵）は入れない（引用と照合していない）
-    ・決まった形の項目（VALUE_SHAPES）は、引用と照合する鍵（quoted）だけ
-    ・数と単位が別の鍵なら組み立てる（amount＋unit／games は G／範囲 low・high＋unit）
-    ・設定ごとの値は、その項目の単位（spec_lookup.FIELDS）を付けた形も入れる（97.7 → 97.7%）
+    ★自分で値を拾わない★＝確定値の道具が「引用と照合すべき表示値」として返すもの（confirmed_values.check_shape）
+    をそのまま使う（覚え書き・照合しない鍵・範囲の組み立てで、照合していない数字が入るのを防ぐ）。
+    形が壊れていれば例外（呼ぶ側が「記録がありません」として断る）。
     """
     import confirmed_values as _cv
-    import spec_lookup as _sp
-    base = _cv.base_field(field)
-    shape = _cv.VALUE_SHAPES.get(base)
-    unit = str((_sp.FIELDS.get(base) or {}).get("unit") or "")
-    unit = "" if unit == "1/x" else unit
-    out = []
-
-    def _walk(o, top=False):
-        if isinstance(o, dict):
-            keys = [k for k in o if not str(k).startswith("_")]
-            if top and shape is not None:
-                keys = [k for k in keys if k in (shape.get("quoted") or ())]
-            for k in keys:
-                if str(k) in ("1", "2", "3", "4", "5", "6"):
-                    out.append(str(k))
-                _walk(o[k])
-            if _scalar(o.get("amount")) and _scalar(o.get("unit")) and (not top or shape is None or
-                                                                     "amount" in (shape.get("quoted") or ())):
-                out.append(_scalar(o["amount"]) + _scalar(o["unit"]))
-            if _scalar(o.get("games")) and (not top or shape is None or "games" in (shape.get("quoted") or ())):
-                out.append(_scalar(o["games"]) + "G")
-            if _scalar(o.get("low")) and _scalar(o.get("high")) and _scalar(o.get("unit")):
-                out.append(_scalar(o["low"]) + _scalar(o["unit"]))
-                out.append(_scalar(o["high"]) + _scalar(o["unit"]))
-        elif isinstance(o, (list, tuple)):
-            for x in o:
-                _walk(x)
-        else:
-            v = _scalar(o)
-            if v:
-                out.append(v)
-                if unit and re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", v):
-                    out.append(v + unit)
-    _walk(value, top=True)
-    return out
+    return [str(x) for x in _cv.check_shape(field, value)]
 
 
 def _record_pool(slug: str, fields: list, confirmed: dict) -> tuple:
-    """名指しした確定値の記録の中の数字（出典で確かめた値だけ・record_strings）"""
+    """名指しした確定値の記録の、照合した表示値の中の数（単位は問わない＝どの言葉に付くかは2AIが決める）"""
     import decide_now as _dn
-    pairs, toks, missing = set(), set(), []
+    toks, missing = set(), []
     for f in fields:
         rec = confirmed.get(f)
         if not isinstance(rec, dict) or "value" not in rec:
             missing.append(f)
             continue
-        strings = record_strings(f, rec["value"])
-        for s in strings:
-            for tok, unit in _dn.numbers_with_unit(s):
-                pairs.add((tok, unit))
+        try:
+            strings = record_strings(f, rec["value"])
+        except Exception:                                        # noqa: BLE001
+            missing.append(f)
+            continue
+        for st in strings:
+            for tok, _unit in _dn.numbers_with_unit(st):
                 toks.add(tok)
-    return pairs, toks, missing
+        # ★設定ごとの値は、設定の番号（1〜6）も使える★（「設定1は…」と書くため）
+        if isinstance(rec["value"], dict):
+            toks |= {str(k) for k in rec["value"] if str(k) in ("1", "2", "3", "4", "5", "6")}
+    return toks, missing
 
 
 def _place(secs: list, title: str) -> int:
@@ -229,10 +193,10 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
         if not isinstance(fields, list) or not all(isinstance(f, str) for f in fields):
             p.append(f"{w}: fields は確定値の項目名の並びです")
             continue
-        rp, rt, miss = _record_pool(row.get("slug") or detail.get("slug") or "", fields, confirmed)
+        rec_toks, miss = _record_pool(row.get("slug") or detail.get("slug") or "", fields, confirmed)
         if miss:
-            p.append(f"{w}: 確定値の記録がありません: {'・'.join(miss)}（先に confirmed_values.py --record）")
-        pool = (base_pool[0] | rp, base_pool[1] | rt)
+            p.append(f"{w}: 確定値の記録がありません・形が違います: {'・'.join(miss)}（先に confirmed_values.py --record）")
+        pool = base_pool
         titles = [s.get("title") for s in secs if isinstance(s, dict)]
         texts = []
         if a["op"] == "add_section":
@@ -310,7 +274,7 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
                 if not p:
                     tbl.setdefault("rows", []).extend(rows)
                     done.append(f"「{sec['title']}」の表に{len(rows)}行")
-        made = _numbers_ok(texts, pool)
+        made = _numbers_ok(texts, pool, rec_toks)
         if made:
             p.append(f"{w}: 確定値にも記事にも無い数字があります: {'・'.join(made)}"
                      "（独立2出典で確かめて confirmed_values.py --record し、fields に名指しする）")
@@ -517,35 +481,49 @@ def selftest() -> int:
         {"title": "基本スペック", "type": "table", "tables": [{"headers": ["項目", "内容"], "rows": [["純増", "約3.0枚"]]}]},
         {"title": "ゲーム性", "body": ["AT中心のゲーム性です。"]},
         {"title": "噂・未確定情報", "type": "rumor", "body": ["噂です。"]}]}
-    conf = {"yuuri": {"value": {"max_games": "3000G", "_memo": "採用しない別条件の9999G"}},
-            "ceiling#at": {"value": {"kind": "GAME", "amount": "777", "unit": "G", "benefit": "AT 5000枚"}},
-            "payout_rate": {"value": {"1": "97.7", "6": "114.9"}}}
+    conf = {"ceiling#yuuri": {"value": {"kind": "GAME", "amount": "3000", "unit": "G", "benefit": "有利区間の終わり",
+                                        "_memo": "採用しない別条件の9999G"}},
+            "ceiling#at": {"value": {"kind": "GAME", "amount": "777", "unit": "G", "benefit": "AT 5000枚",
+                                     "low": "9999", "high": "10000"}},
+            "payout_rate": {"value": {"1": "97.7%", "6": "114.9%"}},
+            "games_per_50": {"value": {"games": 31, "note": "9999G"}}}
     base = {"slug": "zzz_g", "by": ["claude", "codex"], "why": "大手2サイトと比べて有利区間の欄が無かった"}
 
     def dec(*adds):
         return dict(base, additions=list(adds))
     r = plan(detail, row, dec({"op": "add_section", "title": "有利区間",
-                               "body": ["有利区間は最大3000Gまでです。"], "fields": ["yuuri"]}), conf)
+                               "body": ["有利区間は最大3000Gまでです。"], "fields": ["ceiling#yuuri"]}), conf)
     t("★★大手にあって記事に無い欄を、確定値の数字で足す（噂の欄の前に並ぶ）★★",
       not r["problems"] and [s["title"] for s in r["sections"]][-2:] == ["有利区間", "噂・未確定情報"])
     r = plan(detail, row, dec({"op": "add_section", "title": "有利区間",
-                               "body": ["有利区間は最大3500Gまでです。"], "fields": ["yuuri"]}), conf)
+                               "body": ["有利区間は最大3500Gまでです。"], "fields": ["ceiling#yuuri"]}), conf)
     t("★★確定値にも記事にも無い数字は断る（数字を作らない）★★", any("無い数字" in x for x in r["problems"]))
     r = plan(detail, row, dec({"op": "add_section", "title": "有利区間",
                                "body": ["有利区間は最大3000Gまでです。"]}), conf)
     t("　確定値を名指ししなければ、その数字は使えない", any("無い数字" in x for x in r["problems"]))
     r = plan(detail, row, dec({"op": "add_section", "title": "有利区間",
-                               "body": ["有利区間は最大9999Gまでです。"], "fields": ["yuuri"]}), conf)
+                               "body": ["有利区間は最大9999Gまでです。"], "fields": ["ceiling#yuuri"]}), conf)
     t("★★確定値の覚え書き（_ で始まる鍵）の数字は使えない★★（Codexの指摘）", any("無い数字" in x for x in r["problems"]))
     r = plan(detail, row, dec({"op": "add_section", "title": "AT間の天井",
                                "body": ["AT間の天井は777Gです。"], "fields": ["ceiling#at"]}), conf)
     t("★★数と単位が別の鍵の確定値（amount＋unit）から 777G を使える★★（Codexの指摘）", not r["problems"])
     r = plan(detail, row, dec({"op": "add_section", "title": "AT間の天井",
+                               "body": ["AT間の天井は9999Gです。"], "fields": ["ceiling#at"]}), conf)
+    t("★★照合しない鍵（範囲 low・high）の数字は、決まった形の項目では使えない★★（Codexの再指摘）",
+      any("無い数字" in x or "形が違います" in x for x in r["problems"]))
+    r = plan(detail, row, dec({"op": "add_section", "title": "50枚あたり",
+                               "body": ["50枚あたり9999Gです。"], "fields": ["games_per_50"]}), conf)
+    t("　spec の項目でも、照合しない鍵（note）の数字は使えない（Codexの再指摘）",
+      any("無い数字" in x or "形が違います" in x for x in r["problems"]))
+    r = plan(detail, row, dec({"op": "add_section", "title": "回転数の目安",
+                               "body": ["コイン持ちは約31Gです。"], "fields": ["games_per_50"]}), conf)
+    t("　照合した値（31）は単位を問わず使える（どの言葉に付くかは2AI）", not r["problems"])
+    r = plan(detail, row, dec({"op": "add_section", "title": "AT間の天井",
                                "body": ["天井到達でAT 5000枚です。"], "fields": ["ceiling#at"]}), conf)
     t("　引用と照合していない鍵（benefit）の数字は使えない", any("無い数字" in x for x in r["problems"]))
     r = plan(detail, row, dec({"op": "add_section", "title": "機械割",
                                "body": ["設定1は97.7%、設定6は114.9%です。"], "fields": ["payout_rate"]}), conf)
-    t("　設定ごとの値は、その項目の単位を付けた形でも使える（97.7 → 97.7%）", not r["problems"])
+    t("　設定ごとの値（機械割）も照合した値として使える", not r["problems"])
     r = plan(detail, row, dec({"op": "add_section", "title": "天井9999G", "body": ["見出しに数字を書く文です。"]}), conf)
     t("★★欄の見出しの数字も作らない★★（Codexの指摘）", any("無い数字" in x for x in r["problems"]))
     r = plan(detail, row, dec({"op": "add_section", "title": "天井の補足",
@@ -554,17 +532,17 @@ def selftest() -> int:
     r = plan(detail, row, dec({"op": "add_section", "title": "ゲーム性", "body": ["重ねて書く文です。"]}), conf)
     t("　記事に在る欄の名前では足さない（add_rows か add_line）", any("もう記事にあります" in x for x in r["problems"]))
     r = plan(detail, row, dec({"op": "add_section", "title": "有利区間",
-                               "body": ["スロパチクエストでは3000Gです。"], "fields": ["yuuri"]}), conf)
+                               "body": ["スロパチクエストでは3000Gです。"], "fields": ["ceiling#yuuri"]}), conf)
     t("　サイト名は書けない", any("サイト名" in x for x in r["problems"]))
     r = plan(detail, row, dec({"op": "add_rows", "section": "基本スペック", "table": 0,
-                               "rows": [["有利区間", "最大3000G"]], "fields": ["yuuri"]}), conf)
+                               "rows": [["有利区間", "最大3000G"]], "fields": ["ceiling#yuuri"]}), conf)
     t("★★既にある表に行を足す★★", not r["problems"]
       and r["sections"][1]["tables"][0]["rows"][-1] == ["有利区間", "最大3000G"])
     r = plan(detail, row, dec({"op": "add_rows", "section": "基本スペック", "table": 0,
-                               "rows": [["有利区間"]], "fields": ["yuuri"]}), conf)
+                               "rows": [["有利区間"]], "fields": ["ceiling#yuuri"]}), conf)
     t("　行の列数が見出しと違えば断る", any("列数" in x for x in r["problems"]))
     r = plan(detail, row, dec({"op": "add_line", "section": "ゲーム性",
-                               "text": "有利区間は最大3000Gまでです。", "fields": ["yuuri"]}), conf)
+                               "text": "有利区間は最大3000Gまでです。", "fields": ["ceiling#yuuri"]}), conf)
     t("★★既にある欄に1文足す★★", not r["problems"] and r["sections"][2]["body"][-1].startswith("有利区間"))
     r = plan(detail, row, dec({"op": "add_line", "section": "噂・未確定情報", "text": "噂の文を足します。"}), conf)
     t("　噂の欄には足せない（rumor_verdict）", bool(r["problems"]))
@@ -572,7 +550,7 @@ def selftest() -> int:
              dec({"op": "add_line", "section": "ゲーム性", "text": "AT中心で純増は約3.0枚です。"}), conf)
     t("★新台経路の機種は欄を足すだけ（行・文は育成が作り直すので断る）★", any("新台経路" in x for x in r["problems"]))
     r = plan(detail, row, dict(base, by=["claude"], additions=[
-        {"op": "add_section", "title": "有利区間", "body": ["有利区間は最大3000Gまでです。"], "fields": ["yuuri"]}]), conf)
+        {"op": "add_section", "title": "有利区間", "body": ["有利区間は最大3000Gまでです。"], "fields": ["ceiling#yuuri"]}]), conf)
     t("　判断者が1人なら断る", any("判断者" in x for x in r["problems"]))
     r = plan(detail, row, dec({"op": "add_section", "title": "ボーナス確率",
                                "table": {"headers": ["設定", "合算"], "rows": [["1", "1/150"]]}}), conf)
@@ -598,7 +576,7 @@ def selftest() -> int:
         io.open(dp, "w", encoding="utf-8", newline="").write(raw0)
         fp = os.path.join(tmp, "dec.json")
         good = dec({"op": "add_section", "title": "有利区間", "body": ["有利区間は最大3000Gまでです。"],
-                    "fields": ["yuuri"]})
+                    "fields": ["ceiling#yuuri"]})
         io.open(fp, "w", encoding="utf-8").write(json.dumps(dict(good, source_sha256="x" * 64), ensure_ascii=False))
         t("★記事の指紋が違えば書かない★", "指紋" in " ".join(apply_decision(fp, True)["problems"]))
         io.open(fp, "w", encoding="utf-8").write(json.dumps(dict(good, source_sha256=article_sha(raw0)),
