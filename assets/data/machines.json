@@ -371,7 +371,7 @@
   "slug": "pw_10503",
   "name": "スマスロ リコリス・リコイル",
   "seo": {
-   "title": "スマスロ リコリス・リコイル スペック・基本情報"
+   "title": "スマスロ リコリス・リコイル 天井・狙い目"
   },
   "info": "",
   "strategy": "",
@@ -405,7 +405,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-14",
+   "decided_at": "2026-11-11",
    "input_digest": "sha256:9da2a483149e4f9803fd62ae50c57f3a7b799bfed00ee07fc3c08b8aaf52577b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
