@@ -252,7 +252,9 @@ def stale_reviews(last_reviewed: dict, rows, today: str) -> list:
                                           or str(m.get("release_date") or "")[:len(today)] > today):
             continue                     # ★導入前の新台も数えない★（代役の指摘＝導入日まで🟡が鳴り続けた）
         last = str((last_reviewed or {}).get(m["slug"]) or "")[:10]
-        if (last and last < lim) or (not last and "publication_policy" not in m):
+        # ★新台期間を過ぎた新台も、点検記録が無ければ数える★（Codexの指摘＝dmm_5089 が永久に対象外だった）
+        _rel = str(m.get("release_date") or "")
+        if (last and last < lim) or (not last and ("publication_policy" not in m or bool(_rel))):
             out.append(m["slug"])
     return out
 
@@ -398,8 +400,9 @@ def selftest() -> int:
       stale_reviews({"a": "2026-09-01", "b": "2026-10-20", "z": "2026-01-01", "y": "2026-09-01"},
                     [{"slug": "a"}, {"slug": "b"}, {"slug": "c"}, {"slug": "d", "publication_policy": "page-decision/v2"},
                      {"slug": "z", "publication_policy": "page-decision/v2", "release_date": "2026-11-01"},
-                     {"slug": "y", "publication_policy": "page-decision/v2", "release_date": "2026-12-07"}],
-                    "2026-11-10") == ["a", "c"])
+                     {"slug": "y", "publication_policy": "page-decision/v2", "release_date": "2026-12-07"},
+                     {"slug": "e", "publication_policy": "page-decision/v2", "release_date": "2026-08-03"}],
+                    "2026-11-10") == ["a", "c", "e"])
     import inspect as _insp
     t("　（配線）見張り番の点検が、点検の古さを数えている",
       ("stale_" + "reviews(") in _insp.getsource(check_problem))

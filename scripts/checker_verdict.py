@@ -1839,6 +1839,39 @@ def _article_strings(slug: str) -> list:
     return out
 
 
+def coin_drift(slug: str, m: dict) -> list:
+    """★書いた coinRate が、いまの確定値 games_per_50・書いたときの記事の逐語と合っているか★（Codexの指摘＝訂正に追いつかなかった）"""
+    import add_items as _ai
+    ck = (m or {}).get("checker") or {}
+    if "coinRate" not in ck:
+        return []
+    v = _ai._canon(str(ck.get("coinRate")))
+    out = []
+    try:
+        import confirmed_values as _cv
+        import decide_now as _dn_d
+        rec = (_cv.for_slug(slug) or {}).get("games_per_50")
+        if isinstance(rec, dict):
+            toks = {_ai._canon(n) for st in _ai.record_strings("games_per_50", rec.get("value"))
+                    for n, _u in _dn_d.numbers_with_unit(st)}
+            if toks and v not in toks:
+                out.append(f"確定値 games_per_50 は {sorted(toks)}・チェッカーは {ck.get('coinRate')}")
+    except Exception:                                        # noqa: BLE001
+        pass
+    try:
+        bas = [b for b in (_sj.read_json(COIN_BASIS, expect=list) if os.path.isfile(COIN_BASIS) else [])
+               if isinstance(b, dict) and b.get("slug") == slug]
+    except Exception:                                        # noqa: BLE001
+        bas = []
+    if bas:
+        last = bas[-1]
+        if _ai._canon(str(last.get("coinRate"))) != v:
+            out.append(f"最後に2AIで書いた値 {last.get('coinRate')} とチェッカーの {ck.get('coinRate')} が違います")
+        elif last.get("quote") and not any(str(last["quote"]) in s9 for s9 in _article_strings(slug)):
+            out.append(f"書いたときの記事の逐語（{str(last['quote'])[:30]}）が記事から消えました")
+    return out
+
+
 def coin_near(q: str, v: str) -> bool:
     """★その数Gのすぐ前後に「50枚あたり」と分かる言葉があるか★（2026-11-10・代役の指摘2回＝言葉が逐語のどこかに在るだけだと、
     「0〜32Gの区間…コイン持ちは約31G/50枚」から 32 を通せた。「950枚」の中の「50枚」も数えていた）"""
@@ -1847,6 +1880,13 @@ def coin_near(q: str, v: str) -> bool:
         if _ai._canon(mm.group(1).translate(str.maketrans("０１２３４５６７８９．", "0123456789."))) != v:
             continue
         before, after = q[max(0, mm.start() - 12):mm.start()], q[mm.end():mm.end() + 8]
+        # ★別のG数や区切り（、。）をまたがない★（Codexの指摘＝「50枚あたり31G、天国32G」から 32 を通した）
+        _cut = list(re.finditer(r"[、。，,；;！!？?]|[0-9０-９][.．]?[0-9０-９]*\s*[GＧ]", before))
+        if _cut:
+            before = before[_cut[-1].end():]
+        _ca = re.search(r"[、。，,；;！!？?]|[0-9０-９]\s*[GＧ]", after)
+        if _ca:
+            after = after[:_ca.start()]
         if re.search(r"^\s*[/／（(]?\s*(?<![0-9０-９])(50|５０)枚", after) \
                 or re.search(r"(コイン持ち|(?<![0-9０-９])(50|５０)枚(あたり|当たり|で)|(?<![0-9０-９])(1000|１０００)円|千円)", before):
             return True
@@ -2093,6 +2133,8 @@ def show(slug: str) -> int:
                   + "＝2AIでどちらが正しいか決め、線を直すか決定に strategy を書いて一覧の文を直す（記事の狙い目の箱も decide_now で）")
     except Exception:                                        # noqa: BLE001
         pass
+    for _cw in coin_drift(slug, m):
+        print("★50枚あたりG数（coinRate）の根拠が変わっています★: " + _cw + "＝2AIで確かめて COIN_RATE を書き直す")
     _lim = m.get("limit")
     if isinstance(_lim, (int, float)) and not isinstance(_lim, bool):
         _over = sorted({v for v in _strs_num(_ck_s) if v > _lim})
@@ -3017,7 +3059,9 @@ def _coin_tests(t) -> None:
         t("★★言葉はその数Gのすぐ前後に要る（同じ文の別の数は通さない・「950枚」の50枚は数えない）★★（代役の指摘）",
           coin_near("コイン持ちは約31G/50枚", "31") and coin_near("50枚あたり約34.7G", "34.7")
           and not coin_near("0〜32Gの区間は天国、コイン持ちは約31G/50枚", "32")
-          and not coin_near("約30G・約950枚のプラス", "30"))
+          and not coin_near("約30G・約950枚のプラス", "30")
+          and not coin_near("50枚あたり31G、天国32G", "32") and not coin_near("50枚あたり31G天国32G", "32")
+          and coin_near("50枚あたり31G、天国32G", "31"))
         t("　出どころを言わなければ断る", any("出どころ" in x for x in coin_problems(dict(base, coinRate=31), ms)))
         t("　新台は育成が作るので断る",
           any("新台" in x for x in coin_problems(dict(base, coinRate=31, quote=q),
@@ -3026,6 +3070,21 @@ def _coin_tests(t) -> None:
           any("判断者" in x for x in coin_problems(dict(base, judges=["claude"], coinRate=31, quote=q), ms)))
     finally:
         DETAILS = keep
+    import tempfile as _tfc
+    global COIN_BASIS
+    _keep_cb = COIN_BASIS
+    try:
+        COIN_BASIS = os.path.join(_tfc.mkdtemp(prefix="coinb_"), "b.json")
+        with open(COIN_BASIS, "w", encoding="utf-8") as f:
+            f.write(json.dumps([{"slug": "zzz_c", "coinRate": 33, "quote": "約33G/50枚"}], ensure_ascii=False))
+        _cd = coin_drift("zzz_c", {"checker": {"coinRate": 31}})
+        with open(COIN_BASIS, "w", encoding="utf-8") as f:
+            f.write(json.dumps([{"slug": "zzz_c", "coinRate": 31, "quote": "どこにも無い逐語"}], ensure_ascii=False))
+        _cd2 = coin_drift("zzz_c", {"checker": {"coinRate": 31}})
+    finally:
+        COIN_BASIS = _keep_cb
+    t("★★書いた coinRate が、最後に2AIで書いた値・書いたときの記事の逐語と合わなければ知らせる★★（Codexの指摘＝訂正に追いつかなかった）",
+      any("違います" in x for x in _cd) and any("消えました" in x for x in _cd2))
     t("★入力の上限を超える線を数える（byRate の中も）★",
       sorted(_strs_num({"normal": {"good": 420, "byRate": {"rate45": {"excellent": 760}}}})) == [420, 760])
 

@@ -11033,8 +11033,8 @@ MUTATIONS = [
     {
         "why": "★昔の機種の導入日：「このままでよい」の印を基本情報表の取り残しで見ない（代役）★",
         "file": "scripts/legacy_release.py",
-        "before": "        if s9 in kept and str(b.get(\"at\") or \"\")[:10] <= str((kept[s9] or {}).get(\"at\") or \"\") \\\n",
-        "after": "        if False and str(b.get(\"at\") or \"\")[:10] <= str((kept[s9] or {}).get(\"at\") or \"\") \\\n",
+        "before": "        if s9 in kept and str(b.get(\"at\") or \"\") <= str((kept[s9] or {}).get(\"at\") or \"\") \\\n",
+        "after": "        if False and str(b.get(\"at\") or \"\") <= str((kept[s9] or {}).get(\"at\") or \"\") \\\n",
         "run": ["scripts/legacy_release.py"],
     },
     {
@@ -11068,7 +11068,7 @@ MUTATIONS = [
     {
         "why": "★昔の機種の導入日：「このままでよい」の印が、後で足し直した行まで黙らせる（代役6回目）★",
         "file": "scripts/legacy_release.py",
-        "before": "        if s9 in kept and str(b.get(\"at\") or \"\")[:10] <= str((kept[s9] or {}).get(\"at\") or \"\") \\\n",
+        "before": "        if s9 in kept and str(b.get(\"at\") or \"\") <= str((kept[s9] or {}).get(\"at\") or \"\") \\\n",
         "after": "        if s9 in kept and True \\\n",
         "run": ["scripts/legacy_release.py"],
     },
@@ -11082,7 +11082,7 @@ MUTATIONS = [
     {
         "why": "★担当機種：最後の点検から60日を超えた機種を見張らない（代役6回目）★",
         "file": "scripts/machine_turn.py",
-        "before": "        if (last and last < lim) or (not last and \"publication_policy\" not in m):\n",
+        "before": "        if (last and last < lim) or (not last and (\"publication_policy\" not in m or bool(_rel))):\n",
         "after": "        if False:\n",
         "run": ["scripts/machine_turn.py"],
     },
@@ -11267,6 +11267,41 @@ MUTATIONS = [
         "before": "            if len(str(rel)) == 10 and _fresh and _td <= str(rel) and not far_from_release(rel, today):\n",
         "after": "            if len(str(rel)) == 10 and _td <= str(rel) and not far_from_release(rel, today):\n",
         "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★チェッカー：50枚あたりG数の前後の言葉が、別のG数や区切りをまたいでも通す（Codex612）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        if _cut:\n            before = before[_cut[-1].end():]\n",
+        "after": "        if False:\n            before = before[_cut[-1].end():]\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★チェッカー：書いた50枚あたりG数が、最後に2AIで書いた値と違っても知らせない（Codex612）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        if _ai._canon(str(last.get(\"coinRate\"))) != v:\n",
+        "after": "        if False:\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：取り直しの途中で結び付けの控え全体が壊れても、控えを捨てる（Codex612）★",
+        "file": "scripts/legacy_release.py",
+        "before": "                    _lb.load()\n                except Exception as e3:",
+        "after": "                    pass\n                except Exception as e3:",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：「このままでよい」を日付だけで比べ、同じ日の後の行まで覆う（Codex612）★",
+        "file": "scripts/legacy_release.py",
+        "before": "        if s9 in kept and str(b.get(\"at\") or \"\") <= str((kept[s9] or {}).get(\"at\") or \"\") \\\n",
+        "after": "        if s9 in kept and str(b.get(\"at\") or \"\")[:10] <= str((kept[s9] or {}).get(\"at\") or \"\") \\\n",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★担当機種：新台期間を過ぎた新台の、点検記録が無いことを見張らない（Codex612）★",
+        "file": "scripts/machine_turn.py",
+        "before": "        if (last and last < lim) or (not last and (\"publication_policy\" not in m or bool(_rel))):\n",
+        "after": "        if (last and last < lim) or (not last and \"publication_policy\" not in m):\n",
+        "run": ["scripts/machine_turn.py"],
     },
 ]
 

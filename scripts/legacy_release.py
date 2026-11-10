@@ -167,6 +167,11 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
                     _pmr.load()
                 except Exception as e2:                          # noqa: BLE001
                     raise LegacyReleaseError(f"途中で待ち行列を読めなくなったので止めます（{type(e2).__name__}）")
+                # ★結び付けの控え全体が途中で壊れたのなら止める★（Codexの指摘＝全体の形の不正も BindingError で来て、全部捨てていた）
+                try:
+                    _lb.load()
+                except Exception as e3:                          # noqa: BLE001
+                    raise LegacyReleaseError(f"途中で結び付けの控えを読めなくなったので止めます（{type(e3).__name__}）")
             u = None
         except Exception as e:                                   # noqa: BLE001
             raise LegacyReleaseError(f"結び付けを読めないので、控えを確かめられません（{s}: {type(e).__name__}）")
@@ -254,7 +259,7 @@ def fact_orphans(d: dict, basis=None, details_dir: str = None) -> list:
             continue
         # ★「このままでよい」の印は、その日より後に足し直した行と、控えの導入日が変わった後には効かない★
         #   （代役の指摘2回＝印が後の取り残しや、結び直して日付が変わった後の食い違いまで黙らせた）
-        if s9 in kept and str(b.get("at") or "")[:10] <= str((kept[s9] or {}).get("at") or "") \
+        if s9 in kept and str(b.get("at") or "") <= str((kept[s9] or {}).get("at") or "") \
                 and str((kept[s9] or {}).get("release") or "") == str((have.get(s9) or {}).get("release") or ""):
             continue
         rows9 = [a.get("row") for a in (b.get("additions") or [])
@@ -312,7 +317,8 @@ def keep_release(slug: str, by, why: str, path: str = None, today: str = None) -
         (d.get("applied") or {}).pop(slug, None)
     # ★控えの導入日も残す★＝控えに記録があって表の日付と食い違う場合も、2AIが「このままでよい」と決められる
     #   （代役の指摘＝直す道も外す道も無く🟡が鳴り続けた）。控えの導入日が変われば印は効かなくなる
-    d.setdefault("kept", {})[slug] = {"at": today or datetime.date.today().isoformat(),
+    # ★時刻まで残す★（Codexの指摘＝日付だけだと、同じ日の後で足し直した行まで覆った）
+    d.setdefault("kept", {})[slug] = {"at": today or datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
                                       "release": str(((d.get("machines") or {}).get(slug) or {}).get("release") or ""),
                                       "by": sorted(x for x in by if str(x).strip()), "why": str(why).strip()}
     _save(d, path)
@@ -596,6 +602,29 @@ def selftest() -> int:
                 today="2026-11-12", path=p2, log=lambda *a: None)
     except LegacyReleaseError as e:
         _r13 = str(e)
+    _save({"machines": {"b": {"release": "2024-03-04", "url": U % 2, "checked": "2026-09-01"}}, "tries": {}}, p2)
+    _keep_load, _keep_b2, _keep_pl2, _keep_st2 = _lbx.load, globals()["_bound"], _pmz.load, _lbx.STORE
+    _lc = [0]
+
+    def _load_once(*a9, **k9):
+        _lc[0] += 1
+        if _lc[0] > 1:
+            raise _lbx.BindingError("結び付けの控えの形が違います")
+        return {"schema_version": _lbx.SCHEMA, "bindings": {}}
+    _r14 = None
+    try:
+        _lbx.STORE = _bf
+        _lbx.load = _load_once
+        _pmz.load = lambda *a9, **k9: {}
+        globals()["_bound"] = lambda s9: (_ for _ in ()).throw(_lbx.BindingError("壊れた"))
+        try:
+            refresh(0, True, rows=rows, fetch=lambda u: "2025-06-02", today="2026-11-12", path=p2, log=lambda *a: None)
+        except LegacyReleaseError as e:
+            _r14 = str(e)
+    finally:
+        _lbx.load, globals()["_bound"], _pmz.load, _lbx.STORE = _keep_load, _keep_b2, _keep_pl2, _keep_st2
+    t("★★取り直しの途中で結び付けの控え全体が読めなくなったら、控えを捨てずに止める★★（Codexの指摘）",
+      _r14 is not None and release_for("b", p2) == "2024-03-04")
     t("★★待ち行列が読めない種類の例外なら、あとで読めても控えを捨てずに止める★★（代役の指摘＝一瞬だけの失敗を守れなかった）",
       _r13 is not None and release_for("b", p2) == "2024-03-04")
     t("　結び付けの控えのファイルが無いのに導入日の控えがあれば止める（消えたのか取り消したのか分からない）",
@@ -717,6 +746,10 @@ def selftest() -> int:
         {"op": "add_fact", "row": ["導入日", "2025年6月2日"], "fields": ["legacy_release"]}]}]
     t("　「このままでよい」の印は、その後に足し直した行には効かない（代役の指摘）",
       fact_orphans(_dk, _bas2, _dd) == ["a"])
+    _bas3 = _bas + [{"slug": "a", "at": "2026-11-10T15:00:00", "additions": [
+        {"op": "add_fact", "row": ["導入日", "2025年6月2日"], "fields": ["legacy_release"]}]}]
+    t("★★同じ日でも、印より後の時刻に足し直した行には効かない★★（Codexの指摘＝日付だけで比べていた）",
+      fact_orphans({"machines": {}, "kept": {"a": {"at": "2026-11-10T09:00:00", "release": ""}}}, _bas3, _dd) == ["a"])
     t("★★機種一覧の導入日がDMMの値と食い違う昔の機種を挙げる（月だけの書き方は食い違いにしない）★★",
       mismatches([{"slug": "a", "release_date": "2025-07-01"}, {"slug": "b", "release_date": "2025-06"}],
                  {"machines": {"a": {"release": "2025-06-02"}, "b": {"release": "2025-06-20"}}})
