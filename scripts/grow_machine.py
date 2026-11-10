@@ -2174,9 +2174,22 @@ def indexed_gap_questions(slug: str, complete: bool = False, urls=None,
             detail = {}
     # ★「当サイトの狙い目」も出さない★＝チェッカーの線から作る欄で、線の問いは target_line_questions が出す
     import target_projection as _tp
-    boxes = [s.get("title") for s in (detail.get("sections") or [])
-             if isinstance(s, dict) and s.get("title") not in _ds.TITLES
-             and s.get("title") != _tp.SECTION_TITLE and _ds.is_pending(s)]
+    boxes = []
+    for s in (detail.get("sections") or []):
+        if not isinstance(s, dict) or s.get("title") in _ds.TITLES \
+                or s.get("title") == _tp.SECTION_TITLE:
+            continue
+        if _ds.is_pending(s):
+            boxes.append(str(s.get("title")))
+        # ★★欄の一部だけが「確認中」の表・行も問いに入れる★★（2026-11-10・洗い出し2回目）＝
+        #   直す前は欄まるごと未確認のときしか聞かず、表のセルの「確認中」は誰も埋めなかった
+        #   （検索に載った新台18機種・24セル）。判定は has_unconfirmed と同じ（_pending_check）。
+        elif has_unconfirmed(slug, {"sections": [s]}):
+            rows = [str(r[0]) for tb in (s.get("tables") or []) if isinstance(tb, dict)
+                    for r in (tb.get("rows") or [])
+                    if isinstance(r, list) and r and has_unconfirmed(slug, {"sections": [{"tables": [
+                        {"rows": [r[1:]]}]}]})]
+            boxes.append(f"{s.get('title')}（一部が未確認" + (": " + "・".join(rows) if rows else "") + "）")
     if boxes:
         links = [str(u) for u in (urls or []) if u]
         scope = "読む先は全部です" if complete else \
@@ -5168,6 +5181,12 @@ def selftest() -> int:
             t("　空いている欄が無ければ聞かない",
               indexed_gap_questions("zzz_q", detail={"sections": [
                   {"title": "天井・恩恵", "body": ["中身"]}]}) == [])
+            _q_cell = indexed_gap_questions("zzz_q", detail={"sections": [
+                {"title": "確認できたCZ", "type": "table", "tables": [
+                    {"headers": ["名前", "突入率"], "rows": [["CZ-A", "1/200"], ["CZ-B", "確認中"]]}]}]})
+            t("★★欄の一部だけが「確認中」の表も問いに入れる（どの行かも渡す）★★"
+              "（直す前は欄まるごと未確認のときしか聞かず、表の「確認中」は誰も埋めなかった）",
+              len(_q_cell) == 1 and _q_cell[0]["boxes"] == ["確認できたCZ（一部が未確認: CZ-B）"])
             # ★★配線：載っている機種の問いに、空いている箱の問いが本当に入る★★（罠③＝関数だけの試験では
             #   呼び出し行を消しても緑）。記事の置き場だけ一時の場所へ向ける
             _keep_dp = globals()["_detail_path"]
