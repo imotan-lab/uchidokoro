@@ -785,6 +785,11 @@ def infra_failure(fid: str, why: str) -> dict:
 #   Claude の封のあと「その文は直さない」と2AIが決めた記録（CLAUDE_SEALED）は閉じる道が無く、
 #   その機種の点検済みの印を毎回断らせていた（モンキーターンVで実際に起きた）。
 WITHDRAWABLE = ("DETECTED", "CLAUDE_SEALED", "CODEX_RECEIVED", "AGREED")
+# ★取り下げた記録に、取り下げる前の段階で要った欄★（_broken_why が見る）
+WITHDRAW_NEED = {"DETECTED": (),
+                 "CLAUDE_SEALED": ("claude_verdict_sha256",),
+                 "CODEX_RECEIVED": ("claude_verdict_sha256", "codex_verdict_sha256"),
+                 "AGREED": ("claude_verdict_sha256", "codex_verdict_sha256", "ops", "recheck", "decided_by")}
 
 
 def withdraw(fid: str, why: str, by) -> dict:
@@ -821,6 +826,7 @@ def withdraw(fid: str, why: str, by) -> dict:
     why = str(why or "").strip()
     if len(why) < MIN_WITHDRAW_WHY:
         raise JournalError(f"取り下げの理由を {MIN_WITHDRAW_WHY} 字以上書いてください")
+    rec["withdrawn_from"] = rec.get("state")
     rec["state"] = WITHDRAWN
     rec["withdrawn_by"] = sorted(who)
     rec["withdrawn_why"] = why
@@ -1212,8 +1218,13 @@ def _broken_why(rec):
     # ★★取り下げた記録は、取り下げる前（AGREED）に要った欄と、
     #   誰が・なぜ取り下げたかが揃っていること★★（2026-09-25・Codexの指摘）
     if rec.get("state") == WITHDRAWN:
-        for _k in ("claude_verdict_sha256", "codex_verdict_sha256",
-                   "ops", "recheck", "decided_by"):
+        # ★取り下げる前の段階に要った欄だけ見る★（2026-11-10・Codexの指摘）＝合意の前に取り下げた記録に
+        #   合意の欄を求めると、正しく取り下げた記録が「壊れた記録」になり、点検済みの印を全機種で断らせた。
+        #   取り下げる前の段階を持たない古い記録は AGREED から取り下げたもの（当時は AGREED だけ取り下げられた）
+        _from = rec.get("withdrawn_from") or "AGREED"
+        if _from not in WITHDRAWABLE:
+            return f"取り下げる前の段階が分かりません（{_from!r}）"
+        for _k in WITHDRAW_NEED[_from]:
             if not rec.get(_k):
                 return f"取り下げたのに {_k} がありません"
         _wb = {str(x).strip().lower() for x in (rec.get("withdrawn_by") or [])}
@@ -1225,8 +1236,8 @@ def _broken_why(rec):
             return "判断者の決まりを読めません"
         if _pair(sorted(_wb)) is None:
             return "取り下げたのに、2AIの両方の判断がありません"
-        # ★もとの合意も2AIの両方で決めていたこと★（2026-09-25・Codexの2回目）
-        if _pair(sorted(_db)) is None:
+        # ★もとの合意も2AIの両方で決めていたこと★（2026-09-25・Codexの2回目）＝合意から取り下げたときだけ
+        if _from == "AGREED" and _pair(sorted(_db)) is None:
             return "取り下げた合意に、2AIの両方の判断がありません"
         if len(str(rec.get("withdrawn_why") or "").strip()) < MIN_WITHDRAW_WHY:
             return "取り下げたのに、理由がありません"
@@ -2104,6 +2115,12 @@ def _selftest() -> int:
           "（直す前は閉じる道が無く、その機種の点検済みの印を毎回断らせた）",
           not _try_fail(lambda: withdraw(f14, _why11, ["claude", "codex"]))
           and load(f14)["state"] == WITHDRAWN)
+        t("★★合意の前に取り下げた記録は、壊れた記録として扱わない★★（Codexの指摘＝点検済みの印を全機種で断らせた）",
+          _broken_why(load(f14)) == "" and load(f14).get("withdrawn_from") == "CLAUDE_SEALED"
+          and any(x.get("finding_id") == f14 and x.get("state") == WITHDRAWN for x in listing()))
+        _bad14 = dict(load(f14))
+        _bad14["withdrawn_from"] = "CODEX_RECEIVED"
+        t("　取り下げる前の段階に要った欄が無ければ、壊れた記録として扱う", bool(_broken_why(_bad14)))
         t("★★同じ記事のまま見つけ直しても、立て直さない★★"
           "（★書けない合意を作り直して、また居座らせない★）",
           detect("zzz11", "text_gone", "十一番の文です。",

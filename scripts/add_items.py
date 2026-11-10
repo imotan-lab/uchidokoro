@@ -114,8 +114,62 @@ def _numbers_ok(texts: list, pool: tuple) -> list:
     return sorted(set(bad))
 
 
+def _scalar(o) -> str:
+    if isinstance(o, bool):
+        return ""
+    if isinstance(o, (int, float)):
+        return str(int(o)) if float(o).is_integer() else str(o)
+    return o if isinstance(o, str) else ""
+
+
+def record_strings(field: str, value) -> list:
+    """★確定値の記録のうち、出典の逐語で確かめた値だけを文字にする★（2026-11-10・Codexの指摘）
+
+    ・覚え書き（`_` で始まる鍵）は入れない（引用と照合していない）
+    ・決まった形の項目（VALUE_SHAPES）は、引用と照合する鍵（quoted）だけ
+    ・数と単位が別の鍵なら組み立てる（amount＋unit／games は G／範囲 low・high＋unit）
+    ・設定ごとの値は、その項目の単位（spec_lookup.FIELDS）を付けた形も入れる（97.7 → 97.7%）
+    """
+    import confirmed_values as _cv
+    import spec_lookup as _sp
+    base = _cv.base_field(field)
+    shape = _cv.VALUE_SHAPES.get(base)
+    unit = str((_sp.FIELDS.get(base) or {}).get("unit") or "")
+    unit = "" if unit == "1/x" else unit
+    out = []
+
+    def _walk(o, top=False):
+        if isinstance(o, dict):
+            keys = [k for k in o if not str(k).startswith("_")]
+            if top and shape is not None:
+                keys = [k for k in keys if k in (shape.get("quoted") or ())]
+            for k in keys:
+                if str(k) in ("1", "2", "3", "4", "5", "6"):
+                    out.append(str(k))
+                _walk(o[k])
+            if _scalar(o.get("amount")) and _scalar(o.get("unit")) and (not top or shape is None or
+                                                                     "amount" in (shape.get("quoted") or ())):
+                out.append(_scalar(o["amount"]) + _scalar(o["unit"]))
+            if _scalar(o.get("games")) and (not top or shape is None or "games" in (shape.get("quoted") or ())):
+                out.append(_scalar(o["games"]) + "G")
+            if _scalar(o.get("low")) and _scalar(o.get("high")) and _scalar(o.get("unit")):
+                out.append(_scalar(o["low"]) + _scalar(o["unit"]))
+                out.append(_scalar(o["high"]) + _scalar(o["unit"]))
+        elif isinstance(o, (list, tuple)):
+            for x in o:
+                _walk(x)
+        else:
+            v = _scalar(o)
+            if v:
+                out.append(v)
+                if unit and re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", v):
+                    out.append(v + unit)
+    _walk(value, top=True)
+    return out
+
+
 def _record_pool(slug: str, fields: list, confirmed: dict) -> tuple:
-    """名指しした確定値の記録の中の数字（値・並びの名前だけ。メモ・逐語は入れない）"""
+    """名指しした確定値の記録の中の数字（出典で確かめた値だけ・record_strings）"""
     import decide_now as _dn
     pairs, toks, missing = set(), set(), []
     for f in fields:
@@ -123,23 +177,7 @@ def _record_pool(slug: str, fields: list, confirmed: dict) -> tuple:
         if not isinstance(rec, dict) or "value" not in rec:
             missing.append(f)
             continue
-        strings = []
-
-        def _walk(o):
-            if isinstance(o, str):
-                strings.append(o)
-            elif isinstance(o, bool):
-                return
-            elif isinstance(o, (int, float)):
-                strings.append(str(int(o)) if float(o).is_integer() else str(o))
-            elif isinstance(o, list):
-                for x in o:
-                    _walk(x)
-            elif isinstance(o, dict):
-                for k, x in o.items():
-                    strings.append(str(k))
-                    _walk(x)
-        _walk(rec["value"])
+        strings = record_strings(f, rec["value"])
         for s in strings:
             for tok, unit in _dn.numbers_with_unit(s):
                 pairs.add((tok, unit))
@@ -200,6 +238,7 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
         if a["op"] == "add_section":
             title = a.get("title")
             p += _text_ng(title, f"{w} 欄の名前", 2, TITLE_MAX)
+            texts.append(title if isinstance(title, str) else "")   # ★見出しの数字も作らない★（Codexの指摘）
             if title in titles:
                 p.append(f"{w}: 「{title}」はもう記事にあります（add_rows か add_line で足す）")
             if title == RUMOR_TITLE or (isinstance(title, str) and title.startswith("噂")):
@@ -478,7 +517,9 @@ def selftest() -> int:
         {"title": "基本スペック", "type": "table", "tables": [{"headers": ["項目", "内容"], "rows": [["純増", "約3.0枚"]]}]},
         {"title": "ゲーム性", "body": ["AT中心のゲーム性です。"]},
         {"title": "噂・未確定情報", "type": "rumor", "body": ["噂です。"]}]}
-    conf = {"yuuri": {"value": {"max_games": "3000G", "note": "メモの777は数えない"}}}
+    conf = {"yuuri": {"value": {"max_games": "3000G", "_memo": "採用しない別条件の9999G"}},
+            "ceiling#at": {"value": {"kind": "GAME", "amount": "777", "unit": "G", "benefit": "AT 5000枚"}},
+            "payout_rate": {"value": {"1": "97.7", "6": "114.9"}}}
     base = {"slug": "zzz_g", "by": ["claude", "codex"], "why": "大手2サイトと比べて有利区間の欄が無かった"}
 
     def dec(*adds):
@@ -493,6 +534,20 @@ def selftest() -> int:
     r = plan(detail, row, dec({"op": "add_section", "title": "有利区間",
                                "body": ["有利区間は最大3000Gまでです。"]}), conf)
     t("　確定値を名指ししなければ、その数字は使えない", any("無い数字" in x for x in r["problems"]))
+    r = plan(detail, row, dec({"op": "add_section", "title": "有利区間",
+                               "body": ["有利区間は最大9999Gまでです。"], "fields": ["yuuri"]}), conf)
+    t("★★確定値の覚え書き（_ で始まる鍵）の数字は使えない★★（Codexの指摘）", any("無い数字" in x for x in r["problems"]))
+    r = plan(detail, row, dec({"op": "add_section", "title": "AT間の天井",
+                               "body": ["AT間の天井は777Gです。"], "fields": ["ceiling#at"]}), conf)
+    t("★★数と単位が別の鍵の確定値（amount＋unit）から 777G を使える★★（Codexの指摘）", not r["problems"])
+    r = plan(detail, row, dec({"op": "add_section", "title": "AT間の天井",
+                               "body": ["天井到達でAT 5000枚です。"], "fields": ["ceiling#at"]}), conf)
+    t("　引用と照合していない鍵（benefit）の数字は使えない", any("無い数字" in x for x in r["problems"]))
+    r = plan(detail, row, dec({"op": "add_section", "title": "機械割",
+                               "body": ["設定1は97.7%、設定6は114.9%です。"], "fields": ["payout_rate"]}), conf)
+    t("　設定ごとの値は、その項目の単位を付けた形でも使える（97.7 → 97.7%）", not r["problems"])
+    r = plan(detail, row, dec({"op": "add_section", "title": "天井9999G", "body": ["見出しに数字を書く文です。"]}), conf)
+    t("★★欄の見出しの数字も作らない★★（Codexの指摘）", any("無い数字" in x for x in r["problems"]))
     r = plan(detail, row, dec({"op": "add_section", "title": "天井の補足",
                                "body": ["天井の999Gは通常時のゲーム数です。"]}), conf)
     t("★記事にもう在る数字（999G）は、確定値を名指ししなくても使える★", not r["problems"])

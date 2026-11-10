@@ -41,7 +41,6 @@ MACHINES = os.path.join(BASE, "assets", "data", "machines.json")
 STORE = os.path.join(_lp.DOCS, "machine_turn.json")
 RESULTS = ("OK", "FIXED", "ADDED", "ASKED", "NA", "LATER")
 NEED_NOTE = ("NA", "LATER")
-CHECK_DAYS = 7
 _IN_SELFTEST = False
 
 # ★項目の一覧★（キー → 何をするか・手順書のどの段の流れで）。並びは記事の上から下＋道具の順
@@ -179,14 +178,17 @@ def pending(rows=None, path: str = None) -> list:
 
 
 def check_problem(today: str = None, rows=None, path: str = None):
-    """★見張り番：前の日までに始めたのに、そろっていない担当（CHECK_DAYS 日以内）★"""
+    """★見張り番：前の日までに始めたのに、そろっていない担当★
+
+    ★古い担当も外さない★（2026-11-10・Codexの指摘＝直す前は7日より前に始めた担当を見ず、そろっていないまま正常に見えた）。
+    次に担当が回ってきて --start し直すと数え直される。
+    """
     today = today or _dt.date.today().isoformat()
     rows = _rows() if rows is None else rows
     d = read(path)
-    cut = (_dt.date.fromisoformat(today) - _dt.timedelta(days=CHECK_DAYS)).isoformat()
     bad = []
     for s, tr in d["turns"].items():
-        if cut <= tr["started"] < today:
+        if tr["started"] < today:
             left = missing(s, tr, rows)
             if left:
                 bad.append(f"{s}（{'・'.join(left)}）")
@@ -244,6 +246,8 @@ def selftest() -> int:
       check_problem("2026-11-10", rows, p) is None)
     t("★★前の日に始めてそろっていない担当は、見張り番が知らせる★★",
       check_problem("2026-11-11", rows, p) is not None)
+    t("★★古い担当（8日以上前に始めた）でも、そろっていなければ知らせ続ける★★（Codexの指摘）",
+      check_problem("2026-11-30", rows, p) is not None)
     try:
         done("zzz_l", "mode", "LATER", note="短い", rows=rows, today="2026-11-10", path=p)
         _short = False

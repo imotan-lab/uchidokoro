@@ -72,6 +72,7 @@ STATE_KEY = "static_review"
 # ★★読み終われなかったページは、数日うしろへ回す★★（2026-11-10・Codexの3回目の洗い出し）＝
 #   直す前は読んだ日がいちばん古いページを毎回選び、1ページが片づかないと後ろのページが何日たっても読まれなかった
 TRIED_KEY = "static_review_tried"
+FIRST_TRIED_KEY = "static_review_first_tried"   # ★まだ読み終えていないページを、初めて試した日★（Codexの指摘）
 TRIED_SKIP_DAYS = 3
 # ★巡回が止まっていないか（見張り番）★＝いちばん古いページの読んだ日が、これだけ前なら🟡（18ページ×2周分）
 STALE_DAYS = 40
@@ -209,6 +210,7 @@ def mark_tried(page: str, day: str) -> None:
     p = _state_path()
     st = _load_state()
     st.setdefault(TRIED_KEY, {})[page] = day
+    st.setdefault(FIRST_TRIED_KEY, {}).setdefault(page, day)
     tmp = p + ".tmp"
     with io.open(tmp, "w", encoding="utf-8") as f:
         json.dump(st, f, ensure_ascii=False, indent=2)
@@ -227,7 +229,11 @@ def stale_problem(state: dict, today: str = None):
     stall_cut = (_dt.date.fromisoformat(today) - _dt.timedelta(days=STALL_DAYS)).isoformat()
     if not last or last < stall_cut:
         return f"固定ページの読み直しが{STALL_DAYS}日以上進んでいません（最後に読んだ日: {last or 'なし'}）"
+    first = (state.get(FIRST_TRIED_KEY) or {}) if isinstance(state, dict) else {}
     old = [pg for pg in ROTATION if seen.get(pg) and seen[pg] < cut]
+    # ★★一度も読み終えていないページも、初めて試した日から数える★★（2026-11-10・Codexの指摘＝
+    #   同じページだけ毎回失敗し続けても、読んだ日が無いので古さの検査から外れていた）
+    old += [pg for pg in ROTATION if not seen.get(pg) and (first.get(pg) or "9999") < cut]
     if old:
         return (f"固定ページの読み直しが止まっています（{STALE_DAYS}日以上読んでいないページ {len(old)}件: "
                 + "・".join(old[:5]) + "）")
@@ -241,6 +247,7 @@ def mark_reviewed(page: str, day: str) -> None:
     p = _state_path()
     st = _load_state()
     st.setdefault(STATE_KEY, {})[page] = day
+    (st.get(FIRST_TRIED_KEY) or {}).pop(page, None)
     tmp = p + ".tmp"
     with io.open(tmp, "w", encoding="utf-8") as f:
         json.dump(st, f, ensure_ascii=False, indent=2)
@@ -382,6 +389,11 @@ def selftest() -> int:
     t("★見張り番：40日以上読んでいないページがあれば知らせる★",
       stale_problem({STATE_KEY: dict(_sv, **{"index.html": "2026-11-09"})}, "2026-11-10") is not None
       and stale_problem({STATE_KEY: {pg: "2026-11-01" for pg in ROTATION}}, "2026-11-04") is None)
+    t("★★一度も読み終えていないページも、初めて試した日から40日で知らせる★★（Codexの指摘）",
+      stale_problem({STATE_KEY: {pg: "2026-11-08" for pg in ROTATION if pg != "about.html"},
+                     FIRST_TRIED_KEY: {"about.html": "2026-09-20"}}, "2026-11-10") is not None
+      and stale_problem({STATE_KEY: {pg: "2026-11-08" for pg in ROTATION if pg != "about.html"},
+                         FIRST_TRIED_KEY: {"about.html": "2026-11-01"}}, "2026-11-10") is None)
     t("　まだ読んでいないページだけなら鳴らさない（先に読まれる）／巡回が5日進まなければ鳴らす",
       stale_problem({STATE_KEY: {pg: "2026-11-08" for pg in ROTATION if pg != "about.html"}}, "2026-11-10") is None
       and stale_problem({STATE_KEY: {pg: "2026-11-01" for pg in ROTATION}}, "2026-11-10") is not None)

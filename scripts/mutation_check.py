@@ -1143,7 +1143,7 @@ MUTATIONS = [
     {
         "why": "★取り下げた記録で、もとの合意の判断者を見ない★",
         "file": "scripts/repair_journal.py",
-        "before": "        if _pair(sorted(_db)) is None:",
+        "before": "        if _from == \"AGREED\" and _pair(sorted(_db)) is None:",
         "after": "        if False:",
         "run": ["scripts/repair_journal.py"],
     },
@@ -10620,8 +10620,8 @@ MUTATIONS = [
     {
         "why": "★担当機種：当日に始めた担当まで見張り番が知らせる（朝のタスクの最中に誤報）★",
         "file": "scripts/machine_turn.py",
-        "before": "        if cut <= tr[\"started\"] < today:\n",
-        "after": "        if cut <= tr[\"started\"] <= today:\n",
+        "before": "        if tr[\"started\"] < today:\n",
+        "after": "        if tr[\"started\"] <= today:\n",
         "run": ["scripts/machine_turn.py"],
     },
     {
@@ -10707,6 +10707,48 @@ MUTATIONS = [
         "before": "    if only is not None:\n        cands = [s for s in cands if s in only]\n",
         "after": "",
         "run": ["scripts/hall_presence.py"],
+    },
+    {
+        "why": "★直しの記録：合意前に取り下げた記録を壊れた記録にする（Codex）★",
+        "file": "scripts/repair_journal.py",
+        "before": "        _from = rec.get(\"withdrawn_from\") or \"AGREED\"\n",
+        "after": "        _from = \"AGREED\"\n",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★大手との差：欄の見出しの数字を確かめない（Codex）★",
+        "file": "scripts/add_items.py",
+        "before": "            texts.append(title if isinstance(title, str) else \"\")   # ★見出しの数字も作らない★（Codexの指摘）\n",
+        "after": "",
+        "run": ["scripts/add_items.py"],
+    },
+    {
+        "why": "★大手との差：確定値の覚え書きの数字まで使う（Codex）★",
+        "file": "scripts/add_items.py",
+        "before": "            keys = [k for k in o if not str(k).startswith(\"_\")]\n",
+        "after": "            keys = list(o)\n",
+        "run": ["scripts/add_items.py"],
+    },
+    {
+        "why": "★大手との差：確定値の数と単位を組み立てない（777G が使えない・Codex）★",
+        "file": "scripts/add_items.py",
+        "before": "                out.append(_scalar(o[\"amount\"]) + _scalar(o[\"unit\"]))\n",
+        "after": "                pass\n",
+        "run": ["scripts/add_items.py"],
+    },
+    {
+        "why": "★担当機種：古い担当は見張り番から外す（Codex）★",
+        "file": "scripts/machine_turn.py",
+        "before": "        if tr[\"started\"] < today:\n",
+        "after": "        if tr[\"started\"] < today and tr[\"started\"] >= \"2026-11-29\":\n",
+        "run": ["scripts/machine_turn.py"],
+    },
+    {
+        "why": "★固定ページ：一度も読み終えていないページの停滞を見ない（Codex）★",
+        "file": "scripts/fix_static_text.py",
+        "before": "    old += [pg for pg in ROTATION if not seen.get(pg) and (first.get(pg) or \"9999\") < cut]\n",
+        "after": "",
+        "run": ["scripts/fix_static_text.py"],
     },
 ]
 
