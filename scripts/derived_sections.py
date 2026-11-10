@@ -610,8 +610,11 @@ def selftest() -> int:
     t("　旧形式の記事（人が書いた欄）は戻さない",
       revert_if_basis_changed(_old, _leg, {"slug": "zzz_l"}) == []
       and _leg["sections"][1]["body"] == ["人が書いた文です。"])
-    # ★育成が書いた欄を持ち越すか（grow_machine の配線）★
     import inspect
+    import decide_now as _dnx
+    t("　（配線）記事を直す道具（decide_now）も、土台が変わったら書いた欄を戻す",
+      "revert_if_basis_changed(_before_write, d" in inspect.getsource(_dnx.apply_decision))
+    # ★育成が書いた欄を持ち越すか（grow_machine の配線）★
     import grow_machine as _gm
     t("★★毎朝の育成が、書いた欄を「未確認」に戻さない（持ち越しが配線されている）★★",
       "carry_written_sections(old_detail, detail, machine)" in inspect.getsource(_gm.plan_one))

@@ -2339,6 +2339,7 @@ def apply_decision(path: str, apply_it: bool = False, *,
       #   （2026-09-18）＝例外のまま外へ投げると、
       #   呼ぶ側（無人タスク）が理由を受け取れず落ちるだけになる。
       #   ★書き込みは最後にまとめて行う★ので、途中で止めても記事は無傷。
+      _before_write = json.loads(json.dumps(d))     # ★根拠3欄の土台が変わったかを比べるため★
       try:
         for kind, si, bi, a in plan:
             if kind in WHOLE_KINDS:
@@ -2411,6 +2412,12 @@ def apply_decision(path: str, apply_it: bool = False, *,
             d["sections"][si]["body"] = [x for i, x in enumerate(body)
                                          if i not in idxs]
         _apply_whole(d, plan)
+        # ★★新台で土台の欄（天井・狙い目・朝一・モード）を直したら、2AIが書いた根拠3欄を未確認へ戻す★★
+        #   （2026-11-10・Codexの3回目の洗い出し＝育成と mode_apply には在ったが、記事を直すこの道に無かった）
+        import derived_sections as _dsx
+        _rev = _dsx.revert_if_basis_changed(_before_write, d, _dsx._row(slug))
+        if _rev:
+            result["reverted_written"] = _rev
       except _StopWrite as _we:
         # ★ここまでの書き換えは写しの上だけ★＝本物のファイルは無傷
         #   ★捕まえるのは「意図して止めた」ときだけ★（2026-09-18・Codexの指摘）

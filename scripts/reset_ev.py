@@ -512,6 +512,11 @@ def check(store_path: str = "", order_path: str = "", today: str = "", rows=None
     # ★停滞＝最後に確かめ終えた日から／一度も無ければ始めた日から★（Codex impl の3）
     last = max([r["checked"] for r in store["records"].values()] or [""])
     base = last or store.get("started") or ""
+    # ★★一度も着手していないのに対象があるなら、それも止まっている★★（2026-11-10・Codexの3回目の洗い出し）＝
+    #   直す前は控えが無いと起点が空で、STEP 6-E が初回から飛ばされ続けても0で返していた
+    if not base and tg:
+        print(f"対象が{len(tg)}機種あるのに、一度も確かめに行っていません（夕方の STEP 6-E が動いていない）")
+        rc = 1
     if base and (t - _dt.date.fromisoformat(base)).days >= STALL_DAYS:
         print(f"{STALL_DAYS}日以上、1件も確かめ終えていません（"
               + (f"最後 {last}" if last else f"始めた日 {base}・まだ0件") + "）")
@@ -696,6 +701,10 @@ def selftest() -> int:
               check(store_path=sp2, order_path=op2, today="2026-11-08", rows=rows) == 1)
             t("始めたばかりなら知らせない",
               check(store_path=sp2, order_path=op2, today="2026-11-02", rows=rows) == 0)
+            sp3 = os.path.join(td, "s3.json")
+            op3 = os.path.join(td, "o3.json")
+            t("★★控えが無い（一度も着手していない）のに対象があれば知らせる★★（直す前は0で返した）",
+              check(store_path=sp3, order_path=op3, today="2026-11-10", rows=rows) == 1)
             globals()["mismatches"] = keep_mm
         finally:
             globals()["targets"] = keep_targets

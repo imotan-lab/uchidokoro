@@ -69,6 +69,13 @@ HUB_PAGES = ("guide-tenjo-ranking.html", "guide-reset-ranking.html",
              "guide-reset-ev-ranking.html",
              "guide-suru-tenjo.html", "guide-ichiran.html")
 STATE_KEY = "static_review"
+# ★★読み終われなかったページは、数日うしろへ回す★★（2026-11-10・Codexの3回目の洗い出し）＝
+#   直す前は読んだ日がいちばん古いページを毎回選び、1ページが片づかないと後ろのページが何日たっても読まれなかった
+TRIED_KEY = "static_review_tried"
+TRIED_SKIP_DAYS = 3
+# ★巡回が止まっていないか（見張り番）★＝いちばん古いページの読んだ日が、これだけ前なら🟡（18ページ×2周分）
+STALE_DAYS = 40
+STALL_DAYS = 5
 
 _MARK = re.compile(r'<span data-dv="([^"]*)">(.*?)</span>', re.S)
 _NUM = re.compile(r"\d+(?:[.,]\d+)*")
@@ -177,10 +184,54 @@ def _load_state() -> dict:
         return json.load(f)
 
 
-def next_page(state: dict) -> str:
-    """★読んだ日がいちばん古いページ（読んだことの無いページが先）★"""
+def next_page(state: dict, today: str = None) -> str:
+    """★読んだ日がいちばん古いページ（読んだことの無いページが先）★
+
+    ★読み終われなかったページ（--tried・TRIED_SKIP_DAYS 日以内・そのあと読み終えていない）は後ろへ回す★。
+    全部が回されていれば、いつもどおり読んだ日がいちばん古いページ。
+    """
     seen = (state.get(STATE_KEY) or {}) if isinstance(state, dict) else {}
-    return min(ROTATION, key=lambda pg: (seen.get(pg) or "", ROTATION.index(pg)))
+    tried = (state.get(TRIED_KEY) or {}) if isinstance(state, dict) else {}
+    today = today or _dt.date.today().isoformat()
+    cut = (_dt.date.fromisoformat(today) - _dt.timedelta(days=TRIED_SKIP_DAYS)).isoformat()
+
+    def _held(pg):
+        t = tried.get(pg) or ""
+        return bool(t) and t > cut and t > (seen.get(pg) or "")
+    pool = [pg for pg in ROTATION if not _held(pg)] or list(ROTATION)
+    return min(pool, key=lambda pg: (seen.get(pg) or "", ROTATION.index(pg)))
+
+
+def mark_tried(page: str, day: str) -> None:
+    """★読み終われなかった（照合が割れた・公開できなかった）ページを数日うしろへ回す★"""
+    if page not in ROTATION:
+        raise ValueError(f"読む順番に無いページです: {page}")
+    p = _state_path()
+    st = _load_state()
+    st.setdefault(TRIED_KEY, {})[page] = day
+    tmp = p + ".tmp"
+    with io.open(tmp, "w", encoding="utf-8") as f:
+        json.dump(st, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, p)
+    _log(f"読み終われなかった（{TRIED_SKIP_DAYS}日うしろへ回す）: {page} {day}")
+
+
+def stale_problem(state: dict, today: str = None):
+    """★見張り番：読んでいないページ、または STALE_DAYS 日より前に読んだきりのページがあれば文★"""
+    seen = (state.get(STATE_KEY) or {}) if isinstance(state, dict) else {}
+    today = today or _dt.date.today().isoformat()
+    cut = (_dt.date.fromisoformat(today) - _dt.timedelta(days=STALE_DAYS)).isoformat()
+    # ★まだ読んでいないページは先に読まれる★ので数えない（足したばかりのページで鳴らさない）。
+    #   代わりに「いちばん新しく読んだ日」が STALL_DAYS 日より前なら、巡回そのものが止まっている
+    last = max([d for d in seen.values() if d] or [""])
+    stall_cut = (_dt.date.fromisoformat(today) - _dt.timedelta(days=STALL_DAYS)).isoformat()
+    if not last or last < stall_cut:
+        return f"固定ページの読み直しが{STALL_DAYS}日以上進んでいません（最後に読んだ日: {last or 'なし'}）"
+    old = [pg for pg in ROTATION if seen.get(pg) and seen[pg] < cut]
+    if old:
+        return (f"固定ページの読み直しが止まっています（{STALE_DAYS}日以上読んでいないページ {len(old)}件: "
+                + "・".join(old[:5]) + "）")
+    return None
 
 
 def mark_reviewed(page: str, day: str) -> None:
@@ -320,6 +371,20 @@ def selftest() -> int:
       next_page({STATE_KEY: {pg: ("2026-09-01" if pg == "guide-rate.html" else "2026-10-01")
                              for pg in ROTATION}}) == "guide-rate.html")
     t("読む順番：控えが無ければ先頭から", next_page({}) == ROTATION[0])
+    _sv = {pg: "2026-10-01" for pg in ROTATION}
+    _sv["about.html"] = "2026-09-01"
+    t("★★読み終われなかったページは3日うしろへ回し、次に古いページを読む★★（直す前は1ページで巡回が止まった）",
+      next_page({STATE_KEY: _sv, TRIED_KEY: {"about.html": "2026-11-09"}}, "2026-11-10") != "about.html"
+      and next_page({STATE_KEY: _sv, TRIED_KEY: {"about.html": "2026-11-09"}}, "2026-11-13") == "about.html")
+    t("　読み終えたあとの古い「読み終われなかった」記録では回さない",
+      next_page({STATE_KEY: dict(_sv, **{"about.html": "2026-09-01"}),
+                 TRIED_KEY: {"about.html": "2026-08-01"}}, "2026-11-10") == "about.html")
+    t("★見張り番：40日以上読んでいないページがあれば知らせる★",
+      stale_problem({STATE_KEY: dict(_sv, **{"index.html": "2026-11-09"})}, "2026-11-10") is not None
+      and stale_problem({STATE_KEY: {pg: "2026-11-01" for pg in ROTATION}}, "2026-11-04") is None)
+    t("　まだ読んでいないページだけなら鳴らさない（先に読まれる）／巡回が5日進まなければ鳴らす",
+      stale_problem({STATE_KEY: {pg: "2026-11-08" for pg in ROTATION if pg != "about.html"}}, "2026-11-10") is None
+      and stale_problem({STATE_KEY: {pg: "2026-11-01" for pg in ROTATION}}, "2026-11-10") is not None)
     t("ランキングの説明文は hub_prose.json で直す", "scripts/hub_prose.json" in PAGES
       and all(h in ROTATION for h in HUB_PAGES))
     # ★★ポチポチくんの画面も読み直す★★（2026-11-10＝直す前は巡回に入っていなかった）
@@ -348,6 +413,8 @@ def main() -> int:
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--next", action="store_true", help="今日読むページを出す")
     ap.add_argument("--reviewed", help="読み終わったページを記録する（照合と公開が済んでから）")
+    ap.add_argument("--tried", help="読み終われなかったページを記録する（3日うしろへ回す）")
+    ap.add_argument("--check", action="store_true", help="見張り番：読み直しが止まっていないか")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
@@ -360,6 +427,18 @@ def main() -> int:
         mark_reviewed(a.reviewed, _dt.date.today().isoformat())
         print(f"記録しました: {a.reviewed}")
         return 0
+    if a.tried:
+        mark_tried(a.tried, _dt.date.today().isoformat())
+        print(f"うしろへ回しました: {a.tried}")
+        return 0
+    if a.check:
+        try:
+            pr = stale_problem(_load_state())
+        except Exception as e:                                   # noqa: BLE001
+            print(f"🟠 読み直しの控えを読めません: {type(e).__name__}: {e}")
+            return 2
+        print(("🟡 " + pr) if pr else "🟢 固定ページの読み直しは回っています")
+        return 1 if pr else 0
     if not a.file:
         print("★--file が要ります★")
         return 1

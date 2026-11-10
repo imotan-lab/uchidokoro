@@ -781,6 +781,12 @@ def infra_failure(fid: str, why: str) -> dict:
     return rec
 
 
+# ★★取り下げられる段階★★（2026-11-10・Codexの3回目の洗い出し＝実害）＝直す前は AGREED だけで、
+#   Claude の封のあと「その文は直さない」と2AIが決めた記録（CLAUDE_SEALED）は閉じる道が無く、
+#   その機種の点検済みの印を毎回断らせていた（モンキーターンVで実際に起きた）。
+WITHDRAWABLE = ("DETECTED", "CLAUDE_SEALED", "CODEX_RECEIVED", "AGREED")
+
+
 def withdraw(fid: str, why: str, by) -> dict:
     """★合意済みのまま書けない直しを、2AIの判断で取り下げる★（2026-09-25）
 
@@ -793,9 +799,9 @@ def withdraw(fid: str, why: str, by) -> dict:
     書けない合意を作り直して、また居座らせないため。記事が変われば立て直す。
     """
     rec = load(fid)
-    if rec.get("state") != "AGREED":
+    if rec.get("state") not in WITHDRAWABLE:
         raise JournalError(
-            f"取り下げられるのは合意済み（AGREED）の記録だけです"
+            f"取り下げられるのは {'・'.join(WITHDRAWABLE)} の記録だけです"
             f"（いま {rec.get('state')}）")
     # ★★壊れた記録は取り下げで「健康」に見せない★★（2026-09-25・Codexの指摘）
     #   AGREED に要る欄が欠けた記録を取り下げると、壊れた事実が消えてしまう。
@@ -803,9 +809,9 @@ def withdraw(fid: str, why: str, by) -> dict:
     if _bw:
         raise JournalError(f"壊れた記録は取り下げられません: {_bw}")
     # ★もとの合意が2AIの両方で決めたものであること★（2026-09-25・Codexの2回目）
-    #   （実測＝本物の記録131件はすべて claude と codex）
+    #   （実測＝本物の記録131件はすべて claude と codex）。★合意の前の段階には合意が無いので見ない★
     import confirmed_values as _cv
-    if _cv.judges_pair(rec.get("decided_by") or []) is None:
+    if rec.get("state") == "AGREED" and _cv.judges_pair(rec.get("decided_by") or []) is None:
         raise JournalError("もとの合意に2AIの両方の判断がありません（壊れた合意は取り下げません）")
     who = {str(x).strip().lower() for x in (by or []) if str(x).strip()}
     if _cv.judges_pair(sorted(who)) is None:
@@ -1057,10 +1063,20 @@ def resolve(fid: str, check: str, by, why: str) -> dict:
         raise JournalError(
             "検査なし（none）で閉じられるのは、直しのコミットが記録にある段階"
             f"（{'・'.join(RESOLVE_WITHOUT_CHECK)}）だけです（いま {rec.get('state')}）")
+    commit_unverified = ""
     if commit:
         ok_c, why_c, tip = _pushed(commit)
         if not ok_c:
-            raise JournalError(f"直しが公開用の枝に入っていることを確かめられません: {why_c}")
+            # ★★逐語を確かめる検査で閉じるときは、記録のコミットが確かめられなくても公開先の先端で確かめる★★
+            #   （2026-11-10・Codexの3回目の洗い出し）＝昔の記録に実在しないコミット番号が入っていると、
+            #   直し終えているのに閉じる道が無かった（ゴーゴージャグラー3）。検査なし（none）は今までどおり断る
+            if check == "none":
+                raise JournalError(f"直しが公開用の枝に入っていることを確かめられません: {why_c}")
+            commit_unverified = why_c
+            commit = ""
+            tip, why_t = _main_tip()
+            if not tip:
+                raise JournalError(f"公開先の先端を調べられません: {why_t}")
     else:
         tip, why_t = _main_tip()
         if not tip:
@@ -1111,6 +1127,8 @@ def resolve(fid: str, check: str, by, why: str) -> dict:
     rec["resolved_result"] = got
     rec["resolved_tip"] = tip
     rec["resolved_at"] = _dtr.datetime.now().isoformat(timespec="seconds")
+    if commit_unverified:
+        rec["resolved_commit_unverified"] = commit_unverified[:200]
     rec.setdefault("history", []).append(
         {"to": RESOLVED, "note": f"2AIで閉じた（{_prev}・検査 {check}）: {why}"})
     _save(rec)
@@ -2072,8 +2090,19 @@ def _selftest() -> int:
               for x in listing()))
         t("　取り下げた記録から先へは進めない",
           _try_fail(lambda: applied(f11, "c" * 64)))
-        t("　合意済みでない記録は取り下げない",
-          _try_fail(lambda: withdraw(fid, _why11, ["claude", "codex"])))
+        t("　閉じた記録（取り下げ済み）は、もう取り下げない",
+          _try_fail(lambda: withdraw(f11, _why11, ["claude", "codex"])))
+        # ★★封のあと「直さない」と2AIが決めた記録も取り下げられる★★（2026-11-10・Codexの3回目＝実害）
+        r14 = detect("zzz14", "text_gone", "十四番の文です。", source_sha256="5" * 64)
+        f14 = r14["finding_id"]
+        io.open(vp, "w", encoding="utf-8").write(_orig)
+        seal_claude(f14, vp)
+        t("　（前提）Claude の封のあと（CLAUDE_SEALED）", load(f14)["state"] == "CLAUDE_SEALED")
+        t("　封のあとの記録も、判断者が片方だけなら取り下げない",
+          _try_fail(lambda: withdraw(f14, _why11, ["claude"])))
+        t("★★封のあと（合意の前）に2AIが「直さない」と決めた記録も取り下げられる★★"
+          "（直す前は閉じる道が無く、その機種の点検済みの印を毎回断らせた）",
+          withdraw(f14, _why11, ["claude", "codex"])["state"] == WITHDRAWN)
         t("★★同じ記事のまま見つけ直しても、立て直さない★★"
           "（★書けない合意を作り直して、また居座らせない★）",
           detect("zzz11", "text_gone", "十一番の文です。",
@@ -2427,6 +2456,21 @@ def _selftest() -> int:
                 globals()["_pushed"] = lambda c: (False, "まだ出ていません", "")
                 t("★直しが公開用の枝に無ければ閉じない★",
                   _rejects(lambda: resolve(rp, "none", _two, _w30)))
+                # ★★記録のコミットが確かめられなくても、逐語の検査なら公開先の先端で確かめて閉じる★★（2026-11-10）
+                globals()["_pushed"] = lambda c: (True, "", "e" * 40)
+                rq = _to_done("zzz31", "三十一番の直した文です。", "8" * 64, _stop="PUSH_CONFIRMED")
+                globals()["_pushed"] = lambda c: (False, "コミットを特定できません", "")
+                _FakeGone.asked.clear()
+                try:
+                    _rq = resolve(rq, "text_gone", _two, _w30)
+                except JournalError as _eq:
+                    _rq = {"error": str(_eq)}
+                t("★★昔の記録のコミット番号が確かめられなくても、逐語が先端から消えていれば閉じる★★"
+                  "（直す前は直し終えた記録を閉じる道が無かった）",
+                  _rq.get("state") == RESOLVED and _rq.get("resolved_tip") == "e" * 40
+                  and "特定できません" in (_rq.get("resolved_commit_unverified") or "")
+                  and _FakeGone.asked[-1:] and _FakeGone.asked[-1]["expected_commit"] == "e" * 40)
+                globals()["_pushed"] = lambda c: (False, "まだ出ていません", "")
                 _pseq = iter([(True, "", "e" * 40), (True, "", "f" * 40)])
                 globals()["_pushed"] = lambda c: next(_pseq)
                 t("★検査のあいだに公開用の枝が進んだら閉じない（コミットのある記録）★",
