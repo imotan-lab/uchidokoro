@@ -52,20 +52,33 @@ def _read() -> dict:
     return got
 
 
-def dismissed(slug: str) -> dict:
+RECHECK_DAYS = 60   # ★控えが効くのは決めてからこの日数まで★（過ぎたら問いが戻り、2AIが読み直す）
+
+
+def dismissed(slug: str, today=None) -> dict:
     """★その機種で、2AIが読み違いと決めた候補★＝{項目名: 読んだページのURLの集合}（読めなければ例外）
 
     ★読むたびに書くときと同じ条件を確かめる★（判断者の組・理由・URL）＝満たさない控えは無かったことにする
     （JSONとして読める壊れ方〈null・{}・1人・1文字〉で問いが消えないように・Codex review efdd1f8f の2）
+    ★★決めてから RECHECK_DAYS 日を過ぎた控えは効かない★★（2026-11-10・運営者「更新されないページ他にもないの？」）＝
+      控えはページの中身の指紋を持たないので、同じページにあとから説明が足されても、
+      同じ項目名に読める限り「読み違い」が永久に効き続けた。日付が読めない控えも効かない（問いへ倒す）。
     """
     rows = (_read().get("machines") or {}).get(slug) or {}
     out = {}
     if not isinstance(rows, dict):
         return out
+    today = today or _dt.date.today()
     for fld, rec in rows.items():
         if not isinstance(rec, dict):
             continue
         if decision_problems({"slug": slug, "field": fld, **{k: rec.get(k) for k in ("by", "why", "urls")}}):
+            continue
+        try:
+            at = _dt.date.fromisoformat(str(rec.get("at") or "")[:10])
+        except ValueError:
+            continue
+        if (today - at).days > RECHECK_DAYS:
             continue
         out[fld] = set(rec.get("urls") or [])
     return out
@@ -142,6 +155,17 @@ def selftest() -> int:
         t("★天井以外の項目名は断る★", decision_problems({**ok, "field": "payout_rate"}) != [])
         t("★読んだ先のURLが無ければ断る★", decision_problems({**ok, "urls": []}) != [])
         t("★控えには読んだ先が残る★", dismissed("zzz_a") == {ok["field"]: {"https://a.invalid/1"}})
+        # ★★決めてから60日を過ぎた控えは効かない★★（2026-11-10＝直す前は永久に効いた）
+        _d0 = _dt.date.today()
+        t("★★決めてから60日を過ぎた控えは効かない（問いが戻る）★★",
+          dismissed("zzz_a", today=_d0 + _dt.timedelta(days=61)) == {})
+        t("　（対照）60日までは効く", ok["field"] in dismissed("zzz_a", today=_d0 + _dt.timedelta(days=60)))
+        with open(STORE, encoding="utf-8") as f:
+            _g = json.load(f)
+        _g["machines"]["zzz_a"][ok["field"]]["at"] = "いつか"
+        with open(STORE, "w", encoding="utf-8") as f:
+            json.dump(_g, f, ensure_ascii=False)
+        t("　日付が読めない控えは効かない（問いへ倒す）", dismissed("zzz_a") == {})
         with open(STORE, "w", encoding="utf-8") as f:
             json.dump({"machines": {"zzz_a": {"ceiling#x": None, "ceiling#y": {},
                                               "ceiling#z": {"by": ["claude"], "why": "短", "urls": ["https://a"]}}}}, f)

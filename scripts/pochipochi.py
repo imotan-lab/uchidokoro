@@ -28,7 +28,7 @@
     `Documents/uchidokoro/pochipochi_basis.json`（出典の引用・判断者・理由＝リポジトリの外。
     ★どこから採ったかを読者に見せない★）
   ・setting.html の MACHINE_CONFIGS の中の印と印のあいだを、控えから機械が作る（`--build`）。
-    ★手で書いた35機種には触らない★（同じ機種への ADD は断る）。
+    ★手で書いた機種は ADD・EXTEND・NO_DIFF では触らない★（断る）。確かめ直して自動へ移すのは TAKE_OVER だけ（2026-11-10）。
 
 ★対応・非対応を決めるのは `status_override` の1か所★（Python は build_machine_pages が、
   ブラウザは machine.html が同じ控えを読む）。控えに無い機種は今までどおりの決まり。
@@ -68,6 +68,7 @@ END = "  // ★POCHI-AUTO-END★"
 NO_DIFF_REASON = "小役による設定差なし"
 KO_RESULTS = ("HAS", "NONE")
 KO_RECHECK_DAYS = 60
+HAND_RECHECK_DAYS = 90   # 手書きの機種と「設定差なし」の機種を、2AIが確かめ直す間隔
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MIN_WHY = 15
 _ID = re.compile(r"^[A-Za-z][A-Za-z0-9]{0,31}$")
@@ -81,7 +82,8 @@ class PochiError(RuntimeError):
 
 # ── 控え ────────────────────────────────────────────────────────────
 def empty() -> dict:
-    return {"schema_version": SCHEMA, "configs": {}, "no_diff": {}, "ko_checked": {}}
+    return {"schema_version": SCHEMA, "configs": {}, "no_diff": {}, "ko_checked": {},
+            "hand_checked": {}, "diff_checked": {}}
 
 
 def load(path: str = None) -> dict:
@@ -113,9 +115,26 @@ def load(path: str = None) -> dict:
     kc = d.setdefault("ko_checked", {})
     if not isinstance(kc, dict):
         raise PochiError("控えの ko_checked が組（辞書）ではありません")
-    extra_top = set(d) - {"schema_version", "configs", "no_diff", "ko_checked"}
+    extra_top = set(d) - {"schema_version", "configs", "no_diff", "ko_checked",
+                          "hand_checked", "diff_checked"}
     if extra_top:
         raise PochiError(f"控えに知らない項目があります: {sorted(extra_top)}")
+    # ★手書きの機種と「設定差なし」の機種を2AIが確かめ直した記録★（2026-11-10）
+    for key in ("hand_checked", "diff_checked"):
+        recs = d.setdefault(key, {})
+        if not isinstance(recs, dict):
+            raise PochiError(f"控えの {key} が組（辞書）ではありません")
+        for slug, rec in recs.items():
+            if (not _SLUG.match(str(slug)) or not isinstance(rec, dict) or set(rec) != {"checked"}
+                    or not _DATE.match(str(rec.get("checked") or ""))):
+                raise PochiError(f"控えの {key} の記録が壊れています: {slug!r}")
+            try:
+                datetime.date.fromisoformat(rec["checked"])
+            except ValueError:
+                raise PochiError(f"控えの {key} の日付が壊れています: {slug!r}")
+    for slug in d["hand_checked"]:
+        if slug in d["configs"]:
+            raise PochiError(f"自動へ移した機種に手書きの確認の記録が残っています: {slug!r}")
     for slug, rec in kc.items():
         if slug not in d["configs"]:
             raise PochiError(f"表の無い機種に小役の確認の記録があります: {slug!r}")
@@ -290,14 +309,26 @@ def shape_problems(d: dict, rows: dict, static: set) -> list:
     if not _SLUG.match(slug) or slug not in rows:
         return [f"機種一覧に無い slug です: {slug!r}"]
     kind = d.get("decision")
-    if kind not in ("ADD", "NO_DIFF", "EXTEND", "KO_CHECK"):
-        return ["decision は ADD / NO_DIFF / EXTEND / KO_CHECK のどれかです"]
+    if kind not in ("ADD", "NO_DIFF", "EXTEND", "KO_CHECK", "TAKE_OVER", "HAND_KEEP", "DIFF_CHECK"):
+        return ["decision は ADD / NO_DIFF / EXTEND / KO_CHECK / TAKE_OVER / HAND_KEEP / DIFF_CHECK のどれかです"]
     if _cv.judges_pair(d.get("by") or []) is None:
         p.append("判断者の組がそろっていません（claude と codex、または代役の2人）")
     if len(str(d.get("why") or "").strip()) < MIN_WHY:
         p.append(f"理由（why）は{MIN_WHY}字以上で書きます")
-    if slug in static:
-        p.append("手で書いた対応がある機種です（ここでは上書きしません）")
+    # ★★手書きの機種は TAKE_OVER（確かめ直して自動へ移す）と HAND_KEEP（いまは移さない）だけ★★（2026-11-10）
+    if kind in ("TAKE_OVER", "HAND_KEEP"):
+        if slug not in static:
+            p.append(f"{kind} は、手で書いた対応がある機種にだけ使えます")
+    elif slug in static:
+        p.append("手で書いた対応がある機種です（ここでは上書きしません。確かめ直すなら TAKE_OVER / HAND_KEEP）")
+    if kind in ("HAND_KEEP", "DIFF_CHECK"):
+        # ★表を変えないので出典は任意★。何を確かめたかは why に書く
+        extra = set(d) & {"settings", "fields", "rates", "note", "resultNote", "settingLabels", "ko"}
+        if extra:
+            p.append(f"{kind} では表を書きません: {sorted(extra)}")
+        if not isinstance(d.get("sources", []), list):
+            p.append("出典（sources）は並びで書きます")
+        return p
     if "ko" in d and d.get("ko") not in KO_RESULTS:
         p.append("ko は HAS か NONE です")
     if kind == "KO_CHECK":
@@ -320,6 +351,68 @@ def shape_problems(d: dict, rows: dict, static: set) -> list:
     if kind == "EXTEND" and "settingLabels" in d:
         p.append("EXTEND では settingLabels を変えません")
     return p + config_problems(d)
+
+
+def status_line(slug: str, state: tuple, store: dict, static: set, today=None) -> str:
+    """★STEP 1-P の対象かを1行で★（純関数＝試験はここを直接呼ぶ）
+
+    対象は4通り＝①使えない（設定差なしと決まっていない）②自動の機種で小役をまだ探していない（ko_due）
+    ③★手書きの機種で、2AIが確かめ直す番★（TAKE_OVER / HAND_KEEP）④★「設定差なし」で、確かめ直す番★（DIFF_CHECK / ADD）
+    （③④は2026-11-10・運営者「更新されないページ他にもないの？」＝直す前は一度決まると二度と見直されなかった）
+    """
+    ok, why = state
+    head = f"{slug}: {'使える' if ok else '使えない（' + why + '）'}"
+    if slug in static:
+        if recheck_due(store, "hand_checked", slug, today):
+            return head + " → STEP 1-P 対象（手書き：2AIで確かめ直す・TAKE_OVER か HAND_KEEP）"
+        return head + " → STEP 1-P 対象外"
+    if ok:
+        ko = ko_due(slug, store, today)
+        return head + (f" → STEP 1-P 対象（小役：{ko}）" if ko else " → STEP 1-P 対象外")
+    if why == NO_DIFF_REASON:
+        if recheck_due(store, "diff_checked", slug, today):
+            return head + " → STEP 1-P 対象（設定差なし：2AIで確かめ直す・ADD か DIFF_CHECK）"
+        return head + " → STEP 1-P 対象外"
+    return head + " → STEP 1-P 対象"
+
+
+def remove_static_block(html: str, slug: str) -> str:
+    """★手で書いた MACHINE_CONFIGS の1機種ぶんを取り除いた html★（TAKE_OVER 用・見つからなければ例外）
+
+    探すのは MACHINE_CONFIGS の中の、自動の区画の外だけ（`static_slugs` と同じ見方）。
+    取り除くのは「  slug: {」から対応する「}」とその後ろの「,」と改行まで。
+    """
+    import extract_setting_rates as _es
+    m = re.search(r"const MACHINE_CONFIGS\s*=\s*\{", html)
+    if not m:
+        raise PochiError("setting.html に MACHINE_CONFIGS がありません")
+    body, end = _es._find_block(html, m.end() - 1)
+    lo, hi = m.end() - 1, end
+    a, b = _region(html)
+    pat = re.compile(r"(?m)^  " + re.escape(slug) + r"\s*:\s*\{")
+    hits = [x for x in pat.finditer(html, lo, hi) if not (a <= x.start() < b)]
+    if len(hits) != 1:
+        raise PochiError(f"手で書いた {slug} がちょうど1つ見つかりません（{len(hits)}件）")
+    start = hits[0].start()
+    block, j = _es._find_block(html, hits[0].end() - 1)
+    if not block:
+        raise PochiError(f"手で書いた {slug} の終わりが見つかりません")
+    if html[j:j + 1] == ",":
+        j += 1
+    if html[j:j + 2] == "\r\n":
+        j += 2
+    elif html[j:j + 1] == "\n":
+        j += 1
+    return html[:start] + html[j:]
+
+
+def recheck_due(store: dict, key: str, slug: str, today: datetime.date = None) -> bool:
+    """★手書き・設定差なしの機種を、2AIが確かめ直す番か★（記録が無いか HAND_RECHECK_DAYS 日たった）"""
+    rec = (store.get(key) or {}).get(slug)
+    if not rec:
+        return True
+    today = today or datetime.date.today()
+    return (today - datetime.date.fromisoformat(rec["checked"])).days >= HAND_RECHECK_DAYS
 
 
 def config_problems(d: dict) -> list:
@@ -464,13 +557,25 @@ def _rows() -> dict:
     return {m["slug"]: m for m in _sj.read_rows(MACHINES)}
 
 
+def hand_no_diff() -> set:
+    """★記事ページの手作りの名簿（machine.html の noSettingDiff）で「設定差なし」の機種★"""
+    import build_machine_pages as _b
+    reasons = _b.extract_pochipochi_reasons(io.open(
+        os.path.join(BASE, "machine.html"), encoding="utf-8").read())
+    return {s for s, r in reasons.items() if isinstance(s, str) and r == NO_DIFF_REASON}
+
+
 def plan(d: dict, fetch=None, store: dict = None, html: str = None,
-         rows: dict = None) -> dict:
+         rows: dict = None, no_diff_hand: set = None) -> dict:
     """★書く前に全部確かめる★（1つでも外れたら何も書かない）"""
     import confirmed_values as _cv
     rows = rows if rows is not None else _rows()
     html = html if html is not None else io.open(SETTING, encoding="utf-8").read()
     store = store if store is not None else load()
+    if d.get("decision") == "DIFF_CHECK":
+        nd = no_diff_hand if no_diff_hand is not None else hand_no_diff()
+        if str(d.get("slug")) not in nd and str(d.get("slug")) not in store.get("no_diff", {}):
+            return {"ok": False, "problems": ["DIFF_CHECK は「小役による設定差なし」の機種にだけ使えます"]}
     p = shape_problems(d, rows, static_slugs(html))
     if p:
         return {"ok": False, "problems": p}
@@ -486,7 +591,7 @@ def plan(d: dict, fetch=None, store: dict = None, html: str = None,
         p += extend_problems(d, cur)
         if p:
             return {"ok": False, "problems": p}
-    if d["decision"] in ("ADD", "EXTEND"):
+    if d["decision"] in ("ADD", "EXTEND", "TAKE_OVER"):
         p += support_problems(d, sources)
         if p:
             return {"ok": False, "problems": p}
@@ -496,20 +601,34 @@ def plan(d: dict, fetch=None, store: dict = None, html: str = None,
     except _cv.ConfirmedError as e:
         return {"ok": False, "problems": [f"出典を確かめられません: {e}"]}
     new = json.loads(json.dumps(store))
-    new.setdefault("ko_checked", {})
+    for _k in ("ko_checked", "hand_checked", "diff_checked"):
+        new.setdefault(_k, {})
     today = datetime.date.today().isoformat()
-    if d["decision"] == "ADD":
+    base_html = html
+    if d["decision"] in ("ADD", "TAKE_OVER"):
         cfg = {"settings": d["settings"], "fields": d["fields"], "rates": d["rates"]}
         for k in ("note", "resultNote", "settingLabels"):
             if d.get(k):
                 cfg[k] = d[k]
         new["configs"][slug] = cfg
         new["no_diff"].pop(slug, None)
+        new["diff_checked"].pop(slug, None)
+        new["hand_checked"].pop(slug, None)
         # ★小役の確認は、書いたときだけ記録★（書かなければ次に担当したときにまた探す）
         if d.get("ko") in KO_RESULTS:
             new["ko_checked"][slug] = {"result": d["ko"], "checked": today}
         else:
             new["ko_checked"].pop(slug, None)
+        if d["decision"] == "TAKE_OVER":
+            # ★★手で書いた表を、2AIが確かめ直した表で置き換えて自動の区画へ移す★★（2026-11-10）
+            try:
+                base_html = remove_static_block(html, slug)
+            except PochiError as e:
+                return {"ok": False, "problems": [str(e)]}
+    elif d["decision"] == "HAND_KEEP":
+        new["hand_checked"][slug] = {"checked": today}
+    elif d["decision"] == "DIFF_CHECK":
+        new["diff_checked"][slug] = {"checked": today}
     elif d["decision"] == "EXTEND":
         new["configs"][slug] = merged_config(cur, d)
         new["ko_checked"][slug] = {"result": "HAS", "checked": today}
@@ -520,13 +639,14 @@ def plan(d: dict, fetch=None, store: dict = None, html: str = None,
             return {"ok": False, "problems": ["対応済みの機種を「設定差なし」にはしません"
                                               "（表を消す道具にしない）"]}
         new["no_diff"][slug] = {"reason": NO_DIFF_REASON}
+        new["diff_checked"][slug] = {"checked": today}
     basis = {"decision": d["decision"], "by": sorted(_cv._judge_names(d["by"])),
              **({"ko": new["ko_checked"][slug]["result"]} if slug in new["ko_checked"]
                 and d["decision"] != "NO_DIFF" else {}),
              "why": str(d["why"]).strip()[:300],
              "decided_at": datetime.date.today().isoformat(),
              "sources": verified}
-    return {"ok": True, "problems": [], "store": new, "html": build(html, new),
+    return {"ok": True, "problems": [], "store": new, "html": build(base_html, new),
             "basis": basis}
 
 
@@ -1053,6 +1173,68 @@ def selftest() -> int:
     _old.pop("ko_checked", None)
     _write_json(_bp, _old)
     t("　（対照）記録の無い古い形の控えも読める", load(_bp).get("ko_checked") == {})
+
+    # ★★手書きの機種と「設定差なし」の機種も確かめ直す★★（2026-11-10＝直す前は一度決まると二度と見直されなかった）
+    qh1 = "北斗 中段チェリー 設定1 1/210.1 設定6 1/190.5 の確率です。"
+    qh2 = "北斗の中段チェリーは設定1が1/210.1、設定6が1/190.5となっています。"
+    page_h = "<html><head><title>北斗</title></head><body><h1>北斗</h1><p>%s</p><p>%s</p></body></html>" % (qh1, qh2)
+    take = dict(json.loads(json.dumps(good)), slug="hokuto", decision="TAKE_OVER",
+                sources=[{"url": "https://chonborista.com/slot/hk/", "quote": qh1},
+                         {"url": "https://nana-press.com/kaiseki/hk/", "quote": qh2}])
+    rt = plan(json.loads(json.dumps(take)), fetch=lambda u: page_h, store=empty(), html=html, rows=rows)
+    t("★★TAKE_OVER＝手で書いた表を、2AIが確かめ直した表で置き換えて自動の区画へ移す★★",
+      rt["ok"] and "hokuto" in rt["store"]["configs"] and "hokuto" not in static_slugs(rt["html"])
+      and "bb: {1:1/383.4" not in rt["html"] and "cherry: {1:1/210.1,6:1/190.5}" in rt["html"]
+      and check_problems(rt["html"], rt["store"]) == [])
+    t("　移したあとも、ページが読む形で読める（手書きの表は消え、自動の表だけが残る）",
+      rt["ok"] and __import__("extract_setting_rates").extract_rates(rt["html"]).get("hokuto")
+      == {"cherry": {"1": "1/210.1", "6": "1/190.5"}})
+    t("★TAKE_OVER でも表は独立2出典の逐語と照合する★",
+      not plan(dict(json.loads(json.dumps(take)), sources=take["sources"][:1]),
+               fetch=lambda u: page_h, store=empty(), html=html, rows=rows)["ok"])
+    t("　TAKE_OVER は手で書いた機種にだけ使える",
+      any("手で書いた対応がある機種にだけ" in x
+          for x in shape_problems(dict(take, slug="zzz_a"), rows, static_slugs(html))))
+    keepd = {"slug": "hokuto", "decision": "HAND_KEEP", "by": ["claude", "codex"],
+             "why": "手書きの表を2サイトで確かめたが、いまは移せる表がそろわない"}
+    rk2 = plan(json.loads(json.dumps(keepd)), fetch=lambda u: page_h, store=empty(), html=html, rows=rows)
+    t("★★HAND_KEEP＝表を変えず、確かめ直した日だけ控える★★",
+      rk2["ok"] and rk2["html"] == html and rk2["store"]["hand_checked"]["hokuto"]["checked"]
+      and not recheck_due(rk2["store"], "hand_checked", "hokuto"))
+    t("　HAND_KEEP で表は書けない",
+      any("表を書きません" in x for x in shape_problems(dict(keepd, rates={}), rows, static_slugs(html))))
+    _st_h = json.loads(json.dumps(rk2["store"]))
+    _st_h["hand_checked"]["hokuto"]["checked"] = "2026-08-01"
+    t("★手書きの機種は90日たったらまた確かめ直す★",
+      recheck_due(_st_h, "hand_checked", "hokuto", datetime.date(2026, 10, 30))
+      and not recheck_due(_st_h, "hand_checked", "hokuto", datetime.date(2026, 10, 29)))
+    dchk = {"slug": "zzz_a", "decision": "DIFF_CHECK", "by": ["claude", "codex"],
+            "why": "2サイトとも小役の設定差を載せていないと確かめた"}
+    rd2 = plan(json.loads(json.dumps(dchk)), fetch=lambda u: page, store=empty(), html=html, rows=rows,
+               no_diff_hand={"zzz_a"})
+    t("★★DIFF_CHECK＝「設定差なし」の機種を確かめ直した日だけ控える★★",
+      rd2["ok"] and rd2["store"]["diff_checked"]["zzz_a"]["checked"] and rd2["html"] == html)
+    t("　DIFF_CHECK は「設定差なし」の機種にだけ使える",
+      not plan(json.loads(json.dumps(dchk)), fetch=lambda u: page, store=empty(), html=html, rows=rows,
+               no_diff_hand=set())["ok"])
+    _ra2 = plan(json.loads(json.dumps(good)), fetch=lambda u: page, store=rd2["store"], html=html, rows=rows)
+    t("　「設定差なし」の機種に ADD したら、確かめ直しの記録は消える",
+      _ra2["ok"] and "zzz_a" not in _ra2["store"]["diff_checked"])
+    t("★★対象の出方：手書き・設定差なし・小役・使えない★★",
+      "手書き" in status_line("hokuto", (True, ""), empty(), {"hokuto"})
+      and "設定差なし" in status_line("zzz_a", (False, NO_DIFF_REASON), empty(), set())
+      and "対象外" in status_line("zzz_a", (False, NO_DIFF_REASON), rd2["store"], set())
+      and "対象外" in status_line("hokuto", (True, ""), rk2["store"], {"hokuto"})
+      and status_line("zzz_b", (False, "解析待ち"), empty(), set()).endswith("STEP 1-P 対象"))
+    _bad_h = json.loads(json.dumps(rt["store"]))
+    _bad_h["hand_checked"]["hokuto"] = {"checked": "2026-11-10"}
+    _write_json(_bp, _bad_h)
+    try:
+        load(_bp)
+        _hb = False
+    except PochiError:
+        _hb = True
+    t("★自動へ移した機種に手書きの確認の記録が残っていたら、読む段で止める★", _hb)
     print(f"{ok[0]}/{sum(ok)} 合格")
     return 0 if ok[1] == 0 else 1
 
@@ -1093,20 +1275,12 @@ def main() -> int:
             os.path.join(BASE, "machine.html"), encoding="utf-8").read())
         rows = _rows()
         store = load()
+        static = static_slugs(io.open(SETTING, encoding="utf-8").read())
         for slug in a.status:
             if slug not in rows:
                 print(f"{slug}: 機種一覧にありません")
                 continue
-            ok, why = _b.pochipochi_state(rows[slug], reasons)
-            # ★対象＝使えない、かつ「設定差なし」と決まっていない★
-            #   ＋★自動で足した機種で、小役の差をまだ探していない（または探し直す番）★
-            target = (not ok) and why != NO_DIFF_REASON
-            ko = ko_due(slug, store) if ok else None
-            head = f"{slug}: {'使える' if ok else '使えない（' + why + '）'}"
-            if ko:
-                print(head + f" → STEP 1-P 対象（小役：{ko}）")
-            else:
-                print(head + f" → STEP 1-P {'対象' if target else '対象外'}")
+            print(status_line(slug, _b.pochipochi_state(rows[slug], reasons), store, static))
         return 0
     if a.list:
         d = load()

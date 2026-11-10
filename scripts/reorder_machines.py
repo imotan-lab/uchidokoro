@@ -62,6 +62,15 @@ def release_of(m: dict) -> str:
     got = m.get("release_date") or ""
     if not got:
         got = (m.get("identity") or {}).get("market_release_date") or ""
+    if not got and "publication_policy" not in m:
+        # ★★昔からの機種で導入日が無ければ、2AIが結んだDMMの機種ページの導入日を読む★★（2026-11-10）＝
+        #   直す前は99機種に導入日が無く、古い並びのまま固定されていた（legacy_release.py が控える）。
+        #   ★控えが読めなければ止める★（黙って「導入日なし」として並べない）
+        import legacy_release as _lr
+        try:
+            got = _lr.release_for(str(m.get("slug") or ""))
+        except Exception as e:                                   # noqa: BLE001
+            raise ReorderError(f"昔からの機種の導入日の控えを読めません: {e}")
     return str(got or "").strip()
 
 

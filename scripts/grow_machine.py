@@ -232,6 +232,10 @@ def grow_scope_problem(m: dict) -> str:
       ・`AUTO_INDEXABLE` … ★空の欄が残っているあいだは対象★
       ・それ以外（旧形式）… 対象外（`grow_legacy` の担当）
     ★空の欄が無くなったら外れる★＝際限なく見に行かないため。
+    ★★ただし導入前と新台期間（導入後30日まで）は、空の欄が無くても対象★★（2026-11-10）＝
+      朝の点検（STEP 1）は新台期間の機種を「育成が毎日見ているから」と候補から外している。
+      空の欄が無くなった新台はどちらからも見られず、新しい解析や訂正が入らなかった
+      （書く3欄を埋められるようにしたので、これから起きやすくなる）。
     """
     try:
         cls = _pdz.machine_class(m)
@@ -241,6 +245,8 @@ def grow_scope_problem(m: dict) -> str:
         return ""
     if cls == "AUTO_INDEXABLE":
         if has_unconfirmed(str(m.get("slug") or "")):
+            return ""
+        if in_new_window(str(m.get("release_date") or ""), _dt.date.today()):
             return ""
         return "育てる対象ではありません（中身の無い欄が残っていません）"
     return f"育てる対象ではありません（いまの区分: {cls}）"
@@ -294,6 +300,17 @@ def is_new_machine(release: str, today, days: int = NEW_MACHINE_DAYS) -> bool:
                        (start.month % 12) + 1, 1)
         end = (nxt - _dt.timedelta(days=1)) + _dt.timedelta(days=days)
     return start <= today <= end
+
+
+def in_new_window(release: str, today) -> bool:
+    """★導入前か、新台期間（is_new_machine）か★＝育成が空の欄が無くても見続ける範囲（2026-11-10）
+
+    ★導入日が読めなければ False★（新台と推測しない＝今までどおり空の欄で決める）。
+    """
+    start, _prec = parse_release(release)
+    if not start:
+        return False
+    return today < start or is_new_machine(release, today)
 
 
 def due(slug: str, release: str, today, state: dict, conf=None) -> bool:
@@ -611,8 +628,12 @@ def release_refined(old: str, new: str) -> bool:
 #   ゴジラ対エヴァ2（dmm_5119）が段が上がっただけで育成が止まっていた（10/29）
 _TIER_RANK = {"CATALOG_BOUND": 1, "CATALOG_CODE_MATCHED": 2}
 # ★★2AIが「同じ機種の表記の変化」と決めたら受け取ってよい項目★★（2026-10-29）
-#   ★URL・型式名・導入日・移行前の記録は受け取らない★（変われば別の機種を疑う）
-IDENTITY_ACCEPTABLE = ("manufacturer_id", "announced_name")
+#   ★URL・型式名・移行前の記録は受け取らない★（変われば別の機種を疑う）
+#   ★★導入日（market_release_date）は受け取る★★（2026-11-10・運営者「更新されないページ他にもないの？」）＝
+#     直す前は導入日が延期されると育成が「自動では直しません」で止まり、問いも出ず、
+#     古い導入日のまま「近日導入」や新台の札が出続けた。同じDMMの機種ページで日付だけ変わったなら
+#     延期かを2AIが決め、受け取ったら新しい導入日で記事と機種行を作り直す（DMMの値が正＝決まり）。
+IDENTITY_ACCEPTABLE = ("manufacturer_id", "announced_name", "market_release_date")
 IDENTITY_STORE = _lp.doc("grow_identity_accepted.json")
 MIN_IDENTITY_WHY = 15
 
@@ -625,7 +646,11 @@ def identity_change_problems(dec) -> list:
     if not re.fullmatch(r"[a-z0-9_]+", str(dec.get("slug") or "")):
         ng.append("slug が英小文字・数字・下線ではありません")
     if dec.get("field") not in IDENTITY_ACCEPTABLE:
-        ng.append(f"field は {'・'.join(IDENTITY_ACCEPTABLE)} のどれかです（URL・型式名・導入日は受け取りません）")
+        ng.append(f"field は {'・'.join(IDENTITY_ACCEPTABLE)} のどれかです（URL・型式名は受け取りません）")
+    if dec.get("field") == "market_release_date":
+        for k in ("before", "after"):
+            if not re.fullmatch(r"\d{4}-\d{2}(-\d{2})?", str(dec.get(k) or "")):
+                ng.append(f"導入日の {k} は YYYY-MM か YYYY-MM-DD で書きます")
     for k in ("before", "after"):
         if not isinstance(dec.get(k), str) or not dec.get(k).strip():
             ng.append(f"{k}（変わる前／後の値そのまま）が空です")
@@ -763,6 +788,38 @@ def maker_change_questions(slug: str, maker: str, problems) -> list:
                     f"★DMMの機種ページのメーカー表記が変わりました★（登録 {maker!r} / 機種ページ {m.group(1).strip()!r}）"
                     "／DMMの機種ページを読み、★同じ機種のメーカー表記の変化か★を2AIで決めてください（型式名・導入日・機種名が同じか）"
                     f"／同じ機種なら決定ファイル（slug={slug}・field=manufacturer_id・before={maker}・after={after}・by・why 15字以上）"
+                    "を書いて python scripts/grow_machine.py --accept-identity <決定ファイル>"
+                    "／★別の機種の疑いがあれば受け取らない★（育成は止まったまま・記事は無傷）"})
+    return out
+
+
+def accepted_release(old_release: str, accepted) -> str:
+    """★2AIが受け取った導入日の変化を当てた導入日★（前の値が登録と完全一致し、後の値が1つに決まるときだけ）"""
+    afters = {a for f, b, a in (accepted or ()) if f == "market_release_date" and b == old_release}
+    return afters.pop() if len(afters) == 1 else old_release
+
+
+def release_change_questions(slug: str, old_release: str, problems) -> list:
+    """★DMMの導入日が登録と違って止まったら、延期として受け取るかを2AIへ問う★（2026-11-10）
+
+    拾う形は2つ＝確かめ直しの「登場年月が機種ページと違います（機種ページ=X / 渡された値=Y）」と、
+    同じ月の中の「登場年月が変わっています（A → B）」。★前の値は登録の導入日（old_release）そのまま★
+    （受け取りの控えは (market_release_date, 前, 後) の完全一致でだけ効く）。
+    """
+    import re as _re
+    out = []
+    for x in problems or []:
+        s = str(x)
+        m = (_re.search(r"登場年月が機種ページと違います（機種ページ=(\d{4}-\d{2}(?:-\d{2})?) /", s)
+             or _re.search(r"登場年月が変わっています（\S+ → (\d{4}-\d{2}(?:-\d{2})?)）", s))
+        if not m or not old_release or m.group(1) == old_release:
+            continue
+        after = m.group(1)
+        out.append({"kind": "grow_identity", "slug": slug, "text":
+                    f"★DMMの機種ページの導入日が変わりました★（登録 {old_release} / 機種ページ {after}）"
+                    "／DMMの機種ページを読み、★同じ機種の導入日の変更（延期・前倒し・日付の確定）か★を2AIで決めてください"
+                    "（機種名・メーカー・型式名が同じか）"
+                    f"／同じ機種なら決定ファイル（slug={slug}・field=market_release_date・before={old_release}・after={after}・by・why 15字以上）"
                     "を書いて python scripts/grow_machine.py --accept-identity <決定ファイル>"
                     "／★別の機種の疑いがあれば受け取らない★（育成は止まったまま・記事は無傷）"})
     return out
@@ -2458,11 +2515,16 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     import claim_identity as _ci_v
     import functools as _ft_v
     verify = _ft_v.partial(verify, my_tags=_ci_v.verify_tags(cur, name))
-    vo = verify(name, url, maker, old_release, require_recent=False)
+    # ★★2AIが受け取った導入日の変化（延期など）を当てて確かめ直す★★（2026-11-10）＝
+    #   当てた導入日は機種行の作り直し（vo["release"]）に流れ、identity_same が (項目, 前, 後) を受け取り済みとして通す
+    _chk_release = accepted_release(old_release, _id_ok)
+    vo = verify(name, url, maker, _chk_release, require_recent=False)
     if vo.get("problems"):
         out["problems"] += [f"本人性を確かめ直せません: {p}" for p in vo["problems"]]
         # ★★DMMのメーカー表記が変わったときは、受け取るかを2AIへ問う★★（Codex review 9fe1f3b5 の1）
         out["questions"] += maker_change_questions(slug, maker, vo["problems"])
+        # ★★DMMの導入日が変わったときも、延期として受け取るかを2AIへ問う★★（2026-11-10）
+        out["questions"] += release_change_questions(slug, old_release, vo["problems"])
         # ★★型のついた失敗は、必ず問いにして返す★★（2026-09-10・CodexのP0）
         #   ★直す前はここで戻っていた★ので、
         #   ★育成レーンで毎朝止まる機種の問いが、どこにも出なかった★。
@@ -2480,10 +2542,12 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
         #   （「2026-08」+「-」で始まるか）。意味の判断はしていない。
         #   ★release_date は勝手に書き換えない★＝ここでは通すだけ。
         #   細かくするかどうかは別の判断（値を作る話になるため）。
-        if not release_refined(old_release, vo["release"]):
+        if not release_refined(old_release, vo["release"]) and vo["release"] != _chk_release:
             out["problems"].append(
                 f"登場年月が変わっています（{old_release} → {vo['release']}）"
                 "／自動では直しません")
+            # ★★延期などは2AIが受け取れる★★（2026-11-10＝直す前は問いも出ず、古い導入日のまま止まった）
+            out["questions"] += release_change_questions(slug, old_release, out["problems"][-1:])
             return out
         # ★★日が分かったことを「予定」として返す（★ここでは書かない★）★★
         #   （2026-08-29・運営者の指示／Codexの指摘を受けて作り直した）
@@ -3790,6 +3854,15 @@ def selftest() -> int:
         _sc_has["has"] = False
         t("　空の欄が無くなったら外れる（際限なく見に行かない）",
           "中身の無い欄" in grow_scope_problem(_st_row()))
+        # ★★導入前と新台期間は、空の欄が無くても対象★★（2026-11-10＝朝の点検は新台期間を外すので、
+        #   ここで外すとどちらからも見られなかった）
+        _dtm = __import__("datetime"); _td = _dtm.date.today()
+        t("★★導入前の機種は、空の欄が無くても対象★★",
+          grow_scope_problem(_st_row((_td + _dtm.timedelta(days=10)).isoformat())) == "")
+        t("★★導入後30日までの機種は、空の欄が無くても対象★★",
+          grow_scope_problem(_st_row((_td - _dtm.timedelta(days=5)).isoformat())) == "")
+        t("　（対照）導入後31日を過ぎたら外れる",
+          "中身の無い欄" in grow_scope_problem(_st_row((_td - _dtm.timedelta(days=31)).isoformat())))
     finally:
         globals()["has_unconfirmed"] = _sc_bak
         _pdz.machine_class = _sc_cls
@@ -4228,7 +4301,35 @@ def selftest() -> int:
     _src_pl = open(__file__, encoding="utf-8").read()
     t("　（配線）育成の入口が、確かめ直しより前に受け取りを当てている",
       _src_pl.index("name, maker = apply_accepted_identity(name, maker, _id_ok)")
-      < _src_pl.index("vo = verify(name, url, maker, old_release, require_recent=False)"))
+      < _src_pl.index("vo = verify(name, url, maker, _chk_release, require_recent=False)"))
+    # ★★導入日の変化（延期など）も2AIが受け取れる★★（2026-11-10＝直す前は止まるだけで問いも出なかった）
+    _rdec = {"slug": "zzz", "field": "market_release_date", "before": "2026-11-16",
+             "after": "2026-12-07", "by": ["claude", "codex"], "why": "DMMの機種ページで同じ機種の延期と確かめた"}
+    t("★★導入日の変化を受け取る決定は通る★★（形は YYYY-MM か YYYY-MM-DD）",
+      identity_change_problems(_rdec) == []
+      and identity_change_problems(dict(_rdec, after="12月7日")) != [])
+    t("★★受け取った導入日を、登録の導入日が一致するときだけ当てる★★",
+      accepted_release("2026-11-16", {("market_release_date", "2026-11-16", "2026-12-07")}) == "2026-12-07"
+      and accepted_release("2026-11-02", {("market_release_date", "2026-11-16", "2026-12-07")}) == "2026-11-02")
+    t("　後の値が2つ以上に割れていたら当てない",
+      accepted_release("2026-11-16", {("market_release_date", "2026-11-16", "2026-12-07"),
+                                      ("market_release_date", "2026-11-16", "2026-12-14")}) == "2026-11-16")
+    _rq = release_change_questions("zzz", "2026-11-16", [
+        "IDENTITY_FAILED 登場年月が機種ページと違います（機種ページ=2026-12-07 / 渡された値=2026-11-16）"])
+    t("★★確かめ直しで導入日が違って止まったら、前と後の値をそのまま書いた問いを出す★★",
+      len(_rq) == 1 and "before=2026-11-16" in _rq[0]["text"] and "after=2026-12-07" in _rq[0]["text"])
+    _rq2 = release_change_questions("zzz", "2026-11-16", ["登場年月が変わっています（2026-11-16 → 2026-11-30）／自動では直しません"])
+    t("★★同じ月の中で日付が変わって止まったときも問いを出す★★",
+      len(_rq2) == 1 and "after=2026-11-30" in _rq2[0]["text"])
+    t("★受け取った導入日は identity_same が通す（受け取っていなければ止める）★",
+      identity_same({"market_release_date": "2026-11-16"}, {"market_release_date": "2026-12-07"},
+                    {("market_release_date", "2026-11-16", "2026-12-07")}) == []
+      and identity_same({"market_release_date": "2026-11-16"}, {"market_release_date": "2026-12-07"}) != [])
+    t("　（配線）確かめ直しで止まったら、導入日の問いも出している",
+      'out["questions"] += release_change_questions(slug, old_release, vo["problems"])' in _src_pl.split(
+          "def selftest", 1)[0]
+      and 'out["questions"] += release_change_questions(slug, old_release, out["problems"][-1:])' in _src_pl.split(
+          "def selftest", 1)[0])
     t("　（配線）確かめ直しで止まったら、メーカー表記の問いを出している",
       'out["questions"] += maker_change_questions(slug, maker, vo["problems"])' in _src_pl.split(
           "def selftest", 1)[0])

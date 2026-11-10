@@ -119,8 +119,18 @@ def _no_line_all() -> dict:
         return {}                          # ★読めないときは「控え無し」＝また聞く★
 
 
-def no_line_record(slug: str) -> dict | None:
-    """★その機種は「線を引かない」と決めてあるか★（★材料が変わっていたら無効★）"""
+NO_LINE_RECHECK_DAYS = 60   # ★「線を引かない」が効くのは控えてからこの日数まで★
+
+
+def no_line_record(slug: str, today=None) -> dict | None:
+    """★その機種は「線を引かない」と決めてあるか★（★材料が変わっていたら無効★）
+
+    ★★控えてから NO_LINE_RECHECK_DAYS 日を過ぎたら無効★★（2026-11-10・運営者「更新されないページ他にもないの？」）＝
+      直す前は確定値の中身が変わったときしか聞き直さず、出典に期待値などが載っても
+      別の処理で確定値を記録するまで、狙い目を決め直す問いが戻らなかった。
+      控えた日は recorded_at（無い古い控えは decided_at）。日付が読めなければ無効（聞く側へ倒す）。
+    """
+    import datetime as _dtn
     rec = _no_line_all().get(str(slug or ""))
     if not isinstance(rec, dict):
         return None
@@ -129,6 +139,12 @@ def no_line_record(slug: str) -> dict | None:
         return None                        # ★控えを読めない＝もう一度聞く★
     if str(rec.get("confirmed_sha256") or "") != now[0]:
         return None                        # ★材料が変わった＝もう一度聞く★
+    try:
+        at = _dtn.date.fromisoformat(str(rec.get("recorded_at") or rec.get("decided_at") or "")[:10])
+    except ValueError:
+        return None
+    if ((today or _dtn.date.today()) - at).days > NO_LINE_RECHECK_DAYS:
+        return None                        # ★日がたった＝もう一度出典を読んで聞く★
     return rec
 
 
@@ -161,6 +177,8 @@ def record_no_line(dec: dict) -> int:
         "why": str(dec.get("why") or "").strip(),
         "judges": sorted({str(x).lower() for x in (dec.get("judges") or [])}),
         "decided_at": str(dec.get("decided_at") or ""),
+        # ★控えた日（機械が付ける）★＝NO_LINE_RECHECK_DAYS を過ぎたら聞き直す
+        "recorded_at": __import__("datetime").date.today().isoformat(),
         # ★待っているもの★＝2AIが読むための覚え書き（★判定には使わない★）
         "waiting_for": [str(x) for x in (dec.get("waiting_for") or [])],
         "confirmed_sha256": state[0],
@@ -948,6 +966,25 @@ def has_target_line(m: dict) -> bool:
     return False
 
 
+def modes_without_line(m: dict) -> list:
+    """★線（good）を1つも持たない欄の呼び名★（has_target_line と同じ見方で、欄ごとに見る）"""
+    ck = (m or {}).get("checker")
+    if not isinstance(ck, dict):
+        return []
+    out = []
+    for md in (ck.get("modes") or []):
+        if not isinstance(md, dict):
+            continue
+        key = str(md.get("key") or "")
+        conf = (ck.get("modeData") or {}).get(key) or ck.get(key) or {}
+        if not isinstance(conf, dict):
+            conf = {}
+        if has_target_line({"checker": {"modes": [md], key: conf}}):
+            continue
+        out.append(str(md.get("label") or key))
+    return out
+
+
 def target_line_questions(m: dict) -> list:
     """★狙い目の線が無い機種を、2AIへの問いにする★（2026-09-18）
 
@@ -957,9 +994,21 @@ def target_line_questions(m: dict) -> list:
     """
     if not isinstance(m, dict) or "publication_policy" not in m:
         return []                          # ★旧形式は触らない★
-    if has_target_line(m):
-        return []
     slug = str(m.get("slug") or "")
+    if has_target_line(m):
+        # ★★線が1つでもあっても、線の無い欄は聞く★★（2026-11-10・運営者「更新されないページ他にもないの？」）＝
+        #   直す前はどれか1つの欄に線があると問いが止まり、ほかの欄は線が無いまま固定された
+        #   （読者がその欄を選ぶと狙い目が出ない）。
+        miss = modes_without_line(m)
+        if not miss:
+            return []
+        return ["★この機種のチェッカーに、狙い目の線が無い欄があります★（" + "・".join(miss) + "）"
+                "／★その欄を選んだ読者には狙い目が出ていません★"
+                f"／材料を見る: python scripts/checker_verdict.py --slug {slug}"
+                "／線を決めたら決定ファイルで python scripts/checker_verdict.py --apply <決定ファイル>"
+                "（その欄の key に線を書く・判断者は claude と codex の両方・理由15字以上）"
+                "／★線を引く欄ではない（出典に狙い目が無い等）と2AIで決めたら、REVISE_MODES の drop_modes でその欄を消す★"]
+    # ★★線が1つも無い機種★★
     # ★★2AIが「引かない」と決めてあれば聞かない★★（2026-09-21・台帳#704）
     #   ★直す前は控える道が無かった★ので、決着しているのに毎朝同じ問いが出て、
     #   「3回聞いても決まらなければ人へ」の数えに乗って運営者へメールが飛んだ。
@@ -2643,6 +2692,20 @@ def selftest() -> int:
     # ★問いに、書き方（コマンド）がそのまま入っていること★
     t("　問いに、決定を書き込むコマンドが入っている",
       "--apply" in target_line_questions(base_ms[0])[0])
+    # ★★線が1つでもあっても、線の無い欄は聞く★★（2026-11-10＝直す前は1つの欄に線があると、ほかの欄は空のまま固定）
+    _part = {"slug": "zzz_auto", "publication_policy": "page-decision/v1",
+             "checker": {"modes": [{"key": "normal", "label": "通常"}, {"key": "reset", "label": "リセット"}],
+                         "normal": {"good": 700}, "reset": {"ceiling": 400}}}
+    _pq = target_line_questions(_part)
+    t("★★線の無い欄があれば、その欄の名前を挙げて聞く★★",
+      len(_pq) == 1 and "リセット" in _pq[0] and "通常" not in _pq[0].split("（", 1)[1].split("）", 1)[0])
+    t("　全部の欄に線があれば聞かない",
+      not target_line_questions(dict(_part, checker=dict(_part["checker"], reset={"good": 100}))))
+    t("　線の無い欄の見分けは、交換率ごと・回数の行・modeData も同じ見方",
+      modes_without_line({"checker": {"modes": [{"key": "a"}, {"key": "b"}, {"key": "c"}],
+                                       "a": {"byRate": {"eq56": {"good": 1}}},
+                                       "b": {"suru": [{"count": 1, "good": 0}]},
+                                       "modeData": {"c": {"good": 2}}}}) == [])
 
     # ★本物の読み取りも動かす★（差し替えたまま終わらない）
     t("　確かめてある天井を読める（本物）",
@@ -2796,6 +2859,12 @@ def _no_line_tests(t) -> None:
         _mat["now"] = {"at": {"v": 1}, "ceiling": {"v": 900}}
         t("　（対照）中身が戻れば、また効く",
           no_line_record("zz_no_line") is not None)
+        # ★★控えてから60日を過ぎたら聞き直す★★（2026-11-10＝直す前は確定値が変わらない限り永久に効いた）
+        _dtn = __import__("datetime")
+        t("★★控えてから60日を過ぎたら、もう一度聞く★★",
+          no_line_record("zz_no_line", today=_dtn.date.today() + _dtn.timedelta(days=61)) is None)
+        t("　（対照）60日までは効く",
+          no_line_record("zz_no_line", today=_dtn.date.today() + _dtn.timedelta(days=60)) is not None)
         # ★★控えを読めないときは、必ず聞き直す★★（同）
         _mat["now"] = None
         t("★★確かめてある値の控えを読めないときは、免除を効かせない★★"

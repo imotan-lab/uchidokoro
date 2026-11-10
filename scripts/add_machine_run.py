@@ -7125,6 +7125,18 @@ def _main() -> int:
     #   （2026-10-02・Codex review202）＝前に確かめた日付のまま外すと、
     #   そのあと延期・未定になった機種が消える。取り直せたものだけが
     #   give_up() の「その日に確かめた」を満たす。
+    # ★★外した機種を、30日ごとに1回だけ待ち行列へ戻す★★（2026-11-10・運営者「更新されないページ他にもないの？」）＝
+    #   直す前は外したら二度と拾わず、あとから解析が出ても記事にならなかった。
+    #   ★もう記事がある機種は戻さない★（控えから消す）。
+    if apply_it:
+        _have = {str(m.get("slug")) for m in _sj.read_rows(MACHINES_PATH)}
+        for _back in _pend.revive(pend):
+            if f"dmm_{_back.get('source_machine_id')}" in _have:
+                pend["items"].pop(_back["queue_id"], None)
+                _log(f"  外した機種はもう記事になっていたので、控えから消しました: {_back['name']}")
+                continue
+            _log(f"  外した機種を、もう一度試すため待ち行列へ戻しました: {_back['name']}"
+                 f"（導入日 {_pend.release_of(_back)}）")
     if apply_it:
         for _cand in [x for x in pend["items"].values() if _pend.would_give_up(x)]:
             try:
@@ -7132,7 +7144,9 @@ def _main() -> int:
             except Exception as e:        # noqa: BLE001
                 _log(f"  打ち切りの前に導入日を取り直せませんでした（外しません）: {e}")
     for it in (_pend.give_up(pend) if apply_it else []):
-        if not _record_issue("site", "structural", "MATERIAL", "PENDING_GAVE_UP",
+        # ★試し直して、また外したものは別の符丁★（朝の点検が🟡に数えるのは初めて外した分だけ＝毎月鳴らさない）
+        _gu_code = "PENDING_RETRY_GAVE_UP" if it.get("revived_at") else "PENDING_GAVE_UP"
+        if not _record_issue("site", "structural", "MATERIAL", _gu_code,
                        f"導入日から{_pend.GIVE_UP_DAYS}日たっても記事にできませんでした",
                        f"{it['name']} / {it.get('identity_url', '')} / "
                        f"直近の理由: {it.get('last_reason', '')}"):
@@ -7140,6 +7154,7 @@ def _main() -> int:
             #   give_up() は返す前に外してしまうので、そのまま保存すると
             #   **待ち行列にも台帳にも無い機種**になる。
             pend["items"][it["queue_id"]] = it
+            pend.get("gave_up", {}).pop(it["queue_id"], None)
             _log(f"  ログに残せなかったので待ち行列に戻しました: {it['name']}")
             continue
         print(f"  ★導入日から{_pend.GIVE_UP_DAYS}日たっても記事にできませんでした: {it['name']}★")

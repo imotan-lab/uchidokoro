@@ -53,7 +53,10 @@ except Exception:
 PAGES = ("index.html", "about.html", "contact.html", "privacy.html", "terms.html", "404.html",
          "guide-haena.html", "guide-rate.html", "guide-reset.html",
          "guide-yamedoki.html", "guide-pochipochi.html", "guide-site.html",
-         "scripts/hub_prose.json")
+         "scripts/hub_prose.json",
+         # ★ポチポチくんの画面★（2026-11-10・運営者「更新されないページ他にもないの？」）＝説明文と手書きの注記を
+         #   2AIが読み直す道が無かった。★自動の区画（POCHI-AUTO）の中は直さない★（pochipochi.py の持ち物＝run が断る）
+         "setting.html")
 
 # ★1日1ページずつ読む順番★（朝の更新タスク STEP 1-S）。ランキング4ページは生成物なので、
 #   直す先は scripts/hub_prose.json（表の中身は機種データから作られる）。
@@ -61,7 +64,7 @@ ROTATION = ("index.html", "guide-tenjo-ranking.html", "guide-reset-ranking.html"
             "guide-reset-ev-ranking.html",
             "guide-suru-tenjo.html", "guide-ichiran.html", "guide-haena.html", "guide-rate.html",
             "guide-reset.html", "guide-yamedoki.html", "guide-pochipochi.html", "guide-site.html",
-            "about.html", "privacy.html", "terms.html", "contact.html", "404.html")
+            "about.html", "privacy.html", "terms.html", "contact.html", "404.html", "setting.html")
 HUB_PAGES = ("guide-tenjo-ranking.html", "guide-reset-ranking.html",
              "guide-reset-ev-ranking.html",
              "guide-suru-tenjo.html", "guide-ichiran.html")
@@ -207,6 +210,14 @@ def _read(rel):
         return f.read()
 
 
+def setting_guard(page: str, new: str, store: dict = None) -> list:
+    """★ポチポチくんの画面を直したとき、自動の区画（控えから作る表）がそろったままか★（そろわなければ理由）"""
+    if page != "setting.html":
+        return []
+    import pochipochi as _pp
+    return _pp.check_problems(new, store)
+
+
 def run(path: str, do_apply: bool) -> int:
     with io.open(path, encoding="utf-8") as f:
         dec = json.load(f)
@@ -226,6 +237,11 @@ def run(path: str, do_apply: bool) -> int:
             print(f"★直したあと JSON として読めません: {e}★")
             _log(f"断った: {page} / JSON 不正")
             return 1
+    _sg = setting_guard(page, new)
+    if _sg:
+        print("★ポチポチくんの自動の区画は直せません（pochipochi.py で直す）★: " + " ／ ".join(_sg)[:300])
+        _log(f"断った: {page} / 自動の区画")
+        return 1
     if not do_apply:
         print(f"確かめました（書いていません）: {page} {len(dec['edits'])}件")
         return 0
@@ -306,6 +322,21 @@ def selftest() -> int:
     t("読む順番：控えが無ければ先頭から", next_page({}) == ROTATION[0])
     t("ランキングの説明文は hub_prose.json で直す", "scripts/hub_prose.json" in PAGES
       and all(h in ROTATION for h in HUB_PAGES))
+    # ★★ポチポチくんの画面も読み直す★★（2026-11-10＝直す前は巡回に入っていなかった）
+    t("★★ポチポチくんの画面（setting.html）も直せる・読む順番に入っている★★",
+      "setting.html" in PAGES and "setting.html" in ROTATION)
+    import pochipochi as _pp
+    _h = ("const MACHINE_CONFIGS = {\n" + _pp.BEGIN + "\n" + _pp.END + "\n};\n<p>説明の文です。</p>\n")
+    _st = _pp.empty()
+    _st["configs"]["zzz_a"] = {"settings": [1, 6], "fields": [{"id": "c", "label": "チェリー", "sub": "", "rateKey": "c"}],
+                               "rates": {"c": {"1": "1/200.0", "6": "1/150.0"}}}
+    _h = _pp.build(_h, _st)
+    t("　自動の区画の外の説明文を直すのは通る",
+      setting_guard("setting.html", _h.replace("説明の文です。", "説明の文を直しました。"), _st) == [])
+    t("★★自動の区画（控えから作る表）を直していたら断る★★",
+      bool(setting_guard("setting.html", _h.replace("1/200.0", "1/199.0"), _st)))
+    t("　（配線）書く前に setting_guard を通している",
+      "_sg = setting_guard(page, new)" in open(__file__, encoding="utf-8").read().split("def selftest", 1)[0])
     print(f"\n{ok}/{len(cases)} 合格")
     return 0 if ok == len(cases) else 1
 

@@ -86,6 +86,11 @@ def load() -> dict:
             raise PendingError(f"待ち行列の鍵と中身が食い違います: {qid}")
         if it.get("state") not in STATES:
             raise PendingError(f"知らない状態です（{qid}）: {it.get('state')!r}")
+    # ★外した機種の控え★（2026-11-10・無い古い形は空として読む）
+    gu = got.get("gave_up", {})
+    if not isinstance(gu, dict) or not all(
+            isinstance(v, dict) and v.get("queue_id") == k and v.get("gave_up_at") for k, v in gu.items()):
+        raise PendingError("外した機種の控え（gave_up）が壊れています")
     return got
 
 
@@ -366,7 +371,53 @@ def give_up(data: dict, today: str = "") -> list:
             continue
         if gone < GIVE_UP_DAYS:
             continue                      # ★導入日から GIVE_UP_DAYS 日たっていない★
-        out.append(data["items"].pop(qid))
+        it = data["items"].pop(qid)
+        # ★★外した機種は捨てずに控える★★（2026-11-10・運営者「更新されないページ他にもないの？」）＝
+        #   直す前は外したら二度と拾わず（新台を見つける側は今月から3か月先しか見ない）、
+        #   あとから解析が出ても記事にならなかった。REVIVE_DAYS ごとに revive() が待ち行列へ戻す。
+        data.setdefault("gave_up", {})[qid] = dict(it, gave_up_at=today[:10])
+        out.append(it)
+    return out
+
+
+REVIVE_DAYS = 30          # 外した機種を、もう一度試すまでの日数
+REVIVE_LIMIT_DAYS = 365   # 導入日からこの日数を過ぎたら、もう試さない（控えは残す）
+
+
+def revive(data: dict, today: str = "") -> list:
+    """★外した機種を、REVIVE_DAYS 日ごとに1回だけ待ち行列へ戻す★（2026-11-10）
+
+    戻すときは試した回数を0にする（give_up は「一度も試していないものは外さない」ので、
+    その晩に1回試してから、まだ記事にできなければ次の give_up でまた控えに戻る＝30日に1回だけ試す）。
+    ★導入日から REVIVE_LIMIT_DAYS 日を過ぎたものは戻さない★（控えには残す）。
+    ★同じ機種が待ち行列にもう在れば戻さない★（新台を見つける側が拾い直した場合）。
+    戻した項目の一覧を返す（呼ぶ側がその晩のログに残す）。
+    """
+    today = today or _today()
+    out = []
+    for qid, it in list((data.get("gave_up") or {}).items()):
+        try:
+            since = (date.fromisoformat(today[:10]) - date.fromisoformat(str(it.get("gave_up_at"))[:10])).days
+        except ValueError:
+            continue
+        if since < REVIVE_DAYS:
+            continue
+        last = release_last_day(it)
+        try:
+            age = (date.fromisoformat(today[:10]) - date.fromisoformat(last)).days if last else None
+        except ValueError:
+            age = None
+        if age is None or age > REVIVE_LIMIT_DAYS:
+            continue
+        if qid in data["items"] or (it.get("source_machine_id")
+                                    and find_by_machine_id(data, str(it["source_machine_id"]))):
+            data["gave_up"].pop(qid)
+            continue
+        back = {k: v for k, v in data["gave_up"].pop(qid).items() if k != "gave_up_at"}
+        back["runs"] = 0
+        back["revived_at"] = today[:10]
+        data["items"][qid] = back
+        out.append(back)
     return out
 
 
@@ -631,6 +682,28 @@ def selftest() -> int:
         d5["items"]["q_0001"]["release_checked"] = "2027-01-29"
     t("　導入日（月なら月末）から60日たってから打ち切る",
       _d5a == [] and len(give_up(d5, "2027-01-29")) == 1)
+    # ★★外した機種は控え、30日ごとに1回だけ戻す★★（2026-11-10＝直す前は二度と拾わなかった）
+    t("★★外した機種は捨てずに控える★★",
+      (d5.get("gave_up") or {}).get("q_0001", {}).get("gave_up_at") == "2027-01-29"
+      and "q_0001" not in d5["items"])
+    t("　外して30日たたないうちは戻さない", revive(d5, "2027-02-27") == [] and "q_0001" not in d5["items"])
+    _rv = revive(d5, "2027-02-28")
+    t("★★外して30日たったら待ち行列へ戻す（試した回数は0に戻す）★★",
+      len(_rv) == 1 and d5["items"]["q_0001"]["runs"] == 0
+      and d5["items"]["q_0001"]["revived_at"] == "2027-02-28" and "q_0001" not in d5["gave_up"])
+    t("　戻した機種も、1回試すまでは外さない（1回だけ試す）",
+      give_up(d5, "2027-02-28") == [] and "q_0001" in d5["items"])
+    _old = _empty()
+    _old["gave_up"] = {"q_0009": {"queue_id": "q_0009", "name": "古い", "release": "2025-01",
+                                  "gave_up_at": "2025-06-01", "state": READY}}
+    t("★導入日から1年を過ぎたものは戻さない（控えには残す）★",
+      revive(_old, "2026-11-10") == [] and "q_0009" in _old["gave_up"])
+    _dup = _empty()
+    add(_dup, "拾い直された機種", DMM + "77", "m", "2026-09", source_machine_id="77")
+    _dup["gave_up"] = {"q_0050": {"queue_id": "q_0050", "name": "拾い直された機種", "release": "2026-09",
+                                  "source_machine_id": "77", "gave_up_at": "2026-10-01", "state": READY}}
+    t("　同じ機種が待ち行列にもう在れば、戻さずに控えから消す",
+      revive(_dup, "2026-11-10") == [] and "q_0050" not in _dup["gave_up"] and len(_dup["items"]) == 1)
     d6 = _empty()
     add(d6, "導入日が未定の機種", DMM + "6", "m", "", source_machine_id="6")
     d6["items"]["q_0001"]["first_seen"] = "2026-01-01"

@@ -940,6 +940,28 @@ def release_quarantine(slug: str, url: str, marks: dict) -> dict:
     return _update_one(slug, url, _change)
 
 
+QUARANTINE_STALE_DAYS = 7   # これより長く隔離されたままなら番人が知らせる
+
+
+def quarantined_rows(data: dict = None, today=None) -> list:
+    """★隔離中の控え★（機種・URL・隔離した日・日数・理由）。置き去りの控え（orphaned）は除く"""
+    data = data if data is not None else load()
+    today = today or datetime.date.today()
+    out = []
+    for s, recs in sorted((data.get("machines") or {}).items()):
+        for rec in recs:
+            if not quarantined(rec) or orphaned(s, rec):
+                continue
+            at = str((rec.get("last_check") or {}).get("at") or "")[:10]
+            try:
+                days = (today - datetime.date.fromisoformat(at)).days
+            except ValueError:
+                days = 10 ** 6
+            out.append({"slug": s, "url": rec.get("url"), "since": at or "？", "days": days,
+                        "why": str((rec.get("last_check") or {}).get("why") or "")[:80]})
+    return out
+
+
 def accept_current(slug: str, url: str, why: str, by: list) -> dict:
     """★人が「まだ同じ機種のページだ」と承認して手がかりを取り直す★
 
@@ -1739,6 +1761,13 @@ def _selftest_body() -> int:
             t("★★隔離中の控えは票にしない★★（2026-08-10・台帳#292）"
               "＝読む側が使わないものを数え続けると、手当ての一覧から外れる",
               q and q[0]["votes"] == 1 and q[0]["quarantined"] == ["nana-press"])
+            # ★★隔離中の控えを並べ、長く置かれたものを番人へ★★（2026-11-10＝直す前は戻す道を呼ぶタスクが無かった）
+            _qr = quarantined_rows(load(), today=datetime.date(2026, 8, 20))
+            t("★★隔離中の控えを、隔離した日と日数つきで並べる★★",
+              len(_qr) == 1 and _qr[0]["slug"] == slug and _qr[0]["since"] == "2026-08-10"
+              and _qr[0]["days"] == 10)
+            t("　7日以上の隔離は番人が知らせる線を越える",
+              _qr[0]["days"] >= QUARANTINE_STALE_DAYS)
         finally:
             _di.scan_directory = real_scan
     finally:
@@ -1763,6 +1792,8 @@ def main() -> int:
                     help="2つの系列に届かない機種を並べる")
     ap.add_argument("--recheck", action="store_true",
                     help="控えのページが同じままか確かめる（既定は見るだけ）")
+    ap.add_argument("--quarantined", action="store_true",
+                    help="隔離中の控えを並べる（朝の更新タスクが2AIで戻すか外すかを決める）")
     ap.add_argument("--apply", action="store_true",
                     help="--recheck の結果を控えに保存する（★人の操作専用★）")
     ap.add_argument("--accept-current", dest="accept_current",
@@ -1829,6 +1860,17 @@ def main() -> int:
                                [x.strip() for x in a.by.split(",") if x.strip()])
             print(json.dumps(r, ensure_ascii=False))
             return 0 if r["state"] == "ACCEPTED" else 1
+        if a.quarantined:
+            # ★★隔離中の控え（ページが変わったと止めたもの）を並べる★★（2026-11-10・運営者「更新されないページ他にもないの？」）＝
+            #   直す前は戻す道（--accept-current）を呼ぶタスクが無く、題が変わっただけの正しい出典が
+            #   使われないまま残っていた（bakemonogatari のなな徹・10/30〜）。朝の更新タスクが2AIで判断する。
+            #   終了コード 1＝QUARANTINE_STALE_DAYS 日より長く隔離されたままの控えがある（番人）
+            rows = quarantined_rows()
+            for r in rows:
+                print(f"{r['slug']}  {r['url']}  隔離 {r['since']}（{r['days']}日）  {r['why']}")
+            stale = [r for r in rows if r["days"] >= QUARANTINE_STALE_DAYS]
+            print(f"隔離中 {len(rows)}件（{QUARANTINE_STALE_DAYS}日以上 {len(stale)}件）")
+            return 1 if stale else 0
         if a.recheck:
             rows = recheck_all(a.slug or "", apply=a.apply)
             mark = {CHECK_OK: "○", CHECK_CHANGED: "★変わっています★",
