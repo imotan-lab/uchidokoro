@@ -74,7 +74,7 @@
   "slug": "dmm_5104",
   "name": "L聖闘士星矢 黄金十二宮",
   "seo": {
-   "title": "L聖闘士星矢 黄金十二宮 スペック・基本情報"
+   "title": "L聖闘士星矢 黄金十二宮 天井・狙い目"
   },
   "info": "",
   "strategy": "",
@@ -108,7 +108,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-10",
+   "decided_at": "2026-11-11",
    "input_digest": "sha256:5faf239356cc200cf4bf70747bb0438405823f9a5ae7903eac197ec719180adf"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
