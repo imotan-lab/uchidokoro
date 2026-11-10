@@ -239,7 +239,7 @@ def stall_problem(rows: list, q: dict, today: str):
     """
     import page_decision as _pd
     cands = [m["slug"] for m in rows if isinstance(m, dict) and _pd.is_auto(m)
-             and (not m.get("aliases") or not m.get("info"))]
+             and (not m.get("aliases") or not m.get("info") or "series" not in m)]
     if not cands:
         return None
     last = max([str(v) for v in (q.get("tried") or {}).values()] + [str(v) for v in (q.get("written") or {}).values()]
@@ -253,11 +253,11 @@ def stall_problem(rows: list, q: dict, today: str):
 
 
 def pick(n: int, rows: list, tried: dict, today: str) -> list:
-    """★通称かタイプが空の新台★（試したことの無い機種→古い順。断って RETRY_DAYS 日たたない機種は外す）"""
+    """★通称かタイプが空・シリーズ名が未決の新台★（試したことの無い機種→古い順。断って RETRY_DAYS 日たたない機種は外す）"""
     import page_decision as _pd
     cut = (_dt.date.fromisoformat(today) - _dt.timedelta(days=RETRY_DAYS)).isoformat()
     cands = [m["slug"] for m in rows if isinstance(m, dict) and _pd.is_auto(m)
-             and (not m.get("aliases") or not m.get("info"))]
+             and (not m.get("aliases") or not m.get("info") or "series" not in m)]
     never = [s for s in cands if s not in tried]
     old = sorted([s for s in cands if s in tried and str(tried[s]) <= cut and str(tried[s]) < today],
                  key=lambda s: str(tried[s]))
@@ -326,9 +326,11 @@ def selftest() -> int:
     t("　機種行の鍵の許可一覧（射影・独立監査・新台の関所）にシリーズ名がある",
       _gx._MACHINE_TYPES.get("series") is str and "series" in _apx.ALLOWED_MACHINE_KEYS
       and "series" in _pnx._MACHINE_KEYS)
-    rows = [row, dict(row, slug="zzz_n", aliases=["a"], info="x"), dict(row, slug="zzz_o", info="x")]
-    t("★通称かタイプが空の新台だけを選ぶ★", pick(5, rows, {}, "2026-11-10") == ["zzz_m", "zzz_o"])
-    t("　断って7日たたない機種は外す", pick(5, rows, {"zzz_m": "2026-11-05"}, "2026-11-10") == ["zzz_o"])
+    rows = [row, dict(row, slug="zzz_n", aliases=["a"], info="x", series=""), dict(row, slug="zzz_o", info="x"),
+            dict(row, slug="zzz_p", aliases=["a"], info="x")]
+    t("★通称かタイプかシリーズ名が決まっていない新台だけを選ぶ★",
+      pick(5, rows, {}, "2026-11-10") == ["zzz_m", "zzz_o", "zzz_p"])
+    t("　断って7日たたない機種は外す", pick(5, rows, {"zzz_m": "2026-11-05"}, "2026-11-10") == ["zzz_o", "zzz_p"])
     # ★★書き込み：ロックの中で読み直す・作り直しが例外でもこの機種だけ戻す★★（2026-11-10・Codexの指摘）
     import tempfile
     import publish_new_machine as _pubx
@@ -393,7 +395,7 @@ def selftest() -> int:
     finally:
         g.update(keep)
         _pubx._OnlyOne = keep_lock
-    _rows_s = [row, dict(row, slug="zzz_full", aliases=["a"], info="x")]
+    _rows_s = [row, dict(row, slug="zzz_full", aliases=["a"], info="x", series="")]
     t("★★空の新台があるのに3日だれも書こうとしていなければ、見張り番が知らせる★★",
       stall_problem(_rows_s, {"tried": {"zzz_m": "2026-11-05"}}, "2026-11-10") is not None
       and stall_problem(_rows_s, {"written": {"zzz_x": "2026-11-09"}}, "2026-11-10") is None

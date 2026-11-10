@@ -11464,6 +11464,13 @@ MUTATIONS = [
         "after": "                 }\n",
         "run": ["scripts/machine_meta.py"],
     },
+    {
+        "why": "★シリーズ名：通称とタイプが埋まった新台は、シリーズ名が未決でも割り当てない★",
+        "file": "scripts/machine_meta.py",
+        "before": "             and (not m.get(\"aliases\") or not m.get(\"info\") or \"series\" not in m)]\n    never = ",
+        "after": "             and (not m.get(\"aliases\") or not m.get(\"info\"))]\n    never = ",
+        "run": ["scripts/machine_meta.py"],
+    },
 ]
 
 
