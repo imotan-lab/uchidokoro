@@ -231,7 +231,7 @@
   "slug": "dmm_5079",
   "name": "スマスロ ラグナドール",
   "seo": {
-   "title": "スマスロ ラグナドール スペック・基本情報"
+   "title": "スマスロ ラグナドール 天井・スペック"
   },
   "info": "",
   "strategy": "",
@@ -265,7 +265,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-31",
+   "decided_at": "2026-11-11",
    "input_digest": "sha256:856e7640453ab4c31055041e22d90e3cbee50b58b346d532d2ba42011ad9be50"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
