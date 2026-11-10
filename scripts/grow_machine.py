@@ -1684,6 +1684,20 @@ def carry_mode_section(old_detail: dict, detail: dict) -> None:
     detail["sections"] = secs[:pos] + [json.loads(json.dumps(prev))] + secs[pos:]
 
 
+def carry_machine_meta(old_row: dict, new_row: dict) -> None:
+    """★2AIが決めた通称（aliases）とタイプ（info）を、作り直した機種行へ持ち越す★（2026-11-10）
+
+    ★なぜ★＝build_machine は通称を空・タイプを空で作る（未確認のことを固定値で書かない）。
+    持ち越さないと、2AIが machine_meta で書いても翌朝の育成で空に戻る（洗い出し2回目で見つかった）。
+    ★作り直した行に値があればそちらが勝つ★（いまは常に空）。
+    """
+    if not isinstance(old_row, dict) or not isinstance(new_row, dict):
+        return
+    for k in ("aliases", "info"):
+        if not new_row.get(k) and old_row.get(k):
+            new_row[k] = json.loads(json.dumps(old_row[k]))
+
+
 def written_basis(detail: dict) -> list:
     """★書く3欄が拠って立つ欄の中身★（並び順どおり・比べるためだけ）
 
@@ -1748,6 +1762,17 @@ def _drop_reverted_written(units: list, new_detail: dict) -> list:
                 if isinstance(s, dict) and s.get("title") in _ds.TITLES and _ds.is_pending(s)}
     return [u for u in units
             if not (u[0] == "body" and len(u) >= 3 and u[1] in reverted)]
+
+
+def _carry_meta_tests(t) -> None:
+    """★2AIが決めた通称・タイプは作り直しで空に戻らない★（2026-11-10）"""
+    _new = {"aliases": [], "info": ""}
+    carry_machine_meta({"aliases": ["リコリコ"], "info": "スマスロAT"}, _new)
+    t("★★2AIが決めた通称とタイプを、作り直した機種行へ持ち越す★★",
+      _new == {"aliases": ["リコリコ"], "info": "スマスロAT"})
+    _new2 = {"aliases": ["新しい"], "info": "スマスロBT"}
+    carry_machine_meta({"aliases": ["古い"], "info": "スマスロAT"}, _new2)
+    t("　作り直した行に値があればそちらが勝つ", _new2 == {"aliases": ["新しい"], "info": "スマスロBT"})
 
 
 def _carry_written_tests(t) -> None:
@@ -2772,6 +2797,8 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     out["problems"] += _carry_identity(ident, machine.get("identity"))
     # ★2AIが決めた狙い目の線も持ち越す★（2026-09-26・台帳#716）
     out["problems"] += carry_checker(cur, machine, out["questions"])
+    # ★2AIが決めた通称・タイプも持ち越す★（2026-11-10・machine_meta）
+    carry_machine_meta(cur, machine)
     detail = _ba.build_detail(slug, vo.get("identity_name") or name, release, mat,
                               machine_row=machine)
     # ★★記事と機種行の両方に同じ指紋を書く★★（2026-10-04・target_projection）＝
@@ -6122,6 +6149,7 @@ def selftest() -> int:
     _carry_full_tests(t)
     _carry_mode_tests(t)
     _carry_written_tests(t)
+    _carry_meta_tests(t)
 
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1
