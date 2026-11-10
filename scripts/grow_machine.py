@@ -1070,7 +1070,18 @@ def machine_row_drift(old_row: dict, new_machine: dict) -> list:
     import target_projection as _tp
     if str((old_row or {}).get(_tp.KEY) or "") != str(new_machine.get(_tp.KEY) or ""):
         out.append("狙い目の表示が変わります")
+    # ★検索向けの題名の変化も書く理由に数える★（2026-11-10）＝数えないと、既にある新台の題名が直らない
+    if ((old_row or {}).get("seo") or {}).get("title") != (new_machine.get("seo") or {}).get("title"):
+        out.append("検索向けの題名が変わります")
     return out
+
+
+def set_seo_title(machine: dict, detail: dict, mat: dict) -> None:
+    """★機種行の題名を、載っている中身から決め直す★（決まりは build_new_article.seo_title の1か所）"""
+    import target_projection as _tp
+    ceil = bool(((mat or {}).get("ceilings") or {}).get("adopted"))
+    machine.setdefault("seo", {})["title"] = _ba.seo_title(
+        machine.get("name") or "", ceil, _tp.synced(machine, detail))
 
 
 def growth_reasons(nn: list, machine: dict, old_detail: dict,
@@ -1773,6 +1784,51 @@ def _carry_meta_tests(t) -> None:
     _new2 = {"aliases": ["新しい"], "info": "スマスロBT"}
     carry_machine_meta({"aliases": ["古い"], "info": "スマスロAT"}, _new2)
     t("　作り直した行に値があればそちらが勝つ", _new2 == {"aliases": ["新しい"], "info": "スマスロBT"})
+    # ★★検索向けの題名を、載っている中身に合わせる★★（2026-11-10）
+    import target_projection as _tpx
+    _orig = _tpx.synced
+    try:
+        _tpx.synced = lambda m, d: True
+        _m1 = {"name": "機Z", "seo": {"title": "機Z スペック・基本情報"}}
+        set_seo_title(_m1, {}, {"ceilings": {"adopted": [{"v": 1}]}})
+        _tpx.synced = lambda m, d: False
+        _m2 = {"name": "機Z", "seo": {"title": "機Z 天井・狙い目"}}
+        set_seo_title(_m2, {}, {"ceilings": {"adopted": [{"v": 1}]}})
+        _m3 = {"name": "機Z"}
+        set_seo_title(_m3, {}, {})
+    finally:
+        _tpx.synced = _orig
+    t("★★狙い目が出ていれば題名を「天井・狙い目」に上げる★★（直す前は作ったときのまま）",
+      _m1["seo"]["title"] == "機Z 天井・狙い目")
+    t("　狙い目が出ていなければ「狙い目」と名乗らない（天井だけなら「天井・スペック」）",
+      _m2["seo"]["title"] == "機Z 天井・スペック")
+    t("　天井も狙い目も無ければ「スペック・基本情報」", _m3["seo"]["title"] == "機Z スペック・基本情報")
+    # ★ページを作る側も、狙い目が出ていなければ「狙い目」と名乗らない／説明文に「（公式確認）」を書かない★
+    import build_machine_pages as _bmpx
+    _mc = _bmpx._pd.machine_class
+    try:
+        _bmpx._pd.machine_class = lambda m: "AUTO_PENDING"
+        _tpx.synced = lambda m, d: False
+        _tt, _dd = _bmpx.build_title_desc(
+            {"name": "機Z", "seo": {"title": "機Z 天井・狙い目"}, "release_date": "2026-11-02"}, False, {})
+        _tpx.synced = lambda m, d: True
+        _tt2, _dd2 = _bmpx.build_title_desc(
+            {"name": "機Z", "seo": {"title": "機Z 天井・狙い目"}, "release_date": "2026-11-02"}, False, {})
+    finally:
+        _bmpx._pd.machine_class = _mc
+        _tpx.synced = _orig
+    t("★★ページの題名：狙い目が出ていない日は「天井・スペック」に下げる★★",
+      _tt == "機Z 天井・スペック" and _dd.startswith("機Zの天井・スペック。"))
+    t("　狙い目が出ていれば「天井・狙い目」のまま・説明文も同じ中身を名乗る",
+      _tt2 == "機Z 天井・狙い目" and _dd2.startswith("機Zの天井・狙い目。"))
+    t("　説明文に「（公式確認）」を書かない（導入日はDMMの値）",
+      "公式確認" not in _dd and "11月2日" in _dd)
+    t("★題名が変わることも、書く理由に数える★（数えないと既にある新台の題名が直らない）",
+      "検索向けの題名が変わります" in machine_row_drift(
+          {"seo": {"title": "機Z スペック・基本情報"}}, {"seo": {"title": "機Z 天井・狙い目"}}))
+    t("　（対照）同じ題名なら理由にしない",
+      "検索向けの題名が変わります" not in machine_row_drift(
+          {"seo": {"title": "a"}}, {"seo": {"title": "a"}}))
 
 
 def _carry_written_tests(t) -> None:
@@ -2809,6 +2865,9 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     else:
         machine.pop(_tp.KEY, None)
     out["problems"] += _tp.sync_problems(machine, detail)
+    # ★★検索向けの題名を、載っている中身に合わせる★★（2026-11-10・洗い出し2回目）＝
+    #   作ったときの「スペック・基本情報」のまま、狙い目が出ても変わらなかった
+    set_seo_title(machine, detail, mat)
     # ③ 本人性が変わっていないか
     _id_ng = identity_same(ident, machine.get("identity") or {}, _id_ok)
     out["problems"] += _id_ng

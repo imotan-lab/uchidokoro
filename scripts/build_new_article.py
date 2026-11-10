@@ -314,6 +314,19 @@ CEILING_PARTIAL_NOTE = ("ほかにも天井がある場合、確認が取れて�
 PENDING_ITEM = "未確認（確認でき次第掲載します）"
 # ★未確認と見なす文言★（新旧どちらも。ここが唯一の一覧）
 PENDING_TEXTS = (PENDING_TEXT, PENDING_TEXT_OLD)
+def seo_title(name: str, ceiling_known: bool, target_shown: bool) -> str:
+    """★新台の検索向けの題名★＝載っている中身だけを名乗る（2026-11-10・洗い出し2回目）
+
+    直す前は作ったときの「スペック・基本情報」のままで、天井や狙い目が載ったあとも変わらなかった。
+    ★載っていないものは名乗らない★（天井が無いのに「天井」・狙い目が出ていないのに「狙い目」と書かない）。
+    """
+    if target_shown:
+        return f"{name} 天井・狙い目"
+    if ceiling_known:
+        return f"{name} 天井・スペック"
+    return f"{name} スペック・基本情報"
+
+
 # ★★「無い」と確かめた欄の決まり文句★★（2026-11-10）＝2AIが独立2出典で「無い」と記録したときだけ使う
 RESET_NONE_TEXT = "**この機種に、設定変更（リセット）で有利になる仕組みはありません。**"
 CZ_NONE_TEXT = "**この機種にCZ（チャンスゾーン）はありません。**"
@@ -848,7 +861,7 @@ def build_machine(slug, name, maker, official_url, release, material,
         #   以前は全機種を「スマスロAT」とし、SEOタイトルも「天井・狙い目」と
         #   していた。AT機でない新台を処理した時点で明確な誤情報になるし、
         #   天井を1つも載せていないのに「天井」と名乗るのもおかしい。
-        "seo": {"title": f"{name} スペック・基本情報"},
+        "seo": {"title": seo_title(name, bool(((material or {}).get("ceilings") or {}).get("adopted")), False)},
         "info": "",
         # ★狙い目は当サイトの判断なので、確認が取れるまで空にしない・書かない★
         "strategy": "",
@@ -2124,6 +2137,11 @@ def selftest() -> int:
       and not article_contract_problems({"slug": "zzz_n", "sections": list(_nd.values())}))
     t("★★天井が無いと確かめたら、狙い目の欄にそう書く★★",
       _nd["当サイトの狙い目"]["body"] == [TARGET_NONE_TEXT])
+    # ★★検索向けの題名は、載っている中身だけを名乗る★★（2026-11-10）
+    t("★★題名＝狙い目が出ていれば「天井・狙い目」／天井だけなら「天井・スペック」／どちらも無ければ「スペック・基本情報」★★",
+      seo_title("機X", True, True) == "機X 天井・狙い目"
+      and seo_title("機X", True, False) == "機X 天井・スペック"
+      and seo_title("機X", False, False) == "機X スペック・基本情報")
     _part_mat = {"adopted": {"cz_state": {**IM, "value": {"state": "PRESENT"}, "sources": ["a", "b"]}}}
     _pdd = {s["title"]: s for s in build_detail("zzz_n", "試験機N", "2026-11-02", _part_mat,
                                                 machine_row={})["sections"]}

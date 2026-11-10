@@ -143,7 +143,8 @@ def pochipochi_state(machine: dict, pochipochi_reasons: dict) -> tuple:
     return (True, "")
 
 
-def build_title_desc(machine: dict, pochipochi_available: bool = True) -> tuple[str, str]:
+def build_title_desc(machine: dict, pochipochi_available: bool = True,
+                     detail: dict | None = None) -> tuple[str, str]:
     """meta-auto.js と同じ title / description を生成。
     pochipochi_available=False の機種はSEO文言に『ポチポチくん対応』を入れない
     （非対応機種で対応と宣伝する誤情報を防ぐ）。"""
@@ -160,9 +161,20 @@ def build_title_desc(machine: dict, pochipochi_available: bool = True) -> tuple[
         #   時間で嘘になる語（導入予定・導入前・先行）も使わない。
         title = (machine.get("seo") or {}).get("title") \
             or f"{name} スペック・基本情報"
-        desc = (f"{name}のスペック・基本情報。確認が取れた項目のみ"
+        # ★狙い目が画面に出ていないのに「狙い目」と名乗らない★（2026-11-10）＝
+        #   線を書き換えると指紋が外れ、翌朝の育成で付け直すまで狙い目は出ない
+        if detail is not None:
+            import build_new_article as _bna
+            import target_projection as _tpj
+            if title == _bna.seo_title(name, True, True) and not _tpj.synced(machine, detail):
+                title = _bna.seo_title(name, True, False)
+        # ★説明文も題名と同じ中身を名乗る★（2026-11-10）＝題名の機種名の後ろ（天井・狙い目 など）をそのまま使う。
+        #   ★「（公式確認）」は書かない★＝導入日はDMMの値で、メーカー公式で確かめたものではない
+        about = (title[len(name):].strip() if name and title.startswith(name) else "") \
+            or "スペック・基本情報"
+        desc = (f"{name}の{about}。確認が取れた項目のみ"
                 "掲載しています。未掲載の項目は確認でき次第更新します。"
-                + (f"登場時期は{release_jp}（公式確認）。" if release_jp else ""))
+                + (f"登場時期は{release_jp}。" if release_jp else ""))
         return title, desc
     if is_preview:
         # ★時間で嘘になる語（導入予定・導入前）と「天井・狙い目」の名乗りをやめた★
@@ -170,7 +182,7 @@ def build_title_desc(machine: dict, pochipochi_available: bool = True) -> tuple[
         title = f"{name} スペック・基本情報｜解析判明次第更新"
         desc = (f"{name}のスペック・基本情報。確認が取れた項目のみ掲載し、"
                 "解析データが判明次第、随時更新します。"
-                + (f"登場時期は{release_jp}（公式確認）。" if release_jp else ""))
+                + (f"登場時期は{release_jp}。" if release_jp else ""))
     elif pochipochi_available:
         title = f"{name} 天井・狙い目・やめどき｜小役カウンター ポチポチくん対応"
         if strategy:
@@ -422,7 +434,7 @@ def render_page(template: str, machine: dict, detail: dict | None,
     else:
         # ★判定は pochipochi_state の1か所★（2AIの控え→解析待ち→名簿の順）
         pp_available, pp_reason = pochipochi_state(machine, pochipochi_reasons)
-    title, desc = build_title_desc(machine, pp_available)
+    title, desc = build_title_desc(machine, pp_available, detail)
     html_out = replace_once(html_out, "<title>機種ページ | うちどころ。</title>",
                                 f"<title>{esc(title)}</title>")
     html_out = replace_once(html_out, 
