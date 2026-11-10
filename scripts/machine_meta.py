@@ -18,7 +18,10 @@ CLI:
   python scripts/machine_meta.py --tried <slug> --result NOT_ENOUGH|UNDECIDED
   python scripts/machine_meta.py --selftest
 決定ファイル: {"slug", "by": ["claude","codex"], "why", "before_aliases": [...], "before_info": "",
-              "aliases": ["通称", ...], "info": "スマスロAT"}
+              "aliases": ["通称", ...], "info": "スマスロAT",
+              （任意）"before_series": null, "series": "バジリスク"}   ← "" はシリーズ無しと決めた印
+★シリーズ名（series）★（2026-11-11・運営者の判断「5A」）＝同じシリーズ名の機種どうしを記事ページの「関連機種」でつなぐ。
+  楽天リンクの原作欄（original）とは別物（広告に触れない）。昔の機種にも書ける（担当の点検表 STEP 1-T の meta 項目）。
 """
 from __future__ import annotations
 
@@ -57,6 +60,9 @@ def _log(msg: str) -> None:
             f.write("[%s] %s\n" % (_dt.datetime.now().strftime("%H:%M:%S"), msg))
     except OSError:
         pass
+
+
+_NO_SERIES = object()      # ★機種行にシリーズ名の鍵が無かった★（戻すときに鍵ごと外す）
 
 
 def _text_ng(name: str, s, lo: int, hi: int) -> list:
@@ -100,9 +106,20 @@ def plan(row: dict, dec: dict) -> dict:
         p.append("機種名そのものは通称に入れません（もう検索に引っかかります）")
     info = dec.get("info")
     p += _text_ng("タイプ", info, 1, 20)
+    # ★★シリーズ名（任意）★★（2026-11-11・運営者の判断「5A」）＝関連機種をつなぐ。楽天リンク（原作）とは別。
+    #   ★書くときは判断したときの値（before_series）も要る★（鍵が無い＝まだ決めていない／""＝シリーズ無しと決めた）
+    out = {"problems": [], "aliases": list(al), "info": info}
+    if "series" in dec:
+        if "before_series" not in dec or dec.get("before_series") != row.get("series"):
+            p.append("判断したときのシリーズ名（before_series）が、いまの機種行と違います"
+                     "（まだ決めていなければ null と書く）")
+        sv = dec.get("series")
+        if sv != "":
+            p += _text_ng("シリーズ名", sv, 1, 30)
+        out["series"] = sv
     if p:
         return {"problems": p}
-    return {"problems": [], "aliases": list(al), "info": info}
+    return out
 
 
 def _rows():
@@ -142,9 +159,14 @@ def restore_row(slug: str, got: dict, old: tuple) -> bool:
         with _pub._OnlyOne():
             rows = _rows()
             row = next((m for m in rows if isinstance(m, dict) and m.get("slug") == slug), None)
-            if row is None or row.get("aliases") != got["aliases"] or row.get("info") != got["info"]:
+            if row is None or row.get("aliases") != got["aliases"] or row.get("info") != got["info"]                     or ("series" in got and row.get("series") != got["series"]):
                 return False
-            row["aliases"], row["info"] = old
+            row["aliases"], row["info"] = old[0], old[1]
+            if "series" in got:
+                if len(old) > 2 and old[2] is not _NO_SERIES:
+                    row["series"] = old[2]
+                else:
+                    row.pop("series", None)
             _write_rows(rows)
             return True
     except Exception as e:                                       # noqa: BLE001
@@ -176,9 +198,11 @@ def apply_decision(path: str, apply_it: bool) -> dict:
                 if got["problems"]:
                     _log(f"{slug}: 断りました: " + " ／ ".join(got["problems"])[:500])
                 return got
-            old = (json.loads(json.dumps(row.get("aliases"))), row.get("info"))
+            old = (json.loads(json.dumps(row.get("aliases"))), row.get("info"), row.get("series", _NO_SERIES))
             row["aliases"] = got["aliases"]
             row["info"] = got["info"]
+            if "series" in got:
+                row["series"] = got["series"]
             _write_rows(rows)
     except _pub.PublishError as e:
         return {"problems": [f"公開ロックを取れないので書きません: {e}"]}
@@ -198,7 +222,8 @@ def apply_decision(path: str, apply_it: bool) -> dict:
                            else "★ページ・早見表を作り直せず、機種行も戻せませんでした（手で確かめてください）★"]
         _log(f"{slug}: {got['problems'][0]}")
         return got
-    _log(f"{slug}: 通称 {got['aliases']}・タイプ {got['info']!r} を書きました（{','.join(dec['by'])}）")
+    _log(f"{slug}: 通称 {got['aliases']}・タイプ {got['info']!r}"
+         + (f"・シリーズ名 {got['series']!r}" if "series" in got else "") + f" を書きました（{','.join(dec['by'])}）")
     got["written"] = True
     return got
 
@@ -273,6 +298,34 @@ def selftest() -> int:
                dict(good, before_aliases=["古い通称"], before_info="スマスロAT"))
     t("★★昔の機種の通称・タイプも、判断したときの値が今と同じなら受け取る（担当の点検表の meta）★★",
       not _rl["problems"] and _rl["aliases"] == ["試験機", "しけんき"])
+    # ★★シリーズ名（任意）★★（2026-11-11・運営者の判断「5A」）
+    _s1 = plan(row, dict(good, before_series=None, series="バジリスク"))
+    _s2 = plan(row, dict(good, before_series=None, series=""))
+    _s3 = plan(dict(row, series="バジリスク"), dict(good, before_series=None, series="北斗"))
+    _s4 = plan(row, dict(good, series="バジリスク"))
+    _s5 = plan(row, dict(good, before_series=None, series="<b>x</b>"))
+    _s6 = plan(row, json.loads(json.dumps(good)))
+    t("★★シリーズ名を受け取る（\"\" はシリーズ無しの印）・書かなければ触らない★★",
+      _s1.get("series") == "バジリスク" and _s2.get("series") == "" and not _s1["problems"]
+      and not _s2["problems"] and "series" not in _s6)
+    t("　判断したときのシリーズ名が違う・書いていなければ断る／タグは断る",
+      any("before_series" in x for x in _s3["problems"]) and any("before_series" in x for x in _s4["problems"])
+      and any("使えない文字" in x for x in _s5["problems"]))
+    _old_r, _new_r = {"aliases": ["a"], "info": "x", "series": ""}, {"aliases": [], "info": ""}
+    _gm0 = __import__("grow_machine")
+    _gm0.carry_machine_meta(_old_r, _new_r)
+    t("★★毎朝の育成が、シリーズ名（シリーズ無しの印も）を持ち越す★★", _new_r.get("series") == "")
+    _tpl = io.open(os.path.join(BASE, "machine.html"), encoding="utf-8").read()
+    t("★★記事ページの「関連機種」が、同じシリーズ名の機種をつなぐ（\"\" はつながない）★★",
+      "const sameName = curName && seriesName(x) === curName;" in _tpl
+      and "return sameOrig || sameSeries || sameName;" in _tpl
+      and '(typeof m.series === "string" && m.series) ? m.series : null' in _tpl)
+    import gates as _gx
+    import audit_public as _apx
+    import publish_new_machine as _pnx
+    t("　機種行の鍵の許可一覧（射影・独立監査・新台の関所）にシリーズ名がある",
+      _gx._MACHINE_TYPES.get("series") is str and "series" in _apx.ALLOWED_MACHINE_KEYS
+      and "series" in _pnx._MACHINE_KEYS)
     rows = [row, dict(row, slug="zzz_n", aliases=["a"], info="x"), dict(row, slug="zzz_o", info="x")]
     t("★通称かタイプが空の新台だけを選ぶ★", pick(5, rows, {}, "2026-11-10") == ["zzz_m", "zzz_o"])
     t("　断って7日たたない機種は外す", pick(5, rows, {"zzz_m": "2026-11-05"}, "2026-11-10") == ["zzz_o"])
@@ -321,6 +374,22 @@ def selftest() -> int:
         t("★★作り直しが例外でも、この機種の通称・タイプを元に戻す（別機種はそのまま）★★",
           r2["problems"] and not r2.get("written") and rs2["zzz_m"]["aliases"] == []
           and rs2["zzz_m"]["info"] == "" and rs2["zzz_other"]["info"] == "別の処理が書いた")
+        io.open(g["MACHINES"], "w", encoding="utf-8").write(json.dumps([row, other], ensure_ascii=False))
+        io.open(dp, "w", encoding="utf-8").write(json.dumps(dict(good, before_series=None, series="試験"),
+                                                            ensure_ascii=False))
+        g["_rebuild"] = lambda s: True
+        r3 = apply_decision(dp, True)
+        rs3 = {m["slug"]: m for m in json.loads(io.open(g["MACHINES"], encoding="utf-8").read())}
+        io.open(g["MACHINES"], "w", encoding="utf-8").write(json.dumps([row, other], ensure_ascii=False))
+        g["_rebuild"] = _boom
+        try:
+            r4 = apply_decision(dp, True)
+        except Exception:                                        # noqa: BLE001
+            r4 = {"problems": [], "crashed": True}
+        rs4 = {m["slug"]: m for m in json.loads(io.open(g["MACHINES"], encoding="utf-8").read())}
+        t("★★シリーズ名を書く・作り直せなければ鍵ごと元に戻す★★",
+          r3.get("written") and rs3["zzz_m"].get("series") == "試験"
+          and r4["problems"] and "series" not in rs4["zzz_m"])
     finally:
         g.update(keep)
         _pubx._OnlyOne = keep_lock

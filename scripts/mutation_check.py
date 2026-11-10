@@ -11422,6 +11422,48 @@ MUTATIONS = [
         "after": "    if True:\n        return vo\n",
         "run": ["scripts/grow_machine.py"],
     },
+    {
+        "why": "★シリーズ名：記事ページの関連機種が、シリーズ名を見ない★",
+        "file": "machine.html",
+        "before": "      const sameName = curName && seriesName(x) === curName;\n",
+        "after": "      const sameName = false;\n",
+        "run": ["scripts/machine_meta.py"],
+    },
+    {
+        "why": "★シリーズ名：決定に書いてあっても受け取らない★",
+        "file": "scripts/machine_meta.py",
+        "before": "    if \"series\" in dec:\n",
+        "after": "    if False:\n",
+        "run": ["scripts/machine_meta.py"],
+    },
+    {
+        "why": "★シリーズ名：判断したときの値と今の機種行が違っても書く★",
+        "file": "scripts/machine_meta.py",
+        "before": "        if \"before_series\" not in dec or dec.get(\"before_series\") != row.get(\"series\"):\n",
+        "after": "        if False:\n",
+        "run": ["scripts/machine_meta.py"],
+    },
+    {
+        "why": "★シリーズ名：毎朝の育成が持ち越さない（2AIが書いたシリーズ名が翌朝消える）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    if \"series\" in old_row and \"series\" not in new_row:\n",
+        "after": "    if False:\n",
+        "run": ["scripts/machine_meta.py"],
+    },
+    {
+        "why": "★シリーズ名：作り直せずに戻すとき、無かった鍵を消さない★",
+        "file": "scripts/machine_meta.py",
+        "before": "                else:\n                    row.pop(\"series\", None)\n",
+        "after": "                else:\n                    pass\n",
+        "run": ["scripts/machine_meta.py"],
+    },
+    {
+        "why": "★シリーズ名：新台の関所が知らない項目として断る★",
+        "file": "scripts/publish_new_machine.py",
+        "before": "                 \"series\"}\n",
+        "after": "                 }\n",
+        "run": ["scripts/machine_meta.py"],
+    },
 ]
 
 

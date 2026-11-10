@@ -1903,6 +1903,8 @@ _MACHINE_TYPES = {
     #   メーカーIDと型式コードで「同じ台」を決める。これが未知フィールド扱いだと、
     #   machines.json に足した途端に公開射影が全機種を拒否する。
     "identity": dict,
+    # ★シリーズ名（関連機種をつなぐ・2AIが machine_meta で書く）★（2026-11-11・運営者の判断「5A」）
+    "series": str,
 }
 # authoring 側に存在してよいキー（公開射影に出さないものも含む）。
 #   lifecycle/checker_modes … Phase 1 の状態軸

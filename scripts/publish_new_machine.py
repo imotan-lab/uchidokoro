@@ -855,7 +855,9 @@ _MACHINE_KEYS = {"slug", "name", "seo", "info", "strategy", "aliases",
                  # ★早見表の材料（2026-08-12）★天井・50枚あたりG数
                  "checker",
                  # ★狙い目の指紋★（2026-10-04・target_projection）
-                 "targetProjection"}
+                 "targetProjection",
+                 # ★シリーズ名（関連機種をつなぐ・2AIが machine_meta で書く・育成が持ち越す）★（2026-11-11）
+                 "series"}
 
 
 def _is_text(x) -> bool:
@@ -1183,7 +1185,7 @@ def check_machine(slug: str, machine: dict) -> list:
     stray = sorted(set(machine) - _MACHINE_KEYS)
     if stray:
         ng.append(f"機種データに知らない項目があります: {stray}")
-    for key in ("name", "info", "strategy", "status", "publish_state"):
+    for key in ("name", "info", "strategy", "status", "publish_state", "series"):
         if key in machine and not _is_text(machine[key]):
             ng.append(f"{key} が文字ではありません")
     aliases = machine.get("aliases", [])

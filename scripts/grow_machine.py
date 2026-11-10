@@ -1892,6 +1892,9 @@ def carry_machine_meta(old_row: dict, new_row: dict) -> None:
     for k in ("aliases", "info"):
         if not new_row.get(k) and old_row.get(k):
             new_row[k] = json.loads(json.dumps(old_row[k]))
+    # ★シリーズ名も持ち越す★（2026-11-11）＝「""」（シリーズ無しと決めた）も決めた印なので鍵ごと持ち越す
+    if "series" in old_row and "series" not in new_row:
+        new_row["series"] = old_row["series"]
 
 
 def written_basis(detail: dict) -> list:

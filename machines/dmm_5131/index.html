@@ -1237,14 +1237,18 @@ function resolveMachineSlug() {
       for (const s of SERIES){ if (s.kw.some(k => hay.includes(k))) return s.id; }
       return null;
     }
+    // ③シリーズ名（machines.json の series・2AIが書く。楽天の原作欄とは別。"" はシリーズ無しの印）
+    function seriesName(m){ return (typeof m.series === "string" && m.series) ? m.series : null; }
     const curOrig = origKey(machine);
     const curSeries = seriesId(machine);
+    const curName = seriesName(machine);
 
     const related = machines.filter(x => {
       if (x.slug === slug) return false;
       const sameOrig = curOrig && origKey(x) === curOrig;
       const sameSeries = curSeries && seriesId(x) === curSeries;
-      return sameOrig || sameSeries;
+      const sameName = curName && seriesName(x) === curName;
+      return sameOrig || sameSeries || sameName;
     });
 
     if (!related.length) return;

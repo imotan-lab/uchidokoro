@@ -82,6 +82,8 @@ ALLOWED_MACHINE_KEYS = {
     #   limit はチェッカーの入力の上限なので、天井とは限らない（番長4 limit=700・天井699G+α）。
     "tenjo_games",
     "original", "checker", "disclaimer", "display_requirements",
+    # ★シリーズ名（関連機種をつなぐ・2AIが machine_meta で書く）★（2026-11-11・運営者の判断「5A」）
+    "series",
     # ★status は公開物に必要★（2026-07-30・Codex 14巡目 (a)-2）
     #   落としていたため、受け取る側が「先行記事（解析待ち）」を判別できず、
     #   noindex も警告バナーも付かないページが作られる状態だった。
