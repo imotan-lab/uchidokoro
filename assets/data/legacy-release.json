@@ -21,6 +21,11 @@
    "url": "https://p-town.dmm.com/machines/4530",
    "checked": "2026-11-10"
   },
+  "dumbbell": {
+   "release": "2024-12-16",
+   "url": "https://p-town.dmm.com/machines/4669",
+   "checked": "2026-11-11"
+  },
   "enen2": {
    "release": "2026-02-02",
    "url": "https://p-town.dmm.com/machines/4926",
@@ -82,6 +87,7 @@
   "azurlane": "2026-11-10",
   "basilisk_tenzen": "2026-11-10",
   "chibaryo2": "2026-11-10",
+  "dumbbell": "2026-11-11",
   "enen2": "2026-11-10",
   "kengan_ashura": "2026-11-10",
   "koukaku": "2026-11-10",

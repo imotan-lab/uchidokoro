@@ -53,6 +53,11 @@
    "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/5121"
   },
+  "dumbbell": {
+   "stores": 245,
+   "checked": "2026-11-11",
+   "url": "https://p-town.dmm.com/machines/4669"
+  },
   "enen2": {
    "stores": 4279,
    "checked": "2026-11-09",
@@ -165,6 +170,7 @@
   "dmm_5119": "2026-11-09",
   "dmm_5120": "2026-11-09",
   "dmm_5121": "2026-11-10",
+  "dumbbell": "2026-11-11",
   "enen2": "2026-11-09",
   "garei_zero_re": "2026-11-10",
   "kengan_ashura": "2026-11-10",
