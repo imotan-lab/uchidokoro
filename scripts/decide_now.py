@@ -445,6 +445,9 @@ OUTSIDE_KINDS = ("fact", "summary", "lead",
                  "fact_in", "summary_in", "lead_in")
 
 
+_REMOVED_OVERRIDE = ""
+
+
 def _record_removed(slug: str, lines: list, dec: dict) -> str:
     """★消した段落を控えに残す★（2026-08-30・あとから戻せるように）
 
@@ -452,7 +455,9 @@ def _record_removed(slug: str, lines: list, dec: dict) -> str:
     ★消す判断そのものは2AIがする★。ここは記録だけ。
     """
     import datetime as _dt
-    p = _lp.doc("removed_lines.jsonl")
+    # ★試験の間は本番の控えに書かない（一時の置き場へ向け直す）★（2026-11-10・洗い出し4回目＝
+    #   本番の控え1858行のうち1789行が試験の行で、本物の69行が埋もれていた）
+    p = _REMOVED_OVERRIDE or _lp.doc("removed_lines.jsonl")
     os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
     rec = {"at": _dt.datetime.now().isoformat(timespec="seconds"),
            "slug": slug,
@@ -2444,6 +2449,25 @@ def apply_decision(path: str, apply_it: bool = False, *,
 
 
 def _selftest() -> int:
+    """★試験の間だけ、消した段落の控えを一時の置き場へ向け直す（必ず戻す）★"""
+    import tempfile as _tf_rm
+    import shutil as _sh_rm
+    global _REMOVED_OVERRIDE
+    _keep_rm = _REMOVED_OVERRIDE
+    _tmp_rm = _tf_rm.mkdtemp(prefix="dn_removed_")
+    _REMOVED_OVERRIDE = os.path.join(_tmp_rm, "removed_lines.jsonl")
+    try:
+        code = _selftest_body()
+        _p_rm = _record_removed("zzz_probe", ["試験の行"], {})
+        _ok = (_p_rm == os.path.join(_tmp_rm, "removed_lines.jsonl"))
+        print(("✅" if _ok else "❌") + " ★試験の間は、消した段落の控えを本番に書かない（一時の置き場へ）★")
+        return code if _ok else 1
+    finally:
+        _REMOVED_OVERRIDE = _keep_rm
+        _sh_rm.rmtree(_tmp_rm, ignore_errors=True)
+
+
+def _selftest_body() -> int:
     import tempfile
     ng = []
 

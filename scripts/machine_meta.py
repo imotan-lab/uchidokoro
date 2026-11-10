@@ -44,7 +44,12 @@ RESULTS = ("NOT_ENOUGH", "UNDECIDED")
 _SLUG = re.compile(r"^[a-z0-9_]{1,60}$")
 
 
+_IN_SELFTEST = False
+
+
 def _log(msg: str) -> None:
+    if _IN_SELFTEST:                 # ★試験の行で本番のログを埋めない★（2026-11-10・洗い出し4回目）
+        return
     try:
         os.makedirs(_lp.LOGS, exist_ok=True)
         with io.open(os.path.join(_lp.LOGS, "machine_meta_%s.log" % _dt.date.today().isoformat()),
@@ -72,8 +77,10 @@ def plan(row: dict, dec: dict) -> dict:
     import confirmed_values as _cv
     import page_decision as _pd
     p = []
-    if not _pd.is_auto(row or {}):
-        return {"problems": ["新台経路の機種ではありません（昔の機種の通称・タイプは手で書いてあります）"]}
+    # ★昔の機種も受け取る★（2026-11-10・洗い出し4回目＝担当の点検表 STEP 1-T の meta 項目で見直す）。
+    #   割り当て（--next）は今までどおり新台だけ（昔の機種は担当が回ってきたときに見る）
+    if not isinstance(row, dict) or not row.get("slug"):
+        return {"problems": ["機種一覧の行がありません"]}
     if _cv.judges_pair(dec.get("by") or []) is None:
         p.append("判断者の組がそろっていません（claude と codex、または代役の2人）")
     if len(str(dec.get("why") or "").strip()) < WHY_MIN:
@@ -110,8 +117,16 @@ def _write_rows(rows: list) -> None:
 
 def _rebuild(slug: str) -> bool:
     import build_machine_pages as _b
-    if (_b._rebuild_auto(slug) or 0) != 0:
-        return False
+    import page_decision as _pd
+    row = next((m for m in _rows() if isinstance(m, dict) and m.get("slug") == slug), {})
+    if _pd.is_auto(row):
+        if (_b._rebuild_auto(slug) or 0) != 0:
+            return False
+    else:
+        r0 = subprocess.run([sys.executable, os.path.join(HERE, "build_machine_pages.py"), "--legacy", "--slug", slug],
+                            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if r0.returncode != 0:
+            return False
     r = subprocess.run([sys.executable, os.path.join(HERE, "build_hub_pages.py"), "--legacy"],
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
     return r.returncode == 0
@@ -201,6 +216,8 @@ def pick(n: int, rows: list, tried: dict, today: str) -> list:
 
 
 def selftest() -> int:
+    global _IN_SELFTEST
+    _IN_SELFTEST = True
     ok = [0, 0]
 
     def t(name, cond):
@@ -228,8 +245,10 @@ def selftest() -> int:
     bad(lambda d: d.update(aliases=["a", "a"]), "　通称の重複は断る", "重なって")
     bad(lambda d: d.update(aliases=["スマスロ 試験機"]), "　機種名そのものは通称に入れない", "機種名そのもの")
     bad(lambda d: d.update(info=""), "　タイプが空なら断る", "タイプ")
-    bad(lambda d: None, "★★新台経路でない機種には書かない★★", "新台経路の機種ではありません",
-        rw={"slug": "zzz_m", "name": "x", "aliases": [], "info": ""})
+    _rl = plan({"slug": "zzz_m", "name": "昔の機種", "aliases": ["古い通称"], "info": "スマスロAT"},
+               dict(good, before_aliases=["古い通称"], before_info="スマスロAT"))
+    t("★★昔の機種の通称・タイプも、判断したときの値が今と同じなら受け取る（担当の点検表の meta）★★",
+      not _rl["problems"] and _rl["aliases"] == ["試験機", "しけんき"])
     rows = [row, dict(row, slug="zzz_n", aliases=["a"], info="x"), dict(row, slug="zzz_o", info="x")]
     t("★通称かタイプが空の新台だけを選ぶ★", pick(5, rows, {}, "2026-11-10") == ["zzz_m", "zzz_o"])
     t("　断って7日たたない機種は外す", pick(5, rows, {"zzz_m": "2026-11-05"}, "2026-11-10") == ["zzz_o"])

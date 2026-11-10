@@ -42,22 +42,30 @@ STORE = os.path.join(_lp.DOCS, "machine_turn.json")
 RESULTS = ("OK", "FIXED", "ADDED", "ASKED", "NA", "LATER")
 NEED_NOTE = ("NA", "LATER")
 _IN_SELFTEST = False
+# ★人気機種の「今週見終わった」印と突き合わせ始める週★（この週より前の印は点検表ができる前のもの）
+TURN_SINCE_WEEK = "2026-11-16"
 
 # ★項目の一覧★（キー → 何をするか・手順書のどの段の流れで）。並びは記事の上から下＋道具の順
 COMMON_ITEMS = (
-    ("article", "記事の中身（本文・表・要約・リード・基本情報表・文体）を読んで直す", "STEP 1-Q"),
+    ("article", "記事の中身（本文・表・要約・リード・基本情報表・文体）を読んで直す（新台は育成の材料＝確定値で直す）", "STEP 1-Q"),
     ("ceiling", "天井・恩恵を出典の原文で確かめ直す（種類・G数・数え方・恩恵・短縮）", "STEP 1-C の流れ"),
+    ("values", "天井以外の数値（機械割・純増・CZ・朝一リセット・設定示唆・ヤメ時）を出典の原文で確かめ直す",
+     "collect_evidence --topic at,cz,reset,settei,yame → 2AI"),
     ("checker", "狙い目チェッカーの線（線の無い欄・交換率ごと・回数の行・注記・天井）", "checker_verdict --slug"),
     ("mode", "モード・ゾーンの欄（間隔に関係なく今回確かめる）", "STEP 1-M の流れ"),
     ("pochipochi", "ポチポチくん（対応・小役の差・手書きの表・設定差なし）", "STEP 1-P（--status --turn）"),
-    ("rumor", "噂・未確定情報の欄（新しい噂・公式の否定）", "STEP 1-R"),
-    ("sources", "出典の控え（隔離・題の変化・本人性）", "machine_sources --check --slug"),
+    ("sources", "出典の控え（同じページのままか・隔離・題の変化）", "machine_sources --recheck --slug"),
     ("gap", "★大手サイトにあって、この記事に無い項目を足す★（数値は独立2出典で確かめたものだけ）", "STEP 1-G（add_items）"),
+    ("hall", "全国の設置店舗数（ランキングから外すかの数）", "hall_presence --refresh 1 --slug --apply（候補でなければ NA）"),
 )
+# ★噂は昔の機種だけ★＝運営者「新台は噂はそもそもない」（STEP 1-R の決まり）
 LEGACY_ITEMS = (
+    ("rumor", "噂・未確定情報の欄（新しい噂・公式の否定）", "STEP 1-R"),
     ("binding", "DMMの機種ページとの結び付け（無ければ2AIで結ぶ）", "legacy_binding --bind"),
-    ("release", "導入日（DMMの機種ページの値）", "legacy_release --refresh 1 --slug --apply"),
-    ("hall", "全国の設置店舗数（ランキングから外すかの数）", "hall_presence --refresh 1 --slug --apply"),
+    ("release", "導入日（DMMの機種ページの値・machines.json にある機種は食い違いを見る）",
+     "legacy_release --refresh 1 --slug --apply"),
+    ("facts", "基本情報表（導入日・メーカーなど大手にある行）", "STEP 1-G（add_items の add_fact）"),
+    ("meta", "通称（検索の別名）とタイプ", "STEP 0-L の流れ（machine_meta・昔の機種も可）"),
     ("tenjo_rank", "天井ランキングの値と書き方（tenjo_games・tenjo_display）", "tenjo_verdict"),
 )
 AUTO_ITEMS = (
@@ -177,6 +185,22 @@ def pending(rows=None, path: str = None) -> list:
     return [(s, left) for _st, s, left in sorted(out)]
 
 
+def popular_without_turn(today: str, done_this_week: list, week: str, path: str = None) -> list:
+    """★人気機種を「今週見終わった」と印したのに、その週に点検表を始めていない機種★（2026-11-10・洗い出し4回目）
+
+    なぜ＝点検表を一度も使わずに印だけ付けると、見張り番は「担当は0件」と読んで🟢を出していた。
+    """
+    if not week or week < TURN_SINCE_WEEK:
+        return []
+    d = read(path)
+    out = []
+    for s9 in done_this_week or []:
+        tr = d["turns"].get(s9)
+        if not tr or tr["started"] < week:
+            out.append(s9)
+    return out
+
+
 def check_problem(today: str = None, rows=None, path: str = None):
     """★見張り番：前の日までに始めたのに、そろっていない担当★
 
@@ -192,9 +216,22 @@ def check_problem(today: str = None, rows=None, path: str = None):
             left = missing(s, tr, rows)
             if left:
                 bad.append(f"{s}（{'・'.join(left)}）")
+    msgs = []
     if bad:
-        return f"担当したのに全項目そろっていない機種が{len(bad)}件あります: " + " ／ ".join(bad[:8])
-    return None
+        msgs.append(f"担当したのに全項目そろっていない機種が{len(bad)}件あります: " + " ／ ".join(bad[:8]))
+    try:
+        import popular_machines as _pm
+        st = _pm.load_store()
+        rot = st.get("rotation") or {}
+        wk = _pm.week_start(today)
+        nt = popular_without_turn(today, rot.get("done") if rot.get("week") == wk else [], wk, path)
+    except Exception as e:                                   # noqa: BLE001
+        nt = []
+        msgs.append(f"人気機種の今週の記録を読めません（{type(e).__name__}）")
+    if nt:
+        msgs.append(f"人気機種を今週見終わったと印したのに、点検表（STEP 1-T）を始めていない機種が{len(nt)}件: "
+                    + "・".join(nt[:8]))
+    return " ／ ".join(msgs) if msgs else None
 
 
 def plan_text(slug: str, rows=None, path: str = None) -> str:
@@ -229,7 +266,9 @@ def selftest() -> int:
     ka = [k for k, _w, _s in items_for(rows[1])]
     t("★★昔の機種は共通＋導入日・結び付け・設置店舗数・天井ランキング、新台は共通＋根拠3欄・通称・育成の問い★★",
       "pochipochi" in kl and "mode" in kl and "gap" in kl and "release" in kl and "derived" not in kl
-      and "derived" in ka and "meta" in ka and "release" not in ka)
+      and "derived" in ka and "meta" in ka and "release" not in ka
+      and "values" in kl and "values" in ka and "hall" in ka and "facts" in kl)
+    t("★噂は昔の機種だけ（運営者「新台は噂はそもそもない」）★", "rumor" in kl and "rumor" not in ka)
     try:
         done("zzz_l", "article", "OK", rows=rows, today="2026-11-10", path=p)
         _no_start = False
@@ -267,6 +306,10 @@ def selftest() -> int:
     t("　その機種に無い項目は記録できない（昔の機種の derived）", _wrong)
     start("zzz_l", today="2026-11-17", path=p)
     t("★次に担当が回ってきたら、全項目を数え直す★", len(pending(rows, p)[0][1]) == len(kl))
+    t("★★人気機種を今週見終わったと印したのに、その週に点検表を始めていなければ挙げる★★",
+      popular_without_turn("2026-11-18", ["zzz_l", "zzz_x"], "2026-11-16", p) == ["zzz_x"]
+      and popular_without_turn("2026-11-24", ["zzz_l"], "2026-11-23", p) == ["zzz_l"])
+    t("　点検表ができる前の週の印は見ない", popular_without_turn("2026-11-10", ["zzz_x"], "2026-11-10", p) == [])
     with io.open(p, "w", encoding="utf-8") as f:
         f.write('{"turns": {"zzz_l": {"started": "", "items": {}}}}')
     try:

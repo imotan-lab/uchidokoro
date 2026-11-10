@@ -1683,6 +1683,29 @@ def text_kept(old_detail: dict, new_detail: dict, accepted=frozenset()) -> list:
     return [f"前に載っていた内容が消える/変わる更新です: {' ／ '.join(gone[:10])}"]
 
 
+def carry_rumor_section(old_detail: dict, detail: dict) -> bool:
+    """★噂の欄（rumor_verdict が書く）を、作り直した記事へ持ち越す★（2026-11-10・洗い出し4回目）
+
+    ★なぜ★＝育成は材料から記事を作り直し、噂の欄を作らない。新台にも噂を書くようにしたので
+    （STEP 1-T・人気の新台）、持ち越さないと翌朝消えて「前に載っていた内容が消える」で止まる。
+    作り直した記事に噂の欄があればそちら。無ければ前の記事の欄を末尾（決まった位置）に置く。
+    """
+    if not isinstance(old_detail, dict) or not isinstance(detail, dict):
+        return False
+    secs = detail.get("sections")
+    if not isinstance(secs, list):
+        return False
+    title = "噂・未確定情報"
+    if any(isinstance(x, dict) and x.get("title") == title for x in secs):
+        return False
+    prev = next((x for x in (old_detail.get("sections") or [])
+                 if isinstance(x, dict) and x.get("title") == title and x.get("type") == "rumor"), None)
+    if prev is None:
+        return False
+    secs.append(json.loads(json.dumps(prev)))
+    return True
+
+
 def carry_added_sections(old_detail: dict, detail: dict, slug: str, titles=None) -> list:
     """★大手と比べて2AIが足した欄（add_items）を、作り直した記事へ持ち越す★（2026-11-10・運営者の指示）
 
@@ -1827,6 +1850,13 @@ def _carry_meta_tests(t) -> None:
     _got_a = carry_added_sections(_old_a, _new_a, "zzz_a", titles={"有利区間"})
     t("★★大手と比べて足した欄（add_items の控えにある名前）を、作り直した記事へ持ち越す（噂の欄の前）★★",
       _got_a == ["有利区間"] and [x["title"] for x in _new_a["sections"]] == ["天井・恩恵", "有利区間", "噂・未確定情報"])
+    _old_r = {"sections": [{"title": "天井・恩恵", "body": ["a"]},
+                           {"title": "噂・未確定情報", "type": "rumor", "body": ["噂です。"]}]}
+    _new_r = {"sections": [{"title": "天井・恩恵", "body": ["a"]}]}
+    t("★★噂の欄を、作り直した記事へ持ち越す（新台にも噂を書く）★★",
+      carry_rumor_section(_old_r, _new_r) is True and _new_r["sections"][-1]["body"] == ["噂です。"])
+    t("　（配線）育成が噂の欄を持ち越している",
+      "carry_rumor_section(old_detail, detail)" in inspect.getsource(plan_one))
     t("　（配線）育成が足した欄を持ち越している",
       "carry_added_sections(old_detail, detail, slug)" in inspect.getsource(plan_one))
     _new = {"aliases": [], "info": ""}
@@ -2975,7 +3005,9 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     old_detail = _sj.read_json(dp, expect=dict) if os.path.isfile(dp) else {}
     # ★モード・ゾーンの欄は mode_apply の持ち物なので持ち越す★（2026-10-28）
     carry_mode_section(old_detail, detail)
-    # ★大手と比べて2AIが足した欄（add_items）も持ち越す★（2026-11-10）
+    # ★噂の欄（rumor_verdict）を持ち越す★（2026-11-10・新台にも噂を書くようにした）
+    carry_rumor_section(old_detail, detail)
+    # ★大手と比べて2AIが足した欄（add_items）も持ち越す★（2026-11-10）＝噂の欄の前へ
     carry_added_sections(old_detail, detail, slug)
     # ★2AIが書いた「狙い目の根拠・ヤメ時・立ち回り」は derived_sections の持ち物なので持ち越す★（2026-11-10）
     carry_written_sections(old_detail, detail, machine)
