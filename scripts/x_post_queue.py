@@ -133,34 +133,22 @@ class _WriteLock:
     """★控えを読み直して書くあいだだけ取る短いロック★（2026-11-10・Codexの指摘＝実害）
 
     なぜ＝run は投稿のあいだ（数分）一覧を持ったままで、そのあいだに add した告知を古い一覧で上書きして消した。
-    add と run の保存は、毎回これを取って読み直してから直す。古い印（2分）は奪う。
+    add と run の保存は、毎回これを取って読み直してから直す。
+    ★中身は task_lock._Guard（OSのファイルロック）★＝プロセスが死ねばOSが外し、持ち主しか外せない。
+    （ファイルを作って古ければ消す形にすると、2つが同時に古いロックを片付けて両方が進む＝Codexの再指摘）
     """
 
-    def __init__(self, path: str):
-        self.path = path + ".write.lock"
+    def __init__(self, path: str, timeout: float = 30.0):
+        import task_lock as _tl
+        self._g = _tl._Guard(path + ".write", timeout=timeout)
 
     def __enter__(self):
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        for _ in range(300):
-            try:
-                os.close(os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
-                return self
-            except FileExistsError:
-                try:
-                    if time.time() - os.path.getmtime(self.path) > 120:
-                        os.remove(self.path)
-                        continue
-                except OSError:
-                    continue
-                time.sleep(0.1)
-        raise RuntimeError("投稿待ちの控えの書き込みロックを取れません")
+        os.makedirs(os.path.dirname(self._g.gp), exist_ok=True)
+        self._g.__enter__()
+        return self
 
     def __exit__(self, *exc):
-        try:
-            os.remove(self.path)
-        except OSError:
-            pass
-        return False
+        return self._g.__exit__(*exc)
 
 
 def update(fn, path: str = None):
@@ -316,6 +304,23 @@ def selftest() -> int:
     run_due(now=later, post=_post_and_add, sleep=lambda s: None, rng=_R(), path=p4)
     t("★★投稿しているあいだに足された告知を、古い一覧で上書きして消さない★★",
       [x["slug"] for x in read(p4)["items"]] == ["zzz_f"])
+    # ★★同時に足しても1件も消えない★★（書き込みロックはOSのファイルロック・Codexの再指摘）
+    import threading
+    p5 = os.path.join(os.path.dirname(p), "q5.json")
+    ths = [threading.Thread(target=add, args=("promotion", "zzz_t%d" % k),
+                            kwargs={"now": now, "rng": _R(), "path": p5}) for k in range(12)]
+    for th in ths:
+        th.start()
+    for th in ths:
+        th.join()
+    t("★★同時に12件足しても、全部残る（取り合いで上書きして消さない）★★", len(read(p5)["items"]) == 12)
+    try:
+        with _WriteLock(p5):
+            with _WriteLock(p5, timeout=0.2):
+                _blocked = False
+    except TimeoutError:
+        _blocked = True
+    t("★★書き込みロックを持っているあいだ、ほかは取れない★★", _blocked)
     slept = []
     add("promotion", "zzz_c", now=now, rng=_R(), path=p)
     add("promotion", "zzz_d", now=now, rng=_R(), path=p)

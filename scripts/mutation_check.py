@@ -10554,6 +10554,13 @@ MUTATIONS = [
         "after": "        pass\n",
         "run": ["scripts/mode_queue.py"],
     },
+    {
+        "why": "★Xの投稿待ち：書き込みロックを取らない（同時に足すと消える・Codex再指摘）★",
+        "file": "scripts/x_post_queue.py",
+        "before": "        self._g = _tl._Guard(path + \".write\", timeout=timeout)\n",
+        "after": "        self._g = _tl._Guard(path + \".write\" + str(id(self)), timeout=timeout)\n",
+        "run": ["scripts/x_post_queue.py"],
+    },
 ]
 
 
