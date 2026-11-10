@@ -181,6 +181,12 @@ def run(slug: str, apply: bool) -> int:
         return 0
     out = dict(detail)
     out["sections"] = got["sections"]
+    # ★★モード・ゾーンの表が変わったら、それを前提に2AIが書いた3欄を「未確認」へ戻す★★（2026-11-10）
+    #   ＝古い表のまま「立ち回りのコツ」が残らないように。新台経路の機種だけ（翌朝の STEP 0-K が書き直す）
+    import derived_sections as _ds
+    reverted = _ds.revert_if_basis_changed(detail, out, _ds._row(slug))
+    if reverted:
+        print("土台が変わったので未確認へ戻しました: " + "・".join(reverted))
     tmp = p + ".tmp"
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
@@ -362,21 +368,29 @@ def selftest() -> int:
                       encoding="utf-8", newline="\n") as _f:
                 _js.dump({"sections": [{"title": "天井・恩恵"},
                                        {"title": "基本スペック"},
-                                       {"title": "当サイトの狙い目"}]},
+                                       {"title": "当サイトの狙い目"},
+                                       {"title": "立ち回りのコツ", "body": ["古い表を前提に書いた文です。"]}]},
                          _f, ensure_ascii=False)
             _ba.mode_box_for = lambda s2, c2: BOX
             _keep_now = globals()["corpus_now"]
             globals()["corpus_now"] = lambda s2, **k: ("VALID", {"fp": "x"}, "")
+            import derived_sections as _dsx
+            _keep_row = _dsx._row
+            _dsx._row = lambda s2: {"slug": s2, "publication_policy": "page-decision/v2"}
             try:
                 code = run("zzz", True)
             finally:
                 globals()["corpus_now"] = _keep_now
+                _dsx._row = _keep_row
             with open(os.path.join(_dtmp, "zzz.json"), encoding="utf-8") as _f:
                 _after = _js.load(_f)
             t("★★後片づけのあと、記事に実際に節が入る★★"
               "／★ここまで見ないと「通し」とは言えない★",
               code == 0
               and [x["title"] for x in _after["sections"]][2] == _ba.MODE_TITLE)
+            t("★★モード・ゾーンの表が変わったら、2AIが書いた「立ち回りのコツ」などを未確認へ戻す（新台経路）★★"
+              "（直す前は古い表を前提にした文が残った）",
+              _after["sections"][-1]["body"] == [_ba.PENDING_TEXT])
         finally:
             _ba.mode_box_for = _keep_box
             globals()["DETAILS"] = _keep_details

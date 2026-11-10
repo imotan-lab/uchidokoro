@@ -1714,11 +1714,8 @@ def written_basis(detail: dict) -> list:
 
     天井・恩恵／当サイトの狙い目／朝一・リセット情報／モード・ゾーン（欄ごと）。
     """
-    import target_projection as _tp
-    titles = ("天井・恩恵", _tp.SECTION_TITLE, "朝一・リセット情報", _ba.MODE_TITLE)
-    return [json.dumps(s, ensure_ascii=False, sort_keys=True)
-            for s in ((detail or {}).get("sections") or [])
-            if isinstance(s, dict) and s.get("title") in titles]
+    import derived_sections as _ds
+    return _ds.written_basis(detail)   # ★決まりは derived_sections の1か所（mode_apply と共有）★
 
 
 def carry_written_sections(old_detail: dict, detail: dict, row: dict = None) -> None:

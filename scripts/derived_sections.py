@@ -96,6 +96,36 @@ def is_pending(sec) -> bool:
             and isinstance(body[0], str) and body[0].strip() in _pending_texts())
 
 
+BASIS_TITLES = ("天井・恩恵", "当サイトの狙い目", "朝一・リセット情報", "モード・ゾーン")
+
+
+def written_basis(detail: dict) -> list:
+    """★書く3欄が拠って立つ欄の中身★（並び順どおり・比べるためだけ）＝育成と mode_apply の1か所"""
+    return [json.dumps(s, ensure_ascii=False, sort_keys=True)
+            for s in ((detail or {}).get("sections") or [])
+            if isinstance(s, dict) and s.get("title") in BASIS_TITLES]
+
+
+def revert_if_basis_changed(old_detail: dict, new_detail: dict, row: dict) -> list:
+    """★土台の欄が変わったら、2AIが書いた3欄を「未確認」へ戻す★（2026-11-10・洗い出し2回目）
+
+    なぜ＝mode_apply がモード・ゾーンの欄を書き換えても、その表を前提に書いた「立ち回りのコツ」などが
+    古いまま残った（育成は持ち越しをやめるが、mode_apply は育成を通らない）。
+    ★新台経路の機種だけ★（旧形式の記事は人が書いた欄なので触らない）。戻した欄の名前を返す。
+    翌朝の STEP 0-K が書き直す対象に戻る。
+    """
+    import page_decision as _pd
+    import build_new_article as _ba
+    if not _pd.is_auto(row or {}) or written_basis(old_detail) == written_basis(new_detail):
+        return []
+    out = []
+    for i, s in enumerate((new_detail or {}).get("sections") or []):
+        if isinstance(s, dict) and s.get("title") in TITLES and not is_pending(s):
+            new_detail["sections"][i] = {**s, "body": [_ba.PENDING_TEXT]}
+            out.append(s["title"])
+    return out
+
+
 def pending_titles(detail: dict) -> list:
     return [s.get("title") for s in (detail.get("sections") or [])
             if isinstance(s, dict) and s.get("title") in TITLES and is_pending(s)]
@@ -544,6 +574,24 @@ def selftest() -> int:
           and json.loads(io.open(g["QUEUE"], encoding="utf-8").read())["tried"]["zzz_d"]["result"] == "WRITTEN")
     finally:
         g.update(keep)
+    # ★★土台の欄が変わったら、書いた3欄を未確認へ戻す★★（mode_apply と育成の共通の決まり）
+    _old = {"sections": [{"title": "モード・ゾーン", "body": ["A"]},
+                         {"title": "立ち回りのコツ", "body": ["書いた文です。"]},
+                         {"title": "ヤメ時の判断", "body": [P]}]}
+    _new = json.loads(json.dumps(_old))
+    _new["sections"][0]["body"] = ["B"]
+    _rv = revert_if_basis_changed(_old, _new, row)
+    t("★★モード・ゾーンなど土台の欄が変わったら、書いた欄を未確認へ戻す（戻した欄の名前を返す）★★",
+      _rv == ["立ち回りのコツ"] and _new["sections"][1]["body"] == [P]
+      and _old["sections"][1]["body"] == ["書いた文です。"])
+    _same = json.loads(json.dumps(_old))
+    t("　土台が同じなら戻さない", revert_if_basis_changed(_old, _same, row) == []
+      and _same["sections"][1]["body"] == ["書いた文です。"])
+    _leg = json.loads(json.dumps(_new))
+    _leg["sections"][1]["body"] = ["人が書いた文です。"]
+    t("　旧形式の記事（人が書いた欄）は戻さない",
+      revert_if_basis_changed(_old, _leg, {"slug": "zzz_l"}) == []
+      and _leg["sections"][1]["body"] == ["人が書いた文です。"])
     # ★育成が書いた欄を持ち越すか（grow_machine の配線）★
     import inspect
     import grow_machine as _gm
