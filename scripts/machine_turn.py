@@ -248,8 +248,9 @@ def stale_reviews(last_reviewed: dict, rows, today: str) -> list:
         if not isinstance(m, dict) or not m.get("slug"):
             continue
         # ★新台期間の機種は数えない★（育成が毎日見ていて、その他の巡回には入らない）
-        if "publication_policy" in m and _gm.is_new_machine(m.get("release_date"), _dt.date.fromisoformat(today)):
-            continue
+        if "publication_policy" in m and (_gm.is_new_machine(m.get("release_date"), _dt.date.fromisoformat(today))
+                                          or str(m.get("release_date") or "")[:len(today)] > today):
+            continue                     # ★導入前の新台も数えない★（代役の指摘＝導入日まで🟡が鳴り続けた）
         last = str((last_reviewed or {}).get(m["slug"]) or "")[:10]
         if (last and last < lim) or (not last and "publication_policy" not in m):
             out.append(m["slug"])
@@ -394,10 +395,14 @@ def selftest() -> int:
     t("★★点検済みの日より後に始めた点検表があれば、その前の印は挙げない★★（代役の指摘＝翌週の担当で誤って出た）",
       reviewed_without_turn({"zzz_l": "2026-11-12"}, p) == [])
     t("★★最後の点検から60日を超えた機種を挙げる（記録の無い昔の機種も）★★（代役の指摘＝巡回の遅れに見張りが無かった）",
-      stale_reviews({"a": "2026-09-01", "b": "2026-10-20", "z": "2026-01-01"},
+      stale_reviews({"a": "2026-09-01", "b": "2026-10-20", "z": "2026-01-01", "y": "2026-09-01"},
                     [{"slug": "a"}, {"slug": "b"}, {"slug": "c"}, {"slug": "d", "publication_policy": "page-decision/v2"},
-                     {"slug": "z", "publication_policy": "page-decision/v2", "release_date": "2026-11-01"}],
+                     {"slug": "z", "publication_policy": "page-decision/v2", "release_date": "2026-11-01"},
+                     {"slug": "y", "publication_policy": "page-decision/v2", "release_date": "2026-12-07"}],
                     "2026-11-10") == ["a", "c"])
+    import inspect as _insp
+    t("　（配線）見張り番の点検が、点検の古さを数えている",
+      ("stale_" + "reviews(") in _insp.getsource(check_problem))
     t("★★ずっと前の点検表では、その後の点検済みの印を覆わない（3日前まで）★★（代役の指摘）",
       reviewed_without_turn({"zzz_o": "2026-11-20"}, _p3) == ["zzz_o"]
       and reviewed_without_turn({"zzz_o": "2026-11-13"}, _p3) == [])

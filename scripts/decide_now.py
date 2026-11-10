@@ -435,14 +435,27 @@ def gather(slug: str) -> dict:
     # ★★「判明次第更新」「解析待ち」など、あとで埋めると約束した文★★（2026-11-10・代役の指摘＝昔の機種39機種に
     #   残り、何か月も埋まっていなかった）。★手がかりであって判定ではない★＝出典を見て判明していれば値を書き
     #   （先に confirmed_values へ記録して numbers_from_confirmed か add_items）、まだ判明していなければ残す
-    for _sec in out["article"]["sections"]:
-        _lines = list(_sec.get("body") or [])
-        for _tb in (_sec.get("tables") or []):
-            if isinstance(_tb, dict):
-                _lines += [str(_tb.get("note") or "")]
-                _lines += ["／".join(str(c) for c in r) for r in (_tb.get("rows") or []) if isinstance(r, list)]
+    def _strs(o):
+        if isinstance(o, str):
+            yield o
+        elif isinstance(o, dict):
+            for v in o.values():
+                yield from _strs(v)
+        elif isinstance(o, list):
+            for v in o:
+                yield from _strs(v)
+    _groups = [(s0.get("title") or "", [x for k, v in s0.items() if k not in ("title", "type") for x in _strs(v)])
+               for s0 in out["article"]["sections"]]
+    _groups.append(("（節の外）", [x for k, v in out["article"].items() if k not in ("sections", "name")
+                                   for x in _strs(v)]))
+    # ★機種データ（一覧の文・チェッカーの注記）も見る★（代役の指摘＝「リセット狙い目ラインは解析待ち」が残った。
+    #   直すのは checker_verdict の REVISE_MODES）
+    _groups.append(("（機種データ・チェッカー）", list(_strs(out.get("machine") or {}))))
+    for _title, _lines in _groups:
+        _sec = {"title": _title}
         for _line in _lines:
-            _pm = [w for w in PENDING_MARKS if w in str(_line)]
+            _pm = [w for w in PENDING_MARKS if w in str(_line)] + [
+                mm.group(0) for mm in _PENDING_RE.finditer(str(_line))]
             if _pm:
                 out["hints"].append(
                     {"kind": "あとで埋めると約束した文", "section": _sec["title"], "words": _pm[:5],
@@ -614,6 +627,13 @@ def _elems(d: dict, where: str) -> list:
                 out += [t.get("note") for t in (sec.get("tables") or [])
                         if isinstance(t, dict)
                         and isinstance(t.get("note"), str)]
+    # ★★表の小見出し（label）も直せる場所にする★★（2026-11-10・代役の指摘＝設定示唆の表の
+    #   「※現在解析待ちです。情報が公開され次第更新します。」が5機種に残り、直す道が無かった）
+    if w in ("", "table_label"):
+        for sec in (d.get("sections") or []):
+            if isinstance(sec, dict):
+                out += [t.get("label") for t in (sec.get("tables") or [])
+                        if isinstance(t, dict) and isinstance(t.get("label"), str)]
     if w in ("", "fact"):
         for row in (d.get("factTable") or []):
             if isinstance(row, (list, tuple)):
@@ -649,7 +669,7 @@ def check_range(d: dict, a: dict) -> tuple:
         return b, af, None                  # 要素まるごと（従来どおり）
     if not where:
         return b, af, ("段落の一部だけを直すときは where で場所を"
-                       "指定してください（body / table_note / fact / "
+                       "指定してください（body / table_note / table_label / fact / "
                        "summary / lead）")
     hit = [e for e in elems if b in e]
     if not hit:
@@ -692,6 +712,8 @@ def _where_hits(d: dict, before) -> list:
         got += ["本文" for x in (sec.get("body") or []) if x == before]
         got += ["表の注記" for t in (sec.get("tables") or [])
                 if isinstance(t, dict) and t.get("note") == before]
+        got += ["表の小見出し" for t in (sec.get("tables") or [])
+                if isinstance(t, dict) and t.get("label") == before]
     for row in (d.get("factTable") or []):
         if isinstance(row, (list, tuple)):
             got += ["基本情報表" for c in row if c == before]
@@ -1273,7 +1295,11 @@ def numbers_with_unit(s: str) -> list:
 #   ★「着席」は入れない★＝69件あるが大半が「着席時」＝ふつうの言葉で、
 #   機械には区別できない（＝名簿で判定してはいけない型）。
 # ★あとで埋めると約束した文の手がかり★（判定には使わない・2026-11-10）
-PENDING_MARKS = ("判明次第", "解析待ち", "調査中", "未公開", "未判明", "確認でき次第", "公開され次第")
+PENDING_MARKS = ("判明次第", "解析待ち", "調査中", "未公開", "未判明", "確認でき次第", "公開され次第",
+                 # ★時間がたつと嘘になる言い方★（代役の指摘＝「導入直後」「最新作」「対応する予定」が何か月も残った）
+                 "現時点", "導入直後", "最新作", "対応予定", "対応する予定", "反映します", "反映する予定")
+# ★日付つきの「いまの状態」★（「2026年4月時点」「2026年5月26日時点」）
+_PENDING_RE = __import__("re").compile(r"[0-9]{4}年[0-9]{1,2}月(?:[0-9]{1,2}日)?(?:時点|現在)")
 
 ADVICE_MARKS = (
     "積極的", "しましょう", "してください", "おすすめ",
@@ -1473,6 +1499,11 @@ def _simulate(detail: dict, plan: list) -> str:
         elif kind == "table_note_in":
             _nt = d["sections"][si]["tables"][bi]["note"]
             d["sections"][si]["tables"][bi]["note"] = _nt.replace(
+                a["before"], a["after"], 1)
+        elif kind == "table_label":
+            d["sections"][si]["tables"][bi]["label"] = a["after"]
+        elif kind == "table_label_in":
+            d["sections"][si]["tables"][bi]["label"] = d["sections"][si]["tables"][bi]["label"].replace(
                 a["before"], a["after"], 1)
         elif kind in OUTSIDE_KINDS:
             # ★節の外も数え直しに入れる★（2026-08-27・台帳#487）
@@ -2003,7 +2034,7 @@ def apply_decision(path: str, apply_it: bool = False, *,
         # ★本文の段落を節と番号で指す形★（2026-11-05）＝言い換えのときだけ
         elif a["op"] == "replace" and body_target(where):
             pass
-        elif where and where not in ("body", "table_note",
+        elif where and where not in ("body", "table_note", "table_label",
                                      "fact", "summary", "lead"):
             result["problems"].append(f"直す場所の指定が不明です: {where!r}")
             return result
@@ -2015,7 +2046,7 @@ def apply_decision(path: str, apply_it: bool = False, *,
                 spots = []
             elif where:
                 # ★場所を言っていても、その場所に2つあるなら決められない★
-                _kind = {"body": "本文", "table_note": "表の注記",
+                _kind = {"body": "本文", "table_note": "表の注記", "table_label": "表の小見出し",
                          "fact": "基本情報表", "summary": "要約ボックス",
                          "lead": "リード文"}[where]
                 spots = [s for s in spots if s == _kind]
@@ -2080,7 +2111,7 @@ def apply_decision(path: str, apply_it: bool = False, *,
         for si, sec in enumerate(d.get("sections") or []):
             if hit:
                 break
-            if where and where not in ("body", "table_note") \
+            if where and where not in ("body", "table_note", "table_label") \
                     and not cell_target(where) and not body_target(where):
                 break
             # ★★本文の段落を名指ししたら、その節のその段落だけを見る★★（2026-11-05）＝
@@ -2153,11 +2184,22 @@ def apply_decision(path: str, apply_it: bool = False, *,
                     plan.append(("table_note_in", si, ti, a))
                     hit = True
                     break
+                # ★表の小見出しは、場所を言ったときだけ（table_label）★
+                if a["op"] == "replace" and where == "table_label" \
+                        and isinstance(tbl.get("label"), str) and a["before"]:
+                    if tbl["label"] == a["before"]:
+                        plan.append(("table_label", si, ti, a))
+                        hit = True
+                        break
+                    if tbl["label"].count(a["before"]) == 1:
+                        plan.append(("table_label_in", si, ti, a))
+                        hit = True
+                        break
             if hit:
                 break
         if not hit:
             # ★節の外（基本情報表・要約ボックス・リード文）も見る★（台帳#487）
-            got = None if where in ("body", "table_note") \
+            got = None if where in ("body", "table_note", "table_label") \
                 else _outside_plan(d, a, where)
             if got:
                 plan.append(got)
@@ -2422,6 +2464,11 @@ def apply_decision(path: str, apply_it: bool = False, *,
             elif kind == "table_note_in":
                 _nt = sec["tables"][bi]["note"]
                 sec["tables"][bi]["note"] = _nt.replace(
+                    a["before"], a["after"], 1)
+            elif kind == "table_label":
+                sec["tables"][bi]["label"] = a["after"]
+            elif kind == "table_label_in":
+                sec["tables"][bi]["label"] = sec["tables"][bi]["label"].replace(
                     a["before"], a["after"], 1)
             elif kind != "drop":
                 # ★★知らない種類は黙って飛ばさない★★（2026-09-18・自分で踏んだ）
@@ -3189,6 +3236,27 @@ def _selftest_body() -> int:
             {"op": "replace", "before": "通常500G", "after": "通常500G",
              "where": "fact", "why": "表を直す", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}]))
         t("　（対照）場所を言えば通る", not rn7["problems"])
+        LB = {"slug": "lb", "sections": [
+            {"title": "設定示唆まとめ", "type": "table", "tables": [
+                {"label": "※現在解析待ちです。情報が公開され次第更新します。",
+                 "headers": ["示唆", "内容"], "rows": [["終了画面", "設定2以上"]]}]}]}
+        with io.open(os.path.join(td, "lb.json"), "w", encoding="utf-8", newline="\n") as f:
+            json.dump(LB, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+        _rlb = os.path.join(td, "dlb.json")
+        io.open(_rlb, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": SCHEMA, "slug": "lb", "source_sha256": _sha_of("lb"),
+             "decided_by": ["Claude", "codex"],
+             "actions": [{"op": "replace", "before": "※現在解析待ちです。情報が公開され次第更新します。",
+                          "after": "確認できた設定示唆の一覧です。", "where": "table_label",
+                          "why": "示唆が載ったので約束の文を外す",
+                          "meaning_why": "2AIで読み比べ、表の中身は変わらず約束の文だけが古いと判断しました"}]},
+            ensure_ascii=False))
+        _glb = apply_decision(_rlb, apply_it=True, guard=False)
+        _now_lb = json.loads(io.open(os.path.join(td, "lb.json"), encoding="utf-8").read())
+        t("★★表の小見出し（table_label）を2AIの決定で直せる★★（代役の指摘＝「解析待ち」の小見出しが残った）",
+          not _glb["problems"]
+          and _now_lb["sections"][0]["tables"][0]["label"] == "確認できた設定示唆の一覧です。")
 
         # ★★同じ場所に2つあっても数える★★（2026-08-27・Codexの2回目の指摘2）
         #   ★直す前は「本文・表…という種類」を数えていた★ので、

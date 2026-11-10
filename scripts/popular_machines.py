@@ -661,6 +661,23 @@ def mark_done(slug: str, today) -> dict:
 
 # ---------------------------------------------------------------- selftest
 
+# ★人気順を取ってからこの日数を超えたら見張り番が知らせる★（毎週月曜に取り直す・1回失敗しても鳴らない幅）
+STALE_RANK_DAYS = 9
+
+
+def rank_stale_problem(checked_at: str, today: str):
+    """★人気順の一覧が古いまま止まっていないか★（2026-11-10・代役の指摘＝取り直しが続けて失敗しても、
+    古い一覧で上位20とトップの「人気TOP10」が黙って古くなり、気づくのはタスクのログだけだった）"""
+    import datetime as _dt
+    try:
+        days = (_dt.date.fromisoformat(today) - _dt.date.fromisoformat(str(checked_at or "")[:10])).days
+    except ValueError:
+        return "人気順を取った日が読めません"
+    if days > STALE_RANK_DAYS:
+        return f"人気順の一覧を{days}日取り直せていません（最後に取った日 {checked_at}）"
+    return None
+
+
 def selftest() -> int:
     import datetime as _dt
     import shutil
@@ -1149,6 +1166,11 @@ def selftest() -> int:
         STORE = _keep2
         shutil.rmtree(_tmp2, ignore_errors=True)
 
+    t("★★人気順を9日より長く取り直せていなければ知らせる★★（代役の指摘＝取り直しの失敗に見張りが無かった）",
+      rank_stale_problem("2026-11-01", "2026-11-11") is not None
+      and rank_stale_problem("2026-11-09", "2026-11-17") is None
+      and rank_stale_problem("", "2026-11-17") is not None)
+
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
@@ -1175,9 +1197,21 @@ def main() -> int:
     ap.add_argument("--weekly", action="store_true",
                     help="月曜（または前回から7日以上）のときだけ取る")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--check", action="store_true",
+                    help="見張り番用：人気順を STALE_RANK_DAYS 日より長く取り直せていなければ 1／読めなければ 2")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.check:
+        import datetime as _dt
+        try:
+            _st = load_store()
+        except Exception as e:                               # noqa: BLE001
+            print(f"🟠 人気順の控えを読めません（{type(e).__name__}）")
+            return 2
+        pr = rank_stale_problem(str(_st.get("checked_at") or ""), _dt.date.today().isoformat())
+        print(("🟡 " + pr) if pr else f"🟢 人気順：{_st.get('checked_at')} に取った一覧")
+        return 1 if pr else 0
     if a.weekly:
         import datetime as _dt
         _st = load_store()

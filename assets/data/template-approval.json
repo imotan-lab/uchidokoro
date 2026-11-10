@@ -32,7 +32,7 @@
   "meta-auto.js": "72cf7d674d1b6d974cd1a471fd3878def546d889915b6643d6cb01f7f66a309f",
   "privacy.html": "9f5bd3891a013fd69d6cf6419e495588fa50ad4cd97fb3a3074b37a104355b7a",
   "robots.txt": "67abd065d0da87ba5c2b13c375add509a3601669f21d6c53f48360d7f271ccf1",
-  "scripts/add_items.py": "d3259f93a55fc540afeacf2797e88c42fa366b65c215d19a342a55037c4b8bff",
+  "scripts/add_items.py": "62feb5079cd928b19f5c972d02583ce7d6700c3fc282aec166c8bfc6ad221dee",
   "scripts/apply_prose_dedup.py": "13c7636c1018db8c4de24d06edef76334e2bb7c1147b7a94958ffb76ca384937",
   "scripts/audit_public.py": "eff9994a488928e3568f6c344b569f6e8079f2ffa799399d5417f32103b444e3",
   "scripts/build_hub_pages.py": "43b254d39c8a78e451d3db013c4ef8d8fd1b7daffb154a76022b09597b183117",
@@ -49,7 +49,7 @@
   "scripts/claim_inventory.py": "80d58f1e483edfd4828dc16a9b568d824c251ead2beb498d5ef4f6898ded9e87",
   "scripts/claim_ledger.py": "fedda71a58ba7648ec76b34a69ca7eb9d7b21601a19393a93bcd37fb13b521c6",
   "scripts/claim_reconcile.py": "aa913c3f06f5a2b6021c6ec9aa2277e11d2c527472d4808afe7b2855da385a27",
-  "scripts/decide_now.py": "f403e365917b60c3b118b975e515c4b27d255e2a6ea9cb84c9982f2606fc0c1c",
+  "scripts/decide_now.py": "9482369a137794cb03bfc0f58d6aa7c48dba743d4853c499add56a2837749b2b",
   "scripts/derived_sections.py": "2866c0737340a2a0b0adc5351f152c06f5492694b1f835a154a464ead41d1947",
   "scripts/extract_setting_rates.py": "967989f6804dea9cd10d88ac2cb288ccfd2ea7cb08f03bc9351106f7f334249e",
   "scripts/fix_plain_style.py": "b8af9b83920fa38aea0210f9bcaa5ddadbc742dca902b39eb0762746743c6d56",
@@ -70,7 +70,7 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "4a40e30d6fc0093895ff9c36d8bc8c1069b7b9b3f8ef96c36c318c3e4bfaff79",
-  "service-worker.js": "9245a90ac53cd4dce7435884adc555ba435f1d10bdf7f4f25d278c2588532121",
+  "service-worker.js": "5403c9fc84ecbe70069d4539a56e61fd558591d2a061ee8d0196abe8ea596beb",
   "setting.html": "3cc724d1d7a06749f9e61e0b97a4d00b216cd419f4338586ac788bcfae3d4a62",
   "terms.html": "cfb07f039c9a57ad5c451118e31abfb7031fd9a4c98d4c0f88f76fd016711a65"
  }

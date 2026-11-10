@@ -214,7 +214,7 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
     auto = _pd.is_auto(row or {})
     secs = json.loads(json.dumps(detail.get("sections") or []))
     base_pool = _ds.number_pool(detail, row or {})
-    done, new_facts = [], []
+    done, new_facts, fix_facts = [], [], {}
     for i, a in enumerate(adds):
         w = f"additions[{i}]"
         if not isinstance(a, dict) or a.get("op") not in OPS:
@@ -234,17 +234,39 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
             if ft is not None and not isinstance(ft, list):
                 p.append(f"{w}: 基本情報表の形が違います")
                 continue
-            if any(isinstance(x, list) and x and x[0] == rw[0] for x in (ft or []) + new_facts):
+            # ★この道具で前に足した行（控えに同じ行がある）なら、同じ項目名で直せる★（2026-11-10・代役の指摘＝
+            #   導入日の控えが変わっても、足した行を直す道が無かった）。それ以外の既存の行は今までどおり断る
+            _same = [x for x in (ft or []) if isinstance(x, list) and x and x[0] == rw[0]]
+            _slug0 = row.get("slug") or detail.get("slug") or ""
+            _mine = False
+            if _same and rw[0] not in fix_facts:
+                try:
+                    _bas0 = _read_json_or(BASIS, [], list)
+                except Exception:                                # noqa: BLE001
+                    _bas0 = []
+                _mine = all(any(isinstance(b, dict) and b.get("slug") == _slug0
+                                and any(isinstance(a2, dict) and a2.get("op") == "add_fact" and a2.get("row") == x
+                                        for a2 in (b.get("additions") or []))
+                                for b in _bas0) for x in _same)
+            if (_same and not _mine) or rw[0] in fix_facts \
+                    or any(isinstance(x, list) and x and x[0] == rw[0] for x in new_facts):
                 p.append(f"{w}: 基本情報表に「{rw[0]}」の行がもうあります（直すなら decide_now）")
-            rec_toks, miss = _record_pool(row.get("slug") or detail.get("slug") or "", a.get("fields") or [], confirmed)
+            rec_toks, miss = _record_pool(_slug0, a.get("fields") or [], confirmed)
             if miss:
                 p.append(f"{w}: 確定値の記録がありません・形が違います: {'・'.join(miss)}")
-            made = _numbers_ok([x for x in rw if isinstance(x, str)], base_pool, rec_toks)
+            # ★直すときは、古い行の数字を「記事にある」に数えない★
+            _pool_f = _ds.number_pool(dict(detail, factTable=[x for x in (ft or []) if x not in _same]), row or {}) \
+                if _mine else base_pool
+            made = _numbers_ok([x for x in rw if isinstance(x, str)], _pool_f, rec_toks)
             if made:
                 p.append(f"{w}: 確定値にも記事にも無い数字があります: {'・'.join(made)}")
             if not p:
-                new_facts.append(list(rw))
-                done.append(f"基本情報表に「{rw[0]}」")
+                if _mine:
+                    fix_facts[rw[0]] = list(rw)
+                    done.append(f"基本情報表の「{rw[0]}」を直した")
+                else:
+                    new_facts.append(list(rw))
+                    done.append(f"基本情報表に「{rw[0]}」")
             continue
         if auto and a["op"] != "add_section":
             p.append(f"{w}: 新台経路の機種は欄を足す（add_section）だけです（育成が記事を作り直すため）")
@@ -371,8 +393,9 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
     if p:
         return {"problems": p}
     out = {"problems": [], "sections": secs, "done": done}
-    if new_facts:
-        out["factTable"] = json.loads(json.dumps(detail.get("factTable") or [])) + new_facts
+    if new_facts or fix_facts:
+        out["factTable"] = [list(fix_facts.get(x[0], x)) if isinstance(x, list) and x else x
+                            for x in json.loads(json.dumps(detail.get("factTable") or []))] + new_facts
     return out
 
 
@@ -674,6 +697,23 @@ def selftest() -> int:
         r = plan(dict(detail, factTable=[["導入日", "2025年6月2日"]]), row,
                  dec({"op": "add_fact", "row": ["導入日", "2025年6月2日"], "fields": ["legacy_release"]}), conf)
         t("　同じ項目の行がもうあれば足さない", any("もうあります" in x for x in r["problems"]))
+        _keep_bs = globals()["BASIS"]
+        _bt = os.path.join(tempfile.mkdtemp(prefix="additems_b_"), "basis.json")
+        try:
+            globals()["BASIS"] = _bt
+            io.open(_bt, "w", encoding="utf-8").write(json.dumps([{"slug": row["slug"], "additions": [
+                {"op": "add_fact", "row": ["導入日", "2024年1月1日"], "fields": ["legacy_release"]}]}],
+                ensure_ascii=False))
+            r = plan(dict(detail, factTable=[["機械割", "97.7%"], ["導入日", "2024年1月1日"]]), row,
+                     dec({"op": "add_fact", "row": ["導入日", "2025年6月2日"], "fields": ["legacy_release"]}), conf)
+            r2 = plan(dict(detail, factTable=[["導入日", "2024年1月1日"]]), row,
+                      dec({"op": "add_fact", "row": ["導入日", "2024年1月1日"]}), conf)
+        finally:
+            globals()["BASIS"] = _keep_bs
+        t("★★この道具で足した基本情報表の行は、同じ項目名の add_fact で直せる（控えの導入日が変わったとき）★★（代役の指摘）",
+          not r["problems"] and r["factTable"] == [["機械割", "97.7%"], ["導入日", "2025年6月2日"]])
+        t("　直すとき、古い行の数字は「記事にある」に数えない（確定値を名指ししなければ古い日付で直せない）",
+          any("無い数字" in x for x in r2["problems"]))
         r = plan(dict(detail, factTable=[]), row,
                  dec({"op": "add_fact", "row": ["メーカー", "サミー"]}, {"op": "add_fact", "row": ["メーカー", "北電子"]}),
                  conf)

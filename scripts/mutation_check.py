@@ -10788,8 +10788,8 @@ MUTATIONS = [
     {
         "why": "★大手との差：基本情報表に同じ項目の行を重ねる★",
         "file": "scripts/add_items.py",
-        "before": "            if any(isinstance(x, list) and x and x[0] == rw[0] for x in (ft or []) + new_facts):\n",
-        "after": "            if False:\n",
+        "before": "            if (_same and not _mine) or rw[0] in fix_facts \\\n",
+        "after": "            if False and (_same and not _mine) or rw[0] in fix_facts \\\n",
         "run": ["scripts/add_items.py"],
     },
     {
@@ -10802,7 +10802,7 @@ MUTATIONS = [
     {
         "why": "★大手との差：基本情報表の数字を確かめない★",
         "file": "scripts/add_items.py",
-        "before": "            made = _numbers_ok([x for x in rw if isinstance(x, str)], base_pool, rec_toks)\n",
+        "before": "            made = _numbers_ok([x for x in rw if isinstance(x, str)], _pool_f, rec_toks)\n",
         "after": "            made = []\n",
         "run": ["scripts/add_items.py"],
     },
@@ -10900,8 +10900,8 @@ MUTATIONS = [
     {
         "why": "★大手との差：同じ決定の中の同じ項目の行を見ない（Codex）★",
         "file": "scripts/add_items.py",
-        "before": "            if any(isinstance(x, list) and x and x[0] == rw[0] for x in (ft or []) + new_facts):\n",
-        "after": "            if any(isinstance(x, list) and x and x[0] == rw[0] for x in (ft or [])):\n",
+        "before": "                    or any(isinstance(x, list) and x and x[0] == rw[0] for x in new_facts):\n",
+        "after": "                    or False:\n",
         "run": ["scripts/add_items.py"],
     },
     {
@@ -11026,15 +11026,15 @@ MUTATIONS = [
     {
         "why": "★昔の機種の導入日：2AIが「このままでよい」と決めても取り残しの知らせが消えない（代役）★",
         "file": "scripts/legacy_release.py",
-        "before": "    (d.get(\"applied\") or {}).pop(slug, None)\n    d.setdefault(\"kept\", {})[slug] = {",
-        "after": "    d.setdefault(\"kept\", {})[slug] = {",
+        "before": "    (d.get(\"applied\") or {}).pop(slug, None)\n    # ★控えの導入日も残す★",
+        "after": "    # ★控えの導入日も残す★",
         "run": ["scripts/legacy_release.py"],
     },
     {
         "why": "★昔の機種の導入日：「このままでよい」の印を基本情報表の取り残しで見ない（代役）★",
         "file": "scripts/legacy_release.py",
-        "before": "        if s9 in kept and str(b.get(\"at\") or \"\")[:10] <= str((kept[s9] or {}).get(\"at\") or \"\"):\n",
-        "after": "        if False:\n",
+        "before": "        if s9 in kept and str(b.get(\"at\") or \"\")[:10] <= str((kept[s9] or {}).get(\"at\") or \"\") \\\n",
+        "after": "        if False and str(b.get(\"at\") or \"\")[:10] <= str((kept[s9] or {}).get(\"at\") or \"\") \\\n",
         "run": ["scripts/legacy_release.py"],
     },
     {
@@ -11061,15 +11061,15 @@ MUTATIONS = [
     {
         "why": "★昔の機種の導入日：基本情報表の日付が控えと食い違っても挙げない（代役6回目）★",
         "file": "scripts/legacy_release.py",
-        "before": "                              == _date_nums(have[s9].get(\"release\")) for r in live):\n",
-        "after": "                              != () for r in live):\n",
+        "before": "                                         have[s9].get(\"release\")) for r in live):\n",
+        "after": "                                         have[s9].get(\"release\")) or True for r in live):\n",
         "run": ["scripts/legacy_release.py"],
     },
     {
         "why": "★昔の機種の導入日：「このままでよい」の印が、後で足し直した行まで黙らせる（代役6回目）★",
         "file": "scripts/legacy_release.py",
-        "before": "        if s9 in kept and str(b.get(\"at\") or \"\")[:10] <= str((kept[s9] or {}).get(\"at\") or \"\"):\n",
-        "after": "        if s9 in kept:\n",
+        "before": "        if s9 in kept and str(b.get(\"at\") or \"\")[:10] <= str((kept[s9] or {}).get(\"at\") or \"\") \\\n",
+        "after": "        if s9 in kept and True \\\n",
         "run": ["scripts/legacy_release.py"],
     },
     {
@@ -11089,9 +11089,79 @@ MUTATIONS = [
     {
         "why": "★担当機種：新台期間の機種まで点検の古さに数える（代役6回目）★",
         "file": "scripts/machine_turn.py",
-        "before": "        if \"publication_policy\" in m and _gm.is_new_machine(",
-        "after": "        if False and _gm.is_new_machine(",
+        "before": "        if \"publication_policy\" in m and (_gm.is_new_machine(m.get(\"release_date\"), _dt.date.fromisoformat(today))\n",
+        "after": "        if \"publication_policy\" in m and (False\n",
         "run": ["scripts/machine_turn.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：待ち行列が読めない日に、控えの導入日を全部捨てる（代役7回目）★",
+        "file": "scripts/legacy_release.py",
+        "before": "            _pmq.load()\n",
+        "after": "            pass\n",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：結び付けの控えが無いのに、導入日の控えを全部捨てる（代役7回目）★",
+        "file": "scripts/legacy_release.py",
+        "before": "            if d[\"machines\"] and not os.path.isfile(_lb.STORE):\n",
+        "after": "            if False:\n",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：「このままでよい」が、控えの導入日が変わった後も効く（代役7回目）★",
+        "file": "scripts/legacy_release.py",
+        "before": "                and str((kept[s9] or {}).get(\"release\") or \"\") == str((have.get(s9) or {}).get(\"release\") or \"\"):\n",
+        "after": "                and True:\n",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：月までの書き方を、日まである値と食い違い扱いにする（代役7回目）★",
+        "file": "scripts/legacy_release.py",
+        "before": "    return x[:n] == y[:n]\n",
+        "after": "    return x == y\n",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★大手との差：この道具で足した基本情報表の行を直せない（代役7回目）★",
+        "file": "scripts/add_items.py",
+        "before": "                if _mine:\n                    fix_facts[rw[0]] = list(rw)\n",
+        "after": "                if False:\n                    fix_facts[rw[0]] = list(rw)\n",
+        "run": ["scripts/add_items.py"],
+    },
+    {
+        "why": "★大手との差：基本情報表の行を直すとき、古い行の数字を「記事にある」に数える（代役7回目）★",
+        "file": "scripts/add_items.py",
+        "before": "                if _mine else base_pool\n",
+        "after": "                if False else base_pool\n",
+        "run": ["scripts/add_items.py"],
+    },
+    {
+        "why": "★担当機種：導入前の新台まで点検の古さに数える（代役7回目）★",
+        "file": "scripts/machine_turn.py",
+        "before": "                                          or str(m.get(\"release_date\") or \"\")[:len(today)] > today):\n",
+        "after": "                                          or False):\n",
+        "run": ["scripts/machine_turn.py"],
+    },
+    {
+        "why": "★記事を直す：表の小見出しを名指ししても、注記として扱う（代役7回目）★",
+        "file": "scripts/decide_now.py",
+        "before": "                        plan.append((\"table_label\", si, ti, a))\n",
+        "after": "                        plan.append((\"table_note\", si, ti, a))\n",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★記事を直す：表の小見出しを書くとき何もしない（代役7回目）★",
+        "file": "scripts/decide_now.py",
+        "before": "                sec[\"tables\"][bi][\"label\"] = a[\"after\"]\n",
+        "after": "                pass\n",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★人気順：取り直せない日が続いても見張らない（代役7回目）★",
+        "file": "scripts/popular_machines.py",
+        "before": "    if days > STALE_RANK_DAYS:\n",
+        "after": "    if False:\n",
+        "run": ["scripts/popular_machines.py"],
     },
 ]
 

@@ -136,12 +136,20 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
     purged = []
     import legacy_binding as _lb
     if bound is _bound:
-        # ★★結び付けの控えそのものが読めないときは、捨てずに止める★★（2026-11-10・代役の指摘＝一時的に読めないだけで、
-        #   控えの導入日を全部捨てて保存していた）。書かずに例外で返す（呼ぶ側は「読めない」で終了コード2）
+        # ★★結び付けを確かめるのに要るもの（控え・待ち行列・機種一覧）が読めないときは、捨てずに止める★★
+        #   （2026-11-10・代役の指摘2回＝待ち行列が一時的に読めないだけで全機種が BindingError になり、全部捨てていた）。
+        #   ★控えのファイルが無いのに導入日の控えがあるときも止める★（消えたのか、結んだ記録が全部取り消されたのか分からない）
         try:
+            if d["machines"] and not os.path.isfile(_lb.STORE):
+                raise LegacyReleaseError("結び付けの控えがありません")
             _lb.load()
+            import pending_machines as _pmq
+            _pmq.load()
+            _lb._machines()
+        except LegacyReleaseError:
+            raise
         except Exception as e:                                   # noqa: BLE001
-            raise LegacyReleaseError(f"結び付けの控えを読めないので、導入日の控えを確かめられません（{type(e).__name__}）")
+            raise LegacyReleaseError(f"結び付けを確かめる材料を読めないので、導入日の控えを確かめられません（{type(e).__name__}）")
     for s in list(d["machines"]):
         try:
             u = bound(s)
@@ -233,8 +241,10 @@ def fact_orphans(d: dict, basis=None, details_dir: str = None) -> list:
         s9 = str(b.get("slug") or "")
         if not s9 or s9 in out:
             continue
-        # ★「このままでよい」の印は、その日より後に足し直した行には効かない★（代役の指摘＝印が後の取り残しまで黙らせた）
-        if s9 in kept and str(b.get("at") or "")[:10] <= str((kept[s9] or {}).get("at") or ""):
+        # ★「このままでよい」の印は、その日より後に足し直した行と、控えの導入日が変わった後には効かない★
+        #   （代役の指摘2回＝印が後の取り残しや、結び直して日付が変わった後の食い違いまで黙らせた）
+        if s9 in kept and str(b.get("at") or "")[:10] <= str((kept[s9] or {}).get("at") or "") \
+                and str((kept[s9] or {}).get("release") or "") == str((have.get(s9) or {}).get("release") or ""):
             continue
         rows9 = [a.get("row") for a in (b.get("additions") or [])
                  if isinstance(a, dict) and a.get("op") == "add_fact"
@@ -250,8 +260,8 @@ def fact_orphans(d: dict, basis=None, details_dir: str = None) -> list:
             continue
         # ★★控えに記録があっても、基本情報表の日付が控えと食い違えば挙げる★★（代役の指摘＝取り消して同じ日に
         #   結び直すと、古い日付の行が残ったまま見張りから消えた）
-        if s9 in have and all(_date_nums(r[1] if isinstance(r, list) and len(r) > 1 else "")
-                              == _date_nums(have[s9].get("release")) for r in live):
+        if s9 in have and all(_same_date(r[1] if isinstance(r, list) and len(r) > 1 else "",
+                                         have[s9].get("release")) for r in live):
             continue
         out.append(s9)
     return out
@@ -260,6 +270,15 @@ def fact_orphans(d: dict, basis=None, details_dir: str = None) -> list:
 def _date_nums(text) -> tuple:
     """日付の数字だけを並べる（「2025年6月2日」と「2025-06-02」を同じに読む）"""
     return tuple(int(x) for x in re.findall(r"[0-9]+", str(text or "")))
+
+
+def _same_date(a, b) -> bool:
+    """★同じ日付か★（月までの書き方は、日まである値と同じ月なら食い違いにしない＝mismatches と同じ決まり）"""
+    x, y = _date_nums(a), _date_nums(b)
+    if len(x) < 2 or len(y) < 2:
+        return x == y
+    n = min(len(x), len(y))
+    return x[:n] == y[:n]
 
 
 def keep_release(slug: str, by, why: str, path: str = None, today: str = None) -> list:
@@ -274,12 +293,13 @@ def keep_release(slug: str, by, why: str, path: str = None, today: str = None) -
     if len(str(why or "").strip()) < 15:
         p.append("理由（why）は15字以上で書きます")
     d = read(path)
-    if slug in (d.get("machines") or {}):
-        p.append("控えにいまの記録があります（取り残しではありません）")
     if p:
         return p
     (d.get("applied") or {}).pop(slug, None)
+    # ★控えの導入日も残す★＝控えに記録があって表の日付と食い違う場合も、2AIが「このままでよい」と決められる
+    #   （代役の指摘＝直す道も外す道も無く🟡が鳴り続けた）。控えの導入日が変われば印は効かなくなる
     d.setdefault("kept", {})[slug] = {"at": today or datetime.date.today().isoformat(),
+                                      "release": str(((d.get("machines") or {}).get(slug) or {}).get("release") or ""),
                                       "by": sorted(x for x in by if str(x).strip()), "why": str(why).strip()}
     _save(d, path)
     return []
@@ -511,6 +531,35 @@ def selftest() -> int:
         _r9 = {"purged": None}
     t("★★1件の結び付けが使えないだけなら、その1件の控えだけ捨てて続ける（全体を止めない）★★（代役の指摘）",
       _r9["purged"] == ["a"] and release_for("b", p2) == "2024-03-04")
+    import pending_machines as _pmz
+    _keep_pl, _keep_b = _pmz.load, globals()["_bound"]
+    _keep_store = _lbx.STORE
+    _bf = os.path.join(os.path.dirname(p2), "binding.json")
+    with open(_bf, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"schema_version": _lbx.SCHEMA, "bindings": {}}))
+    _r10 = None
+    try:
+        _lbx.STORE = _bf
+        globals()["_bound"] = lambda s9: (_ for _ in ()).throw(_lbx.BindingError("待ち行列が読めないので"))
+        _pmz.load = lambda *a, **k: (_ for _ in ()).throw(OSError("ロック中"))
+        try:
+            refresh(0, True, rows=rows, fetch=lambda u: "2025-06-02", today="2026-11-12", path=p2, log=lambda *a: None)
+        except LegacyReleaseError as e:
+            _r10 = str(e)
+        _mid = release_for("b", p2)
+        _lbx.STORE = _bf + ".nai"
+        _pmz.load = _keep_pl
+        try:
+            refresh(0, True, rows=rows, fetch=lambda u: "2025-06-02", today="2026-11-12", path=p2, log=lambda *a: None)
+            _r11 = None
+        except LegacyReleaseError as e:
+            _r11 = str(e)
+    finally:
+        _pmz.load, globals()["_bound"], _lbx.STORE = _keep_pl, _keep_b, _keep_store
+    t("★★待ち行列が一時的に読めない日は、控えの導入日を1件も捨てずに止める★★（代役の指摘＝全件が BindingError になり全部消えた）",
+      _r10 is not None and _mid == "2024-03-04")
+    t("　結び付けの控えのファイルが無いのに導入日の控えがあれば止める（消えたのか取り消したのか分からない）",
+      _r11 is not None and release_for("b", p2) == "2024-03-04")
     refresh(1, True, rows=rows, fetch=lambda u: "2025-06-02", bound=bound, today="2026-11-12",
             path=p, log=lambda *a: None)
     _r4 = refresh(0, True, rows=rows, fetch=lambda u: "2025-06-02", bound={"a": U % 7, "d": U % 4}.get,
@@ -602,6 +651,14 @@ def selftest() -> int:
       and fact_orphans({"machines": {"a": {"release": "2025-06-02"}}}, _bas, _dd) == [])
     t("★★控えに記録があっても、基本情報表の日付が控えと食い違えば挙げる★★（代役の指摘＝同じ日に結び直すと消えた）",
       fact_orphans({"machines": {"a": {"release": "2025-07-01"}}}, _bas, _dd) == ["a"])
+    t("　月までの書き方は、日まである値と同じ月なら食い違いにしない（mismatches と同じ決まり）",
+      _same_date("2025年6月", "2025-06-02") and _same_date("2025-06", "2025年6月頃")
+      and not _same_date("2025年6月2日", "2025-06-03") and not _same_date("2025年7月", "2025-06-02"))
+    t("　記録がある機種でも、2AIが「このままでよい」と決めたら外せる（控えの導入日が同じあいだだけ）",
+      fact_orphans({"machines": {"a": {"release": "2025-07-01"}},
+                    "kept": {"a": {"at": "2026-11-10", "release": "2025-07-01"}}}, _bas, _dd) == []
+      and fact_orphans({"machines": {"a": {"release": "2025-08-01"}},
+                        "kept": {"a": {"at": "2026-11-10", "release": "2025-07-01"}}}, _bas, _dd) == ["a"])
     _pk = os.path.join(os.path.dirname(pz), "keep.json")
     _save(dict(_da, applied={"a": "2025-06-02"}), _pk)
     _k1 = keep_release("a", ["claude"], "正しいページが無いと2AIで決めたため", path=_pk)
@@ -692,8 +749,9 @@ def main() -> int:
             return 2
         if _orph:
             pr = ((pr + " ／ ") if pr else "") + (
-                f"結び付けを取り消したのに、写した導入日（機種一覧・基本情報表）が残っている機種が{len(_orph)}件: "
-                + "・".join(_orph[:5]) + "（2AIで正しい導入日を確かめ直す。いまの値でよければ --keep-release）")
+                f"写した導入日（機種一覧・基本情報表）が、控え（DMMの値）と合わない・控えが無いのに残っている機種が{len(_orph)}件: "
+                + "・".join(_orph[:5]) + "（2AIで正しい導入日を確かめ、基本情報表は add_items の add_fact で直す。"
+                "いまの値でよければ --keep-release）")
         print(("🟡 " + pr) if pr else f"🟢 昔からの機種の導入日：控え {len(d['machines'])}件")
         return 1 if pr else 0
     if a.unbound:
