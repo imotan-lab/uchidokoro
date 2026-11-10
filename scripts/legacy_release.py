@@ -35,6 +35,9 @@ STORE = os.path.join(BASE, "assets", "data", "legacy-release.json")
 MACHINES = os.path.join(BASE, "assets", "data", "machines.json")
 SCHEMA = "legacy-release/v1"
 STALL_DAYS = 3
+# ★★確かめてから30日は取り直さない★★（2026-11-10・洗い出し2回目）＝直す前は確かめ済みの機種まで毎日20件取り直し、
+#   控え（リポジトリの中）の日付だけが変わって毎日コミットしていた。昔の機種の導入日はまず変わらない
+RECHECK_DAYS = 30
 _ID_RE = re.compile(r"^https://p-town\.dmm\.com/machines/([0-9]+)$")
 _REL_RE = re.compile(r"^\d{4}-\d{2}(-\d{2})?$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -132,6 +135,11 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
             log(f"結び付けが使えません {s}: {str(e)[:100]}")
             continue
         if u and _ID_RE.match(u):
+            rec = d["machines"].get(s) or {}
+            if rec.get("url") == u and _DATE_RE.match(str(rec.get("checked") or "")) and (
+                    datetime.date.fromisoformat(today)
+                    - datetime.date.fromisoformat(rec["checked"])).days < RECHECK_DAYS:
+                continue
             cands.append((s, u))
     cands.sort(key=lambda su: str(d["tries"].get(su[0], "")))
     done, failed = [], []
@@ -224,12 +232,25 @@ def selftest() -> int:
       d["machines"].get("a", {}).get("release") == "2025-06-02" and release_for("a", p) == "2025-06-02")
     t("★結び付けの無い機種は取りに行かない★（推測しない）", "e" not in d["tries"])
     t("　試した日は全部残る", d["tries"] == {"a": "2026-11-10", "d": "2026-11-10"})
-    r2 = refresh(1, True, rows=rows, fetch=lambda u: "2025-06-02", bound=bound, today="2026-11-11",
-                 path=p, log=lambda *a: None)
-    t("★試した日が古い順に取り直す★（同じ日なら機種一覧の順）", [x[0] for x in r2["done"]] == ["a"])
+    r2 = refresh(5, True, rows=rows, fetch=lambda u: {U % 1: "2025-06-02", U % 4: "未定"}[u],
+                 bound=bound, today="2026-11-11", path=p, log=lambda *a: None)
+    t("★★確かめて30日たっていない機種は取り直さない★★（直す前は毎日20件取り直し、毎日コミットしていた）",
+      not r2["done"] and [x[0] for x in r2["failed"]] == ["d"])
+    p2 = os.path.join(os.path.dirname(p), "lr_re.json")
+    _save({"machines": {"a": {"release": "2025-06-02", "url": U % 1, "checked": "2026-10-11"}},
+           "tries": {"a": "2026-10-11"}}, p2)
+    _r29 = refresh(5, True, rows=rows, fetch=lambda u: "2025-06-02", bound={"a": U % 1}.get,
+                   today="2026-11-09", path=p2, log=lambda *a: None)
+    _r30 = refresh(5, True, rows=rows, fetch=lambda u: "2025-06-02", bound={"a": U % 1}.get,
+                   today="2026-11-10", path=p2, log=lambda *a: None)
+    t("　30日たったら取り直す（29日なら取り直さない）",
+      _r29["candidates"] == 0 and [x[0] for x in _r30["done"]] == ["a"])
+    _save({"machines": {"a": {"release": "2025-06-02", "url": U % 1, "checked": "2026-09-01"}},
+           "tries": {}}, p2)
     t("★読めなければ書かず、前の記録は残す★",
-      refresh(1, True, rows=rows, fetch=lambda u: (_ for _ in ()).throw(ValueError("x")), bound=bound,
-              today="2026-11-12", path=p, log=lambda *a: None)["failed"] and release_for("a", p) == "2025-06-02")
+      refresh(1, True, rows=rows, fetch=lambda u: (_ for _ in ()).throw(ValueError("x")),
+              bound={"a": U % 1}.get, today="2026-11-12", path=p2, log=lambda *a: None)["failed"]
+      and release_for("a", p2) == "2025-06-02")
     _r3 = refresh(0, True, rows=rows, fetch=lambda u: "2025-06-02", bound={"d": U % 4}.get,
                   today="2026-11-12", path=p, log=lambda *a: None)
     t("★★結び付けを取り消した機種の導入日は、控えから捨てる★★（Codexの指摘＝別の機種の日付が残った）",

@@ -392,9 +392,15 @@ def candidates(rows: list, details: dict) -> list:
     return out
 
 
-def pick(n: int, cands: list, tried: dict, today: str) -> list:
+def pick(n: int, cands: list, tried: dict, today: str, pending: dict = None) -> list:
     """★純関数★ 一度も試していない機種→最後に試した日が古い順。今日試した機種と、
-    「書けない・決まらない」と答えて RETRY_DAYS 日たっていない機種は外す"""
+    「書けない・決まらない」と答えて RETRY_DAYS 日たっていない機種は外す。
+
+    ★★一部だけ書けた機種（WRITTEN で残りがある）も RETRY_DAYS 日あける★★（2026-11-10・洗い出し2回目）＝
+    直す前は残りの欄が書けないままでも毎朝選ばれ、ほかの機種の枠を食っていた。
+    ただし、書いたときに無かった未確認の欄が増えていれば（土台が変わって戻した等）すぐ選ぶ。
+    pending … slug → いま未確認の欄の名前（無ければ増えたかは見ない）
+    """
     cut = (_dt.date.fromisoformat(today) - _dt.timedelta(days=RETRY_DAYS)).isoformat()
     never, old = [], []
     for s in cands:
@@ -407,6 +413,10 @@ def pick(n: int, cands: list, tried: dict, today: str) -> list:
             continue
         if t.get("result") in RESULTS and at > cut:
             continue
+        if t.get("result") == "WRITTEN" and t.get("left") and at > cut:
+            grew = pending is not None and set((pending or {}).get(s) or []) - set(t.get("left") or [])
+            if not grew:
+                continue
         old.append(s)
     old.sort(key=lambda s: str(tried[s].get("at", "")))
     return (never + old)[:max(0, n)]
@@ -528,6 +538,14 @@ def selftest() -> int:
     t("★★一度も試していない機種→古い順。今日試した機種と、断って3日たたない機種は外す★★",
       pick(5, ["a", "b", "c", "d", "e"], tried, "2026-11-10") == ["e", "d", "a"])
     t("　数を守る", pick(1, ["a", "e"], tried, "2026-11-10") == ["e"])
+    _tp2 = {"f": {"at": "2026-11-09", "result": "WRITTEN", "left": ["ヤメ時の判断"]},
+            "g": {"at": "2026-11-09", "result": "WRITTEN", "left": ["ヤメ時の判断"]}}
+    t("★★一部だけ書けた機種は、残りがあっても3日あける（毎朝選ばない）★★",
+      pick(5, ["f"], _tp2, "2026-11-10", {"f": ["ヤメ時の判断"]}) == []
+      and pick(5, ["f"], _tp2, "2026-11-13", {"f": ["ヤメ時の判断"]}) == ["f"])
+    t("　書いたときに無かった未確認の欄が増えていれば、すぐ選ぶ（土台が変わって戻した等）",
+      pick(5, ["f", "g"], _tp2, "2026-11-10",
+           {"f": ["ヤメ時の判断", "立ち回りのコツ"], "g": ["ヤメ時の判断"]}) == ["f"])
     t("★だれも試していなければ番人に知らせる★", stall_problem(["a"], {}, "2026-11-10") is not None)
     t("★3日だれも試していなければ知らせる★",
       stall_problem(["a"], {"a": {"at": "2026-11-07"}}, "2026-11-10") is not None)
@@ -653,7 +671,8 @@ def main() -> int:
         return 2
     cands = candidates(rows, details)
     if a.next is not None:
-        got = pick(a.next, cands, q.get("tried") or {}, today)
+        got = pick(a.next, cands, q.get("tried") or {}, today,
+                   {s: pending_titles(details[s]) for s in cands})
         for s in got:
             print(f"{s}: 未確認＝{'・'.join(pending_titles(details[s]))}")
         if not got:
