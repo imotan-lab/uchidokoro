@@ -11313,8 +11313,8 @@ MUTATIONS = [
     {
         "why": "★チェッカー：50枚あたりG数で採った確定値が取り消されても知らせない（Codex612-2）★",
         "file": "scripts/checker_verdict.py",
-        "before": "                if not isinstance((_cv2.for_slug(slug) or {}).get(\"games_per_50\"), dict):\n",
-        "after": "                if False:\n",
+        "before": "        if last.get(\"field\") == \"games_per_50\" and conf is not None and not isinstance(rec, dict):\n",
+        "after": "        if False:\n",
         "run": ["scripts/checker_verdict.py"],
     },
     {
@@ -11330,6 +11330,13 @@ MUTATIONS = [
         "before": "                try:\n                    u = bound(s)\n                except _lb.PendingUnreadable as e4:",
         "after": "                try:\n                    u = None\n                except _lb.PendingUnreadable as e4:",
         "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★チェッカー：50枚あたりG数の照合で、確定値が読めなかったことを黙る（Codex612-3）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        out.append(f\"確定値を読めないので照合できません（{type(e).__name__}）\")\n",
+        "after": "        pass\n",
+        "run": ["scripts/checker_verdict.py"],
     },
 ]
 

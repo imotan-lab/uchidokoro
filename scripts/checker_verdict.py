@@ -1847,17 +1847,25 @@ def coin_drift(slug: str, m: dict) -> list:
         return []
     v = _ai._canon(str(ck.get("coinRate")))
     out = []
+    # ★確定値は1回だけ読み、値の照合と取り消しの確認で同じ結果を使う★（Codexの指摘＝2回読んでいて、1回目だけ失敗すると
+    #   読めなかったことも食い違いも黙った）。読めなければ「照合できません」を返す
     try:
         import confirmed_values as _cv
-        import decide_now as _dn_d
-        rec = (_cv.for_slug(slug) or {}).get("games_per_50")
-        if isinstance(rec, dict):
+        conf = _cv.for_slug(slug) or {}
+    except Exception as e:                                   # noqa: BLE001
+        conf = None
+        out.append(f"確定値を読めないので照合できません（{type(e).__name__}）")
+    rec = (conf or {}).get("games_per_50")
+    if isinstance(rec, dict):
+        try:
+            import decide_now as _dn_d
             toks = {_ai._canon(n) for st in _ai.record_strings("games_per_50", rec.get("value"))
                     for n, _u in _dn_d.numbers_with_unit(st)}
-            if toks and v not in toks:
-                out.append(f"確定値 games_per_50 は {sorted(toks)}・チェッカーは {ck.get('coinRate')}")
-    except Exception:                                        # noqa: BLE001
-        pass
+        except Exception as e:                               # noqa: BLE001
+            toks = set()
+            out.append(f"確定値 games_per_50 の形が読めません（{type(e).__name__}）")
+        if toks and v not in toks:
+            out.append(f"確定値 games_per_50 は {sorted(toks)}・チェッカーは {ck.get('coinRate')}")
     try:
         bas = [b for b in (_sj.read_json(COIN_BASIS, expect=list) if os.path.isfile(COIN_BASIS) else [])
                if isinstance(b, dict) and b.get("slug") == slug]
@@ -1866,14 +1874,9 @@ def coin_drift(slug: str, m: dict) -> list:
         return out + [f"判断の控え（coin_rate_basis.json）を読めないので照合できません（{type(e).__name__}）"]
     if bas:
         last = bas[-1]
-        if last.get("field") == "games_per_50":
+        if last.get("field") == "games_per_50" and conf is not None and not isinstance(rec, dict):
             # ★採った確定値が取り消されたら知らせる★（Codexの指摘＝値の訂正だけ見て、取り消しは見ていなかった）
-            try:
-                import confirmed_values as _cv2
-                if not isinstance((_cv2.for_slug(slug) or {}).get("games_per_50"), dict):
-                    out.append("書いたときに採った確定値 games_per_50 がもうありません")
-            except Exception as e:                           # noqa: BLE001
-                out.append(f"確定値を読めないので照合できません（{type(e).__name__}）")
+            out.append("書いたときに採った確定値 games_per_50 がもうありません")
         if _ai._canon(str(last.get("coinRate"))) != v:
             out.append(f"最後に2AIで書いた値 {last.get('coinRate')} とチェッカーの {ck.get('coinRate')} が違います")
         elif last.get("quote") and not any(str(last["quote"]) in s9 for s9 in _article_strings(slug)):
@@ -3126,6 +3129,20 @@ def _coin_tests(t) -> None:
         _cvz.for_slug = _keep_fs
     t("★★採った確定値が取り消されたら知らせる／控えが読めなければ知らせる★★（Codexの指摘）",
       any("もうありません" in x for x in _cd3) and any("読めない" in x for x in _cd4))
+    _calls_c = [0]
+
+    def _fs_flaky(s9, data=None):
+        _calls_c[0] += 1
+        if _calls_c[0] == 1:
+            raise OSError("一瞬だけ読めない")
+        return {"games_per_50": {"value": {"amount": "32"}}}
+    try:
+        _cvz.for_slug = _fs_flaky
+        _cd5 = coin_drift("zzz_c", {"checker": {"coinRate": 31}})
+    finally:
+        _cvz.for_slug = _keep_fs
+    t("★★確定値が読めなければ、そのことを知らせる（2回読んで1回目の失敗を黙らない）★★（Codexの指摘）",
+      any("読めない" in x for x in _cd5) and _calls_c[0] == 1)
     t("★入力の上限を超える線を数える（byRate の中も）★",
       sorted(_strs_num({"normal": {"good": 420, "byRate": {"rate45": {"excellent": 760}}}})) == [420, 760])
 
