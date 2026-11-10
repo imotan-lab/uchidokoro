@@ -2673,7 +2673,7 @@
   "slug": "prskkm",
   "name": "スマスロパリピ孔明",
   "seo": {
-   "title": "スマスロパリピ孔明 スペック・基本情報"
+   "title": "スマスロパリピ孔明 天井・狙い目"
   },
   "info": "",
   "strategy": "",
@@ -2707,7 +2707,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-14",
+   "decided_at": "2026-11-11",
    "input_digest": "sha256:4f39c8038dfbe837e7262b763fb5d7a640ba3032004f2cdc059b6575d3c7aa34"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
