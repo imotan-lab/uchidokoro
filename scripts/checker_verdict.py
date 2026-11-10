@@ -1813,11 +1813,84 @@ def _revise_tests(t) -> None:
         DROPS_STORE, globals()["_machines"], globals()["DETAILS"] = _bak
 
 
+COIN = "COIN_RATE"
+
+
+def _coin_allowed(slug: str, m: dict) -> set:
+    """★50枚あたりG数として受け取れる数★＝この機種の公開データ（記事＋機種行）の数と、確定値 games_per_50 の照合済みの値"""
+    import add_items as _ai
+    got = {_ai._canon(n) for n, _u in _published_numbers(slug, m)}
+    try:
+        import confirmed_values as _cv
+        rec = (_cv.for_slug(slug) or {}).get("games_per_50")
+        if isinstance(rec, dict):
+            import decide_now as _dn_c
+            for st in _ai.record_strings("games_per_50", rec.get("value")):
+                got |= {_ai._canon(n) for n, _u in _dn_c.numbers_with_unit(st)}
+    except Exception:                                        # noqa: BLE001
+        pass
+    return got
+
+
+def coin_problems(dec, ms=None) -> list:
+    """★昔の機種のチェッカーに「50枚あたりG数」（coinRate）を書く決定★（2026-11-10・代役の指摘＝
+    ゲーム数別の早見表の「直行なら投入」の列は coinRate があるときだけ出るが、昔の機種108機種に書く道が無かった）"""
+    ng, m = _common_problems(dec, ms)
+    if m is None:
+        return ng
+    slug = str(dec.get("slug") or "")
+    if "publication_policy" in m:
+        ng.append(f"{slug}: 新台の50枚あたりG数は育成が材料から作ります")
+    ck = m.get("checker")
+    if not isinstance(ck, dict) or str(ck.get("unit") or "G") != "G":
+        ng.append(f"{slug}: G数のチェッカーを持つ機種だけです")
+    v = dec.get("coinRate")
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not 10 <= v <= 100:
+        ng.append("coinRate は 10〜100 の数で書きます")
+    else:
+        import add_items as _ai
+        if _ai._canon(str(v)) not in _coin_allowed(slug, m):
+            ng.append(f"{slug}: {v} は記事・機種行・確定値（games_per_50）にありません（数字を作らない）")
+    return ng
+
+
+def apply_coin(dec: dict, ms: list, dry_run: bool = False) -> int:
+    ng = coin_problems(dec, ms)
+    if ng:
+        print("★書きません★（1件でも通らなければ何も書かない）")
+        for x in ng:
+            print("  ・" + x)
+        return 1
+    slug = str(dec.get("slug") or "")
+    i = next(i for i, m in enumerate(ms) if str(m.get("slug") or "") == slug)
+    new = json.loads(json.dumps(ms[i], ensure_ascii=False))
+    new["checker"]["coinRate"] = dec["coinRate"]
+    if new == ms[i]:
+        print(f"{slug}: すでにその50枚あたりG数です（書きません）")
+        return 0
+    if dry_run:
+        print(f"{slug}: 50枚あたりG数を {dec['coinRate']} と書きます")
+        return 0
+    ms[i] = new
+    # ★書式はほかの書き手と同じ（字下げ1・LF）★
+    _body = json.dumps(ms, ensure_ascii=False, indent=1) + "\n"
+    with open(MACHINES + ".tmp", "wb") as f:
+        f.write(_body.encode("utf-8"))
+    os.replace(MACHINES + ".tmp", MACHINES)
+    if _find(_machines(), slug) != new:
+        print("★書いた後の読み直しが合いません★（手で確かめてください）")
+        return 1
+    print(f"{slug}: 50枚あたりG数を {dec['coinRate']} と書きました（ゲーム数別の早見表に「直行なら投入」が出ます）")
+    return 0
+
+
 def apply_decision(path: str, dry_run: bool = False) -> int:
     dec = _sj.read_json(path, expect=dict)
     ms = _machines()
     if str(dec.get("decision") or "") == REVISE:
         return apply_revise(dec, ms, dry_run)
+    if str(dec.get("decision") or "") == COIN:
+        return apply_coin(dec, ms, dry_run)
     # ★★「線を引かない」という結論も受け取る★★（2026-09-21・台帳#704）
     #   ★天井が分かっても、座ってよいゲーム数を出せないことはある★
     #   （平均投資・当選時の期待枚数が確認できていない機種）。
@@ -1902,6 +1975,22 @@ def apply_decision(path: str, dry_run: bool = False) -> int:
     return 0
 
 
+def _strs_num(ck) -> list:
+    """チェッカーの線（excellent / good / caution / target）の数を全部（byRate・回数の行も）"""
+    out = []
+    if isinstance(ck, dict):
+        for k, v in ck.items():
+            if k in ("excellent", "good", "caution", "target") and isinstance(v, (int, float)) \
+                    and not isinstance(v, bool):
+                out.append(v)
+            elif isinstance(v, (dict, list)):
+                out += _strs_num(v)
+    elif isinstance(ck, list):
+        for v in ck:
+            out += _strs_num(v)
+    return out
+
+
 def show(slug: str) -> int:
     """★2AIが読む材料を出す★（★決めない★＝いくつにするかは2AIの仕事）"""
     m = _find(_machines(), slug)
@@ -1912,6 +2001,17 @@ def show(slug: str) -> int:
     print("いまのチェッカー:",
           json.dumps(m.get("checker") or {}, ensure_ascii=False)[:700])
     print("いまの一覧の文:", repr(m.get("strategy") or ""))
+    _ck_s = m.get("checker") if isinstance(m.get("checker"), dict) else {}
+    if _ck_s.get("modes") and str(_ck_s.get("unit") or "G") == "G" and "coinRate" not in _ck_s \
+            and "publication_policy" not in m:
+        print("★50枚あたりG数（coinRate）がありません★＝記事・確定値に値があれば "
+              '{"decision": "COIN_RATE", "coinRate": 31.0, ...} で書く（ゲーム数別の早見表に「直行なら投入」が出る）')
+    _lim = m.get("limit")
+    if isinstance(_lim, (int, float)) and not isinstance(_lim, bool):
+        _over = sorted({v for v in _strs_num(_ck_s) if v > _lim})
+        if _over:
+            print(f"★入力の上限（limit {_lim}）を超える線があります★: {_over[:6]}＝読者が入力できない／天井より深い線の疑い。"
+                  "2AIで線（byRate 含む）を確かめて直す")
     if not isinstance(m.get("checker"), dict) or not (m.get("checker") or {}).get("modes"):
         # ★★チェッカーの無い機種を知らせる★★（2026-11-10・代役の指摘＝昔の機種5台が、一覧の文「算定中」のまま3か月
         #   止まっていた。書く道具はあるのに、問いを出す所が新台だけだった）
@@ -2781,6 +2881,7 @@ def selftest() -> int:
     t("　チェッカーに入っている天井は読める（対照）", _wired == {888})
 
     _no_line_tests(t)
+    _coin_tests(t)
     _revise_tests(t)
     _rows_tests(t)
     _adds_tests(t)
@@ -2796,6 +2897,28 @@ def selftest() -> int:
       "targetProjection" not in _tp_after and _tp_m.get("targetProjection") == "aaaa")
     print(f"\n{ok[0]}/{ok[1]} 合格")
     return 0 if ok[0] == ok[1] else 1
+
+
+def _coin_tests(t) -> None:
+    """★50枚あたりG数の決定★（本番の machines.json には書かない）"""
+    m = {"slug": "zzz_c", "name": "試験機", "checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}]},
+         "info": "50枚あたり約31.0G"}
+    ms = [m]
+    base = {"slug": "zzz_c", "decision": COIN, "judges": ["claude", "codex"], "why": "基本情報表の50枚あたりの値を入れる"}
+    keep = globals()["_published_numbers"]
+    try:
+        globals()["_published_numbers"] = lambda s9, m9: {("31.0", "G")}
+        t("★★昔の機種のチェッカーに、記事にある50枚あたりG数を書ける★★（代役の指摘＝108機種に書く道が無かった）",
+          coin_problems(dict(base, coinRate=31), ms) == [])
+        t("　記事・確定値に無い数は書かない（数字を作らない）",
+          any("ありません" in x for x in coin_problems(dict(base, coinRate=33.5), ms)))
+        t("　新台は育成が作るので断る",
+          any("新台" in x for x in coin_problems(dict(base, coinRate=31), [dict(m, publication_policy="page-decision/v2")])))
+        t("　判断者の組が要る", any("判断者" in x for x in coin_problems(dict(base, judges=["claude"], coinRate=31), ms)))
+    finally:
+        globals()["_published_numbers"] = keep
+    t("★入力の上限を超える線を数える（byRate の中も）★",
+      sorted(_strs_num({"normal": {"good": 420, "byRate": {"rate45": {"excellent": 760}}}})) == [420, 760])
 
 
 def _no_line_tests(t) -> None:

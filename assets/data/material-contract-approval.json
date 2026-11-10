@@ -9,7 +9,7 @@
   "scripts/add_machine_run.py": "e50fb8c794c018038338fb6c650ef9adfa92ed1f0d02ae0069208b1c84d9ad22",
   "scripts/adoption_basis.py": "b816e9cabae59738572420fbf6d77b888ad70fc5d6585aacf6e783ac9188c2d0",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
-  "scripts/automation_policy.py": "308cf1510e49f3cc57354e66ad2acef887c60fca87c7b09b536d6b011a6c8169",
+  "scripts/automation_policy.py": "241d46b1c2e2415534547c129fcae88c16456e0890df8d4129bee74fbdab9f59",
   "scripts/blocked_hosts.py": "4ceaea818d61bff2571542622b695fb67295d523ba015667ba89d9829425c2d9",
   "scripts/ceiling_dismiss.py": "a0e9bee6afbea29cbc97e3be9ea58239fc3bf47036d001206aa90f999605e9d8",
   "scripts/ceiling_lookup.py": "17cd802e6d8e5eb90bcc13354cef0d602f7c3693ab5419434643c4b1edac0118",

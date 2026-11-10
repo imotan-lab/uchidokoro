@@ -11026,8 +11026,8 @@ MUTATIONS = [
     {
         "why": "★昔の機種の導入日：2AIが「このままでよい」と決めても取り残しの知らせが消えない（代役）★",
         "file": "scripts/legacy_release.py",
-        "before": "    (d.get(\"applied\") or {}).pop(slug, None)\n    # ★控えの導入日も残す★",
-        "after": "    # ★控えの導入日も残す★",
+        "before": "        (d.get(\"applied\") or {}).pop(slug, None)\n    # ★控えの導入日も残す★",
+        "after": "        pass\n    # ★控えの導入日も残す★",
         "run": ["scripts/legacy_release.py"],
     },
     {
@@ -11162,6 +11162,41 @@ MUTATIONS = [
         "before": "    if days > STALE_RANK_DAYS:\n",
         "after": "    if False:\n",
         "run": ["scripts/popular_machines.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：取り直しの途中で待ち行列が読めなくなると、残りの控えを捨てる（代役8回目）★",
+        "file": "scripts/legacy_release.py",
+        "before": "                    _pmr.load()\n",
+        "after": "                    pass\n",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：記録がある機種の「このままでよい」で、写した印まで消す（代役8回目）★",
+        "file": "scripts/legacy_release.py",
+        "before": "    if slug not in (d.get(\"machines\") or {}):\n        (d.get(\"applied\") or {}).pop(slug, None)\n",
+        "after": "    if True:\n        (d.get(\"applied\") or {}).pop(slug, None)\n",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★チェッカー：50枚あたりG数を、記事・確定値に無い数でも書く（代役8回目）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        if _ai._canon(str(v)) not in _coin_allowed(slug, m):\n",
+        "after": "        if False:\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★チェッカー：新台の50枚あたりG数まで決定で書く（代役8回目）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "    if \"publication_policy\" in m:\n        ng.append(f\"{slug}: 新台の50枚あたりG数は育成が材料から作ります\")\n",
+        "after": "    if False:\n        ng.append(f\"{slug}: 新台の50枚あたりG数は育成が材料から作ります\")\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★通信の名簿：規約の確認期限が近づいても知らせない（代役8回目）★",
+        "file": "scripts/automation_policy.py",
+        "before": "        if c.get(\"status\") == APPROVED and rb and rb <= lim:\n",
+        "after": "        if False:\n",
+        "run": ["scripts/automation_policy.py"],
     },
 ]
 

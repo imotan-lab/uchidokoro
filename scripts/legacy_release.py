@@ -156,6 +156,13 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
         except _lb.BindingError:
             # ★★この1件の結び付けが使えない（機種名が変わった・URLが重なった・封が合わない）なら、その控えだけ捨てる★★
             #   （代役の指摘＝例外で全体を止めると、1件の不具合で全機種の取り直しが毎日止まった）
+            # ★ただし途中で待ち行列が読めなくなったのなら止める★（待ち行列の読み失敗も BindingError に包まれて来る・代役の指摘）
+            if bound is _bound:
+                try:
+                    import pending_machines as _pmr
+                    _pmr.load()
+                except Exception as e2:                          # noqa: BLE001
+                    raise LegacyReleaseError(f"途中で待ち行列を読めなくなったので止めます（{type(e2).__name__}）")
             u = None
         except Exception as e:                                   # noqa: BLE001
             raise LegacyReleaseError(f"結び付けを読めないので、控えを確かめられません（{s}: {type(e).__name__}）")
@@ -295,7 +302,10 @@ def keep_release(slug: str, by, why: str, path: str = None, today: str = None) -
     d = read(path)
     if p:
         return p
-    (d.get("applied") or {}).pop(slug, None)
+    # ★控えに記録がある機種では、写した印（applied）は残す★（代役の指摘＝あとで結び付けを取り消したとき、
+    #   機種一覧に写した導入日の取り残しを見張れなくなった）
+    if slug not in (d.get("machines") or {}):
+        (d.get("applied") or {}).pop(slug, None)
     # ★控えの導入日も残す★＝控えに記録があって表の日付と食い違う場合も、2AIが「このままでよい」と決められる
     #   （代役の指摘＝直す道も外す道も無く🟡が鳴り続けた）。控えの導入日が変われば印は効かなくなる
     d.setdefault("kept", {})[slug] = {"at": today or datetime.date.today().isoformat(),
@@ -547,6 +557,20 @@ def selftest() -> int:
         except LegacyReleaseError as e:
             _r10 = str(e)
         _mid = release_for("b", p2)
+        _calls = [0]
+
+        def _pl_once(*a9, **k9):
+            _calls[0] += 1
+            if _calls[0] > 1:
+                raise OSError("途中からロック中")
+            return {}
+        _pmz.load = _pl_once
+        _r12 = None
+        try:
+            refresh(0, True, rows=rows, fetch=lambda u: "2025-06-02", today="2026-11-12", path=p2, log=lambda *a: None)
+        except LegacyReleaseError as e:
+            _r12 = str(e)
+        _mid2 = release_for("b", p2)
         _lbx.STORE = _bf + ".nai"
         _pmz.load = _keep_pl
         try:
@@ -558,6 +582,8 @@ def selftest() -> int:
         _pmz.load, globals()["_bound"], _lbx.STORE = _keep_pl, _keep_b, _keep_store
     t("★★待ち行列が一時的に読めない日は、控えの導入日を1件も捨てずに止める★★（代役の指摘＝全件が BindingError になり全部消えた）",
       _r10 is not None and _mid == "2024-03-04")
+    t("★★取り直しの途中で待ち行列が読めなくなっても、控えを捨てずに止める★★（代役の指摘＝最初の確認しか守っていなかった）",
+      _r12 is not None and _mid2 == "2024-03-04")
     t("　結び付けの控えのファイルが無いのに導入日の控えがあれば止める（消えたのか取り消したのか分からない）",
       _r11 is not None and release_for("b", p2) == "2024-03-04")
     refresh(1, True, rows=rows, fetch=lambda u: "2025-06-02", bound=bound, today="2026-11-12",
@@ -654,6 +680,12 @@ def selftest() -> int:
     t("　月までの書き方は、日まである値と同じ月なら食い違いにしない（mismatches と同じ決まり）",
       _same_date("2025年6月", "2025-06-02") and _same_date("2025-06", "2025年6月頃")
       and not _same_date("2025年6月2日", "2025-06-03") and not _same_date("2025年7月", "2025-06-02"))
+    _pk2 = os.path.join(os.path.dirname(pz), "keep2.json")
+    _save({"machines": {"q": {"release": "2025-06-02", "url": U % 9, "checked": "2026-11-01"}},
+           "tries": {}, "applied": {"q": "2025-06-02"}}, _pk2)
+    keep_release("q", ["claude", "codex"], "基本情報表の日付はこのままでよいと2AIで決めた", path=_pk2)
+    t("　記録がある機種で「このままでよい」にしても、機種一覧へ写した印は残す（代役の指摘）",
+      read(_pk2)["applied"].get("q") == "2025-06-02" and "q" in read(_pk2)["kept"])
     t("　記録がある機種でも、2AIが「このままでよい」と決めたら外せる（控えの導入日が同じあいだだけ）",
       fact_orphans({"machines": {"a": {"release": "2025-07-01"}},
                     "kept": {"a": {"at": "2026-11-10", "release": "2025-07-01"}}}, _bas, _dd) == []

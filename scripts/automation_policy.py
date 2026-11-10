@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import io
 import os
 import sys
 import urllib.parse
@@ -228,6 +229,29 @@ def disagreements(policy: dict | None = None) -> list:
 
 # ---------------------------------------------------------------- selftest
 
+# ★規約を読み直す期限の何日前から知らせるか★（運営者が規約を読み直して日付を更新するための猶予）
+DUE_WARN_DAYS = 45
+
+
+def due_soon(d: dict, catalogs_text: str, today: str, days: int = DUE_WARN_DAYS) -> list:
+    """★規約・投稿欄の確認期限が近い（または過ぎた）先★ → [(名前, 期限)]
+
+    （2026-11-10・代役の指摘＝期限を過ぎると取得も監査53も止まり、新台・育成・配信がまとめて止まるのに、
+    前もって知らせる見張りが無かった）。名簿の APPROVED の先と、名鑑の投稿欄の確認期限（_recheck_by）を見る。
+    """
+    import re as _re
+    lim = (datetime.date.fromisoformat(today) + datetime.timedelta(days=days)).isoformat()
+    out = []
+    for h, c in sorted((d.get("hosts") or {}).items()):
+        rb = str(c.get("recheck_by") or "")
+        if c.get("status") == APPROVED and rb and rb <= lim:
+            out.append((f"{h} の規約", rb))
+    for rb in sorted(set(_re.findall(r'"_recheck_by":\s*"([^"]+)"', catalogs_text or ""))):
+        if rb <= lim:
+            out.append(("名鑑の投稿欄の確認", rb))
+    return out
+
+
 def selftest() -> int:
     results = []
 
@@ -356,6 +380,14 @@ def selftest() -> int:
       all(os.path.isfile(os.path.join(BASE, c["evidence_ref"]))
           for c in d["hosts"].values() if c.get("evidence_ref")))
 
+    _dd = {"hosts": {"a.example": {"status": APPROVED, "recheck_by": "2027-02-16"},
+                     "b.example": {"status": APPROVED, "recheck_by": "2027-06-01"},
+                     "c.example": {"status": "BLOCKED", "recheck_by": "2026-01-01"}}}
+    t("★★規約の確認期限が45日以内に来る先を知らせる（止めた先は見ない・名鑑の投稿欄も見る）★★（代役の指摘）",
+      due_soon(_dd, '{"_recheck_by": "2027-01-20"}', "2027-01-05")
+      == [("a.example の規約", "2027-02-16"), ("名鑑の投稿欄の確認", "2027-01-20")]
+      and due_soon(_dd, "", "2026-11-10") == [])
+
     ng = sum(1 for _, o in results if not o)
     print()
     print("%d/%d 合格" % (len(results) - ng, len(results)))
@@ -382,10 +414,27 @@ def main() -> int:
     ap.add_argument("--url")
     ap.add_argument("--purpose", default="")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--due", action="store_true",
+                    help="見張り番用：規約・投稿欄の確認期限が45日以内なら 1／読めなければ 2")
     a = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
     if a.selftest:
         return selftest()
+    if a.due:
+        try:
+            d = load()
+            cat = io.open(os.path.join(BASE, "assets", "data", "directory-catalogs.json"), encoding="utf-8").read()
+        except Exception as e:                                   # noqa: BLE001
+            print(f"🟠 通信の名簿を読めません（{type(e).__name__}）")
+            return 2
+        got = due_soon(d, cat, datetime.date.today().isoformat())
+        if got:
+            print("🟡 規約を読み直す期限が近い先があります（過ぎると新台・育成・配信が止まる）: "
+                  + "・".join(f"{n}（{rb}）" for n, rb in got)
+                  + "／運営者が規約を読み直し、automation-policy.json の recheck_by を更新する")
+            return 1
+        print("🟢 規約の確認期限：45日以内のものはありません")
+        return 0
     if a.url:
         ok, why = allows(a.url, a.purpose)
         print(("通せます: " if ok else "★通しません★ ") + why)
