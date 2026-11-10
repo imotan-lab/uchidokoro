@@ -1046,6 +1046,55 @@ def main(preview: bool = False, legacy: bool = False,
 
     return 0
 
+def stale_pages(base=None) -> tuple:
+    """★全機種のページを、いまのデータとコードから作り直した姿と比べる★（2026-11-10・洗い出し4回目）
+
+    なぜ＝ページを作るコード（説明文など）を直しても、データが変わらない機種のページは作り直されず、
+    検索結果・SNSカードの文だけ古いまま残った（新台29機種の「（公式確認）」）。
+    → (古いページの slug の並び, 作れなかった機種の並び)。★書かない★（比べるだけ）。
+    新台経路は publish_new_machine.render（最初に作ったのと同じ関数）、昔の機種は render_page。
+    """
+    import json as _js
+    import publish_new_machine as _pub
+    base = Path(base) if base else BASE
+    rows = _js.loads((base / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
+    tmpl = prepare_template((base / "machine.html").read_text(encoding="utf-8"))
+    reasons = extract_pochipochi_reasons(tmpl)
+    stale, broken = [], []
+    for m in rows:
+        s9 = m.get("slug")
+        dp = base / "assets" / "data" / "machine-details" / f"{s9}.json"
+        out = base / "machines" / str(s9) / "index.html"
+        try:
+            d = _js.loads(dp.read_text(encoding="utf-8")) if dp.is_file() else None
+            if _pd.machine_class(m) in ("AUTO_INDEXABLE", "AUTO_PENDING"):
+                h = _pub.render(s9, m, d)
+            else:
+                h = render_page(tmpl, m, d, reasons, True)
+        except Exception as e:                           # noqa: BLE001
+            broken.append(f"{s9}（{type(e).__name__}）")
+            continue
+        if not out.is_file() or out.read_text(encoding="utf-8") != h:
+            stale.append(str(s9))
+    return stale, broken
+
+
+def check_pages() -> int:
+    """★--check-pages★：古いページがあれば1（作り直し方を出す）・作れない機種があれば2"""
+    stale, broken = stale_pages()
+    if broken:
+        print("★ページを作れない機種があります★: " + "・".join(broken[:10]))
+        return 2
+    if stale:
+        print(f"★いまのデータとコードから作り直すと変わる機種ページが{len(stale)}件あります★: "
+              + "・".join(stale[:10]) + (" ほか" if len(stale) > 10 else ""))
+        print("  直し方: 昔の機種は python scripts/build_machine_pages.py --legacy --slug <slug>／"
+              "新台は --rebuild-auto <slug>")
+        return 1
+    print("機種ページ: いまのデータとコードから作った姿と一致しています")
+    return 0
+
+
 if __name__ == "__main__":
     # ★終了コードを落とさない★（Codex 10巡目 (b)-2）
     #   main() が 1 を返しても、プロセスは 0 で終わっていた＝呼び出し側が失敗に気づけない
@@ -1058,6 +1107,8 @@ if __name__ == "__main__":
     _p.add_argument("--legacy", action="store_true",
                     help="いま公開中の旧形式ページを作り直す"
                          "（公開データは読まない）")
+    _p.add_argument("--check-pages", action="store_true",
+                    help="全機種のページが、いまのデータとコードから作った姿と一致するか（書かない）")
     _p.add_argument("--rebuild-auto", default=None, metavar="SLUG",
                     help="新台経路のページを1枚だけ描き直す"
                          "（公開中の誤りを消すため・区分とnoindexを確かめてから書く）")
@@ -1067,6 +1118,8 @@ if __name__ == "__main__":
     _s9.path.insert(0, str(BASE / "scripts"))
     import safe_json as _sj9
     try:
+        if _a.check_pages:
+            raise SystemExit(check_pages())
         if _a.rebuild_auto:
             if _a.preview or _a.legacy or _a.slug:
                 print("★--rebuild-auto は他の指定と一緒には使えません★")

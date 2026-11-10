@@ -269,6 +269,29 @@ _TD_SRC = ("assets/data/machines.json", "assets/data/machine-details",
            "machine.html")
 
 
+# ★★機種ページ（machines/<slug>/index.html）が古くなり得る変更★★（2026-11-10・洗い出し4回目）＝
+#   ページを作るコード（説明文など）を直しても、データが変わらない機種のページは作り直されず、
+#   検索結果・SNSカードの文だけ古いまま残った（新台29機種）。作る側とデータの両方を引き金にする。
+_PAGES_SRC = ("machine.html", "setting.html", "scripts/build_machine_pages.py", "scripts/publish_new_machine.py",
+              "scripts/page_decision.py", "scripts/target_display.py", "scripts/target_projection.py",
+              "scripts/updated_dates.py", "scripts/gates.py", "scripts/build_new_article.py",
+              "assets/data/machines.json", "assets/data/machine-details/", "assets/data/pochipochi.json")
+
+
+def touches_pages(paths) -> bool:
+    return _touches(paths, _PAGES_SRC)
+
+
+def pages_check_problem(changed, run) -> str:
+    """★機種ページの点検が要るなら流して、駄目なら理由を返す★（早見表の点検と同じ形）"""
+    if not touches_pages(changed):
+        return ""
+    code, out = run(["build_machine_pages.py", "--check-pages"])
+    for line in str(out or "").strip().splitlines():
+        print("   " + line)
+    return "機種ページが古いまま" if code != 0 else ""
+
+
 def touches_target(paths) -> bool:
     """★狙い目の文が手書きへ戻り得る変更か★（2026-09-11）"""
     return _touches(paths, _TD_SRC)
@@ -1274,6 +1297,14 @@ def _selftest() -> int:
         t("★関所の配線★ " + _x, False)
     t("★★関所の本体を1回通すと、早見表の点検が呼ばれ、失敗が伝わる★★",
       not _hw)
+    _pw = _check_gate_wiring("build_machine_pages.py", "機種ページ")
+    for _x in _pw:
+        t("★関所の配線（機種ページ）★ " + _x, False)
+    t("★★関所の本体を1回通すと、機種ページの点検も呼ばれ、失敗が伝わる★★（2026-11-10）", not _pw)
+    t("★機種ページ：点検が赤なら push を止める・作る側を変えたら流す★",
+      pages_check_problem(["scripts/build_machine_pages.py"], lambda a: (1, "古い")) != ""
+      and pages_check_problem(["README.md"], lambda a: (1, "★呼ばれてはいけません★")) == ""
+      and pages_check_problem(["assets/data/machine-details/x.json"], lambda a: (0, "一致")) == "")
     t("　点検が要らない変更では流さない（流したら失敗にする）",
       hub_check_problem(["README.md"],
                         lambda a: (1, "★呼ばれてはいけません★")) == "")
@@ -1695,6 +1726,10 @@ def main() -> int:
     _hub_ng = hub_check_problem(changed, _hub_run)
     if _hub_ng:
         ng.append(_hub_ng)
+    # ★機種ページも同じ場所で見る★（2026-11-10）
+    _pg_ng = pages_check_problem(changed, _hub_run)
+    if _pg_ng:
+        ng.append(_pg_ng)
 
     # ★★狙い目の文も、早見表と同じ場所で見る★★（2026-09-11）
     #   ★記事の早期returnより前★＝`target_display.py` だけを変えた push でも流す。

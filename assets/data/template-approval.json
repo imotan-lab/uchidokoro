@@ -37,7 +37,7 @@
   "scripts/audit_public.py": "eff9994a488928e3568f6c344b569f6e8079f2ffa799399d5417f32103b444e3",
   "scripts/build_hub_pages.py": "43b254d39c8a78e451d3db013c4ef8d8fd1b7daffb154a76022b09597b183117",
   "scripts/build_ledger.py": "c51b84e0a7a6dc9b97faf29003ab617291f9c93fe0378d2c9b19dd664f783e7d",
-  "scripts/build_machine_pages.py": "94e2b3c2ec9160c3d71fc8db998c90f25417346533f9c5e0119e0a14fdae1f56",
+  "scripts/build_machine_pages.py": "a7ad5c5e98538d37fb268a2d332a382fe31960f38113c63e85db84d57ef6f9ed",
   "scripts/build_new_article.py": "bc3d2e7cc55b9d84bae248dc4c1660066eaf455356ffd49a6d8a4498e471b077",
   "scripts/build_pages_artifact.py": "69afae44dee29a657dd228b05da11d2d06817611ddf2761bbc39e56e46c9d74b",
   "scripts/check_duplicate.py": "d5c8221444105553cca1894ff8d44eb255ad6534cafcd0e0af8a5a8e23c16c36",
