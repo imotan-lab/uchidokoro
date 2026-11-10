@@ -10788,7 +10788,7 @@ MUTATIONS = [
     {
         "why": "★大手との差：基本情報表に同じ項目の行を重ねる★",
         "file": "scripts/add_items.py",
-        "before": "            if any(isinstance(x, list) and x and x[0] == rw[0] for x in (ft or [])):\n",
+        "before": "            if any(isinstance(x, list) and x and x[0] == rw[0] for x in (ft or []) + new_facts):\n",
         "after": "            if False:\n",
         "run": ["scripts/add_items.py"],
     },
@@ -10830,8 +10830,8 @@ MUTATIONS = [
     {
         "why": "★運営者への質問：答えが無いまま7日たっても挙げない★",
         "file": "scripts/owner_questions.py",
-        "before": "            and str(it[\"sent_at\"])[:19] <= cut]\n",
-        "after": "            and False]\n",
+        "before": "            if now_d - _dt_of(it[\"sent_at\"]) >= _dt.timedelta(days=days):\n",
+        "after": "            if False:\n",
         "run": ["scripts/owner_questions.py"],
     },
     {
@@ -10882,6 +10882,41 @@ MUTATIONS = [
         "before": "    if days >= STALL_DAYS:\n",
         "after": "    if False:\n",
         "run": ["scripts/machine_meta.py"],
+    },
+    {
+        "why": "★運営者への質問：取り下げた質問を同じ題で使い回す（二度と届かない・Codex）★",
+        "file": "scripts/owner_questions.py",
+        "before": "        if it.get(\"title\") == title and not it.get(\"answered_at\") and not it.get(\"retracted_at\"):\n",
+        "after": "        if it.get(\"title\") == title and not it.get(\"answered_at\"):\n",
+        "run": ["scripts/owner_questions.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：いまの結び付けと控えのURLを照合しない（別機種の日付・Codex）★",
+        "file": "scripts/legacy_release.py",
+        "before": "        if not _bu or _bu != rec.get(\"url\"):\n",
+        "after": "        if False:\n",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★大手との差：同じ決定の中の同じ項目の行を見ない（Codex）★",
+        "file": "scripts/add_items.py",
+        "before": "            if any(isinstance(x, list) and x and x[0] == rw[0] for x in (ft or []) + new_facts):\n",
+        "after": "            if any(isinstance(x, list) and x and x[0] == rw[0] for x in (ft or [])):\n",
+        "run": ["scripts/add_items.py"],
+    },
+    {
+        "why": "★最終更新日：ポチポチくんから外した日を数えない（Codex）★",
+        "file": "scripts/updated_dates.py",
+        "before": "            if prev.get(s) != cur.get(s):          # ★外した日も変化として数える★（Codexの指摘）\n",
+        "after": "            if prev.get(s) != cur.get(s) and s in cur:\n",
+        "run": ["scripts/updated_dates.py"],
+    },
+    {
+        "why": "★育成：持ち越さなかった足した欄の免除が基本情報表・要約にも及ぶ（Codex）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    return [u for u in units if not (u[0] in (\"body\", \"table\", \"note\") and len(u) >= 2 and u[1] in gone)]\n",
+        "after": "    return [u for u in units if not (len(u) >= 2 and u[1] in gone)]\n",
+        "run": ["scripts/grow_machine.py"],
     },
 ]
 

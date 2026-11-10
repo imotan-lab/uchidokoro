@@ -1890,7 +1890,8 @@ def _drop_uncarried_added(units: list, old_detail: dict, new_detail: dict) -> li
         return units
     have = {s.get("title") for s in ((new_detail or {}).get("sections") or []) if isinstance(s, dict)}
     gone = added - have
-    return [u for u in units if not (len(u) >= 2 and u[1] in gone)]
+    # ★節に属する単位（本文・表・注記）だけを外す★（Codexの指摘＝基本情報表の項目名・要約のラベルと名前が同じだと巻き込んだ）
+    return [u for u in units if not (u[0] in ("body", "table", "note") and len(u) >= 2 and u[1] in gone)]
 
 
 def _carry_meta_tests(t) -> None:
@@ -1915,6 +1916,15 @@ def _carry_meta_tests(t) -> None:
       carry_added_sections(_old_n, _new_n, "zzz_a", titles={"有利区間"}, confirmed={}) == []
       and len(_new_n["sections"]) == 1)
     _conf_n = {"ceiling#yuuri": {"value": {"kind": "GAME", "amount": "3000", "unit": "G", "benefit": "終わり"}}}
+    _keep_ast = _ba.added_section_titles
+    try:
+        _ba.added_section_titles = lambda slug, path=None: ["有利区間"]
+        _units_d = [("body", "有利区間", "古い文"), ("fact", "有利区間", "3000G"), ("box", "有利区間", "x")]
+        _kept_d = _drop_uncarried_added(_units_d, {"slug": "zzz_a"}, {"sections": []})
+    finally:
+        _ba.added_section_titles = _keep_ast
+    t("★持ち越さなかった足した欄の免除は、節の本文・表・注記だけ（同じ名前の基本情報表・要約は今までどおり比べる）★（Codexの指摘）",
+      _kept_d == [("fact", "有利区間", "3000G"), ("box", "有利区間", "x")])
     t("　確定値にまだ在れば持ち越す",
       carry_added_sections(_old_n, _new_n, "zzz_a", titles={"有利区間"}, confirmed=_conf_n) == ["有利区間"])
     t("　（配線）育成が足した欄を持ち越している",

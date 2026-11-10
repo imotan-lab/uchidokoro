@@ -108,7 +108,7 @@ def pochi_dates(root=BASE) -> dict:
                 cur.setdefault(str(s), {})[key] = v
         cur = {s: _canon(v) for s, v in cur.items()}
         for s in set(cur) | set(prev):
-            if prev.get(s) != cur.get(s) and s in cur:
+            if prev.get(s) != cur.get(s):          # ★外した日も変化として数える★（Codexの指摘）
                 last[s] = day
         prev = cur
     return last
@@ -209,6 +209,9 @@ def selftest() -> int:
         d = build(tmp)["dates"]
         t("★★ポチポチくんの表が変わった日を最終更新に数える（確かめた日付だけの変更は数えない）★★",
           d.get("a") == "2026-10-01")
+        put(POCHI, {"configs": {}, "ko_checked": {}})
+        g("commit", "-q", "-am", "10", date="2026-11-01T10:00:00+09:00")
+        t("　ポチポチくんから外した日も数える（Codexの指摘）", pochi_dates(tmp).get("a") == "2026-11-01")
         t("★★記事を消して同じ中身で戻したら、戻した日を採る★★（消す前の日付を残さない・review282 の2）",
           d.get("b") == "2026-09-01")
         try:

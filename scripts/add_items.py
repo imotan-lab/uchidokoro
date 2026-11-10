@@ -234,7 +234,7 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
             if ft is not None and not isinstance(ft, list):
                 p.append(f"{w}: 基本情報表の形が違います")
                 continue
-            if any(isinstance(x, list) and x and x[0] == rw[0] for x in (ft or [])):
+            if any(isinstance(x, list) and x and x[0] == rw[0] for x in (ft or []) + new_facts):
                 p.append(f"{w}: 基本情報表に「{rw[0]}」の行がもうあります（直すなら decide_now）")
             rec_toks, miss = _record_pool(row.get("slug") or detail.get("slug") or "", a.get("fields") or [], confirmed)
             if miss:
@@ -630,6 +630,10 @@ def selftest() -> int:
         r = plan(dict(detail, factTable=[["導入日", "2025年6月2日"]]), row,
                  dec({"op": "add_fact", "row": ["導入日", "2025年6月2日"], "fields": ["legacy_release"]}), conf)
         t("　同じ項目の行がもうあれば足さない", any("もうあります" in x for x in r["problems"]))
+        r = plan(dict(detail, factTable=[]), row,
+                 dec({"op": "add_fact", "row": ["メーカー", "サミー"]}, {"op": "add_fact", "row": ["メーカー", "北電子"]}),
+                 conf)
+        t("★同じ決定の中で、同じ項目の行を2つ足さない★（Codexの指摘）", any("もうあります" in x for x in r["problems"]))
         r = plan(detail, dict(row, publication_policy="page-decision/v2"),
                  dec({"op": "add_fact", "row": ["メーカー", "サミー"]}), conf)
         t("　新台の基本情報表には足さない（育成が作り直す）", any("昔の機種だけ" in x for x in r["problems"]))

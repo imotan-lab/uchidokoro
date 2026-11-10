@@ -62,7 +62,8 @@ def add(path: Path, title: str, detail: str) -> int:
     d = _load(path)
     for it in d["items"]:
         # ★同じ題で答えが出ていないものは重ねない★（本文だけ新しくする＝届け直す）
-        if it.get("title") == title and not it.get("answered_at"):
+        # ★取り下げた質問は使い回さない★（Codexの指摘＝取り下げの印が残ったまま本文だけ変わり、二度と届かなかった）
+        if it.get("title") == title and not it.get("answered_at") and not it.get("retracted_at"):
             it["detail"] = detail
             it.pop("sent_at", None)
             _save(path, d)
@@ -91,11 +92,20 @@ def unanswered(path: Path, now: str = None, days: int = UNANSWERED_DAYS) -> list
     見張り番が🟡で思い出させる（運営者がメールを見落としたときのため）。取り下げた質問は出さない。
     """
     import datetime as _dt
-    now = now or _now()
-    cut = (_dt.datetime.fromisoformat(now[:19]) - _dt.timedelta(days=days)).isoformat(timespec="seconds")
-    return [it for it in _load(path)["items"]
-            if it.get("sent_at") and not it.get("answered_at") and not it.get("retracted_at")
-            and str(it["sent_at"])[:19] <= cut]
+    # ★日時として比べる★（Codexの指摘＝区切りの空白と T を文字のまま比べ、最大1日早く出ていた）
+    def _dt_of(x):
+        return _dt.datetime.fromisoformat(str(x)[:19].replace(" ", "T"))
+    now_d = _dt_of(now or _now())
+    out = []
+    for it in _load(path)["items"]:
+        if not it.get("sent_at") or it.get("answered_at") or it.get("retracted_at"):
+            continue
+        try:
+            if now_d - _dt_of(it["sent_at"]) >= _dt.timedelta(days=days):
+                out.append(it)
+        except ValueError:
+            out.append(it)                 # ★読めない日時は「答え待ち」として出す（黙って外さない）★
+    return out
 
 
 def retract(path: Path, qid: int, why: str, by) -> int:
@@ -178,6 +188,17 @@ def selftest() -> int:
         t("★★2AIで片づいた質問は取り下げられ、答えの無い一覧から外れる★★",
           retract(p, e, "2AIで落としてよいと決めて片づいたので聞く必要が無い", ["claude", "codex"]) == 0
           and unanswered(p, "2026-11-09T09:00:00") == [])
+        e2 = add(p, "別の天井", "新しく割れた")
+        t("★★取り下げた質問と同じ題でも、新しい質問として控えて届ける★★（Codexの指摘）",
+          e2 != e and e2 in [i["id"] for i in pending(p)] and e not in [i["id"] for i in pending(p)])
+        mark(p, e2, "sent_at")
+        _d2 = _load(p)
+        for _it in _d2["items"]:
+            if _it["id"] == e2:
+                _it["sent_at"] = "2026-11-01 23:00:00"
+        _save(p, _d2)
+        t("　7日の判定は日時で比べる（11/1 23時に送った質問は 11/8 9時にはまだ出ない・11/9 0時には出る）",
+          unanswered(p, "2026-11-08 09:00:00") == [] and [i["id"] for i in unanswered(p, "2026-11-09 00:00:00")] == [e2])
         p.write_text("[]", encoding="utf-8")
         try:
             pending(p)

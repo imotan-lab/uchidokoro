@@ -199,7 +199,7 @@ APPLY_FRESH_DAYS = 7
 
 
 def apply_release(slug: str, by, why: str, path: str = None, machines_path: str = None,
-                  today: str = None, rebuild=None) -> list:
+                  today: str = None, rebuild=None, bound=None) -> list:
     """★2AIが決めたとき、控えの導入日（DMMの値）を machines.json の release_date へ写す★ → 問題の並び（空＝書いた）
 
     機械が見る＝判断者の組・理由15字・昔からの機種・控えの導入日が APPLY_FRESH_DAYS 日以内に確かめたもの・
@@ -220,6 +220,14 @@ def apply_release(slug: str, by, why: str, path: str = None, machines_path: str 
         p.append("控えに導入日がありません（先に --refresh 1 --slug で取り直す）")
     elif (datetime.date.fromisoformat(today) - datetime.date.fromisoformat(chk)).days > APPLY_FRESH_DAYS:
         p.append(f"控えの導入日を確かめてから{APPLY_FRESH_DAYS}日より前です（取り直してから写す）")
+    else:
+        # ★写す直前に、いまの結び付けと控えのURLが同じか確かめる★（Codexの指摘＝取り消した結び付けの控えで別機種の日付を書けた）
+        try:
+            _bu = (bound or _bound)(slug)
+        except Exception:                                        # noqa: BLE001
+            _bu = None
+        if not _bu or _bu != rec.get("url"):
+            p.append("いまのDMMとの結び付けと、控えのURLが違います（結び付けを確かめて取り直してから）")
     if p:
         return p
     mp = machines_path or MACHINES
@@ -413,20 +421,25 @@ def selftest() -> int:
             return False
     _pubx._OnlyOne = _L
     try:
-        r1 = apply_release("a", ["claude"], "DMMの機種ページの導入日と一致した", pz, mp, "2026-11-10", lambda s: True)
+        _b1 = {"a": U % 1}.get
+        r1 = apply_release("a", ["claude"], "DMMの機種ページの導入日と一致した", pz, mp, "2026-11-10", lambda s: True, _b1)
         r2 = apply_release("a", ["claude", "codex"], "DMMの機種ページの導入日と一致した", pz, mp, "2026-11-30",
-                           lambda s: True)
+                           lambda s: True, _b1)
         r3 = apply_release("a", ["claude", "codex"], "DMMの機種ページの導入日と一致した", pz, mp, "2026-11-10",
-                           lambda s: False)
+                           lambda s: False, _b1)
         after_fail = json.loads(io.open(mp, encoding="utf-8").read())
+        r5 = apply_release("a", ["claude", "codex"], "DMMの機種ページの導入日と一致した", pz, mp, "2026-11-10",
+                           lambda s: True, {"a": U % 9}.get)
         r4 = apply_release("a", ["claude", "codex"], "DMMの機種ページの導入日と一致した", pz, mp, "2026-11-10",
-                           lambda s: True)
+                           lambda s: True, _b1)
         after_ok = json.loads(io.open(mp, encoding="utf-8").read())
     finally:
         _pubx._OnlyOne = keep_lock
     t("　写すのは判断者の組がそろったときだけ", any("判断者" in x for x in r1))
     t("　控えを確かめてから7日より前なら写さない（取り直してから）", any("日より前" in x for x in r2))
     t("★作り直せなければ導入日を元に戻す★", r3 and "release_date" not in after_fail[0])
+    t("★★いまの結び付けと控えのURLが違えば写さない★★（Codexの指摘＝取り消した結び付けの日付を書けた）",
+      any("結び付け" in x for x in r5))
     t("★★2AIが決めたとき、控えの導入日（DMMの値）を機種一覧の release_date へ写す★★（ページの登場時期に出る）",
       r4 == [] and after_ok[0].get("release_date") == "2025-06-02")
     t("★★機種一覧の導入日がDMMの値と食い違う昔の機種を挙げる（月だけの書き方は食い違いにしない）★★",
