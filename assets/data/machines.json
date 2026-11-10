@@ -8155,7 +8155,9 @@
    "title": "アズールレーン",
    "kind": "ゲーム",
    "search": "アズールレーン"
-  }
+  },
+  "tenjo_games": 350,
+  "tenjo_display": "ボーナス間350G+α"
  },
  {
   "slug": "biohazard",
