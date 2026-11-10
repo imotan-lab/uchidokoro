@@ -203,6 +203,30 @@ def apply_decision(path: str, apply_it: bool) -> dict:
     return got
 
 
+STALL_DAYS = 3
+
+
+def stall_problem(rows: list, q: dict, today: str):
+    """★見張り番：通称かタイプが空の新台があるのに、STALL_DAYS 日だれも書こうとしていない★（2026-11-10・洗い出し4回目）
+
+    なぜ＝朝の STEP 0-L を飛ばしても誰も気づけなかった（新台29機種すべてで通称・タイプが空）。
+    「試した日」（--tried）と「書いた日」（written）のいちばん新しい日で見る。
+    """
+    import page_decision as _pd
+    cands = [m["slug"] for m in rows if isinstance(m, dict) and _pd.is_auto(m)
+             and (not m.get("aliases") or not m.get("info"))]
+    if not cands:
+        return None
+    last = max([str(v) for v in (q.get("tried") or {}).values()] + [str(v) for v in (q.get("written") or {}).values()]
+               or [""])
+    if not last:
+        return f"通称かタイプが空の新台が{len(cands)}件あるのに、一度も書こうとしていません（朝の STEP 0-L）"
+    days = (_dt.date.fromisoformat(today) - _dt.date.fromisoformat(last[:10])).days
+    if days >= STALL_DAYS:
+        return f"通称かタイプが空の新台が{len(cands)}件あるのに、{days}日だれも書こうとしていません（朝の STEP 0-L）"
+    return None
+
+
 def pick(n: int, rows: list, tried: dict, today: str) -> list:
     """★通称かタイプが空の新台★（試したことの無い機種→古い順。断って RETRY_DAYS 日たたない機種は外す）"""
     import page_decision as _pd
@@ -300,6 +324,12 @@ def selftest() -> int:
     finally:
         g.update(keep)
         _pubx._OnlyOne = keep_lock
+    _rows_s = [row, dict(row, slug="zzz_full", aliases=["a"], info="x")]
+    t("★★空の新台があるのに3日だれも書こうとしていなければ、見張り番が知らせる★★",
+      stall_problem(_rows_s, {"tried": {"zzz_m": "2026-11-05"}}, "2026-11-10") is not None
+      and stall_problem(_rows_s, {"written": {"zzz_x": "2026-11-09"}}, "2026-11-10") is None
+      and stall_problem(_rows_s, {}, "2026-11-10") is not None)
+    t("　空の新台が無ければ知らせない", stall_problem(_rows_s[1:], {}, "2026-11-10") is None)
     import inspect
     import grow_machine as _gm
     t("★★毎朝の育成が、通称とタイプを空に戻さない（持ち越しが配線されている）★★",
@@ -320,15 +350,24 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--tried")
     ap.add_argument("--result", choices=RESULTS)
+    ap.add_argument("--check", action="store_true", help="見張り番：空の新台があるのに進んでいなければ1")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
     today = _dt.date.today().isoformat()
     q = {}
-    if os.path.isfile(QUEUE):
-        with io.open(QUEUE, encoding="utf-8") as f:
-            q = json.load(f)
+    try:
+        if os.path.isfile(QUEUE):
+            with io.open(QUEUE, encoding="utf-8") as f:
+                q = json.load(f)
+    except Exception as e:                                       # noqa: BLE001
+        print(f"🟠 通称・タイプの割り当ての控えを読めません: {type(e).__name__}: {e}")
+        return 2
+    if a.check:
+        pr = stall_problem(_rows(), q, today)
+        print(("🟡 " + pr) if pr else "🟢 新台の通称・タイプは進んでいます")
+        return 1 if pr else 0
     if a.apply:
         r = apply_decision(a.apply, not a.dry_run)
         if r.get("problems"):
@@ -336,6 +375,11 @@ def main() -> int:
             for x in r["problems"]:
                 print("  - " + x)
             return 1
+        if not a.dry_run:
+            q.setdefault("written", {})[r.get("slug") or ""] = today
+            os.makedirs(os.path.dirname(QUEUE), exist_ok=True)
+            with io.open(QUEUE, "w", encoding="utf-8") as f:
+                f.write(json.dumps(q, ensure_ascii=False, indent=1) + "\n")
         print("下見: 通ります（書いていません）" if a.dry_run else "書きました（機種行・ページ・早見表）")
         return 0
     if a.tried:
