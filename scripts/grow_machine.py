@@ -2107,6 +2107,8 @@ def indexed_gap_questions(slug: str, complete: bool = False, urls=None,
                      + "／★機械では取り出せなかったので、出典の原文を自分で読んで決めてください★"
                      + ("／" + scope + ": " + " ".join(links) if links else "")
                      + "／決めたら confirmed_values.py --record で記録（逐語引用が要ります）"
+                     + "／★出典が「無い」と明記していれば、--field cz_state（CZ）・reset_state（朝一・リセット）・"
+                       "ceiling_state（天井）を {\"state\": \"NONE\"} で記録（独立2出典）＝欄に「〜はありません」と出る★"
                      + "／★まだどこにも載っていなければ記録しない（未確認のままでよい）★")})
     return out
 

@@ -314,6 +314,10 @@ CEILING_PARTIAL_NOTE = ("ほかにも天井がある場合、確認が取れて�
 PENDING_ITEM = "未確認（確認でき次第掲載します）"
 # ★未確認と見なす文言★（新旧どちらも。ここが唯一の一覧）
 PENDING_TEXTS = (PENDING_TEXT, PENDING_TEXT_OLD)
+# ★★「無い」と確かめた欄の決まり文句★★（2026-11-10）＝2AIが独立2出典で「無い」と記録したときだけ使う
+RESET_NONE_TEXT = "**この機種に、設定変更（リセット）で有利になる仕組みはありません。**"
+CZ_NONE_TEXT = "**この機種にCZ（チャンスゾーン）はありません。**"
+TARGET_NONE_TEXT = "**この機種には天井が無いため、ゲーム数で狙う目安はありません。**"
 
 
 def is_pending_body(body) -> bool:
@@ -676,7 +680,9 @@ def article_contract_problems(detail) -> list:
         if not tables and not pending_only and any(x in PENDING_TEXTS
                                                    for x in body):
             ng.append(f"未確認の文が中身に混ざっています: {title}")
-        if title in TABLE_SECTIONS and not tables and not pending_only:
+        # ★CZが無いと2AIが確かめた箱は、決まり文句1つだけでよい★（2026-11-10）
+        if title in TABLE_SECTIONS and not tables and not pending_only \
+                and body != [CZ_NONE_TEXT]:
             ng.append(f"表の箱なのに表も未確認表示もありません: {title}")
     return ng
 
@@ -1573,6 +1579,19 @@ def build_detail(slug, name, release, material, machine_row=None) -> dict:
     _tf = _tp.detail_fields(machine_row or {})
     if _tf["body"]:
         boxes[_tp.SECTION_TITLE] = {"title": _tp.SECTION_TITLE, "body": list(_tf["body"])}
+    # ★★「無い」と確かめた欄には、そう書く★★（2026-11-10・運営者「更新されないページ他にもないの？」）＝
+    #   直す前は天井だけが「ありません」と書けて、リセットの恩恵やCZが無い機種、天井が無い機種の狙い目まで
+    #   「未確認（確認でき次第掲載します）」と約束し続けた（確認される日は来ない）。
+    #   ★2AIが独立2出典で「無い」と記録したとき（reset_state / cz_state = NONE）だけ★。中身が採れていればそちらが勝つ。
+    #   ★狙い目は天井が無いと確定した機種だけ★（線が出ていれば線の文が勝つ）。型から推論しない。
+    def _state(k):
+        return (((material.get("adopted") or {}).get(k) or {}).get("value") or {}).get("state")
+    if "朝一・リセット情報" not in boxes and _state("reset_state") == "NONE":
+        boxes["朝一・リセット情報"] = {"title": "朝一・リセット情報", "body": [RESET_NONE_TEXT]}
+    if "確認できたCZ" not in boxes and _state("cz_state") == "NONE":
+        boxes["確認できたCZ"] = {"title": "確認できたCZ", "body": [CZ_NONE_TEXT]}
+    if _tp.SECTION_TITLE not in boxes and _cs_v == "NONE":
+        boxes[_tp.SECTION_TITLE] = {"title": _tp.SECTION_TITLE, "body": [TARGET_NONE_TEXT]}
     sections = []
     for title in SECTION_ORDER:
         sections.append(boxes.get(title)
@@ -2091,6 +2110,28 @@ def selftest() -> int:
     t("　ノーマル機の判定書に、型と天井の状態が残る",
       _dec_bonus["machine_profile"] == "BONUS"
       and _dec_bonus["ceiling_state"] == "NONE")
+    # ★★「無い」と確かめた欄には、そう書く★★（2026-11-10＝直す前は「確認でき次第掲載します」と約束し続けた）
+    _none_mat = {"adopted": {
+        "ceiling_state": {**IM, "value": {"state": "NONE"}, "sources": ["a", "b"]},
+        "reset_state": {**IM, "value": {"state": "NONE"}, "sources": ["a", "b"]},
+        "cz_state": {**IM, "value": {"state": "NONE"}, "sources": ["a", "b"]}}}
+    _nd = {s["title"]: s for s in build_detail("zzz_n", "試験機N", "2026-11-02", _none_mat,
+                                               machine_row={})["sections"]}
+    t("★★リセットの恩恵が無いと確かめたら、朝一・リセットの欄にそう書く★★",
+      _nd["朝一・リセット情報"]["body"] == [RESET_NONE_TEXT])
+    t("★★CZが無いと確かめたら、CZの欄にそう書く（表の箱でも通る）★★",
+      _nd["確認できたCZ"]["body"] == [CZ_NONE_TEXT]
+      and not article_contract_problems({"slug": "zzz_n", "sections": list(_nd.values())}))
+    t("★★天井が無いと確かめたら、狙い目の欄にそう書く★★",
+      _nd["当サイトの狙い目"]["body"] == [TARGET_NONE_TEXT])
+    _part_mat = {"adopted": {"cz_state": {**IM, "value": {"state": "PRESENT"}, "sources": ["a", "b"]}}}
+    _pdd = {s["title"]: s for s in build_detail("zzz_n", "試験機N", "2026-11-02", _part_mat,
+                                                machine_row={})["sections"]}
+    t("　（対照）「ある」と記録しただけなら、未確認のまま（中身が採れたら中身を出す）",
+      is_pending_body(_pdd["確認できたCZ"]["body"]) and is_pending_body(_pdd["当サイトの狙い目"]["body"]))
+    t("　CZの箱で「無い」の決まり文句以外の文だけなら、今までどおり表を求める",
+      bool(article_contract_problems({"slug": "zzz_n", "sections": [
+          {"title": "確認できたCZ", "body": ["CZは無いと思います。"]}]})))
     # ★★単独確認の値には、どこに出ても必ず名乗りが付く★★
     #   （2026-08-23・Codexの敵対的レビュー指摘4）
     #   ★私はCZの表しか直しておらず★、機械割・50枚あたり・天井・AT・

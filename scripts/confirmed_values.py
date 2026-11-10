@@ -164,6 +164,11 @@ FIELD_TOPICS = {
     "machine_profile": "",
     # ★天井の有無は「天井・恩恵」の箱に出る★（「天井はありません」）
     "ceiling_state": "ceiling",
+    # ★★リセットの恩恵・CZの有無★★（2026-11-10・運営者「更新されないページ他にもないの？」）＝
+    #   「この機種には無い」と書く道が天井にしか無く、無い機種まで「確認でき次第掲載します」と約束し続けた。
+    #   NONE を記録したときだけ「〜はありません」と書く（独立2出典で無いと確かめる＝天井と同じ）。
+    "reset_state": "reset",
+    "cz_state": "cz",
     "model_code": "",               # ★読者には出さない★
 }
 
@@ -209,6 +214,9 @@ AI_ONLY_FIELDS = {
     #   実例＝X-300 は概要が「完全告知のボーナスタイプ」だが、
     #   天井欄は「調査中」＝型が分かっても天井の有無は分からない。
     "ceiling_state": "adopted",
+    # ★★リセットの恩恵・CZの有無★★（2026-11-10）＝ceiling_state と同じ形
+    "reset_state": "adopted",
+    "cz_state": "adopted",
 }
 
 # ★★人が読む名前★★（2026-08-24・Codexの4回目の指摘）
@@ -221,6 +229,8 @@ AI_ONLY_LABELS = {
     "checker_ceiling": "早見表に使う天井",
     "at_net_unmapped": "AT純増（AT名との対応は未確認）",
     "ceilings_complete": "天井はこれで全部か",
+    "reset_state": "リセットの恩恵の有無",
+    "cz_state": "CZの有無",
 }
 
 
@@ -267,6 +277,13 @@ VALUE_SHAPES = {
     "ceiling_state": {"required": ("state",),
                       "enums": {"state": ("PRESENT", "NONE")},
                       "quoted": ()},
+    # ★リセットの恩恵・CZの有無★（2026-11-10・ceiling_state と同じ形）
+    "reset_state": {"required": ("state",),
+                    "enums": {"state": ("PRESENT", "NONE")},
+                    "quoted": ()},
+    "cz_state": {"required": ("state",),
+                 "enums": {"state": ("PRESENT", "NONE")},
+                 "quoted": ()},
     "ceilings_complete": {"required": ("complete",),
                           "enums": {"complete": ("YES",)},
                           "quoted": ()},
