@@ -134,12 +134,22 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
     #   誤った結び付けを2AIが取り消しても、その（別の機種の）導入日が残り、並べ替えが使い続けた。
     #   ★結び付けが読めない機種も捨てる★（確かめられない値を並べ替えに使わない）。
     purged = []
+    import legacy_binding as _lb
+    if bound is _bound:
+        # ★★結び付けの控えそのものが読めないときは、捨てずに止める★★（2026-11-10・代役の指摘＝一時的に読めないだけで、
+        #   控えの導入日を全部捨てて保存していた）。書かずに例外で返す（呼ぶ側は「読めない」で終了コード2）
+        try:
+            _lb.load()
+        except Exception as e:                                   # noqa: BLE001
+            raise LegacyReleaseError(f"結び付けの控えを読めないので、導入日の控えを確かめられません（{type(e).__name__}）")
     for s in list(d["machines"]):
         try:
             u = bound(s)
+        except _lb.BindingError:
+            # ★★この1件の結び付けが使えない（機種名が変わった・URLが重なった・封が合わない）なら、その控えだけ捨てる★★
+            #   （代役の指摘＝例外で全体を止めると、1件の不具合で全機種の取り直しが毎日止まった）
+            u = None
         except Exception as e:                                   # noqa: BLE001
-            # ★★読めないときは捨てずに止める★★（2026-11-10・代役の指摘＝結び付けの控えが一時的に読めないだけで、
-            #   控えの導入日を全部捨てて保存していた）。書かずに例外で返す（呼ぶ側は「読めない」で終了コード2）
             raise LegacyReleaseError(f"結び付けを読めないので、控えを確かめられません（{s}: {type(e).__name__}）")
         if not u or u != d["machines"][s].get("url"):
             d["machines"].pop(s)
@@ -221,7 +231,10 @@ def fact_orphans(d: dict, basis=None, details_dir: str = None) -> list:
         if not isinstance(b, dict):
             continue
         s9 = str(b.get("slug") or "")
-        if not s9 or s9 in have or s9 in kept or s9 in out:
+        if not s9 or s9 in out:
+            continue
+        # ★「このままでよい」の印は、その日より後に足し直した行には効かない★（代役の指摘＝印が後の取り残しまで黙らせた）
+        if s9 in kept and str(b.get("at") or "")[:10] <= str((kept[s9] or {}).get("at") or ""):
             continue
         rows9 = [a.get("row") for a in (b.get("additions") or [])
                  if isinstance(a, dict) and a.get("op") == "add_fact"
@@ -232,9 +245,21 @@ def fact_orphans(d: dict, basis=None, details_dir: str = None) -> list:
         if not os.path.isfile(dp):
             continue
         ft = (json.loads(io.open(dp, encoding="utf-8").read()).get("factTable") or [])
-        if any(r in ft for r in rows9):
-            out.append(s9)
+        live = [r for r in rows9 if r in ft]
+        if not live:
+            continue
+        # ★★控えに記録があっても、基本情報表の日付が控えと食い違えば挙げる★★（代役の指摘＝取り消して同じ日に
+        #   結び直すと、古い日付の行が残ったまま見張りから消えた）
+        if s9 in have and all(_date_nums(r[1] if isinstance(r, list) and len(r) > 1 else "")
+                              == _date_nums(have[s9].get("release")) for r in live):
+            continue
+        out.append(s9)
     return out
+
+
+def _date_nums(text) -> tuple:
+    """日付の数字だけを並べる（「2025年6月2日」と「2025-06-02」を同じに読む）"""
+    return tuple(int(x) for x in re.findall(r"[0-9]+", str(text or "")))
 
 
 def keep_release(slug: str, by, why: str, path: str = None, today: str = None) -> list:
@@ -470,6 +495,22 @@ def selftest() -> int:
         _raised = True
     t("★★結び付けが読めないときは、控えの導入日を捨てずに止める★★（代役の指摘＝一時的に読めないだけで全部消えた）",
       _raised and release_for("a", p2) == "2025-06-02")
+    import legacy_binding as _lbx
+    _save({"machines": {"a": {"release": "2025-06-02", "url": U % 1, "checked": "2026-09-01"},
+                        "b": {"release": "2024-03-04", "url": U % 2, "checked": "2026-09-01"}},
+           "tries": {}}, p2)
+
+    def _bad_a(s9):
+        if s9 == "a":
+            raise _lbx.BindingError("引き直すと別の機種になります")
+        return {"b": U % 2}.get(s9)
+    try:
+        _r9 = refresh(0, True, rows=rows, fetch=lambda u: "2025-06-02", bound=_bad_a,
+                      today="2026-11-12", path=p2, log=lambda *a: None)
+    except LegacyReleaseError:
+        _r9 = {"purged": None}
+    t("★★1件の結び付けが使えないだけなら、その1件の控えだけ捨てて続ける（全体を止めない）★★（代役の指摘）",
+      _r9["purged"] == ["a"] and release_for("b", p2) == "2024-03-04")
     refresh(1, True, rows=rows, fetch=lambda u: "2025-06-02", bound=bound, today="2026-11-12",
             path=p, log=lambda *a: None)
     _r4 = refresh(0, True, rows=rows, fetch=lambda u: "2025-06-02", bound={"a": U % 7, "d": U % 4}.get,
@@ -558,7 +599,9 @@ def selftest() -> int:
             {"slug": "b", "additions": [{"op": "add_fact", "row": ["メーカー", "サミー"]}]}]
     t("★★基本情報表へ足した導入日も、控えの記録が無くなって記事に残っていれば挙げる★★（代役の指摘）",
       fact_orphans(_da, _bas, _dd) == ["a"]
-      and fact_orphans({"machines": {"a": {}}}, _bas, _dd) == [])
+      and fact_orphans({"machines": {"a": {"release": "2025-06-02"}}}, _bas, _dd) == [])
+    t("★★控えに記録があっても、基本情報表の日付が控えと食い違えば挙げる★★（代役の指摘＝同じ日に結び直すと消えた）",
+      fact_orphans({"machines": {"a": {"release": "2025-07-01"}}}, _bas, _dd) == ["a"])
     _pk = os.path.join(os.path.dirname(pz), "keep.json")
     _save(dict(_da, applied={"a": "2025-06-02"}), _pk)
     _k1 = keep_release("a", ["claude"], "正しいページが無いと2AIで決めたため", path=_pk)
@@ -567,6 +610,10 @@ def selftest() -> int:
     t("★★2AIが「このままでよい」と決めたら、取り残しの見張りから外す（判断者の組が要る）★★（代役の指摘）",
       _k1 and _k2 == [] and "a" not in _dk["applied"] and "a" in _dk["kept"]
       and applied_orphans(after_ok, _dk) == [] and fact_orphans(_dk, _bas, _dd) == [])
+    _bas2 = _bas + [{"slug": "a", "at": "2999-01-01T00:00:00", "additions": [
+        {"op": "add_fact", "row": ["導入日", "2025年6月2日"], "fields": ["legacy_release"]}]}]
+    t("　「このままでよい」の印は、その後に足し直した行には効かない（代役の指摘）",
+      fact_orphans(_dk, _bas2, _dd) == ["a"])
     t("★★機種一覧の導入日がDMMの値と食い違う昔の機種を挙げる（月だけの書き方は食い違いにしない）★★",
       mismatches([{"slug": "a", "release_date": "2025-07-01"}, {"slug": "b", "release_date": "2025-06"}],
                  {"machines": {"a": {"release": "2025-06-02"}, "b": {"release": "2025-06-20"}}})

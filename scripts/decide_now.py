@@ -432,6 +432,23 @@ def gather(slug: str) -> dict:
                              "★数値・狙い目のラインは残し、言い方だけ直す★。"
                              "★ふつうの言葉として使っている場合は触らない★"
                              "（2AIが記事を読んで決める）。"})
+    # ★★「判明次第更新」「解析待ち」など、あとで埋めると約束した文★★（2026-11-10・代役の指摘＝昔の機種39機種に
+    #   残り、何か月も埋まっていなかった）。★手がかりであって判定ではない★＝出典を見て判明していれば値を書き
+    #   （先に confirmed_values へ記録して numbers_from_confirmed か add_items）、まだ判明していなければ残す
+    for _sec in out["article"]["sections"]:
+        _lines = list(_sec.get("body") or [])
+        for _tb in (_sec.get("tables") or []):
+            if isinstance(_tb, dict):
+                _lines += [str(_tb.get("note") or "")]
+                _lines += ["／".join(str(c) for c in r) for r in (_tb.get("rows") or []) if isinstance(r, list)]
+        for _line in _lines:
+            _pm = [w for w in PENDING_MARKS if w in str(_line)]
+            if _pm:
+                out["hints"].append(
+                    {"kind": "あとで埋めると約束した文", "section": _sec["title"], "words": _pm[:5],
+                     "line": str(_line)[:100],
+                     "note": "出典を見て判明していれば値を書く（先に confirmed_values へ記録）。"
+                             "まだ判明していなければ残す（2AIが決める）"})
     out["counts"]["_note"] = "★この数は機械が気づけた分だけ★（網羅ではない）"
     return out
 
@@ -1255,6 +1272,9 @@ def numbers_with_unit(s: str) -> list:
 #   ★実データで数えて選んだ★（513件・109機種）。
 #   ★「着席」は入れない★＝69件あるが大半が「着席時」＝ふつうの言葉で、
 #   機械には区別できない（＝名簿で判定してはいけない型）。
+# ★あとで埋めると約束した文の手がかり★（判定には使わない・2026-11-10）
+PENDING_MARKS = ("判明次第", "解析待ち", "調査中", "未公開", "未判明", "確認でき次第", "公開され次第")
+
 ADVICE_MARKS = (
     "積極的", "しましょう", "してください", "おすすめ",
     "べきです", "したいところ", "即ヤメせず", "狙いたい", "避けたい")

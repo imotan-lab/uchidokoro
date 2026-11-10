@@ -1912,6 +1912,12 @@ def show(slug: str) -> int:
     print("いまのチェッカー:",
           json.dumps(m.get("checker") or {}, ensure_ascii=False)[:700])
     print("いまの一覧の文:", repr(m.get("strategy") or ""))
+    if not isinstance(m.get("checker"), dict) or not (m.get("checker") or {}).get("modes"):
+        # ★★チェッカーの無い機種を知らせる★★（2026-11-10・代役の指摘＝昔の機種5台が、一覧の文「算定中」のまま3か月
+        #   止まっていた。書く道具はあるのに、問いを出す所が新台だけだった）
+        print("★この機種には狙い目チェッカーがありません★＝天井が確かめられていれば線を決めて下の形で書く"
+              "（チェッカーを新しく作ります）。線を引かないと決めたら NO_LINE。"
+              "★一覧の文が「算定中」などのままなら、決定に strategy も書いて直す★")
     path = os.path.join(DETAILS, f"{slug}.json")
     if os.path.exists(path):
         d = _sj.read_json(path, expect=dict)

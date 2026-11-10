@@ -46,6 +46,8 @@ _IN_SELFTEST = False
 TURN_SINCE_WEEK = "2026-11-16"
 # ★「点検済み」の日付（state.json の quality_review.last_reviewed）と突き合わせ始める日★
 TURN_SINCE_DAY = "2026-11-11"
+# ★最後の点検からこの日数を超えた機種があれば見張り番が知らせる★（その他の一周は約35日・それより十分長く）
+REVIEW_STALE_DAYS = 60
 # ★点検済みの印を覆える点検表は、その日から何日前までに始めたものか★（LATER を翌朝に仕上げる分の余裕）
 REVIEW_TURN_DAYS = 3
 
@@ -234,6 +236,26 @@ def _stale_turn(tr: dict, day: str) -> bool:
                    for v in (tr.get("items") or {}).values())
 
 
+def stale_reviews(last_reviewed: dict, rows, today: str) -> list:
+    """★最後の点検から REVIEW_STALE_DAYS 日を超えた機種（一覧にあるものだけ）★（2026-11-10・代役の指摘）
+
+    点検済みの記録が無い昔の機種も含める（新台は育成が見るので、記録が無ければ数えない）。
+    """
+    lim = (_dt.date.fromisoformat(today) - _dt.timedelta(days=REVIEW_STALE_DAYS)).isoformat()
+    import grow_machine as _gm
+    out = []
+    for m in rows or []:
+        if not isinstance(m, dict) or not m.get("slug"):
+            continue
+        # ★新台期間の機種は数えない★（育成が毎日見ていて、その他の巡回には入らない）
+        if "publication_policy" in m and _gm.is_new_machine(m.get("release_date"), _dt.date.fromisoformat(today)):
+            continue
+        last = str((last_reviewed or {}).get(m["slug"]) or "")[:10]
+        if (last and last < lim) or (not last and "publication_policy" not in m):
+            out.append(m["slug"])
+    return out
+
+
 def check_problem(today: str = None, rows=None, path: str = None):
     """★見張り番：前の日までに始めたのに、そろっていない担当★
 
@@ -274,6 +296,15 @@ def check_problem(today: str = None, rows=None, path: str = None):
         msgs.append(f"点検済みの記録を読めません（{type(e).__name__}）")
     if rv:
         msgs.append(f"点検済みにしたのに、その日に点検表（STEP 1-T）を始めていない機種が{len(rv)}件: " + "・".join(rv[:8]))
+    try:
+        # ★本番の控えを見るときだけ★（試験の機種一覧と本番の点検記録を混ぜない）
+        sv = stale_reviews(((_st.get("quality_review") or {}).get("last_reviewed") or {}), rows, today)             if path is None else []
+    except Exception as e:                                   # noqa: BLE001
+        sv = []
+        msgs.append(f"点検の古さを数えられません（{type(e).__name__}）")
+    if sv:
+        msgs.append(f"最後の点検から{REVIEW_STALE_DAYS}日を超えた機種が{len(sv)}件（点検の巡回が遅れています）: "
+                    + "・".join(sv[:8]))
     return " ／ ".join(msgs) if msgs else None
 
 
@@ -362,6 +393,11 @@ def selftest() -> int:
             "mode": {"at": "2026-11-11", "result": "OK", "note": ""}}}}}))
     t("★★点検済みの日より後に始めた点検表があれば、その前の印は挙げない★★（代役の指摘＝翌週の担当で誤って出た）",
       reviewed_without_turn({"zzz_l": "2026-11-12"}, p) == [])
+    t("★★最後の点検から60日を超えた機種を挙げる（記録の無い昔の機種も）★★（代役の指摘＝巡回の遅れに見張りが無かった）",
+      stale_reviews({"a": "2026-09-01", "b": "2026-10-20", "z": "2026-01-01"},
+                    [{"slug": "a"}, {"slug": "b"}, {"slug": "c"}, {"slug": "d", "publication_policy": "page-decision/v2"},
+                     {"slug": "z", "publication_policy": "page-decision/v2", "release_date": "2026-11-01"}],
+                    "2026-11-10") == ["a", "c"])
     t("★★ずっと前の点検表では、その後の点検済みの印を覆わない（3日前まで）★★（代役の指摘）",
       reviewed_without_turn({"zzz_o": "2026-11-20"}, _p3) == ["zzz_o"]
       and reviewed_without_turn({"zzz_o": "2026-11-13"}, _p3) == [])

@@ -10949,7 +10949,7 @@ MUTATIONS = [
     {
         "why": "★大手との差：前に足した欄を同じ名前で直せない（Codex5回目）★",
         "file": "scripts/add_items.py",
-        "before": "                    _replace = title in _bna.added_section_titles(row.get(\"slug\") or detail.get(\"slug\") or \"\")\n",
+        "before": "                    _replace = title in _added_all\n",
         "after": "                    _replace = False\n",
         "run": ["scripts/add_items.py"],
     },
@@ -11019,8 +11019,8 @@ MUTATIONS = [
     {
         "why": "★昔の機種の導入日：基本情報表へ足した導入日の取り残しを見ない（代役）★",
         "file": "scripts/legacy_release.py",
-        "before": "        if any(r in ft for r in rows9):\n",
-        "after": "        if False:\n",
+        "before": "        live = [r for r in rows9 if r in ft]\n",
+        "after": "        live = []\n",
         "run": ["scripts/legacy_release.py"],
     },
     {
@@ -11033,8 +11033,8 @@ MUTATIONS = [
     {
         "why": "★昔の機種の導入日：「このままでよい」の印を基本情報表の取り残しで見ない（代役）★",
         "file": "scripts/legacy_release.py",
-        "before": "        if not s9 or s9 in have or s9 in kept or s9 in out:\n",
-        "after": "        if not s9 or s9 in have or s9 in out:\n",
+        "before": "        if s9 in kept and str(b.get(\"at\") or \"\")[:10] <= str((kept[s9] or {}).get(\"at\") or \"\"):\n",
+        "after": "        if False:\n",
         "run": ["scripts/legacy_release.py"],
     },
     {
@@ -11049,6 +11049,48 @@ MUTATIONS = [
         "file": "scripts/machine_turn.py",
         "before": "        if not tr or tr[\"started\"] < lo or (tr[\"started\"] < day and _stale_turn(tr, day)):\n",
         "after": "        if not tr or (tr[\"started\"] < day and _stale_turn(tr, day)):\n",
+        "run": ["scripts/machine_turn.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：1件の結び付けが使えないだけで全機種の取り直しを止める（代役6回目）★",
+        "file": "scripts/legacy_release.py",
+        "before": "        except _lb.BindingError:\n",
+        "after": "        except ZeroDivisionError:\n",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：基本情報表の日付が控えと食い違っても挙げない（代役6回目）★",
+        "file": "scripts/legacy_release.py",
+        "before": "                              == _date_nums(have[s9].get(\"release\")) for r in live):\n",
+        "after": "                              != () for r in live):\n",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：「このままでよい」の印が、後で足し直した行まで黙らせる（代役6回目）★",
+        "file": "scripts/legacy_release.py",
+        "before": "        if s9 in kept and str(b.get(\"at\") or \"\")[:10] <= str((kept[s9] or {}).get(\"at\") or \"\"):\n",
+        "after": "        if s9 in kept:\n",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★大手との差：置き換えるとき、ほかの足した欄の古い数字を「記事にある」に数える（代役6回目）★",
+        "file": "scripts/add_items.py",
+        "before": "                        if not (isinstance(s, dict) and s.get(\"title\") in (_added_all | {title}))]),\n",
+        "after": "                        if not (isinstance(s, dict) and s.get(\"title\") in {title})]),\n",
+        "run": ["scripts/add_items.py"],
+    },
+    {
+        "why": "★担当機種：最後の点検から60日を超えた機種を見張らない（代役6回目）★",
+        "file": "scripts/machine_turn.py",
+        "before": "        if (last and last < lim) or (not last and \"publication_policy\" not in m):\n",
+        "after": "        if False:\n",
+        "run": ["scripts/machine_turn.py"],
+    },
+    {
+        "why": "★担当機種：新台期間の機種まで点検の古さに数える（代役6回目）★",
+        "file": "scripts/machine_turn.py",
+        "before": "        if \"publication_policy\" in m and _gm.is_new_machine(",
+        "after": "        if False and _gm.is_new_machine(",
         "run": ["scripts/machine_turn.py"],
     },
 ]

@@ -269,7 +269,8 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
             if title in titles:
                 try:
                     import build_new_article as _bna
-                    _replace = title in _bna.added_section_titles(row.get("slug") or detail.get("slug") or "")
+                    _added_all = set(_bna.added_section_titles(row.get("slug") or detail.get("slug") or ""))
+                    _replace = title in _added_all
                 except Exception:                                # noqa: BLE001
                     _replace = False
                 if not _replace:
@@ -277,8 +278,10 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
                 else:
                     # ★★置き換えるときは、古い欄の数字を「記事にある」に数えない★★（2026-11-10・代役の指摘＝
                     #   数えると、確定値が直っても古い数字のまま「直した」ことにできた）
+                    #   ★この道具で足したほかの欄の数字も数えない★（代役の指摘＝同じ古い確定値から足した別の欄があると抜けた）
                     pool = _ds.number_pool(dict(detail, sections=[
-                        s for s in (detail.get("sections") or []) if not (isinstance(s, dict) and s.get("title") == title)]),
+                        s for s in (detail.get("sections") or [])
+                        if not (isinstance(s, dict) and s.get("title") in (_added_all | {title}))]),
                         row or {})
             if title == RUMOR_TITLE or (isinstance(title, str) and title.startswith("噂")):
                 p.append(f"{w}: 噂の欄は rumor_verdict で書きます")
@@ -760,6 +763,17 @@ def selftest() -> int:
             _bna2.ADDED_SECTIONS = _keep_as
         t("★★置き換えるとき、古い欄にしか無い数字は「記事にある」に数えない★★（代役の指摘＝確定値を名指しせず古い数字のまま直せた）",
           any("無い数字" in x for x in r3["problems"]))
+        _now3 = dict(_now2, sections=list(_now2["sections"]) + [{"title": "有利区間の補足", "body": ["最大3000Gです。"]}])
+        try:
+            _bna2.ADDED_SECTIONS = g["ADDED"]
+            io.open(g["ADDED"], "w", encoding="utf-8").write(
+                json.dumps({"zzz_g": ["有利区間", "有利区間の補足"]}, ensure_ascii=False))
+            r4 = plan(_now3, row, dec({"op": "add_section", "title": "有利区間",
+                                       "body": ["有利区間は最大3000Gまでです。"]}), conf)
+        finally:
+            _bna2.ADDED_SECTIONS = _keep_as
+        t("　この道具で足したほかの欄に残る古い数字も「記事にある」に数えない（代役の指摘）",
+          any("無い数字" in x for x in r4["problems"]))
     finally:
         g.update(keep)
         _cvx.for_slug = keep_fs
