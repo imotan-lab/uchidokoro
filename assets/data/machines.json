@@ -2881,7 +2881,7 @@
   "slug": "pw_10543",
   "name": "Lパチスロ 彼女、お借りします",
   "seo": {
-   "title": "Lパチスロ 彼女、お借りします スペック・基本情報"
+   "title": "Lパチスロ 彼女、お借りします 天井・狙い目"
   },
   "info": "",
   "strategy": "",
@@ -2915,7 +2915,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-21",
+   "decided_at": "2026-11-11",
    "input_digest": "sha256:14f29339a0d8bf76fb56f1aa608481937cb09e924f1795232593b6ebc4de6a4a"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
