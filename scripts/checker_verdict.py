@@ -1861,10 +1861,19 @@ def coin_drift(slug: str, m: dict) -> list:
     try:
         bas = [b for b in (_sj.read_json(COIN_BASIS, expect=list) if os.path.isfile(COIN_BASIS) else [])
                if isinstance(b, dict) and b.get("slug") == slug]
-    except Exception:                                        # noqa: BLE001
-        bas = []
+    except Exception as e:                                   # noqa: BLE001
+        # ★読めないことを黙らない★（Codexの指摘）
+        return out + [f"判断の控え（coin_rate_basis.json）を読めないので照合できません（{type(e).__name__}）"]
     if bas:
         last = bas[-1]
+        if last.get("field") == "games_per_50":
+            # ★採った確定値が取り消されたら知らせる★（Codexの指摘＝値の訂正だけ見て、取り消しは見ていなかった）
+            try:
+                import confirmed_values as _cv2
+                if not isinstance((_cv2.for_slug(slug) or {}).get("games_per_50"), dict):
+                    out.append("書いたときに採った確定値 games_per_50 がもうありません")
+            except Exception as e:                           # noqa: BLE001
+                out.append(f"確定値を読めないので照合できません（{type(e).__name__}）")
         if _ai._canon(str(last.get("coinRate"))) != v:
             out.append(f"最後に2AIで書いた値 {last.get('coinRate')} とチェッカーの {ck.get('coinRate')} が違います")
         elif last.get("quote") and not any(str(last["quote"]) in s9 for s9 in _article_strings(slug)):
@@ -1960,11 +1969,10 @@ def apply_coin(dec: dict, ms: list, dry_run: bool = False) -> int:
     i = next(i for i, m in enumerate(ms) if str(m.get("slug") or "") == slug)
     new = json.loads(json.dumps(ms[i], ensure_ascii=False))
     new["checker"]["coinRate"] = dec["coinRate"]
-    if new == ms[i]:
-        print(f"{slug}: すでにその50枚あたりG数です（書きません）")
-        return 0
+    _same = new == ms[i]
     if dry_run:
-        print(f"{slug}: 50枚あたりG数を {dec['coinRate']} と書きます")
+        print(f"{slug}: " + ("すでにその値です（根拠の控えだけ書き直します）" if _same
+                             else f"50枚あたりG数を {dec['coinRate']} と書きます"))
         return 0
     # ★★判断の控えを先に残す★★（代役の指摘＝どの記録から採ったか残らず、確定値を直しても気づけなかった）
     try:
@@ -1979,6 +1987,10 @@ def apply_coin(dec: dict, ms: list, dry_run: bool = False) -> int:
     except Exception as e:                                   # noqa: BLE001
         print(f"★書きません★: 判断の控えを残せません（{type(e).__name__}: {e}）")
         return 1
+    if _same:
+        # ★値が同じでも根拠を新しくできる★（Codexの指摘＝記事の逐語が変わったとき、同じ値で決め直しても警告が残った）
+        print(f"{slug}: すでにその50枚あたりG数です（根拠の控えだけ書き直しました）")
+        return 0
     ms[i] = new
     # ★書式はほかの書き手と同じ（字下げ1・LF）★
     _body = json.dumps(ms, ensure_ascii=False, indent=1) + "\n"
@@ -3035,7 +3047,7 @@ def _coin_tests(t) -> None:
     ms = [m]
     base = {"slug": "zzz_c", "decision": COIN, "judges": ["claude", "codex"], "why": "基本情報表の50枚あたりの値を入れる"}
     import tempfile
-    global DETAILS
+    global DETAILS, MACHINES, COIN_BASIS
     keep = DETAILS
     try:
         DETAILS = tempfile.mkdtemp(prefix="coin_")
@@ -3068,10 +3080,23 @@ def _coin_tests(t) -> None:
                                                  [dict(m, publication_policy="page-decision/v2")])))
         t("　判断者の組が要る",
           any("判断者" in x for x in coin_problems(dict(base, judges=["claude"], coinRate=31, quote=q), ms)))
+        _keep_m, _keep_b = MACHINES, COIN_BASIS
+        try:
+            MACHINES = os.path.join(DETAILS, "machines.json")
+            COIN_BASIS = os.path.join(DETAILS, "coin_basis.json")
+            _m2 = json.loads(json.dumps(m, ensure_ascii=False))
+            _m2["checker"]["coinRate"] = 31
+            with open(MACHINES, "w", encoding="utf-8") as f:
+                f.write(json.dumps([_m2], ensure_ascii=False))
+            _rc = apply_coin(dict(base, coinRate=31, quote=q), [_m2])
+            _bb = json.loads(open(COIN_BASIS, encoding="utf-8").read()) if os.path.isfile(COIN_BASIS) else []
+        finally:
+            MACHINES, COIN_BASIS = _keep_m, _keep_b
+        t("★★値が同じでも、根拠（逐語）を決め直せば控えだけ書き直す★★（Codexの指摘＝逐語が変わると警告が残り続けた）",
+          _rc == 0 and len(_bb) == 1 and _bb[0].get("quote") == q)
     finally:
         DETAILS = keep
     import tempfile as _tfc
-    global COIN_BASIS
     _keep_cb = COIN_BASIS
     try:
         COIN_BASIS = os.path.join(_tfc.mkdtemp(prefix="coinb_"), "b.json")
@@ -3085,6 +3110,22 @@ def _coin_tests(t) -> None:
         COIN_BASIS = _keep_cb
     t("★★書いた coinRate が、最後に2AIで書いた値・書いたときの記事の逐語と合わなければ知らせる★★（Codexの指摘＝訂正に追いつかなかった）",
       any("違います" in x for x in _cd) and any("消えました" in x for x in _cd2))
+    import confirmed_values as _cvz
+    _keep_fs = _cvz.for_slug
+    try:
+        COIN_BASIS = os.path.join(_tfc.mkdtemp(prefix="coinb2_"), "b.json")
+        with open(COIN_BASIS, "w", encoding="utf-8") as f:
+            f.write(json.dumps([{"slug": "zzz_c", "coinRate": 31, "field": "games_per_50"}], ensure_ascii=False))
+        _cvz.for_slug = lambda s9, data=None: {}
+        _cd3 = coin_drift("zzz_c", {"checker": {"coinRate": 31}})
+        with open(COIN_BASIS, "w", encoding="utf-8") as f:
+            f.write("{壊れた")
+        _cd4 = coin_drift("zzz_c", {"checker": {"coinRate": 31}})
+    finally:
+        COIN_BASIS = _keep_cb
+        _cvz.for_slug = _keep_fs
+    t("★★採った確定値が取り消されたら知らせる／控えが読めなければ知らせる★★（Codexの指摘）",
+      any("もうありません" in x for x in _cd3) and any("読めない" in x for x in _cd4))
     t("★入力の上限を超える線を数える（byRate の中も）★",
       sorted(_strs_num({"normal": {"good": 420, "byRate": {"rate45": {"excellent": 760}}}})) == [420, 760])
 

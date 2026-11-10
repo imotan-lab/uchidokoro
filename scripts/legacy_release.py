@@ -172,7 +172,16 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
                     _lb.load()
                 except Exception as e3:                          # noqa: BLE001
                     raise LegacyReleaseError(f"途中で結び付けの控えを読めなくなったので止めます（{type(e3).__name__}）")
-            u = None
+                # ★読み直せたなら、その機種の結び付けをもう一度引く★（Codexの指摘＝一瞬だけ控え全体が壊れたとき、
+                #   読み直しは通るのに u=None のまま捨てていた）。もう一度だめなら、その1件の不具合として捨てる
+                try:
+                    u = bound(s)
+                except _lb.PendingUnreadable as e4:
+                    raise LegacyReleaseError(f"待ち行列を読めないので、導入日の控えを確かめられません（{s}: {str(e4)[:60]}）")
+                except _lb.BindingError:
+                    u = None
+            else:
+                u = None
         except Exception as e:                                   # noqa: BLE001
             raise LegacyReleaseError(f"結び付けを読めないので、控えを確かめられません（{s}: {type(e).__name__}）")
         if not u or u != d["machines"][s].get("url"):
@@ -625,6 +634,22 @@ def selftest() -> int:
         _lbx.load, globals()["_bound"], _pmz.load, _lbx.STORE = _keep_load, _keep_b2, _keep_pl2, _keep_st2
     t("★★取り直しの途中で結び付けの控え全体が読めなくなったら、控えを捨てずに止める★★（Codexの指摘）",
       _r14 is not None and release_for("b", p2) == "2024-03-04")
+    _bc = [0]
+
+    def _bound_flaky(s9):
+        _bc[0] += 1
+        if _bc[0] == 1:
+            raise _lbx.BindingError("結び付けの控えの形が違います（一瞬だけ）")
+        return U % 2
+    try:
+        _lbx.STORE = _bf
+        _pmz.load = lambda *a9, **k9: {}
+        globals()["_bound"] = _bound_flaky
+        _r15 = refresh(0, True, rows=rows, fetch=lambda u: "2025-06-02", today="2026-11-12", path=p2, log=lambda *a: None)
+    finally:
+        globals()["_bound"], _pmz.load, _lbx.STORE = _keep_b2, _keep_pl2, _keep_st2
+    t("★★結び付けが一瞬だけ読めなかったなら、引き直して控えを残す★★（Codexの指摘＝読み直しは通るのに捨てていた）",
+      _r15["purged"] == [] and release_for("b", p2) == "2024-03-04")
     t("★★待ち行列が読めない種類の例外なら、あとで読めても控えを捨てずに止める★★（代役の指摘＝一瞬だけの失敗を守れなかった）",
       _r13 is not None and release_for("b", p2) == "2024-03-04")
     t("　結び付けの控えのファイルが無いのに導入日の控えがあれば止める（消えたのか取り消したのか分からない）",

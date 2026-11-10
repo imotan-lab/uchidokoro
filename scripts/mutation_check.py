@@ -11054,8 +11054,8 @@ MUTATIONS = [
     {
         "why": "★昔の機種の導入日：1件の結び付けが使えないだけで全機種の取り直しを止める（代役6回目）★",
         "file": "scripts/legacy_release.py",
-        "before": "        except _lb.BindingError:\n",
-        "after": "        except ZeroDivisionError:\n",
+        "before": "        except _lb.BindingError:\n            # ★★この1件の結び付けが使えない",
+        "after": "        except ZeroDivisionError:\n            # ★★この1件の結び付けが使えない",
         "run": ["scripts/legacy_release.py"],
     },
     {
@@ -11302,6 +11302,34 @@ MUTATIONS = [
         "before": "        if (last and last < lim) or (not last and (\"publication_policy\" not in m or bool(_rel))):\n",
         "after": "        if (last and last < lim) or (not last and \"publication_policy\" not in m):\n",
         "run": ["scripts/machine_turn.py"],
+    },
+    {
+        "why": "★チェッカー：50枚あたりG数が同じ値なら、根拠の控えを書き直さない（Codex612-2）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "    _same = new == ms[i]\n",
+        "after": "    _same = new == ms[i]\n    if _same:\n        return 0\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★チェッカー：50枚あたりG数で採った確定値が取り消されても知らせない（Codex612-2）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "                if not isinstance((_cv2.for_slug(slug) or {}).get(\"games_per_50\"), dict):\n",
+        "after": "                if False:\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★チェッカー：50枚あたりG数の判断の控えが読めなくても黙る（Codex612-2）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "        return out + [f\"判断の控え（coin_rate_basis.json）を読めないので照合できません（{type(e).__name__}）\"]\n",
+        "after": "        bas = []\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★昔の機種の導入日：結び付けが一瞬だけ読めなかったとき、引き直さずに控えを捨てる（Codex612-2）★",
+        "file": "scripts/legacy_release.py",
+        "before": "                try:\n                    u = bound(s)\n                except _lb.PendingUnreadable as e4:",
+        "after": "                try:\n                    u = None\n                except _lb.PendingUnreadable as e4:",
+        "run": ["scripts/legacy_release.py"],
     },
 ]
 
