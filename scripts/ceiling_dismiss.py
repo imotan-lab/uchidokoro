@@ -167,8 +167,11 @@ def selftest() -> int:
             json.dump(_g, f, ensure_ascii=False)
         t("　日付が読めない控えは効かない（問いへ倒す）", dismissed("zzz_a") == {})
         with open(STORE, "w", encoding="utf-8") as f:
-            json.dump({"machines": {"zzz_a": {"ceiling#x": None, "ceiling#y": {},
-                                              "ceiling#z": {"by": ["claude"], "why": "短", "urls": ["https://a"]}}}}, f)
+            # ★日付は今日にする★（日付の守りが先に落とすと、判断者・理由の守りを試せない・罠⑫）
+            _td = _dt.date.today().isoformat()
+            json.dump({"machines": {"zzz_a": {"ceiling#x": None, "ceiling#y": {"at": _td},
+                                              "ceiling#z": {"by": ["claude"], "why": "短", "urls": ["https://a"],
+                                                            "at": _td}}}}, f)
         t("★★読める形で壊れた控え（null・空・1人・短い理由）は無かったことにする★★（Codex review efdd1f8f の2）",
           dismissed("zzz_a") == {})
         with open(STORE, "w", encoding="utf-8") as f:
