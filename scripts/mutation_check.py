@@ -11338,6 +11338,34 @@ MUTATIONS = [
         "after": "        pass\n",
         "run": ["scripts/checker_verdict.py"],
     },
+    {
+        "why": "★昔の機種の題名：設定狙いだけの機種も「天井・狙い目」と名乗る（狙い目の有無を見ない）★",
+        "file": "scripts/build_machine_pages.py",
+        "before": "    if _td.expected_axes(ck):\n        return LEGACY_ABOUT_FULL\n",
+        "after": "    if True:\n        return LEGACY_ABOUT_FULL\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★昔の機種の題名：チェッカーの欄の天井を見ない（天井のある設定狙いの機種が「設定判別・スペック」になる）★",
+        "file": "scripts/build_machine_pages.py",
+        "before": "            ceil = True\n    if _td.expected_axes(ck):\n",
+        "after": "            pass\n    if _td.expected_axes(ck):\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★昔の機種の題名：中身に合わせた名乗りを使わず、全部「天井・狙い目・やめどき」にする★",
+        "file": "scripts/build_machine_pages.py",
+        "before": "    elif legacy_about(machine) != LEGACY_ABOUT_FULL:\n",
+        "after": "    elif False:\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★昔の機種の題名：チェッカーの無い機種で、天井の有無を見ない★",
+        "file": "scripts/build_machine_pages.py",
+        "before": "        return \"天井・スペック\" if ceil else \"設定判別・スペック\"\n",
+        "after": "        return \"設定判別・スペック\"\n",
+        "run": ["scripts/grow_machine.py"],
+    },
 ]
 
 

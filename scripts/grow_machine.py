@@ -2058,6 +2058,31 @@ def _carry_meta_tests(t) -> None:
       _tt2 == "機Z 天井・狙い目" and _dd2.startswith("機Zの天井・狙い目。"))
     t("　説明文に「（公式確認）」を書かない（導入日はDMMの値）",
       "公式確認" not in _dd and "11月2日" in _dd)
+    # ★昔の機種も載っている中身だけを名乗る★（2026-11-11・運営者の判断）＝判定はチェッカーのデータだけ
+    _set = {"unit": "G", "modes": [{"key": "normal", "label": "設定狙い"}],
+            "normal": {"good": 99999, "caution": 99999, "excellent": 99999}}
+    _lg = {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+           "normal": {"good": 600, "caution": 500, "excellent": 700}}
+    _la = [_bmpx.legacy_about({"checker": _set}),
+           _bmpx.legacy_about({"checker": _set, "tenjo_games": 999}),
+           _bmpx.legacy_about({"checker": None, "tenjo_display": "通常時1000G+α"}),
+           _bmpx.legacy_about({}),
+           _bmpx.legacy_about({"checker": _lg}),
+           _bmpx.legacy_about({"checker": {**_set, "normal": {**_set["normal"], "ceiling": 800}}})]
+    t("★★昔の機種の題名：設定狙いだけなら「設定判別」・チェッカーが無ければ「スペック」・狙い目があれば今までどおり★★",
+      _la == ["設定判別・スペック", "天井・設定判別", "天井・スペック", "設定判別・スペック",
+              "天井・狙い目・やめどき", "天井・設定判別"])
+    _mc2 = _bmpx._pd.machine_class
+    try:
+        _bmpx._pd.machine_class = lambda m: "LEGACY_COMPLETE"
+        _lt, _ld = _bmpx.build_title_desc({"name": "機J", "checker": _set, "strategy": "設定狙い主体・天井なし"}, True)
+        _lt2, _ld2 = _bmpx.build_title_desc({"name": "機K", "checker": _lg, "strategy": "5.6枚 通常600G〜"}, False)
+    finally:
+        _bmpx._pd.machine_class = _mc2
+    t("　設定狙いだけの昔の機種は「天井・狙い目」と名乗らない（題名も説明文も）",
+      _lt == "機J 設定判別・スペック｜小役カウンター ポチポチくん対応"
+      and "狙い目" not in _ld and _ld.startswith("機Jの設定判別・スペックを解説。"))
+    t("　狙い目のある昔の機種は今までどおり", _lt2 == "機K 天井・狙い目・やめどき｜期待値・立ち回りガイド")
     t("★題名が変わることも、書く理由に数える★（数えないと既にある新台の題名が直らない）",
       "検索向けの題名が変わります" in machine_row_drift(
           {"seo": {"title": "機Z スペック・基本情報"}}, {"seo": {"title": "機Z 天井・狙い目"}}))

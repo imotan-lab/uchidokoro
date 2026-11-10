@@ -143,6 +143,32 @@ def pochipochi_state(machine: dict, pochipochi_reasons: dict) -> tuple:
     return (True, "")
 
 
+LEGACY_ABOUT_FULL = "天井・狙い目・やめどき"
+
+
+def legacy_about(machine: dict) -> str:
+    """★昔の機種が題名で名乗る中身★（2026-11-11）＝チェッカーのデータだけで決める（文の言い回しは見ない）。
+
+    ・チェッカーが無い          … 天井が分かっていれば「天井・スペック」、無ければ「設定判別・スペック」（BT・Aタイプ）
+    ・見える欄の狙い目が全部「設定狙い」の番兵（99999）か空 … 天井が分かっていれば「天井・設定判別」、無ければ「設定判別・スペック」
+    ・それ以外                  … 今までどおり「天井・狙い目・やめどき」
+    天井が分かっている＝機種行の tenjo_games / tenjo_display か、見える欄の ceiling（番兵未満の整数）。
+    """
+    import target_display as _td
+    ck = machine.get("checker")
+    ceil = bool(machine.get("tenjo_games") or machine.get("tenjo_display"))
+    if not isinstance(ck, dict) or not ck:
+        return "天井・スペック" if ceil else "設定判別・スペック"
+    for md in ck.get("modes") or []:
+        c = _td.mode_conf(ck, (md or {}).get("key")) if isinstance(md, dict) else None
+        if isinstance(c, dict) and not _td.is_off(c) and type(c.get("ceiling")) is int \
+                and 0 < c["ceiling"] < _td.NO_TARGET:
+            ceil = True
+    if _td.expected_axes(ck):
+        return LEGACY_ABOUT_FULL
+    return "天井・設定判別" if ceil else "設定判別・スペック"
+
+
 def build_title_desc(machine: dict, pochipochi_available: bool = True,
                      detail: dict | None = None) -> tuple[str, str]:
     """meta-auto.js と同じ title / description を生成。
@@ -183,6 +209,15 @@ def build_title_desc(machine: dict, pochipochi_available: bool = True,
         desc = (f"{name}のスペック・基本情報。確認が取れた項目のみ掲載し、"
                 "解析データが判明次第、随時更新します。"
                 + (f"登場時期は{release_jp}。" if release_jp else ""))
+    elif legacy_about(machine) != LEGACY_ABOUT_FULL:
+        # ★昔の機種も載っている中身だけを名乗る★（2026-11-11・運営者の判断「1A」）＝ジャグラーなど天井も狙い目も無い機種と、
+        #   チェッカーの無い機種が「天井・狙い目」と名乗っていた。判定はチェッカーのデータだけで決める（legacy_about）
+        about = legacy_about(machine)
+        tail = "小役カウンター ポチポチくん対応" if pochipochi_available else "スペック・立ち回りガイド"
+        title = f"{name} {about}｜{tail}"
+        desc = (f"{name}の{about}を解説。"
+                + (f"{strategy}。" if strategy else (f"{info}。" if info else ""))
+                + ("小役カウンター ポチポチくんで設定判別も可能です。" if pochipochi_available else ""))
     elif pochipochi_available:
         title = f"{name} 天井・狙い目・やめどき｜小役カウンター ポチポチくん対応"
         if strategy:
