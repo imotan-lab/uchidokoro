@@ -185,6 +185,7 @@ def selftest() -> int:
     bad(lambda d: d.update(by=["claude"]), "　判断者が1人なら断る", "判断者")
     bad(lambda d: d.update(why="短い"), "　理由が短ければ断る", "理由")
     bad(lambda d: d.update(before_info="スマスロBT"), "★判断したときと機種行が違えば断る（上書きしない）★", "いまの機種行と違います")
+    bad(lambda d: d.update(before_aliases=["古い通称"]), "　通称が判断したときと違っても断る", "いまの機種行と違います")
     bad(lambda d: d.update(aliases=["<b>x</b>"]), "　タグは使えない", "使えない文字")
     bad(lambda d: d.update(aliases=["スロパチクエスト"]), "　サイト名は使えない", "サイト名")
     bad(lambda d: d.update(aliases=["a", "a"]), "　通称の重複は断る", "重なって")

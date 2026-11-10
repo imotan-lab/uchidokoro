@@ -220,7 +220,10 @@ def selftest() -> int:
     t("★★時刻の来た告知を投稿し、成功したら控えから外す★★",
       r1["done"] == ["zzz_a"] and calls == ["zzz_a"] and read(p)["items"] == [])
     add("promotion", "zzz_b", now=now, rng=_R(), path=p)
-    for k in range(MAX_TRIES):
+    run_due(now=later, post=lambda x: 1, sleep=lambda s: None, rng=_R(), path=p)
+    t("　失敗したら次の挑戦は30分あける（すぐ再挑戦しない）",
+      read(p)["items"][0]["due"] == (later + _dt.timedelta(minutes=RETRY_MIN)).isoformat())
+    for k in range(1, MAX_TRIES):
         run_due(now=later + _dt.timedelta(hours=k), post=lambda x: 1, sleep=lambda s: None, rng=_R(), path=p)
     t(f"★失敗したら30分あけて再挑戦し、{MAX_TRIES}回で控えから外す（ずっと居座らない）★", read(p)["items"] == [])
     add("promotion", "zzz_c", now=now, rng=_R(), path=p)

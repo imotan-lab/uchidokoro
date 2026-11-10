@@ -1307,9 +1307,12 @@ def _selftest_body() -> int:
         print(("✅" if cond else "❌") + " " + name)
 
     # ★★Codexが利用制限のときの代役の名前も判断者として通す★★（2026-11-10・直す前は名前の段で断っていた）
+    try:
+        _sw = _judgement("題と導入日で同じ機種と判断", ["claude-agent-a", "claude-agent-b"])
+    except SourceError:
+        _sw = None
     t("★★代役（claude-agent-a・claude-agent-b）を判断者として受け取る★★",
-      _judgement("題と導入日で同じ機種と判断", ["claude-agent-a", "claude-agent-b"])
-      == ["claude-agent-a", "claude-agent-b"])
+      _sw == ["claude-agent-a", "claude-agent-b"])
     try:
         _judgement("題と導入日で同じ機種と判断", ["誰か"])
         _bad_ok = False

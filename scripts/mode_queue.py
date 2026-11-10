@@ -255,7 +255,7 @@ def selftest() -> int:
         _r1 = record_tried(None, "2026-11-01", "APPLIED")
         _r2 = record_tried(_r1, "2026-11-12", "APPLIED")
         t("　初めて済んだ日は、見直しで記録し直しても残る",
-          _r1["first_done_at"] == "2026-11-01" and _r2["first_done_at"] == "2026-11-01" and _r2["at"] == "2026-11-12")
+          _r1.get("first_done_at") == "2026-11-01" and _r2.get("first_done_at") == "2026-11-01" and _r2["at"] == "2026-11-12")
         _pr = progress([{"slug": "a"}, {"slug": "b"}], {"a"}, {"a": _r2}, "2026-11-12")
         t("★★見直しで毎日済んでいても、まだやっていない機種が7日以上進まなければ止まっている★★",
           _pr["stalled"] and _pr["remaining"] == 1)

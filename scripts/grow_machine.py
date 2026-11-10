@@ -1837,6 +1837,8 @@ def _carry_meta_tests(t) -> None:
     t("　導入日が同じ・前の導入日が無いなら入れない", _r2 is False and _r3 is False and len(_q) == 1)
     t("　（配線）書けたあとに呼んでいる",
       "queue_release_correction(slug, got.get(\"old_release\")" in inspect.getsource(apply_one))
+    t("　（配線）育成が題名を決め直している（狙い目の指紋を付けたあと）",
+      "set_seo_title(machine, detail, mat)" in inspect.getsource(plan_one))
 
 
 def _carry_written_tests(t) -> None:

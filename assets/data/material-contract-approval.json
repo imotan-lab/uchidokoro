@@ -25,9 +25,9 @@
   "scripts/html_tables.py": "5d0f32d7e988ce0696e07b4ac118d119ea4c4e2280b57acee89e0c6ebaa78c3e",
   "scripts/legacy_binding.py": "ffaee623cd2dccddf3300864bc9595ec53d0bb69fac047cec21a2e6eb8200089",
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
-  "scripts/machine_sources.py": "ac90d1e0536f4711ee58d828b2859b91f54e624d2ff9d66c2a5a44106a6b85b1",
+  "scripts/machine_sources.py": "e6bd7860f334b257ff80cbdcde389771d0a8452ae157373579e7e7bf3775cb05",
   "scripts/maker_identity_cache.py": "758f7eb8856fa87648a97b6c7fde6b334c14078be2e386f07ec095069ccf0aa7",
-  "scripts/mode_apply.py": "f79e96d71cb31c552c532ba90f2256a857e65eb6972e0c6ac31f265e1f7abbca",
+  "scripts/mode_apply.py": "863b49b831162feb8656d7b3cbe3938f7c7317db6b30eab9b8ba10b802e12dcb",
   "scripts/mode_ask.py": "b4891cbe65e959ed957d3c11e5a85137ea8202efb016940c5c8f30394f782bd4",
   "scripts/mode_verdict.py": "7f313105487573ebdd4287276337805aa567d12f5730197d23a3305cbed2390a",
   "scripts/model_code_lookup.py": "b21a1a43658617cfbc536fd25e6d1526233d1bcafe56acaba1e673e8a26de9b4",
@@ -35,7 +35,7 @@
   "scripts/page_corpus.py": "7019d1e19ec774a228111b7f5271324d7d5f7e6c92db8c025998f90642affa02",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/page_reading.py": "d993398c2b658fa06753f45262b5b8795e9591a739d1b1d75d2e35f273642589",
-  "scripts/pending_machines.py": "e712c0c420244483f76a63b72532b175dac7b64b70b614a779a4b5bfaf425f47",
+  "scripts/pending_machines.py": "9fd4c3af93cb546a64e1eccde3fdf082577208763942bb974e4665ad510de1fc",
   "scripts/read_failure.py": "be1280280387ea03708afdd281a97289c311a9aa70ef53a62dffd438de9b96fe",
   "scripts/selftest_log_guard.py": "0de496b6ac4774489492a6c66f47c80ca3c546aa30f77209bbd0c69fee8b3aab",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
@@ -214,6 +214,7 @@
   ],
   "scripts/mode_apply.py": [
    "build_new_article",
+   "derived_sections",
    "fetched_page",
    "html_check",
    "mode_ask",
@@ -292,5 +293,6 @@
    "page_reading",
    "read_failure"
   ]
- }
+ },
+ "_deps_changed_why": "mode_apply が derived_sections を取り込んだのは、モード・ゾーンの表が変わったときに、それを前提に2AIが書いた3欄（狙い目の根拠・ヤメ時の判断・立ち回りのコツ）を未確認へ戻すため（revert_if_basis_changed と written_basis の1か所を育成と共有する）。derived_sections は材料の採否を決める側ではなく、記事の欄を書く側なので材料の契約には入れない。公開物の承認（build_pages_artifact の承認一覧）には既に入っているので、契約は依存まで閉じている。"
 }
