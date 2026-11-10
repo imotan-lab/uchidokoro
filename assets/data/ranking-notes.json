@@ -38,6 +38,9 @@
   },
   "umineko2": {
    "tenjo": "CZ間の通常時を200G消化すると天井となり、CZ「運命分岐モード」に突入します（ART当選は約束されません）。"
+  },
+  "youjitsu": {
+   "tenjo": "CZ間500G+αでCZに、AT間980G+αでATに当選し、CZを7回連続でスルーすると次のCZがATに書き換わります。"
   }
  },
  "schema_version": "ranking-notes/v1"
