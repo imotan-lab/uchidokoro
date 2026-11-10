@@ -10641,7 +10641,7 @@ MUTATIONS = [
     {
         "why": "★大手との差：確定値にも記事にも無い数字を足せる★",
         "file": "scripts/add_items.py",
-        "before": "            if nu in pairs or (nu[1] == \"\" and nu[0] in toks) or nu[0] in rec_toks:\n",
+        "before": "            if nu in pairs or (nu[1] == \"\" and nu[0] in toks) or nu[0] in rec_toks or _canon(nu[0]) in rec_toks:\n",
         "after": "            if True:\n",
         "run": ["scripts/add_items.py"],
     },
@@ -10749,6 +10749,20 @@ MUTATIONS = [
         "before": "    old += [pg for pg in ROTATION if not seen.get(pg) and (first.get(pg) or \"9999\") <= cut]\n",
         "after": "",
         "run": ["scripts/fix_static_text.py"],
+    },
+    {
+        "why": "★大手との差：31.0 と 31 を別の数として扱う（Codex）★",
+        "file": "scripts/add_items.py",
+        "before": "                toks.add(_canon(tok))          # ★31.0 と 31 は同じ数★（Codexの指摘）\n",
+        "after": "",
+        "run": ["scripts/add_items.py"],
+    },
+    {
+        "why": "★大手との差：設定別でない項目の数字の鍵も設定の番号として使う（Codex）★",
+        "file": "scripts/add_items.py",
+        "before": "        if str((_sp.FIELDS.get(_cv.base_field(f)) or {}).get(\"kind\") or \"\").startswith(\"per_setting\")",
+        "after": "        if True",
+        "run": ["scripts/add_items.py"],
     },
 ]
 

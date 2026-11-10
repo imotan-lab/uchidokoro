@@ -109,7 +109,7 @@ def _numbers_ok(texts: list, pool: tuple, rec_toks=frozenset()) -> list:
     bad = []
     for t in texts:
         for nu in _dn.numbers_with_unit(t):
-            if nu in pairs or (nu[1] == "" and nu[0] in toks) or nu[0] in rec_toks:
+            if nu in pairs or (nu[1] == "" and nu[0] in toks) or nu[0] in rec_toks or _canon(nu[0]) in rec_toks:
                 continue
             bad.append(f"{nu[0]}{nu[1]}")
     return sorted(set(bad))
@@ -143,10 +143,22 @@ def _record_pool(slug: str, fields: list, confirmed: dict) -> tuple:
         for st in strings:
             for tok, _unit in _dn.numbers_with_unit(st):
                 toks.add(tok)
-        # ★設定ごとの値は、設定の番号（1〜6）も使える★（「設定1は…」と書くため）
-        if isinstance(rec["value"], dict):
+                toks.add(_canon(tok))          # ★31.0 と 31 は同じ数★（Codexの指摘）
+        # ★設定ごとの項目だけ、設定の番号（1〜6）も使える★（「設定1は…」と書くため・Codexの指摘＝ほかの項目の数字の鍵は使わない）
+        import confirmed_values as _cv
+        import spec_lookup as _sp
+        if str((_sp.FIELDS.get(_cv.base_field(f)) or {}).get("kind") or "").startswith("per_setting")                 and isinstance(rec["value"], dict):
             toks |= {str(k) for k in rec["value"] if str(k) in ("1", "2", "3", "4", "5", "6")}
     return toks, missing
+
+
+def _canon(tok: str) -> str:
+    """数の書き方をそろえる（31.0 → 31・31.50 → 31.5）。数でなければそのまま"""
+    try:
+        v = float(tok)
+    except ValueError:
+        return tok
+    return str(int(v)) if v.is_integer() else ("%s" % v)
 
 
 def _place(secs: list, title: str) -> int:
@@ -486,7 +498,8 @@ def selftest() -> int:
             "ceiling#at": {"value": {"kind": "GAME", "amount": "777", "unit": "G", "benefit": "AT 5000枚",
                                      "low": "9999", "high": "10000"}},
             "payout_rate": {"value": {"1": "97.7%", "6": "114.9%"}},
-            "games_per_50": {"value": {"games": 31, "note": "9999G"}}}
+            "games_per_50": {"value": {"games": 31.0, "note": "9999G"}}}
+    conf["ceiling#six"] = {"value": {"kind": "GAME", "amount": "777", "unit": "G", "benefit": "AT", "6": "9999G"}}
     base = {"slug": "zzz_g", "by": ["claude", "codex"], "why": "大手2サイトと比べて有利区間の欄が無かった"}
 
     def dec(*adds):
@@ -517,7 +530,11 @@ def selftest() -> int:
       any("無い数字" in x or "形が違います" in x for x in r["problems"]))
     r = plan(detail, row, dec({"op": "add_section", "title": "回転数の目安",
                                "body": ["コイン持ちは約31Gです。"], "fields": ["games_per_50"]}), conf)
-    t("　照合した値（31）は単位を問わず使える（どの言葉に付くかは2AI）", not r["problems"])
+    t("　照合した値（31.0）は 31G と書いても使える（数の書き方をそろえる・Codexの指摘）", not r["problems"])
+    r = plan(detail, row, dec({"op": "add_section", "title": "継続の目安",
+                               "body": ["継続ゲーム数は6Gです。"], "fields": ["ceiling#six"]}), conf)
+    t("★設定別でない項目では、数字の鍵（\"6\"）を設定の番号として使わない★（Codexの指摘）",
+      any("無い数字" in x or "形が違います" in x for x in r["problems"]))
     r = plan(detail, row, dec({"op": "add_section", "title": "AT間の天井",
                                "body": ["天井到達でAT 5000枚です。"], "fields": ["ceiling#at"]}), conf)
     t("　引用と照合していない鍵（benefit）の数字は使えない", any("無い数字" in x for x in r["problems"]))
