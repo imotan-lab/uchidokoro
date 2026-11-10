@@ -875,7 +875,7 @@
   "slug": "pw_10521",
   "name": "スマスロ 獣王",
   "seo": {
-   "title": "スマスロ 獣王 スペック・基本情報"
+   "title": "スマスロ 獣王 天井・狙い目"
   },
   "info": "",
   "strategy": "",
@@ -907,7 +907,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-10",
+   "decided_at": "2026-11-11",
    "input_digest": "sha256:86b831056449691b89bf9ceaa38e34428616bfa19a8232ee0fd69dca9c5d4546"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
