@@ -1621,6 +1621,18 @@ def carry_mode_section(old_detail: dict, detail: dict) -> None:
     detail["sections"] = secs[:pos] + [json.loads(json.dumps(prev))] + secs[pos:]
 
 
+def written_basis(detail: dict) -> list:
+    """★書く3欄が拠って立つ欄の中身★（並び順どおり・比べるためだけ）
+
+    天井・恩恵／当サイトの狙い目／朝一・リセット情報／モード・ゾーン（欄ごと）。
+    """
+    import target_projection as _tp
+    titles = ("天井・恩恵", _tp.SECTION_TITLE, "朝一・リセット情報", _ba.MODE_TITLE)
+    return [json.dumps(s, ensure_ascii=False, sort_keys=True)
+            for s in ((detail or {}).get("sections") or [])
+            if isinstance(s, dict) and s.get("title") in titles]
+
+
 def carry_written_sections(old_detail: dict, detail: dict, row: dict = None) -> None:
     """★2AIが書いた「狙い目の根拠」「ヤメ時の判断」「立ち回りのコツ」を持ち越す★（2026-11-10）
 
@@ -1630,14 +1642,16 @@ def carry_written_sections(old_detail: dict, detail: dict, row: dict = None) -> 
     ★育成は欄の中身を判断しない★＝作り直した欄が「未確認」で、前の欄に中身があるときだけ前の欄を使う。
     ★★ただし、書いた土台が変わったら持ち越さない★★（2026-11-10・Codexの指摘＝実害）＝
       狙い目の線が600G→700Gに変わっても「狙い目の根拠」に600Gが残り、どの検査も通っていた。
-      ①文の数値が、作り直した記事と機種行にもう無い（derived_sections と同じ数え方）
-      ②「狙い目の根拠」は、「当サイトの狙い目」の欄が変わった
+      ①3欄が拠って立つ欄（FACT_TITLES＝天井・恩恵／当サイトの狙い目／朝一・リセット情報／モード・ゾーン）の
+        どれかが変わった → ★3欄すべて★持ち越さない
+        （★「狙い目の根拠」だけにすると、同じ数字が記事のほかの場所にあるとき「立ち回りのコツ」に
+          古い狙い目が残った＝Codexの2回目の指摘・pw_10543 で再現）
+      ②文の数値が、作り直した記事と機種行にもう無い（derived_sections と同じ数え方）
       のどちらかなら「未確認」のまま残す＝翌朝の STEP 0-K が書き直す対象に戻る
       （消えたことは text_kept が止めない＝_drop_reverted_written）。
     """
     import derived_sections as _ds
     import decide_now as _dn
-    import target_projection as _tp
     if not isinstance(old_detail, dict) or not isinstance(detail, dict):
         return
     secs = detail.get("sections")
@@ -1645,18 +1659,14 @@ def carry_written_sections(old_detail: dict, detail: dict, row: dict = None) -> 
         return
     prev = {s.get("title"): s for s in (old_detail.get("sections") or [])
             if isinstance(s, dict) and s.get("title") in _ds.TITLES}
-
-    def _target_body(d):
-        return next((s.get("body") for s in (d.get("sections") or [])
-                     if isinstance(s, dict) and s.get("title") == _tp.SECTION_TITLE), None)
+    if written_basis(old_detail) != written_basis(detail):
+        return
     pairs, toks = _ds.number_pool(detail, row or {})
     for i, s in enumerate(secs):
         if not isinstance(s, dict) or s.get("title") not in _ds.TITLES:
             continue
         old = prev.get(s.get("title"))
         if old is None or not _ds.is_pending(s) or _ds.is_pending(old):
-            continue
-        if s.get("title") == "狙い目の根拠" and _target_body(old_detail) != _target_body(detail):
             continue
         nums = [nu for b in (old.get("body") or []) if isinstance(b, str)
                 for nu in _dn.numbers_with_unit(b)]
@@ -1683,13 +1693,13 @@ def _carry_written_tests(t) -> None:
     old = {"sections": [{"title": "天井・恩恵", "body": ["a"]},
                         {"title": "狙い目の根拠", "body": ["書いた根拠"]},
                         {"title": "ヤメ時の判断", "body": [P]}]}
-    new = {"sections": [{"title": "天井・恩恵", "body": ["a2"]},
+    new = {"sections": [{"title": "天井・恩恵", "body": ["a"]},
                         {"title": "狙い目の根拠", "body": [P]},
                         {"title": "ヤメ時の判断", "body": [P]}]}
     carry_written_sections(old, new)
     t("★★2AIが書いた欄を、作り直した記事へ持ち越す★★（直す前は翌朝「未確認」に戻った）",
       new["sections"][1]["body"] == ["書いた根拠"] and new["sections"][2]["body"] == [P]
-      and new["sections"][0]["body"] == ["a2"])
+      and new["sections"][0]["body"] == ["a"])
     new2 = {"sections": [{"title": "狙い目の根拠", "body": ["材料から作れた中身"]}]}
     carry_written_sections(old, new2)
     t("　作り直した欄に中身があれば、そちらを使う（古い欄で上書きしない）",
@@ -1711,21 +1721,31 @@ def _carry_written_tests(t) -> None:
       and n_same["sections"][3]["body"] == o3["sections"][3]["body"])
     n_moved = _n3(700)
     carry_written_sections(o3, n_moved, {})
-    t("★★狙い目の欄が変わったら「狙い目の根拠」は持ち越さない（未確認に戻して書き直させる）★★",
-      n_moved["sections"][2]["body"] == [P])
-    t("　狙い目に関係なく数値が残っている欄（立ち回り）は持ち越す",
-      n_moved["sections"][3]["body"] == o3["sections"][3]["body"])
-    # ★狙い目の欄の変化だけが効く材料★（根拠の文に狙い目の数値が無い＝数値の守りでは捕まらない・罠④）
+    t("★★狙い目の欄が変わったら、3欄すべて持ち越さない（未確認に戻して書き直させる）★★"
+      "（Codexの2回目の指摘＝根拠だけ戻すと、立ち回りに古い狙い目が残った）",
+      n_moved["sections"][2]["body"] == [P] and n_moved["sections"][3]["body"] == [P])
+    # ★土台の欄の変化だけが効く材料★（文の数値は別の欄にも残っている＝数値の守りでは捕まらない・罠④）
     o4 = json.loads(json.dumps(o3))
-    o4["sections"][2]["body"] = ["天井850Gまでの距離から、当サイトの目安を決めています。"]
+    o4["sections"].append({"title": "ゲーム性", "body": ["BIG後700Gまで見る機種で、600Gでも当選します。"]})
+    o4["sections"][3]["body"] = ["BIG後の狙い目は600Gからです。"]
     n_moved4 = _n3(700)
+    n_moved4["sections"].append(json.loads(json.dumps(o4["sections"][-1])))
     carry_written_sections(o4, n_moved4, {})
-    t("★★根拠の文に狙い目の数値が無くても、狙い目の欄が変われば持ち越さない★★",
-      n_moved4["sections"][2]["body"] == [P])
+    t("★★同じ数字が記事のほかの欄に残っていても、狙い目の欄が変われば立ち回りも持ち越さない★★",
+      n_moved4["sections"][3]["body"] == [P])
+    # ★数値の守りだけが効く材料★（土台の欄は同じ・ゲーム性の数値だけ変わる）
+    o5 = json.loads(json.dumps(o3))
+    o5["sections"].append({"title": "ゲーム性", "body": ["CZ後32Gまでが引き戻しの区切りです。"]})
+    o5["sections"][3]["body"] = ["CZ後32Gまでを見てから区切る機種です。"]
+    n5 = _n3(600)
+    n5["sections"].append({"title": "ゲーム性", "body": ["CZ後40Gまでが引き戻しの区切りです。"]})
+    carry_written_sections(o5, n5, {})
+    t("★★文の数値が記事から消えたら持ち越さない★★（ゲーム性の32G→40Gで、立ち回りの32Gが残らない）",
+      n5["sections"][3]["body"] == [P] and n5["sections"][2]["body"] == o5["sections"][2]["body"])
     n_ceil = _n3(600)
     n_ceil["sections"][0] = {"title": "天井・恩恵", "body": ["天井は999Gです。"]}
     carry_written_sections(o3, n_ceil, {})
-    t("★★文の数値が記事から消えたら持ち越さない★★（天井850G→999Gで立ち回りの850Gが残らない）",
+    t("★★天井の欄が変わったら持ち越さない★★（天井850G→999G）",
       n_ceil["sections"][3]["body"] == [P])
     t("★★持ち越さなかった書く欄は「消えた」と数えない（育成が止まらない）★★",
       not any("天井850Gまでの残り" in x or "600Gからを目安" in x for x in text_kept(o3, n_ceil))

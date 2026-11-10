@@ -10055,9 +10055,9 @@ MUTATIONS = [
         "run": ["scripts/derived_sections.py"],
     },
     {
-        "why": "★育成：狙い目の欄が変わっても「狙い目の根拠」を持ち越す（古い線の根拠が残る・Codex指摘）★",
+        "why": "★育成：狙い目・天井などの欄が変わっても書いた3欄を持ち越す（古い線の根拠・立ち回りが残る・Codex指摘）★",
         "file": "scripts/grow_machine.py",
-        "before": "        if s.get(\"title\") == \"狙い目の根拠\" and _target_body(old_detail) != _target_body(detail):\n            continue\n",
+        "before": "    if written_basis(old_detail) != written_basis(detail):\n        return\n",
         "after": "",
         "run": ["scripts/grow_machine.py"],
     },
