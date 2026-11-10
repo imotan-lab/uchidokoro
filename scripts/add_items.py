@@ -57,7 +57,12 @@ BASIS = os.path.join(_lp.DOCS, "add_items_basis.json")
 # ★足した欄の名前の一覧はリポジトリの中★＝新台の記事の契約（build_new_article.expected_titles）と育成の持ち越しが読む
 ADDED = os.path.join(BASE, "assets", "data", "added-sections.json")
 WHY_MIN = 15
-OPS = ("add_section", "add_rows", "add_line")
+OPS = ("add_section", "add_rows", "add_line", "add_fact")
+# ★基本情報表に1行足す（昔の機種だけ）★（2026-11-10・洗い出し4回目＝導入日・メーカーの行が92機種で無かった）
+#   導入日は fields に "legacy_release" と書くと、昔の機種の導入日の控え（DMMの機種ページの値）の数字が使える
+LEGACY_RELEASE_FIELD = "legacy_release"
+FACT_LABEL_MAX = 20
+FACT_VALUE_MAX = 60
 TITLE_MAX = 20
 TEXT_MAX = 400
 CELL_MAX = 80
@@ -131,6 +136,19 @@ def _record_pool(slug: str, fields: list, confirmed: dict) -> tuple:
     import decide_now as _dn
     toks, missing = set(), []
     for f in fields:
+        if f == LEGACY_RELEASE_FIELD:
+            try:
+                import legacy_release as _lr
+                rel = _lr.release_for(slug)
+            except Exception:                                    # noqa: BLE001
+                rel = ""
+            if not rel:
+                missing.append(f)
+                continue
+            for tok, _unit in _dn.numbers_with_unit(rel):
+                toks.add(tok)
+                toks.add(_canon(tok))
+            continue
         rec = confirmed.get(f)
         if not isinstance(rec, dict) or "value" not in rec:
             missing.append(f)
@@ -196,11 +214,37 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
     auto = _pd.is_auto(row or {})
     secs = json.loads(json.dumps(detail.get("sections") or []))
     base_pool = _ds.number_pool(detail, row or {})
-    done = []
+    done, new_facts = [], []
     for i, a in enumerate(adds):
         w = f"additions[{i}]"
         if not isinstance(a, dict) or a.get("op") not in OPS:
             p.append(f"{w}: op は {'/'.join(OPS)} のどれかです")
+            continue
+        if a["op"] == "add_fact":
+            if auto:
+                p.append(f"{w}: 基本情報表に足せるのは昔の機種だけです（新台は育成が作り直す）")
+                continue
+            rw = a.get("row")
+            if not isinstance(rw, list) or len(rw) != 2:
+                p.append(f"{w}: row は [項目, 内容] の2つです")
+                continue
+            p += _text_ng(rw[0], f"{w} 項目", 1, FACT_LABEL_MAX)
+            p += _text_ng(rw[1], f"{w} 内容", 1, FACT_VALUE_MAX)
+            ft = detail.get("factTable")
+            if ft is not None and not isinstance(ft, list):
+                p.append(f"{w}: 基本情報表の形が違います")
+                continue
+            if any(isinstance(x, list) and x and x[0] == rw[0] for x in (ft or [])):
+                p.append(f"{w}: 基本情報表に「{rw[0]}」の行がもうあります（直すなら decide_now）")
+            rec_toks, miss = _record_pool(row.get("slug") or detail.get("slug") or "", a.get("fields") or [], confirmed)
+            if miss:
+                p.append(f"{w}: 確定値の記録がありません・形が違います: {'・'.join(miss)}")
+            made = _numbers_ok([x for x in rw if isinstance(x, str)], base_pool, rec_toks)
+            if made:
+                p.append(f"{w}: 確定値にも記事にも無い数字があります: {'・'.join(made)}")
+            if not p:
+                new_facts.append(list(rw))
+                done.append(f"基本情報表に「{rw[0]}」")
             continue
         if auto and a["op"] != "add_section":
             p.append(f"{w}: 新台経路の機種は欄を足す（add_section）だけです（育成が記事を作り直すため）")
@@ -296,7 +340,10 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
                      "（独立2出典で確かめて confirmed_values.py --record し、fields に名指しする）")
     if p:
         return {"problems": p}
-    return {"problems": [], "sections": secs, "done": done}
+    out = {"problems": [], "sections": secs, "done": done}
+    if new_facts:
+        out["factTable"] = json.loads(json.dumps(detail.get("factTable") or [])) + new_facts
+    return out
 
 
 def _table_ng(tb, w: str) -> tuple:
@@ -409,6 +456,8 @@ def apply_decision(path: str, apply_it: bool) -> dict:
         return got
     after = dict(detail)
     after["sections"] = got["sections"]
+    if "factTable" in got:
+        after["factTable"] = got["factTable"]
     new_raw = json.dumps(after, ensure_ascii=False, indent=_indent_of(raw))
     if raw.endswith("\n"):
         new_raw += "\n"
@@ -565,6 +614,27 @@ def selftest() -> int:
     r = plan(detail, row, dec({"op": "add_rows", "section": "基本スペック", "table": 0,
                                "rows": [["有利区間"]], "fields": ["ceiling#yuuri"]}), conf)
     t("　行の列数が見出しと違えば断る", any("列数" in x for x in r["problems"]))
+    r = plan(detail, row, dec({"op": "add_line", "section": "ゲーム性",
+                               "text": "有利区間は最大3000Gまでです。", "fields": ["ceiling#yuuri"]}), conf)
+    import legacy_release as _lrx
+    _keep_rf = _lrx.release_for
+    try:
+        _lrx.release_for = lambda s, path=None: "2025-06-02"
+        r = plan(dict(detail, factTable=[["機械割", "97.7%"]]), row,
+                 dec({"op": "add_fact", "row": ["導入日", "2025年6月2日"], "fields": ["legacy_release"]}), conf)
+        t("★★昔の機種の基本情報表に、導入日の行を足す（DMMの導入日の控えの数字）★★",
+          not r["problems"] and r["factTable"][-1] == ["導入日", "2025年6月2日"])
+        r = plan(dict(detail, factTable=[]), row,
+                 dec({"op": "add_fact", "row": ["導入日", "2025年7月2日"], "fields": ["legacy_release"]}), conf)
+        t("　控えと違う日付は足せない（数字を作らない）", any("無い数字" in x for x in r["problems"]))
+        r = plan(dict(detail, factTable=[["導入日", "2025年6月2日"]]), row,
+                 dec({"op": "add_fact", "row": ["導入日", "2025年6月2日"], "fields": ["legacy_release"]}), conf)
+        t("　同じ項目の行がもうあれば足さない", any("もうあります" in x for x in r["problems"]))
+        r = plan(detail, dict(row, publication_policy="page-decision/v2"),
+                 dec({"op": "add_fact", "row": ["メーカー", "サミー"]}), conf)
+        t("　新台の基本情報表には足さない（育成が作り直す）", any("昔の機種だけ" in x for x in r["problems"]))
+    finally:
+        _lrx.release_for = _keep_rf
     r = plan(detail, row, dec({"op": "add_line", "section": "ゲーム性",
                                "text": "有利区間は最大3000Gまでです。", "fields": ["ceiling#yuuri"]}), conf)
     t("★★既にある欄に1文足す★★", not r["problems"] and r["sections"][2]["body"][-1].startswith("有利区間"))
