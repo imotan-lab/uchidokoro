@@ -149,7 +149,7 @@
   "slug": "dmm_5073",
   "name": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン",
   "seo": {
-   "title": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン スペック・基本情報"
+   "title": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン 天井・狙い目"
   },
   "info": "",
   "strategy": "",
@@ -180,7 +180,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-09",
+   "decided_at": "2026-11-11",
    "input_digest": "sha256:5c2fed8e3d2862c5cb5c2cee3ff82b6243379ddec03195727c69cb0d8045c94b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
