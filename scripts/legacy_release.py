@@ -183,10 +183,11 @@ def selftest() -> int:
       targets(rows) == ["a", "d", "e"])
     r = refresh(5, True, rows=rows, fetch=lambda u: {U % 1: "2025-06-02", U % 4: "未定"}[u],
                 bound=bound, today="2026-11-10", path=p, log=lambda *a: None)
-    d = read(p)
+    with open(p, encoding="utf-8") as f:
+        d = json.load(f)                   # ★生のまま読む★（形の検査で落ちると、狙った守りを試せない）
+    t("★形の違う値（未定など）は書かない★", "d" not in d["machines"] and r["failed"])
     t("★★結び付けたDMMの機種ページの導入日を控える★★",
       d["machines"].get("a", {}).get("release") == "2025-06-02" and release_for("a", p) == "2025-06-02")
-    t("★形の違う値（未定など）は書かない★", "d" not in d["machines"] and r["failed"])
     t("★結び付けの無い機種は取りに行かない★（推測しない）", "e" not in d["tries"])
     t("　試した日は全部残る", d["tries"] == {"a": "2026-11-10", "d": "2026-11-10"})
     r2 = refresh(1, True, rows=rows, fetch=lambda u: "2025-06-02", bound=bound, today="2026-11-11",
@@ -208,8 +209,20 @@ def selftest() -> int:
     # ★並べ替えが控えを読む配線★（罠③）
     import inspect
     import reorder_machines as _rm
-    t("★★並べ替えは、machines.json に導入日が無いとき控えの導入日を読む★★",
-      "legacy_release" in inspect.getsource(_rm.release_of))
+    # ★並べ替えが読み込む「legacy_release」の置き場を向け直す★（このファイルを直接動かすと別の入れ物になるため）
+    import legacy_release as _me
+    _keep = _me.STORE
+    try:
+        _me.STORE = os.path.join(os.path.dirname(p), "lr2.json")
+        _save({"machines": {"zzz_old": {"release": "2024-03-04", "url": U % 9, "checked": "2026-11-10"}},
+               "tries": {}}, _me.STORE)
+        t("★★並べ替えは、machines.json に導入日が無いとき控えの導入日を読む★★",
+          _rm.release_of({"slug": "zzz_old"}) == "2024-03-04"
+          and _rm.release_of({"slug": "zzz_old", "release_date": "2023-01-01"}) == "2023-01-01"
+          and _rm.release_of({"slug": "zzz_old", "publication_policy": "page-decision/v2"}) == "")
+    finally:
+        _me.STORE = _keep
+    t("　（配線）並べ替えの関数が控えを読んでいる", "legacy_release" in inspect.getsource(_rm.release_of))
     print(f"\n{sum(res)}/{len(res)} 合格")
     return 0 if all(res) else 1
 

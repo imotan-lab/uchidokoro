@@ -1222,7 +1222,7 @@ def selftest() -> int:
       _ra2["ok"] and "zzz_a" not in _ra2["store"]["diff_checked"])
     t("★★対象の出方：手書き・設定差なし・小役・使えない★★",
       "手書き" in status_line("hokuto", (True, ""), empty(), {"hokuto"})
-      and "設定差なし" in status_line("zzz_a", (False, NO_DIFF_REASON), empty(), set())
+      and "対象（設定差なし" in status_line("zzz_a", (False, NO_DIFF_REASON), empty(), set())
       and "対象外" in status_line("zzz_a", (False, NO_DIFF_REASON), rd2["store"], set())
       and "対象外" in status_line("hokuto", (True, ""), rk2["store"], {"hokuto"})
       and status_line("zzz_b", (False, "解析待ち"), empty(), set()).endswith("STEP 1-P 対象"))
