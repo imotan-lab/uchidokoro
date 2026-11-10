@@ -1571,6 +1571,7 @@ def text_kept(old_detail: dict, new_detail: dict, accepted=frozenset()) -> list:
         note = _ba.CEILING_PARTIAL_NOTE
         old = [u for u in old if not (u[0] == "body" and u[-1] == note)]
     old = _drop_generated_target(old, old_detail)
+    old = _drop_reverted_written(old, new_detail)
     rest = list(new)
     gone = []
     # ★認めた内容は、認めた件数だけ消えてよい★（同じ文が2つあれば2つ書く）
@@ -1620,15 +1621,23 @@ def carry_mode_section(old_detail: dict, detail: dict) -> None:
     detail["sections"] = secs[:pos] + [json.loads(json.dumps(prev))] + secs[pos:]
 
 
-def carry_written_sections(old_detail: dict, detail: dict) -> None:
+def carry_written_sections(old_detail: dict, detail: dict, row: dict = None) -> None:
     """★2AIが書いた「狙い目の根拠」「ヤメ時の判断」「立ち回りのコツ」を持ち越す★（2026-11-10）
 
     ★なぜ★＝この3欄は build_detail が必ず「未確認」で作る（材料から作れない・書くのは
     derived_sections）。持ち越さないと、書いた翌朝の育成で「未確認」に戻るか、
     「前に載っていた内容が消える」と数えられて育成が止まる。
     ★育成は欄の中身を判断しない★＝作り直した欄が「未確認」で、前の欄に中身があるときだけ前の欄を使う。
+    ★★ただし、書いた土台が変わったら持ち越さない★★（2026-11-10・Codexの指摘＝実害）＝
+      狙い目の線が600G→700Gに変わっても「狙い目の根拠」に600Gが残り、どの検査も通っていた。
+      ①文の数値が、作り直した記事と機種行にもう無い（derived_sections と同じ数え方）
+      ②「狙い目の根拠」は、「当サイトの狙い目」の欄が変わった
+      のどちらかなら「未確認」のまま残す＝翌朝の STEP 0-K が書き直す対象に戻る
+      （消えたことは text_kept が止めない＝_drop_reverted_written）。
     """
     import derived_sections as _ds
+    import decide_now as _dn
+    import target_projection as _tp
     if not isinstance(old_detail, dict) or not isinstance(detail, dict):
         return
     secs = detail.get("sections")
@@ -1636,12 +1645,36 @@ def carry_written_sections(old_detail: dict, detail: dict) -> None:
         return
     prev = {s.get("title"): s for s in (old_detail.get("sections") or [])
             if isinstance(s, dict) and s.get("title") in _ds.TITLES}
+
+    def _target_body(d):
+        return next((s.get("body") for s in (d.get("sections") or [])
+                     if isinstance(s, dict) and s.get("title") == _tp.SECTION_TITLE), None)
+    pairs, toks = _ds.number_pool(detail, row or {})
     for i, s in enumerate(secs):
         if not isinstance(s, dict) or s.get("title") not in _ds.TITLES:
             continue
         old = prev.get(s.get("title"))
-        if old is not None and _ds.is_pending(s) and not _ds.is_pending(old):
-            secs[i] = json.loads(json.dumps(old))
+        if old is None or not _ds.is_pending(s) or _ds.is_pending(old):
+            continue
+        if s.get("title") == "狙い目の根拠" and _target_body(old_detail) != _target_body(detail):
+            continue
+        nums = [nu for b in (old.get("body") or []) if isinstance(b, str)
+                for nu in _dn.numbers_with_unit(b)]
+        if not all(nu in pairs or (nu[1] == "" and nu[0] in toks) for nu in nums):
+            continue
+        secs[i] = json.loads(json.dumps(old))
+
+
+def _drop_reverted_written(units: list, new_detail: dict) -> list:
+    """★持ち越さなかった（土台が変わった）書く欄は、消失として数えない★（2026-11-10）
+
+    ★外すのは「作り直した記事でその欄が未確認」のときだけ★＝持ち越せた欄は今までどおり比べる。
+    """
+    import derived_sections as _ds
+    reverted = {s.get("title") for s in ((new_detail or {}).get("sections") or [])
+                if isinstance(s, dict) and s.get("title") in _ds.TITLES and _ds.is_pending(s)}
+    return [u for u in units
+            if not (u[0] == "body" and len(u) >= 3 and u[1] in reverted)]
 
 
 def _carry_written_tests(t) -> None:
@@ -1661,6 +1694,37 @@ def _carry_written_tests(t) -> None:
     carry_written_sections(old, new2)
     t("　作り直した欄に中身があれば、そちらを使う（古い欄で上書きしない）",
       new2["sections"][0]["body"] == ["材料から作れた中身"])
+    # ★★書いた土台が変わったら持ち越さない★★（2026-11-10・Codexの指摘＝狙い目600G→700Gで根拠に600Gが残った）
+    _tgt = lambda g: {"title": "当サイトの狙い目", "body": [f"狙い目は、通常{g}G〜です。"]}
+    _ceil = {"title": "天井・恩恵", "body": ["天井は850Gです。"]}
+    o3 = {"sections": [_ceil, _tgt(600),
+                       {"title": "狙い目の根拠", "body": ["天井850Gなので600Gからを目安にしています。"]},
+                       {"title": "立ち回りのコツ", "body": ["天井850Gまでの残りを数えて打つ機種です。"]}]}
+
+    def _n3(g):
+        return {"sections": [_ceil, _tgt(g), {"title": "狙い目の根拠", "body": [P]},
+                             {"title": "立ち回りのコツ", "body": [P]}]}
+    n_same = _n3(600)
+    carry_written_sections(o3, n_same, {})
+    t("　（対照）土台が変わらなければ持ち越す",
+      n_same["sections"][2]["body"] == o3["sections"][2]["body"]
+      and n_same["sections"][3]["body"] == o3["sections"][3]["body"])
+    n_moved = _n3(700)
+    carry_written_sections(o3, n_moved, {})
+    t("★★狙い目の欄が変わったら「狙い目の根拠」は持ち越さない（未確認に戻して書き直させる）★★",
+      n_moved["sections"][2]["body"] == [P])
+    t("　狙い目に関係なく数値が残っている欄（立ち回り）は持ち越す",
+      n_moved["sections"][3]["body"] == o3["sections"][3]["body"])
+    n_ceil = _n3(600)
+    n_ceil["sections"][0] = {"title": "天井・恩恵", "body": ["天井は999Gです。"]}
+    carry_written_sections(o3, n_ceil, {})
+    t("★★文の数値が記事から消えたら持ち越さない★★（天井850G→999Gで立ち回りの850Gが残らない）",
+      n_ceil["sections"][3]["body"] == [P])
+    t("★★持ち越さなかった書く欄は「消えた」と数えない（育成が止まらない）★★",
+      not any("天井850Gまでの残り" in x or "600Gからを目安" in x for x in text_kept(o3, n_ceil))
+      and not any("600Gからを目安" in x for x in text_kept(o3, n_moved)))
+    t("　（対照）ほかの欄の消失は今までどおり止める",
+      bool(text_kept(o3, n_ceil)))
 
 
 def _carry_mode_tests(t) -> None:
@@ -1919,6 +1983,44 @@ def already_answered(mat: dict, slug: str, key: str) -> bool:
     return bool(rec.get("value"))
 
 
+def indexed_gap_questions(slug: str, complete: bool = False, urls=None,
+                          detail: dict = None) -> list:
+    """★検索に載っている新台の、空いている箱を埋める問い★（2026-11-10）
+
+    記事に「未確認」の箱が残っていれば、その欄の名前と読む先を渡す
+    （天井などの問い＝checker_questions は pending_questions が載っていても出す）。
+    ★「狙い目の根拠・ヤメ時・立ち回り」は出さない★＝外の出典ではなく記事の事実から
+    書く欄なので、朝の STEP 0-K（derived_sections）の持ち物。
+    ★決めるのは2AI／ここは「どこを読めばよいか」を渡すだけ★（pending_questions と同じ）。
+    """
+    import derived_sections as _ds
+    out = []
+    if detail is None:
+        try:
+            dp = _detail_path(slug)
+            detail = _sj.read_json(dp, expect=dict) if os.path.isfile(dp) else {}
+        except Exception:                 # noqa: BLE001
+            detail = {}
+    # ★「当サイトの狙い目」も出さない★＝チェッカーの線から作る欄で、線の問いは target_line_questions が出す
+    import target_projection as _tp
+    boxes = [s.get("title") for s in (detail.get("sections") or [])
+             if isinstance(s, dict) and s.get("title") not in _ds.TITLES
+             and s.get("title") != _tp.SECTION_TITLE and _ds.is_pending(s)]
+    if boxes:
+        links = [str(u) for u in (urls or []) if u]
+        scope = "読む先は全部です" if complete else \
+            "読む先は全部ではありません（下位ページを含めて、その機種のページを一通り見てください）"
+        out.append({
+            "kind": "grow_read_sources", "slug": slug, "urls": links, "boxes": boxes,
+            "text": ("★検索に載っている機種ですが、空いている欄があります★ " + str(slug)
+                     + "／空いている欄: " + " ／ ".join(boxes)
+                     + "／★機械では取り出せなかったので、出典の原文を自分で読んで決めてください★"
+                     + ("／" + scope + ": " + " ".join(links) if links else "")
+                     + "／決めたら confirmed_values.py --record で記録（逐語引用が要ります）"
+                     + "／★まだどこにも載っていなければ記録しない（未確認のままでよい）★")})
+    return out
+
+
 def pending_questions(cur: dict, mat: dict = None, slug: str = "",
                      complete: bool = False,
                       urls=None) -> list:
@@ -1948,8 +2050,12 @@ def pending_questions(cur: dict, mat: dict = None, slug: str = "",
     for _q in _ckv.target_line_questions(cur):
         out.append({"text": str(_q), "kind": "grow_checker", "slug": slug})
     pd = (cur or {}).get("page_decision") or {}
-    if pd.get("indexable"):
-        return out
+    # ★★検索に載っている機種でも、空いている欄は埋める★★（2026-11-10・運営者「更新されないページ他にもないの？」）
+    #   ★直す前はここで返していた★＝検索に載った瞬間に、天井の問い（checker_questions）も
+    #   「原文を読んで埋めて」の問いも出なくなり、天井が空のまま導入日を迎える新台があった
+    #   （検索に載った23機種のうち、天井・恩恵が空4・朝一7・ゲーム性7・CZ7）。
+    #   ★載っているかで止めてよいのは「検索に載せるための問い」（型・判定書の UNKNOWN・足りないもの）だけ★。
+    #   ＝天井などの問い（下の checker_questions）は載っていても出し、空いている箱の問いを足してから返す。
     # ★★控えを重ねた「写し」で質問を作らせる★★（2026-09-07・Codexの指摘）
     #   ★「答えがあるから聞かない」では駄目★＝早見表の天井は、
     #   保存済みの答えが**いまの候補に無い**とき、わざと聞き直す作り。
@@ -1967,6 +2073,8 @@ def pending_questions(cur: dict, mat: dict = None, slug: str = "",
             mat2 = mat                    # ★重ねられないなら元のまま（聞く側へ）★
         for q in _ba.checker_questions(mat2):
             out.append({"text": str(q), "kind": "grow_pending", "slug": slug})
+    if pd.get("indexable"):
+        return out + indexed_gap_questions(slug, complete=complete, urls=urls)
     # ★★判定書に「まだ決まっていない」と書いてある欄は、必ず聞く★★
     #   （2026-09-05）★材料が無い日（見送り）でも聞ける★のがここの値打ち。
     #   ★★同じ項目を二重に聞かない★★（実機で型・天井が2つずつ出た）＝
@@ -2544,7 +2652,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     # ★モード・ゾーンの欄は mode_apply の持ち物なので持ち越す★（2026-10-28）
     carry_mode_section(old_detail, detail)
     # ★2AIが書いた「狙い目の根拠・ヤメ時・立ち回り」は derived_sections の持ち物なので持ち越す★（2026-11-10）
-    carry_written_sections(old_detail, detail)
+    carry_written_sections(old_detail, detail, machine)
     out["problems"] += claims_grew(cur.get("page_decision"), mat,
                                    accepted_lost_claims(slug, old_detail))
     lost = text_kept(old_detail, detail, accepted_losses(slug, old_detail))
@@ -4732,9 +4840,30 @@ def selftest() -> int:
               len(_q_no) >= 1
               and any("型" in x["text"] for x in _q_no)
               and all(x.get("kind") == "grow_pending" for x in _q_no))
-            t("　もう載っている機種には聞かない（答える意味がないので）",
-              pending_questions({"page_decision": {"indexable": True}},
-                                {"adopted": {}}, "zzz_q") == [])
+            # ★★載っている機種でも空いている欄は聞く★★（2026-11-10）＝止めるのは「載せるための問い」だけ
+            _q_idx = pending_questions({"page_decision": {"indexable": True}},
+                                       {"adopted": {}}, "zzz_q")
+            t("　もう載っている機種には「検索に載せるための問い」（足りないもの・判定書の欄）は出さない",
+              not any("まだ検索に載っていません" in x["text"] for x in _q_idx)
+              and not any(x.get("field") for x in _q_idx))
+            t("★★もう載っている機種でも、天井などの問い（checker_questions）は出す★★"
+              "（直す前は載った瞬間に聞かれなくなり、天井が空のまま導入日を迎えた）",
+              any("天井があるか" in x["text"] for x in _q_idx))
+            _P = _ba.PENDING_TEXT
+            _det_gap = {"sections": [{"title": "天井・恩恵", "body": [_P]},
+                                     {"title": "当サイトの狙い目", "body": [_P]},
+                                     {"title": "ゲーム性", "body": ["中身"]},
+                                     {"title": "狙い目の根拠", "body": [_P]}]}
+            _q_gap = indexed_gap_questions("zzz_q", urls=["https://example.invalid/a"],
+                                           detail=_det_gap)
+            t("★★載っている機種に「未確認」の欄があれば、欄の名前と読む先を渡す★★",
+              len(_q_gap) == 1 and _q_gap[0]["boxes"] == ["天井・恩恵"]
+              and "https://example.invalid/a" in _q_gap[0]["text"])
+            t("　「狙い目の根拠」など記事の事実から書く欄と「当サイトの狙い目」（線から作る）は、ここでは聞かない",
+              all("狙い目の根拠" not in x["text"] and "当サイトの狙い目" not in x["text"] for x in _q_gap))
+            t("　空いている欄が無ければ聞かない",
+              indexed_gap_questions("zzz_q", detail={"sections": [
+                  {"title": "天井・恩恵", "body": ["中身"]}]}) == [])
             t("　判定書がまだ無い機種にも聞く（載っていないので）",
               len(pending_questions({}, {"adopted": {}}, "zzz_q")) >= 1)
 

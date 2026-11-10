@@ -243,7 +243,16 @@ def gather(slug: str) -> dict:
              "body": [x for x in (sec.get("body") or [])
                       if isinstance(x, str)],
              "notes": [t.get("note") for t in (sec.get("tables") or [])
-                       if isinstance(t, dict) and t.get("note")]}
+                       if isinstance(t, dict) and t.get("note")],
+             # ★★表の中身も渡す★★（2026-11-10・運営者「更新されないページ他にもないの？」）
+             #   ★直す前は見出し・本文・注記だけ★＝基本スペックの表や設定示唆の表の数字は、
+             #   毎朝の点検（STEP 1-Q）で2AIに一度も読まれていなかった（旧形式120機種中103機種に表がある）。
+             #   セルを直すときの名指し（where）は `sections[i].tables[j].rows[k][c]` で、この並びと同じ。
+             "tables": [{"label": t.get("label") or "", "headers": list(t.get("headers") or []),
+                         "rows": [list(r) for r in (t.get("rows") or []) if isinstance(r, list)]}
+                        for t in (sec.get("tables") or []) if isinstance(t, dict)],
+             # ★設定示唆の表（type=settei）は節の rows に札（{"text","badge"}）で入っている★
+             "rows": [list(r) for r in (sec.get("rows") or []) if isinstance(r, list)]}
             for sec in (d.get("sections") or []) if isinstance(sec, dict)
         ],
         # ★★節の外にも読者が読むものがある★★（2026-08-27・台帳#487）
@@ -2995,6 +3004,23 @@ def _selftest() -> int:
         t("★2AIに表・要約・リード文を見せる（見せないものは直せない）★",
           bool(_gm.get("factTable")) and bool(_gm.get("summaryBoxes"))
           and bool(_gm.get("lead")))
+        # ★★節の中の表のセルと、設定示唆の札も見せる★★（2026-11-10＝直す前は注記だけで、
+        #   基本スペックの表や設定示唆の表の数字は毎朝の点検で一度も読まれていなかった）
+        with io.open(os.path.join(td, "mt.json"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"slug": "mt", "sections": [
+                {"title": "基本スペック", "type": "table",
+                 "tables": [{"label": "L", "headers": ["項目", "内容"],
+                             "rows": [["機械割", "97.7%〜114.9%"]], "note": "注"}]},
+                {"title": "設定示唆まとめ", "type": "settei",
+                 "rows": [["終了画面", {"text": "設定4以上", "badge": "strong"}]]}]},
+                ensure_ascii=False))
+        _gt = {s["title"]: s for s in gather("mt")["article"]["sections"]}
+        t("★★2AIに節の中の表のセル（基本スペックの表など）を見せる★★",
+          _gt["基本スペック"]["tables"][0]["rows"] == [["機械割", "97.7%〜114.9%"]]
+          and _gt["基本スペック"]["tables"][0]["headers"] == ["項目", "内容"]
+          and _gt["基本スペック"]["notes"] == ["注"])
+        t("★★2AIに設定示唆の札（type=settei の rows）を見せる★★",
+          _gt["設定示唆まとめ"]["rows"] == [["終了画面", {"text": "設定4以上", "badge": "strong"}]])
 
         # ── 2026-08-27・Codexのレビューで塞いだ穴 ────────────────
         N = {"slug": "n",

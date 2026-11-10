@@ -548,7 +548,7 @@ def selftest() -> int:
     import inspect
     import grow_machine as _gm
     t("★★毎朝の育成が、書いた欄を「未確認」に戻さない（持ち越しが配線されている）★★",
-      "carry_written_sections(old_detail, detail)" in inspect.getsource(_gm.plan_one))
+      "carry_written_sections(old_detail, detail, machine)" in inspect.getsource(_gm.plan_one))
     print(f"{ok[0]}/{sum(ok)} 合格")
     return 0 if ok[1] == 0 else 1
 

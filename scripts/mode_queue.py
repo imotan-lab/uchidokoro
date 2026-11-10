@@ -35,6 +35,9 @@ RESULTS = ("APPLIED", "NO_BOX", "UNDECIDED", "UNREADABLE", "ERROR")
 DONE_RESULTS = ("APPLIED", "NO_BOX")   # ★記事への反映まで済んだ結果★（これだけを「進んだ」と数える）
 RETRY_DAYS = 14          # 決まらなかった機種をもう一度選ぶまでの日数
 STALL_DAYS = 3           # これだけ1件も進まなければ番人が知らせる
+NEW_DAYS = 60            # 導入からこの日数までは「新台」として早めに見直す
+RECHECK_NEW = 7          # 新台の済んだ機種を見直すまでの日数（解析は導入後に出そろう）
+RECHECK_OLD = 60         # それ以外の済んだ機種を見直すまでの日数
 JST = _dt.timezone(_dt.timedelta(hours=9))
 
 
@@ -86,15 +89,54 @@ def done_slugs(decided: set, tried: dict) -> set:
     return {s for s in decided if str((tried.get(s) or {}).get("result", "")) in DONE_RESULTS}
 
 
+def recheck_days(m: dict, today: str) -> int:
+    """★済んだ機種を見直すまでの日数★（2026-11-10・運営者「更新されないページ他にもないの？」）
+
+    ★直す前は「済んだ機種は二度と選ばない」★＝導入から数日で決めた新台の表が、
+    解析が出そろったあとも古いまま固定されていた（済んだ25機種のうち新台7機種は導入直後に固定）。
+    導入から NEW_DAYS 日以内の機種は RECHECK_NEW 日おき、それ以外は RECHECK_OLD 日おきに見直す。
+    ★見直しは軽い★＝mode_ask は2回目以降、本体1ページだけ読み、証拠の集合が変わったときだけ2AIへ回す。
+    """
+    rel = str((m or {}).get("release_date") or "")
+    try:
+        if len(rel) == 7:
+            rel += "-01"
+        age = (_dt.date.fromisoformat(today) - _dt.date.fromisoformat(rel[:10])).days
+    except ValueError:
+        return RECHECK_OLD
+    return RECHECK_NEW if age <= NEW_DAYS else RECHECK_OLD
+
+
 def pick(n: int, machines: list, decided: set, tried: dict, today: str) -> list:
-    """★純関数★（試験はここを直接呼ぶ）"""
+    """★純関数★（試験はここを直接呼ぶ）
+
+    順番＝①まだ一度もやっていない ②決まらなかった・失敗して RETRY_DAYS 日たった（古い順）
+    ③済んだが見直しの日が来た（古い順・recheck_days）
+    """
     done = done_slugs(decided, tried)
     order = [s for s in _order(machines) if s not in done]
     cutoff = (_dt.date.fromisoformat(today) - _dt.timedelta(days=RETRY_DAYS)).isoformat()
     never = [s for s in order if s not in tried]
     old = sorted([s for s in order if s in tried and str(tried[s].get("at", "")) <= cutoff],
                  key=lambda s: str(tried[s].get("at", "")))
-    return (never + old)[:max(0, n)]
+    rows = {str(m.get("slug")): m for m in machines if isinstance(m, dict)}
+    due = []
+    for s in _order(machines):
+        if s not in done:
+            continue
+        at = str((tried.get(s) or {}).get("at", ""))
+        try:
+            gap = (_dt.date.fromisoformat(today) - _dt.date.fromisoformat(at)).days
+        except ValueError:
+            gap = 10 ** 6
+        if gap >= recheck_days(rows.get(s), today):
+            due.append(s)
+    due.sort(key=lambda s: str((tried.get(s) or {}).get("at", "")))
+    # ★新台の見直しは先頭★（運営者の優先順位＝①新台 ②人気 ③その他）＝まだやっていない旧機種が
+    #   100機種以上あり、後ろに置くと新台の見直しが何か月も回ってこない
+    due_new = [s for s in due if recheck_days(rows.get(s), today) == RECHECK_NEW]
+    due_old = [s for s in due if s not in due_new]
+    return (due_new + never + old + due_old)[:max(0, n)]
 
 
 def progress(machines: list, decided: set, tried: dict, today: str) -> dict:
@@ -153,8 +195,24 @@ def selftest() -> int:
           progress(ms, set(), _fail, "2026-10-26")["stalled"])
         t("★★控えはあるが反映が失敗した機種は、もう一度選ぶ★★（review285 の2）",
           "a" in pick(4, ms, {"a"}, {"a": {"at": "2026-09-01", "result": "ERROR"}}, "2026-10-26"))
-        t("★控えがあり反映まで済んだ機種は選ばない★",
+        t("★控えがあり反映まで済んだ機種は、見直しの日が来るまで選ばない★",
           "a" not in pick(4, ms, {"a"}, {"a": {"at": "2026-09-01", "result": "APPLIED"}}, "2026-10-26"))
+        # ★★済んだ機種も見直す★★（2026-11-10＝直す前は二度と選ばれず、導入直後の表が固定されていた）
+        _ms2 = [{"slug": "a", "release_date": "2026-11-02"}, {"slug": "b", "release_date": "2025-01-01"},
+                {"slug": "c"}, {"slug": "d"}]
+        _tr2 = {"a": {"at": "2026-11-03", "result": "APPLIED"}, "b": {"at": "2026-09-01", "result": "NO_BOX"},
+                "c": {"at": "2026-11-01", "result": "UNDECIDED"}}
+        t("★★導入から60日以内の済んだ機種は、7日たったら見直す★★",
+          "a" in pick(4, _ms2, {"a", "b"}, _tr2, "2026-11-10"))
+        t("　（対照）6日なら見直さない", "a" not in pick(4, _ms2, {"a", "b"}, _tr2, "2026-11-09"))
+        t("★それ以外の済んだ機種は、60日たったら見直す★",
+          "b" in pick(4, _ms2, {"a", "b"}, _tr2, "2026-10-31")
+          and "b" not in pick(4, _ms2, {"a", "b"}, _tr2, "2026-10-30"))
+        t("★★新台の見直しは先頭、それ以外の見直しは、まだやっていない機種と決まらなかった機種のあと★★",
+          pick(4, _ms2, {"a", "b"}, _tr2, "2026-11-20") == ["a", "d", "c", "b"])
+        t("　導入日の書き方が月だけでも読める・読めなければ60日",
+          recheck_days({"release_date": "2026-11"}, "2026-11-10") == RECHECK_NEW
+          and recheck_days({}, "2026-11-10") == RECHECK_OLD)
     finally:
         _pm.popular_slugs = keep
     # ★★記録が壊れていたら、本物の起動で終了コード2になる★★（review286）＝
