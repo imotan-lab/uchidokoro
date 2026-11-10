@@ -3049,7 +3049,7 @@
   "slug": "pw_10523",
   "name": "モグモグ風林火山 大海戦の巻",
   "seo": {
-   "title": "モグモグ風林火山 大海戦の巻 スペック・基本情報"
+   "title": "モグモグ風林火山 大海戦の巻 天井・狙い目"
   },
   "info": "",
   "strategy": "",
@@ -3084,7 +3084,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-17",
+   "decided_at": "2026-11-11",
    "input_digest": "sha256:f267946610230403394fdbb5756a95b69be46e5c7e9a0dea20fe67bdf4c9f592"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -3097,13 +3097,13 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5059 型式=Lモグモグ風林火山 大海戦の巻ZB メーカー=ネット 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
+   "_legacy_evidence_ref": "pworld:10523 型式=Lモグモグ風林火山 大海戦の巻ZB 検定=531225 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10523",
+   "regulatory_model_code": "Lモグモグ風林火山 大海戦の巻ZB",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ],
-   "_legacy_evidence_ref": "pworld:10523 型式=Lモグモグ風林火山 大海戦の巻ZB 検定=531225 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10523",
-   "regulatory_model_code": "Lモグモグ風林火山 大海戦の巻ZB"
+   ]
   },
   "checker": {
    "coinRate": 32.0,
