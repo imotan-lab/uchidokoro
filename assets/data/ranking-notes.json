@@ -3,6 +3,9 @@
   "animal_dotch": {
    "reset": "設定変更後はBIG後でもREG後と同じく天井が499Gに短縮され、到達するとBIGに当選します。"
   },
+  "basilisk_tenzen": {
+   "tenjo": "BC間333G+αでBCに当選し、BCを最大7回スルーした次のBCではBTに当選します。"
+  },
   "chibaryo2": {
    "reset": "設定変更後は天井が350G+αか600G+αに短縮され、350G+αが選ばれやすくなります。"
   },
