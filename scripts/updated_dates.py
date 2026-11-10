@@ -11,6 +11,8 @@
 ★日付の決め方★＝その機種の
   ①記事データ（assets/data/machine-details/<slug>.json）の中身が変わった最後のコミット
   ②機種データ（machines.json の、その機種の行）の中身が変わった最後のコミット
+  ③ポチポチくんの控え（assets/data/pochipochi.json の、その機種の表・設定差なし）が変わった最後のコミット
+    （2026-11-10・洗い出し4回目＝ポチポチくんに対応しても機種ページの最終更新日が動かなかった）
   の遅いほうの日（日本時間）。★並べ替えだけ・書式だけの変更は数えない★（JSON として比べる）。
 ★作れなかったら書かない★＝公開は止めず、ページは日付を出さない（間違った日付を見せない）。
 ★リポジトリには置かない★（.gitignore）＝公開の直前に作る生成物。置くとコミットのたびに古くなる。
@@ -25,6 +27,7 @@ import sys
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MACHINES = "assets/data/machines.json"
 DETAILS = "assets/data/machine-details"
+POCHI = "assets/data/pochipochi.json"
 JST = _dt.timezone(_dt.timedelta(hours=9))
 
 
@@ -91,6 +94,26 @@ def row_dates(root=BASE) -> dict:
     return last
 
 
+def pochi_dates(root=BASE) -> dict:
+    """★ポチポチくんの控えの、その機種の表・設定差なしが最後に変わった日★（確かめた日付の欄は数えない）"""
+    last: dict = {}
+    prev: dict = {}
+    for sha, day in _history(POCHI, root):
+        data = _show(sha, POCHI, root)
+        if not isinstance(data, dict):
+            data = {}
+        cur = {}
+        for key in ("configs", "no_diff"):
+            for s, v in (data.get(key) or {}).items():
+                cur.setdefault(str(s), {})[key] = v
+        cur = {s: _canon(v) for s, v in cur.items()}
+        for s in set(cur) | set(prev):
+            if prev.get(s) != cur.get(s) and s in cur:
+                last[s] = day
+        prev = cur
+    return last
+
+
 def detail_dates(slugs, root=BASE, until: str = "") -> dict:
     """★記事データの中身が最後に変わった日★（updated 欄だけの変更は数えない＝道具が書いていない古い欄）"""
     out = {}
@@ -115,9 +138,10 @@ def build(root=BASE) -> dict:
     slugs = [str(m["slug"]) for m in ms if isinstance(m, dict) and m.get("slug")]
     rows = row_dates(root)
     dets = detail_dates(slugs, root)
+    pochi = pochi_dates(root)
     dates = {}
     for s in slugs:
-        got = [x for x in (rows.get(s), dets.get(s)) if x]
+        got = [x for x in (rows.get(s), dets.get(s), pochi.get(s)) if x]
         if got:
             dates[s] = max(got)
     return {"schema_version": "updated-dates/v1",
@@ -176,7 +200,15 @@ def selftest() -> int:
         put(f"{DETAILS}/b.json", {"slug": "b", "lead": "直した"})
         g("add", "-A")
         g("commit", "-q", "-m", "7", date="2026-09-01T10:00:00+09:00")
+        # ★ポチポチくんの表が変わった日も数える★（2026-11-10）＝確かめた日付の欄だけの変更は数えない
+        put(POCHI, {"configs": {"a": {"settings": [1, 6]}}, "ko_checked": {"a": {"checked": "2026-09-01"}}})
+        g("add", "-A")
+        g("commit", "-q", "-m", "8", date="2026-10-01T10:00:00+09:00")
+        put(POCHI, {"configs": {"a": {"settings": [1, 6]}}, "ko_checked": {"a": {"checked": "2026-10-20"}}})
+        g("commit", "-q", "-am", "9", date="2026-10-20T10:00:00+09:00")
         d = build(tmp)["dates"]
+        t("★★ポチポチくんの表が変わった日を最終更新に数える（確かめた日付だけの変更は数えない）★★",
+          d.get("a") == "2026-10-01")
         t("★★記事を消して同じ中身で戻したら、戻した日を採る★★（消す前の日付を残さない・review282 の2）",
           d.get("b") == "2026-09-01")
         try:
@@ -184,7 +216,7 @@ def selftest() -> int:
             t("★読めないコミットは例外にする★（「無い」と読んで古い日付で終わらない・review282 の3）", False)
         except RuntimeError:
             t("★読めないコミットは例外にする★（「無い」と読んで古い日付で終わらない・review282 の3）", True)
-        t("★行の中身が変わった日を採る★（a は 5/1）", d.get("a") == "2026-05-01")
+        t("★行の中身が変わった日を採る★（a の行は 5/1）", row_dates(tmp).get("a") == "2026-05-01")
         t("★並べ替えだけは更新に数えない★（b は並べ替えの 4/1 ではなく記事の日）", d.get("b") != "2026-04-01")
         t("★記事の中身が変わった日を、日本時間で採る★（消す前は b が 6/2）",
           detail_dates(["b"], tmp, until="2026-07-31").get("b") == "2026-06-02")

@@ -1287,6 +1287,32 @@ def _broken_why(rec):
     return ""
 
 
+# ★★途中で止まったままの記録を見張り番に出す★★（2026-11-10・洗い出し4回目）＝
+#   直す前は朝の手順書が「合意済み」だけを見直し、Claude の封のまま（モンキーターンV・9/1〜）や
+#   存在しないコミット番号のまま（ゴーゴージャグラー3・9/10〜）の記録を誰も拾わなかった
+STUCK_DAYS = 14
+STUCK_STATES = ("DETECTED", "CLAUDE_SEALED", "CODEX_RECEIVED", "AGREED", "APPLIED",
+                "COMMIT_VERIFIED", "PUSH_CONFIRMED", "RECHECK_PASS", "BROKEN")
+
+
+def stuck(now=None, days: int = STUCK_DAYS) -> list:
+    """★STUCK_DAYS 日以上動いていない、終わっていない記録★（記録のファイルの更新時刻で見る）"""
+    import time as _t
+    now = _t.time() if now is None else now
+    out = []
+    for r in listing():
+        if r.get("state") not in STUCK_STATES:
+            continue
+        try:
+            age = (now - os.path.getmtime(os.path.join(_store(), str(r["finding_id"]) + ".json"))) / 86400.0
+        except OSError:
+            continue
+        if age >= days:
+            out.append({"finding_id": r["finding_id"], "slug": r.get("slug"), "state": r.get("state"),
+                        "days": int(age)})
+    return out
+
+
 def listing(state: str | None = None) -> list:
     out = []
     if not os.path.isdir(_store()):
@@ -2103,6 +2129,15 @@ def _selftest() -> int:
           _try_fail(lambda: applied(f11, "c" * 64)))
         t("　閉じた記録（取り下げ済み）は、もう取り下げない",
           _try_fail(lambda: withdraw(f11, _why11, ["claude", "codex"])))
+        # ★★止まったままの記録を見張り番に出す★★（2026-11-10）＝更新時刻を古くして確かめる
+        import time as _tst
+        f15 = detect("zzz15", "text_gone", "十五番の文です。", source_sha256="6" * 64)["finding_id"]
+        _old_t = _tst.time() - 20 * 86400
+        os.utime(_path(f15), (_old_t, _old_t))
+        t("★★14日以上動いていない、終わっていない記録を挙げる★★（直す前は誰も拾わなかった）",
+          any(x["finding_id"] == f15 for x in stuck()))
+        t("　最近動いた記録は挙げない", not any(x["finding_id"] == f15 for x in stuck(_old_t + 86400)))
+        t("　閉じた記録（取り下げ済み）は挙げない", not any(x["finding_id"] == f11 for x in stuck(_tst.time() + 30 * 86400)))
         # ★★封のあと「直さない」と2AIが決めた記録も取り下げられる★★（2026-11-10・Codexの3回目＝実害）
         r14 = detect("zzz14", "text_gone", "十四番の文です。", source_sha256="5" * 64)
         f14 = r14["finding_id"]
@@ -2601,11 +2636,24 @@ def main() -> int:
                     help="決まった道で閉じられない記録を、2AIが決めて閉じる")
     ap.add_argument("--check", default=None,
                     help="--resolve で確かめる検査の名前（none＝検査なし・公開済みの直しだけ）")
+    ap.add_argument("--stuck", action="store_true",
+                    help=f"見張り番：{STUCK_DAYS}日以上動いていない、終わっていない記録（1＝ある）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
 
     if a.selftest:
         return _selftest()
+    if a.stuck:
+        try:
+            got = stuck()
+        except Exception as e:                                   # noqa: BLE001
+            print(f"🟠 直しの記録を読めません: {type(e).__name__}: {e}")
+            return 2
+        for x in got:
+            print(f"{x['slug']} {x['finding_id']} {x['state']}（{x['days']}日動いていない）")
+        print((f"🟡 途中で止まったままの直しの記録が{len(got)}件あります（朝の STEP 1-Q：2AIで直す・取り下げる・閉じる）")
+              if got else "🟢 止まったままの直しの記録はありません")
+        return 1 if got else 0
     if a.withdraw:
         # ★理由はファイルで受け取る★（鉄則1c＝自由文をシェルに書かない）
         if not a.why_file:
