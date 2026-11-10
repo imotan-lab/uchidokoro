@@ -11474,8 +11474,8 @@ MUTATIONS = [
     {
         "why": "★未定の新台：見送りの前の導入日確認で、機種ページが未定ならカレンダーを見ない（カレンダーだけの延期に気づかない・Codex）★",
         "file": "scripts/grow_machine.py",
-        "before": "        return _amr_r.calendar_lookup(m.group(1), str((cur or {}).get(\"release_date\") or \"\"))\n",
-        "after": "        return \"\"\n",
+        "before": "        return _amr_r.calendar_lookup(m.group(1), str((cur or {}).get(\"release_date\") or \"\")) or RELEASE_UNCONFIRMED\n",
+        "after": "        return RELEASE_UNCONFIRMED\n",
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -11491,6 +11491,20 @@ MUTATIONS = [
         "before": "    seen = str(work.get(\"calendar_seen\") or \"\")\n",
         "after": "    seen = str(work.get(\"calendar_seen\") or work.get(\"release_seen\") or \"\")\n",
         "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★未定の新台：機種ページが未定でカレンダーでも確かめられないとき、空を返して見送りに落とす（Codexの再指摘）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        return _amr_r.calendar_lookup(m.group(1), str((cur or {}).get(\"release_date\") or \"\")) or RELEASE_UNCONFIRMED\n",
+        "after": "        return _amr_r.calendar_lookup(m.group(1), str((cur or {}).get(\"release_date\") or \"\"))\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★未定の新台：導入日を確かめられない印を、見送らない理由にしない（Codexの再指摘）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    if now == RELEASE_UNCONFIRMED:\n        return \"DMMの機種ページが未定で、導入カレンダーでも今の導入日を確かめられません\"\n",
+        "after": "    if False:\n        return \"DMMの機種ページが未定で、導入カレンダーでも今の導入日を確かめられません\"\n",
+        "run": ["scripts/grow_machine.py"],
     },
 ]
 

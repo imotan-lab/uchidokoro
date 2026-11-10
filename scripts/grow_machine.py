@@ -2116,7 +2116,9 @@ def _carry_meta_tests(t) -> None:
     finally:
         _dm_rt.fetch, _amr_rn.calendar_lookup = _keep_f, _keep_l
     t("★★見送りの前の導入日確認：機種ページが未定なら、カレンダーの日付で延期に気づく★★",
-      _rn == "2027-01-12" and _rn2 == "")
+      _rn == "2027-01-12" and _rn2 == RELEASE_UNCONFIRMED)
+    _rdu = release_drift({"release_date": "2026-12-07"}, {}, lambda c: RELEASE_UNCONFIRMED, _dt.date(2026, 11, 20))
+    t("　カレンダーでも確かめられなければ見送らない（Codexの再指摘）", "確かめられません" in _rdu)
     t("　カレンダーで見つからなければ止まったまま・未定以外の失敗では探さない",
       _r2 is _und and _r3 == {"problems": ["別の理由"]} and _calls_rt == [1])
     # ★昔の機種も載っている中身だけを名乗る★（2026-11-11・運営者の判断）＝判定はチェッカーのデータだけ
@@ -2821,6 +2823,10 @@ def _deliver_read(out: dict, src: dict | None) -> None:
             have.add(s)
 
 
+# ★機種ページが「未定」で、カレンダーでも今の導入日を確かめられなかった印★（見送らない理由になる）
+RELEASE_UNCONFIRMED = "?unconfirmed"
+
+
 def dmm_release_now(cur: dict) -> str:
     """★その機種のDMMの機種ページに、いま書いてある導入日★（読めない・未定・DMMの機種ページでなければ空）"""
     import dmm_machine as _dmr
@@ -2834,7 +2840,8 @@ def dmm_release_now(cur: dict) -> str:
         # ★★機種ページが「未定」なら、DMMの導入カレンダーの日付を見る★★（2026-11-11・Codexの指摘＝実害）＝
         #   出典が変わらない日は見送りで、カレンダーだけの延期に気づけなかった
         import add_machine_run as _amr_r
-        return _amr_r.calendar_lookup(m.group(1), str((cur or {}).get("release_date") or ""))
+        # ★カレンダーでも確かめられなければ「確かめられない」の印を返す★（Codexの再指摘＝空だと見送りに落ちた）
+        return _amr_r.calendar_lookup(m.group(1), str((cur or {}).get("release_date") or "")) or RELEASE_UNCONFIRMED
     except Exception:                     # noqa: BLE001
         return ""
 
@@ -2854,6 +2861,8 @@ def release_drift(cur: dict, accepted, release_probe=None, today=None) -> str:
     if not in_new_window(old, today or _dt.date.today()):
         return ""
     now = (release_probe or dmm_release_now)(cur)
+    if now == RELEASE_UNCONFIRMED:
+        return "DMMの機種ページが未定で、導入カレンダーでも今の導入日を確かめられません"
     if now and now != old and not release_refined(old, now):
         return f"DMMの導入日が登録と違います（{old} → {now}）"
     return ""
