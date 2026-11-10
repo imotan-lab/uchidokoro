@@ -1715,6 +1715,13 @@ def _carry_written_tests(t) -> None:
       n_moved["sections"][2]["body"] == [P])
     t("　狙い目に関係なく数値が残っている欄（立ち回り）は持ち越す",
       n_moved["sections"][3]["body"] == o3["sections"][3]["body"])
+    # ★狙い目の欄の変化だけが効く材料★（根拠の文に狙い目の数値が無い＝数値の守りでは捕まらない・罠④）
+    o4 = json.loads(json.dumps(o3))
+    o4["sections"][2]["body"] = ["天井850Gまでの距離から、当サイトの目安を決めています。"]
+    n_moved4 = _n3(700)
+    carry_written_sections(o4, n_moved4, {})
+    t("★★根拠の文に狙い目の数値が無くても、狙い目の欄が変われば持ち越さない★★",
+      n_moved4["sections"][2]["body"] == [P])
     n_ceil = _n3(600)
     n_ceil["sections"][0] = {"title": "天井・恩恵", "body": ["天井は999Gです。"]}
     carry_written_sections(o3, n_ceil, {})
@@ -4864,6 +4871,19 @@ def selftest() -> int:
             t("　空いている欄が無ければ聞かない",
               indexed_gap_questions("zzz_q", detail={"sections": [
                   {"title": "天井・恩恵", "body": ["中身"]}]}) == [])
+            # ★★配線：載っている機種の問いに、空いている箱の問いが本当に入る★★（罠③＝関数だけの試験では
+            #   呼び出し行を消しても緑）。記事の置き場だけ一時の場所へ向ける
+            _keep_dp = globals()["_detail_path"]
+            _dp_tmp = os.path.join(_dir_s, "zzz_q.json")
+            with open(_dp_tmp, "w", encoding="utf-8") as _f:
+                json.dump(_det_gap, _f, ensure_ascii=False)
+            globals()["_detail_path"] = lambda s: _dp_tmp
+            try:
+                _q_wired = pending_questions({"page_decision": {"indexable": True}}, None, "zzz_q")
+            finally:
+                globals()["_detail_path"] = _keep_dp
+            t("★★検索に載っている機種の問いに、空いている箱（天井・恩恵）の問いが入る★★",
+              any(x.get("boxes") == ["天井・恩恵"] for x in _q_wired))
             t("　判定書がまだ無い機種にも聞く（載っていないので）",
               len(pending_questions({}, {"adopted": {}}, "zzz_q")) >= 1)
 
