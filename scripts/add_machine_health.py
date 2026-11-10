@@ -300,7 +300,12 @@ def check_stuck(today=None) -> list:
             # ★★ただし DMMのカレンダーが日付まで出しているなら、導入3日前から🔴★★（2026-11-10・代役の指摘＝
             #   機種ページは「未定」のまま、カレンダーには 12/7 導入と載っている新台が3機種あり、毎晩「未定」の印が
             #   付き直って記事づくりにも🔴にも乗らなかった）。カレンダーの日付は毎晩の発見（dmm_discover）が取り直している
-            if len(str(rel)) == 10 and not far_from_release(rel, today):
+            # ★導入日を受け取ったのが2日以内（今もカレンダーに載っている）で、導入日当日までだけ★（代役の指摘＝
+            #   終わりが無く毎朝🔴が出続ける・カレンダーから消えた古い日付でも出ていた）
+            _seen = str(it.get("release_seen") or "")
+            _td = str(today or date.today().isoformat())[:10]
+            _fresh = bool(_seen) and (date.fromisoformat(_td) - date.fromisoformat(_seen[:10])).days <= 2
+            if len(str(rel)) == 10 and _fresh and _td <= str(rel) and not far_from_release(rel, today):
                 ng.append(
                     f"{RED}{it.get('name')} は機種ページの導入日が「未定」のままですが、DMMのカレンダーでは"
                     f"{rel} 導入で、{OWNER_ALERT_DAYS}日前を過ぎても記事にできていません（{it.get('identity_url')}）")
@@ -573,13 +578,15 @@ def selftest() -> int:
           "（ゴジラ対エヴァ2・アサルトリリィが毎朝出ていた）",
           check_stuck(_T7) == [])
         _fake({"q_1": {"name": "カレンダーでは日付が出ている未定の機種", "state": "READY",
-                       "release": "2026-10-19", "tries": 30,
+                       "release": "2026-10-19", "release_seen": "2026-10-16", "tries": 30,
                        "last_blocker": "RELEASE_TBD", "blocker_streak": 11,
                        "release_tbd": True,
                        "identity_url": "https://p-town.dmm.com/machines/1"}})
         _rt = check_stuck("2026-10-17")
         t("★★機種ページは未定でも、カレンダーに日付があれば導入3日前から🔴★★（代役の指摘＝12/7導入の新台が見張りから外れていた）",
           len(_rt) == 1 and _rt[0].startswith(RED) and check_stuck("2026-10-01") == [])
+        t("　導入日を過ぎたら🔴を出し続けない／古い日付（3日以上受け取っていない）でも出さない（代役の指摘）",
+          check_stuck("2026-10-21") == [] and check_stuck("2026-10-20") == [])
         _fake({"q_1": {"name": "試し直しで戻した機種", "state": "READY",
                        "release": "2026-07", "release_day": "2026-07-06", "runs": 0,
                        "revived_at": "2026-10-16",

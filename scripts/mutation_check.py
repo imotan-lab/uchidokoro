@@ -11208,7 +11208,7 @@ MUTATIONS = [
     {
         "why": "★チェッカー：50枚あたりG数の逐語が記事に無くても書く（代役9回目）★",
         "file": "scripts/checker_verdict.py",
-        "before": "    if not any(q in s9 for s9 in _article_strings(slug)):\n",
+        "before": "    if not any(_at_boundary(s9) for s9 in _article_strings(slug)):\n",
         "after": "    if False:\n",
         "run": ["scripts/checker_verdict.py"],
     },
@@ -11222,9 +11222,37 @@ MUTATIONS = [
     {
         "why": "★新台の見張り：機種ページが未定でもカレンダーに日付がある新台を、導入3日前に知らせない（代役9回目）★",
         "file": "scripts/add_machine_health.py",
-        "before": "            if len(str(rel)) == 10 and not far_from_release(rel, today):\n",
+        "before": "            if len(str(rel)) == 10 and _fresh and _td <= str(rel) and not far_from_release(rel, today):\n",
         "after": "            if False:\n",
         "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★チェッカー：50枚あたりG数の逐語を、数の途中から切っても通す（代役10回目）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "            if i0 == 0 or not (s9[i0 - 1].isdigit() or s9[i0 - 1] in \".,，．\"):\n",
+        "after": "            if True:\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★チェッカー：50枚あたりG数の逐語に「50枚」「コイン持ち」などが無くても通す（代役10回目）★",
+        "file": "scripts/checker_verdict.py",
+        "before": "    if not any(w in q for w in COIN_CONTEXT):\n",
+        "after": "    if False:\n",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★新台の見張り：未定の新台の🔴を、導入日を過ぎても・古い日付でも出し続ける（代役10回目）★",
+        "file": "scripts/add_machine_health.py",
+        "before": "            if len(str(rel)) == 10 and _fresh and _td <= str(rel) and not far_from_release(rel, today):\n",
+        "after": "            if len(str(rel)) == 10 and not far_from_release(rel, today):\n",
+        "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★待ち行列：導入日を受け取った日を残さない（代役10回目）★",
+        "file": "scripts/pending_machines.py",
+        "before": "        **({\"release_seen\": _today()} if str(release or \"\").strip() else {}),\n",
+        "after": "",
+        "run": ["scripts/pending_machines.py"],
     },
 ]
 

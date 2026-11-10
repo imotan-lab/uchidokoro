@@ -202,6 +202,8 @@ def add(data: dict, name: str, url: str, maker: str, release: str,
             it["maker"] = maker
         if str(release or "").strip():
             it["release"] = release
+            # ★導入日を最後に受け取った日★（2026-11-10・代役の指摘＝カレンダーから消えた機種の古い日付で🔴を出さない）
+            it["release_seen"] = _today()
             # ★導入日が来た＝もう未定ではない★（2026-10-02・Codex review202）
             #   巡回で日付が分かっても印が残ると、記事づくりまで進めなかった晩、
             #   番兵がその機種を「未定」として黙って🔴を出さなかった。
@@ -247,6 +249,7 @@ def add(data: dict, name: str, url: str, maker: str, release: str,
         "identity_source": identity_source or ("dmm" if url else ""),
         "source_machine_id": str(source_machine_id or ""),
         "first_seen": _today(), "last_try": _today(), "tries": 1,
+        **({"release_seen": _today()} if str(release or "").strip() else {}),
         "last_reason": reason[:300],
         **{k: v for k, v in (extra or {}).items() if v}}
     return data["items"][qid]
@@ -604,7 +607,7 @@ def selftest() -> int:
     t("　覚えるのは事実だけ（数値や記事は持たない）",
       set(a1) == {"queue_id", "state", "name", "identity_url", "maker",
                   "release", "identity_source", "source_machine_id",
-                  "first_seen", "last_try", "tries", "last_reason"})
+                  "first_seen", "last_try", "tries", "last_reason", "release_seen"})
     add(d, "テスト機", DMM + "5049", "m", "2026-09", "まだ無い",
         source_machine_id="5049")
     t("★★同じ機種を二重に持たない（試した回数が増える）★★",

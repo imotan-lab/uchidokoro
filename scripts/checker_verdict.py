@@ -1817,6 +1817,8 @@ COIN = "COIN_RATE"
 
 
 COIN_BASIS = _lp.doc("coin_rate_basis.json")
+# ★50枚あたりのG数だと分かる言葉★（逐語にどれか1つが要る＝言うだけでは通らない照合・意味の判断は2AI）
+COIN_CONTEXT = ("50枚", "５０枚", "1000円", "千円", "コイン持ち")
 
 
 def _article_strings(slug: str) -> list:
@@ -1859,8 +1861,18 @@ def coin_basis_problems(slug: str, dec: dict) -> list:
         return [] if v in toks else [f"{slug}: 確定値 games_per_50 に {dec.get('coinRate')} がありません"]
     if not isinstance(q, str) or not 4 <= len(q) <= 120:
         return ["記事の逐語（quote・4〜120字）か field: games_per_50 で、数の出どころを言います"]
-    if not any(q in s9 for s9 in _article_strings(slug)):
-        return [f"{slug}: quote が記事にそのまま見当たりません（{q[:40]}）"]
+    def _at_boundary(s9):
+        # ★数の途中から切った逐語は認めない★（「650G+α」から「50G+α」を作れた・代役の指摘）
+        i0 = s9.find(q)
+        while i0 != -1:
+            if i0 == 0 or not (s9[i0 - 1].isdigit() or s9[i0 - 1] in ".,，．"):
+                return True
+            i0 = s9.find(q, i0 + 1)
+        return False
+    if not any(_at_boundary(s9) for s9 in _article_strings(slug)):
+        return [f"{slug}: quote が記事にそのまま見当たりません（数の途中から切った逐語も不可）（{q[:40]}）"]
+    if not any(w in q for w in COIN_CONTEXT):
+        return [f"{slug}: quote に「50枚」「1000円」「コイン持ち」などの言葉がありません（50枚あたりのG数だと分かる逐語を挙げる）"]
     if not any(_ai._canon(n) == v and u == "G" for n, u in _dn_c.numbers_with_unit(q)):
         return [f"{slug}: quote の中に「{dec.get('coinRate')}G」がありません（数字を作らない）"]
     return []
@@ -2059,6 +2071,16 @@ def show(slug: str) -> int:
             #   昔の機種109機種のうち1機種にしか無かった）。天井は確かめた記録からしか受け取らない
             print(f"★欄の天井（ceiling）がありません★: {'・'.join(_noc)}＝ゲーム数別の早見表の「天井まで・直行なら投入」の表が出ない。"
                   "天井を confirmed_values へ記録（独立2出典）してから、決定の modes にその欄の ceiling を書く")
+    # ★★一覧の文（strategy）とチェッカーの線の食い違いを知らせる★★（2026-11-10・代役の指摘＝交換率の切り替えが無い
+    #   昔の機種は一覧の文が手書きで、線を変えても追いつかず、気づく道が無かった。rezero2・dark_haibi で食い違っていた）
+    try:
+        import recheck as _rc_s
+        _sv = _rc_s.check_strategy_vs_checker({"slug": slug})
+        if str(_sv.get("result") or "") == "FAIL":
+            print("★一覧の文（strategy）とチェッカーの線が食い違っています★: " + str(_sv.get("detail") or _sv.get("why") or "")[:200]
+                  + "＝2AIでどちらが正しいか決め、線を直すか決定に strategy を書いて一覧の文を直す（記事の狙い目の箱も decide_now で）")
+    except Exception:                                        # noqa: BLE001
+        pass
     _lim = m.get("limit")
     if isinstance(_lim, (int, float)) and not isinstance(_lim, bool):
         _over = sorted({v for v in _strs_num(_ck_s) if v > _lim})
@@ -2964,7 +2986,8 @@ def _coin_tests(t) -> None:
     try:
         DETAILS = tempfile.mkdtemp(prefix="coin_")
         with open(os.path.join(DETAILS, "zzz_c.json"), "w", encoding="utf-8") as f:
-            f.write(json.dumps({"factTable": [["コイン持ち", "約31.0G/50枚（設定1）"], ["機械割", "97.9%"]],
+            f.write(json.dumps({"factTable": [["コイン持ち", "約31.0G/50枚（設定1）"], ["機械割", "97.9%"],
+                                              ["天井", "650G+α・50枚あたりの目安は別"]],
                                 "sections": [{"title": "基本スペック", "body": ["交換率は5.0枚と5.6枚を想定しています。"]}]},
                                ensure_ascii=False))
         q = "約31.0G/50枚"
@@ -2974,6 +2997,11 @@ def _coin_tests(t) -> None:
           any("ありません" in x for x in coin_problems(dict(base, coinRate=97.9, quote="97.9%"), ms))
           and any("ありません" in x for x in coin_problems(dict(base, coinRate=50, quote="約31.0G/50枚"), ms)))
         t("　記事に無い逐語は断る", any("見当たりません" in x for x in coin_problems(dict(base, coinRate=33, quote="約33G/50枚"), ms)))
+        t("★★数の途中から切った逐語は断る（「650G」から「50G」）★★（代役の指摘）",
+          any("見当たりません" in x for x in coin_problems(dict(base, coinRate=50, quote="50G+α・50枚あたり"), ms))
+          and not coin_problems(dict(base, coinRate=31, quote="約31.0G/50枚"), ms))
+        t("★★「50枚」「コイン持ち」などの言葉が無い逐語は断る★★（代役の指摘＝「ゾーンは32G」でも通った）",
+          any("言葉がありません" in x for x in coin_problems(dict(base, coinRate=31, quote="約31.0G"), ms)))
         t("　出どころを言わなければ断る", any("出どころ" in x for x in coin_problems(dict(base, coinRate=31), ms)))
         t("　新台は育成が作るので断る",
           any("新台" in x for x in coin_problems(dict(base, coinRate=31, quote=q),

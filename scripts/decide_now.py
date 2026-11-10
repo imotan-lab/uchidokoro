@@ -462,6 +462,18 @@ def gather(slug: str) -> dict:
                      "line": str(_line)[:100],
                      "note": "出典を見て判明していれば値を書く（先に confirmed_values へ記録）。"
                              "まだ判明していなければ残す（2AIが決める）"})
+    # ★★一覧の文とチェッカーの線の食い違い★★（2026-11-10・代役の指摘＝観測の関数はあったが、どこにもつながっていなかった）
+    try:
+        import recheck as _rc_g
+        _sv = _rc_g.check_strategy_vs_checker({"slug": slug})
+        if str(_sv.get("result") or "") == "FAIL":
+            out["hints"].append(
+                {"kind": "一覧の文とチェッカーの線の食い違い", "section": "（機種データ・チェッカー）",
+                 "words": [], "line": str(_sv.get("detail") or _sv.get("why") or "")[:160],
+                 "note": "どちらが正しいかは2AIが決める。線を直すなら checker_verdict、一覧の文と記事の狙い目の箱を直すなら "
+                         "checker_verdict の決定の strategy と decide_now"})
+    except Exception:                                        # noqa: BLE001
+        pass
     out["counts"]["_note"] = "★この数は機械が気づけた分だけ★（網羅ではない）"
     return out
 
