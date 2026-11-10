@@ -11,6 +11,9 @@
   ・★machines.json は書かない★＝控え assets/data/legacy-release.json に置き、並べ替え（reorder_machines.release_of）が
     machines.json に導入日が無いときだけ読む。記事の本文や判定は変えない。
   ・「未定」・読めない・転送されたページは書かない（前の記録は残す）。
+  ・★2026-11-10から★：2AIが決めたときだけ（--apply-release）控えの導入日を machines.json の release_date へ写す
+    （洗い出し4回目＝控えにあってもページの「登場時期」に出ず、92機種で導入日が読者に見えなかった）。
+    担当の回（--slug）では machines.json に導入日がある機種も取り直し、DMMの値と食い違えば知らせる。
 
 置き場＝assets/data/legacy-release.json（リポジトリの中＝CIでも並べ替えが読める）
 CLI:
@@ -23,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import io
 import json
 import os
 import re
@@ -129,9 +133,12 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
             purged.append(s)
             log(f"結び付けが無い・変わったので控えから外した {s}")
     cands = []
-    for s in targets(rows):
-        if only is not None and s not in only:
-            continue
+    _tg = targets(rows)
+    if only is not None:
+        # ★担当の回は、machines.json に導入日がある昔の機種も取り直す（食い違いを見るため）★
+        _tg = [str(m.get("slug")) for m in rows
+               if isinstance(m, dict) and "publication_policy" not in m and str(m.get("slug")) in only]
+    for s in _tg:
         try:
             u = bound(s)
         except Exception as e:                                   # noqa: BLE001
@@ -166,6 +173,98 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
         _save(d, path)
     return {"done": done, "failed": failed, "candidates": len(cands), "changed": changed,
             "purged": purged}
+
+
+def mismatches(rows, d: dict) -> list:
+    """★machines.json の導入日が、控え（DMMの値）と食い違う昔の機種★ → [(slug, machines.json の値, 控えの値)]
+
+    月までしか書いていない側は、月だけで比べる（2025-06 と 2025-06-02 は食い違いではない）。
+    """
+    out = []
+    for m in rows:
+        if not isinstance(m, dict) or "publication_policy" in m:
+            continue
+        s, mine = str(m.get("slug") or ""), str(m.get("release_date") or "").strip()
+        rec = (d.get("machines") or {}).get(s) or {}
+        dmm = str(rec.get("release") or "")
+        if not mine or not dmm:
+            continue
+        n = min(len(mine), len(dmm))
+        if mine[:n] != dmm[:n]:
+            out.append((s, mine, dmm))
+    return out
+
+
+APPLY_FRESH_DAYS = 7
+
+
+def apply_release(slug: str, by, why: str, path: str = None, machines_path: str = None,
+                  today: str = None, rebuild=None) -> list:
+    """★2AIが決めたとき、控えの導入日（DMMの値）を machines.json の release_date へ写す★ → 問題の並び（空＝書いた）
+
+    機械が見る＝判断者の組・理由15字・昔からの機種・控えの導入日が APPLY_FRESH_DAYS 日以内に確かめたもの・
+    いまの値と違う。書いたら機種ページと早見表を作り直す（できなければ元に戻す）。
+    """
+    import confirmed_values as _cv
+    import publish_new_machine as _pub
+    today = today or datetime.date.today().isoformat()
+    p = []
+    if _cv.judges_pair([x for x in (by or []) if str(x).strip()]) is None:
+        p.append("判断者の組がそろっていません（claude と codex、または代役の2人）")
+    if len(str(why or "").strip()) < 15:
+        p.append("理由（why）は15字以上で書きます")
+    d = read(path)
+    rec = (d.get("machines") or {}).get(slug) or {}
+    rel, chk = str(rec.get("release") or ""), str(rec.get("checked") or "")
+    if not _REL_RE.match(rel) or not _DATE_RE.match(chk):
+        p.append("控えに導入日がありません（先に --refresh 1 --slug で取り直す）")
+    elif (datetime.date.fromisoformat(today) - datetime.date.fromisoformat(chk)).days > APPLY_FRESH_DAYS:
+        p.append(f"控えの導入日を確かめてから{APPLY_FRESH_DAYS}日より前です（取り直してから写す）")
+    if p:
+        return p
+    mp = machines_path or MACHINES
+    with _pub._OnlyOne():
+        raw = io.open(mp, encoding="utf-8", newline="").read()
+        rows = json.loads(raw)
+        row = next((m for m in rows if isinstance(m, dict) and m.get("slug") == slug), None)
+        if row is None or "publication_policy" in row:
+            return ["昔からの機種ではありません（新台の導入日は育成が DMM の値で作る）"]
+        if str(row.get("release_date") or "") == rel:
+            return ["もう同じ導入日です"]
+        old = row.get("release_date")
+        row["release_date"] = rel
+        _pub.write_atomic(mp, json.dumps(rows, ensure_ascii=False, indent=1) + "\n")
+    try:
+        ok = (rebuild or _rebuild_pages)(slug)
+    except Exception:                                            # noqa: BLE001
+        ok = False
+    if not ok:
+        with _pub._OnlyOne():
+            rows = json.loads(io.open(mp, encoding="utf-8").read())
+            row = next((m for m in rows if isinstance(m, dict) and m.get("slug") == slug), None)
+            if row is not None and row.get("release_date") == rel:
+                if old is None:
+                    row.pop("release_date", None)
+                else:
+                    row["release_date"] = old
+                _pub.write_atomic(mp, json.dumps(rows, ensure_ascii=False, indent=1) + "\n")
+        try:
+            (rebuild or _rebuild_pages)(slug)
+        except Exception:                                        # noqa: BLE001
+            pass
+        return ["ページ・早見表を作り直せなかったので、導入日を元に戻しました"]
+    return []
+
+
+def _rebuild_pages(slug: str) -> bool:
+    import subprocess
+    here = os.path.dirname(os.path.abspath(__file__))
+    for args in (["build_machine_pages.py", "--legacy", "--slug", slug], ["build_hub_pages.py", "--legacy"]):
+        r = subprocess.run([sys.executable, os.path.join(here, args[0])] + args[1:],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if r.returncode != 0:
+            return False
+    return True
 
 
 def unbound(rows, bound=None, ranked=None) -> list:
@@ -298,6 +397,42 @@ def selftest() -> int:
     finally:
         _me.STORE = _keep
     t("　（配線）並べ替えの関数が控えを読んでいる", "legacy_release" in inspect.getsource(_rm.release_of))
+    # ★★2AIが決めたとき、控えの導入日を機種一覧へ写す（--apply-release）★★
+    mp = os.path.join(os.path.dirname(p), "machines.json")
+    io.open(mp, "w", encoding="utf-8").write(json.dumps([{"slug": "a"}, {"slug": "n", "publication_policy": "x"}]))
+    pz = os.path.join(os.path.dirname(p), "lr_apply.json")
+    _save({"machines": {"a": {"release": "2025-06-02", "url": U % 1, "checked": "2026-11-09"}}, "tries": {}}, pz)
+    import publish_new_machine as _pubx
+    keep_lock = _pubx._OnlyOne
+
+    class _L:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+    _pubx._OnlyOne = _L
+    try:
+        r1 = apply_release("a", ["claude"], "DMMの機種ページの導入日と一致した", pz, mp, "2026-11-10", lambda s: True)
+        r2 = apply_release("a", ["claude", "codex"], "DMMの機種ページの導入日と一致した", pz, mp, "2026-11-30",
+                           lambda s: True)
+        r3 = apply_release("a", ["claude", "codex"], "DMMの機種ページの導入日と一致した", pz, mp, "2026-11-10",
+                           lambda s: False)
+        after_fail = json.loads(io.open(mp, encoding="utf-8").read())
+        r4 = apply_release("a", ["claude", "codex"], "DMMの機種ページの導入日と一致した", pz, mp, "2026-11-10",
+                           lambda s: True)
+        after_ok = json.loads(io.open(mp, encoding="utf-8").read())
+    finally:
+        _pubx._OnlyOne = keep_lock
+    t("　写すのは判断者の組がそろったときだけ", any("判断者" in x for x in r1))
+    t("　控えを確かめてから7日より前なら写さない（取り直してから）", any("日より前" in x for x in r2))
+    t("★作り直せなければ導入日を元に戻す★", r3 and "release_date" not in after_fail[0])
+    t("★★2AIが決めたとき、控えの導入日（DMMの値）を機種一覧の release_date へ写す★★（ページの登場時期に出る）",
+      r4 == [] and after_ok[0].get("release_date") == "2025-06-02")
+    t("★★機種一覧の導入日がDMMの値と食い違う昔の機種を挙げる（月だけの書き方は食い違いにしない）★★",
+      mismatches([{"slug": "a", "release_date": "2025-07-01"}, {"slug": "b", "release_date": "2025-06"}],
+                 {"machines": {"a": {"release": "2025-06-02"}, "b": {"release": "2025-06-20"}}})
+      == [("a", "2025-07-01", "2025-06-02")])
     print(f"\n{sum(res)}/{len(res)} 合格")
     return 0 if all(res) else 1
 
@@ -317,6 +452,10 @@ def main() -> int:
                     help="導入日が無く、まだDMMと結び付けていない昔の機種（ランキングの候補外が先）")
     ap.add_argument("--limit", type=int, default=10)
     ap.add_argument("--slug", nargs="+", help="担当が回ってきた機種だけ取り直す（30日以内でも）")
+    ap.add_argument("--apply-release", metavar="SLUG",
+                    help="2AIが決めたとき、控えの導入日を machines.json の release_date へ写す（--by と --why-file）")
+    ap.add_argument("--by", default="")
+    ap.add_argument("--why-file")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -328,8 +467,19 @@ def main() -> int:
     except Exception as e:                                       # noqa: BLE001
         print(f"🟠 昔からの機種の導入日の控えを読めません（{type(e).__name__}: {e}）")
         return 2
+    if a.apply_release:
+        why = io.open(a.why_file, encoding="utf-8").read() if a.why_file else ""
+        pr = apply_release(a.apply_release, [x for x in a.by.split(",") if x.strip()], why)
+        for x in pr:
+            print("★書きません★ " + x)
+        if not pr:
+            print(f"{a.apply_release}: 導入日を機種一覧へ写し、ページと早見表を作り直しました")
+        return 1 if pr else 0
     if a.refresh is not None:
         r = refresh(a.refresh, a.apply, only=a.slug)
+        for s9, mine, dmm in mismatches(rows, read()):
+            if a.slug is None or s9 in a.slug:
+                print(f"★食い違い★ {s9}: 機種一覧 {mine} ／ DMM {dmm}（2AIで確かめて --apply-release）")
         print(f"取り直し: {len(r['done'])}件／読めなかった {len(r['failed'])}件／対象 {r['candidates']}件"
               + ("（下見・書いていません）" if not a.apply else ""))
         return 10 if (a.apply and r["changed"]) else 0

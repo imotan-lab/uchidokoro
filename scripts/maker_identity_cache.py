@@ -522,6 +522,10 @@ def verdict_for(slug: str, store=None, fetch=None, material_url: str = "",
             continue
         v = rec.get("verdict")
         if v != "ACCEPT_MATERIAL":
+            # ★使わない側も、ページが書き換わったら効かない★（2026-11-10・洗い出し4回目＝直す前は永久に効いた）
+            #   本文が渡されないときは今までどおり「使わない」（安全側）
+            if runtime_page is not None and rec.get("body_sha256")                     and str(rec.get("body_sha256")) != _page_sha(runtime_page):
+                return None
             return v                       # ★使わない側は対象が合えば返す★
         # ★★①判断したときと同じ本文か★★（2026-09-17）
         #   ★渡されなければ答えない（fail-closed）★＝
@@ -1212,6 +1216,10 @@ def _selftest_body() -> int:
     t("★★「使わない」は対象が合えば返る★★（取り直さない）",
       verdict_for("dmm_5086", st2, _fetch, material_url=_C,
                   runtime_page=_P) == "REJECT_MATERIAL")
+    t("★★「使わない」も、ページが書き換わったら効かない（もう一度2AIへ）★★（2026-11-10）",
+      verdict_for("dmm_5086", st2, _fetch, material_url=_C,
+                  runtime_page=_pg(html=_page(day="2026年12月24日"))) is None
+      and verdict_for("dmm_5086", st2, _fetch, material_url=_C) == "REJECT_MATERIAL")
 
     # ─── ★★読むときも書くときと同じ物差し★★ ─────────────────────
     t("★★手で書き足した控えは、読むときに弾く★★"

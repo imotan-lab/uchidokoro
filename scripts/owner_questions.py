@@ -78,7 +78,51 @@ def add(path: Path, title: str, detail: str) -> int:
 
 def pending(path: Path) -> list:
     return [it for it in _load(path)["items"]
-            if not it.get("sent_at") and not it.get("answered_at")]
+            if not it.get("sent_at") and not it.get("answered_at") and not it.get("retracted_at")]
+
+
+UNANSWERED_DAYS = 7
+
+
+def unanswered(path: Path, now: str = None, days: int = UNANSWERED_DAYS) -> list:
+    """★送ったのに答えが来ないまま days 日たった質問★（2026-11-10・洗い出し4回目）
+
+    なぜ＝直す前は「送った」印が付くと二度と見ず、答えが無いまま残っても誰も知らなかった。
+    見張り番が🟡で思い出させる（運営者がメールを見落としたときのため）。取り下げた質問は出さない。
+    """
+    import datetime as _dt
+    now = now or _now()
+    cut = (_dt.datetime.fromisoformat(now[:19]) - _dt.timedelta(days=days)).isoformat(timespec="seconds")
+    return [it for it in _load(path)["items"]
+            if it.get("sent_at") and not it.get("answered_at") and not it.get("retracted_at")
+            and str(it["sent_at"])[:19] <= cut]
+
+
+def retract(path: Path, qid: int, why: str, by) -> int:
+    """★2AIで片づいて、運営者に聞く必要が無くなった質問を取り下げる★（判断者の組・理由15字以上）
+
+    例＝3回割れた値を、その後2AIが「落としてよい」と決めて片づけた（grow_loss_accepted）。
+    ★答えたことにはしない★（answered と分ける）＝運営者の判断が要らなくなったという記録。
+    """
+    import confirmed_values as _cv
+    why = str(why or "").strip()
+    if len(why) < 15:
+        print("★取り下げる理由を15字以上書いてください★")
+        return 1
+    if _cv.judges_pair([x.strip() for x in (by or []) if str(x).strip()]) is None:
+        print("★取り下げには2AIの両方の判断が要ります（claude,codex または代役の2人）★")
+        return 1
+    d = _load(path)
+    hit = next((it for it in d["items"] if it.get("id") == qid), None)
+    if hit is None or hit.get("answered_at"):
+        print(f"★#{qid} は無いか、もう答えが出ています★")
+        return 1
+    hit["retracted_at"] = _now()
+    hit["retract_why"] = why
+    hit["retracted_by"] = sorted(x.strip() for x in by if str(x).strip())
+    _save(path, d)
+    print(f"#{qid} を取り下げました（運営者の判断は要らなくなった）")
+    return 0
 
 
 def mark(path: Path, qid: int, key: str, note: str = "") -> int:
@@ -119,6 +163,21 @@ def selftest() -> int:
         t("★答えが記録されたら pending から外れる★", pending(p) == [])
         c = add(p, "沖ドキの天井", "新しい食い違い")
         t("　答えが出た質問と同じ題でも、新しい質問として控える", c != a)
+        e = add(p, "別の天井", "Claude=1/2／Codex=3/4")
+        mark(p, e, "sent_at")
+        _d = _load(p)
+        for _it in _d["items"]:
+            if _it["id"] == e:
+                _it["sent_at"] = "2026-11-01T09:00:00"
+        _save(p, _d)
+        t("★★送ったのに7日答えが無い質問を挙げる★★（直す前は送ったら二度と見なかった）",
+          [i["id"] for i in unanswered(p, "2026-11-09T09:00:00")] == [e]
+          and unanswered(p, "2026-11-07T09:00:00") == [])
+        t("　取り下げは判断者の組と理由が要る",
+          retract(p, e, "短い", ["claude", "codex"]) == 1 and retract(p, e, "2AIで落としてよいと決めて片づいた", ["claude"]) == 1)
+        t("★★2AIで片づいた質問は取り下げられ、答えの無い一覧から外れる★★",
+          retract(p, e, "2AIで落としてよいと決めて片づいたので聞く必要が無い", ["claude", "codex"]) == 0
+          and unanswered(p, "2026-11-09T09:00:00") == [])
         p.write_text("[]", encoding="utf-8")
         try:
             pending(p)
@@ -138,6 +197,11 @@ def main() -> int:
     p.add_argument("--title-file", required=True)
     p.add_argument("--detail-file", required=True)
     sub.add_parser("pending")
+    sub.add_parser("unanswered")
+    p = sub.add_parser("retract")
+    p.add_argument("--id", type=int, required=True)
+    p.add_argument("--why-file", required=True)
+    p.add_argument("--by", required=True)
     for name in ("sent", "answered"):
         p = sub.add_parser(name)
         p.add_argument("--id", type=int, required=True)
@@ -155,6 +219,16 @@ def main() -> int:
         for it in items:
             print(f"#{it['id']} {it['title']}\n{it['detail']}\n")
         return 0
+    if a.cmd == "unanswered":
+        items = unanswered(STORE)
+        for it in items:
+            print(f"#{it['id']} {it['title']}（送った日 {str(it['sent_at'])[:10]}）")
+        print((f"🟡 運営者への質問で、送ってから{UNANSWERED_DAYS}日以上答えが無いものが{len(items)}件あります"
+               "（2AIで片づいたなら retract で取り下げる）") if items else "🟢 答えを待っている質問はありません")
+        return 1 if items else 0
+    if a.cmd == "retract":
+        return retract(STORE, a.id, _ta.read_text_arg("", a.why_file, "why"),
+                       [x for x in a.by.split(",") if x.strip()])
     if a.cmd == "sent":
         return mark(STORE, a.id, "sent_at")
     note = _ta.read_text_arg("", a.note_file, "note") if a.note_file else ""
