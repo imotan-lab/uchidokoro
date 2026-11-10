@@ -109,6 +109,8 @@ APPROVED_INPUTS = frozenset({
     #   承認の集合へ入れ忘れていた（decide_now / apply_prose_dedup と同じ役）。
     #   実際に47機種の記事を書き換えている。
     "scripts/tableize_spec.py",
+    # ★2026-11-10に足した★＝新台の「狙い目の根拠・ヤメ時・立ち回り」を記事データへ書く（decide_now と同じ役）
+    "scripts/derived_sections.py",
     # ★★狙い目の文を全機種ぶん作る側★★（2026-09-11）
     #   machines.json の strategy / strategyByRate と、
     #   machine-details の狙い目の箱を**全機種まとめて**書き換える。

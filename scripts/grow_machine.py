@@ -1620,6 +1620,49 @@ def carry_mode_section(old_detail: dict, detail: dict) -> None:
     detail["sections"] = secs[:pos] + [json.loads(json.dumps(prev))] + secs[pos:]
 
 
+def carry_written_sections(old_detail: dict, detail: dict) -> None:
+    """★2AIが書いた「狙い目の根拠」「ヤメ時の判断」「立ち回りのコツ」を持ち越す★（2026-11-10）
+
+    ★なぜ★＝この3欄は build_detail が必ず「未確認」で作る（材料から作れない・書くのは
+    derived_sections）。持ち越さないと、書いた翌朝の育成で「未確認」に戻るか、
+    「前に載っていた内容が消える」と数えられて育成が止まる。
+    ★育成は欄の中身を判断しない★＝作り直した欄が「未確認」で、前の欄に中身があるときだけ前の欄を使う。
+    """
+    import derived_sections as _ds
+    if not isinstance(old_detail, dict) or not isinstance(detail, dict):
+        return
+    secs = detail.get("sections")
+    if not isinstance(secs, list):
+        return
+    prev = {s.get("title"): s for s in (old_detail.get("sections") or [])
+            if isinstance(s, dict) and s.get("title") in _ds.TITLES}
+    for i, s in enumerate(secs):
+        if not isinstance(s, dict) or s.get("title") not in _ds.TITLES:
+            continue
+        old = prev.get(s.get("title"))
+        if old is not None and _ds.is_pending(s) and not _ds.is_pending(old):
+            secs[i] = json.loads(json.dumps(old))
+
+
+def _carry_written_tests(t) -> None:
+    """★2AIが書いた3欄は作り直しで「未確認」に戻らない★（2026-11-10）"""
+    P = _ba.PENDING_TEXT
+    old = {"sections": [{"title": "天井・恩恵", "body": ["a"]},
+                        {"title": "狙い目の根拠", "body": ["書いた根拠"]},
+                        {"title": "ヤメ時の判断", "body": [P]}]}
+    new = {"sections": [{"title": "天井・恩恵", "body": ["a2"]},
+                        {"title": "狙い目の根拠", "body": [P]},
+                        {"title": "ヤメ時の判断", "body": [P]}]}
+    carry_written_sections(old, new)
+    t("★★2AIが書いた欄を、作り直した記事へ持ち越す★★（直す前は翌朝「未確認」に戻った）",
+      new["sections"][1]["body"] == ["書いた根拠"] and new["sections"][2]["body"] == [P]
+      and new["sections"][0]["body"] == ["a2"])
+    new2 = {"sections": [{"title": "狙い目の根拠", "body": ["材料から作れた中身"]}]}
+    carry_written_sections(old, new2)
+    t("　作り直した欄に中身があれば、そちらを使う（古い欄で上書きしない）",
+      new2["sections"][0]["body"] == ["材料から作れた中身"])
+
+
 def _carry_mode_tests(t) -> None:
     """★モード・ゾーンの欄は作り直しで消えない★（2026-10-28）"""
     import inspect
@@ -2500,6 +2543,8 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     old_detail = _sj.read_json(dp, expect=dict) if os.path.isfile(dp) else {}
     # ★モード・ゾーンの欄は mode_apply の持ち物なので持ち越す★（2026-10-28）
     carry_mode_section(old_detail, detail)
+    # ★2AIが書いた「狙い目の根拠・ヤメ時・立ち回り」は derived_sections の持ち物なので持ち越す★（2026-11-10）
+    carry_written_sections(old_detail, detail)
     out["problems"] += claims_grew(cur.get("page_decision"), mat,
                                    accepted_lost_claims(slug, old_detail))
     lost = text_kept(old_detail, detail, accepted_losses(slug, old_detail))
@@ -5716,6 +5761,7 @@ def selftest() -> int:
     _generated_target_tests(t)
     _carry_full_tests(t)
     _carry_mode_tests(t)
+    _carry_written_tests(t)
 
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1
