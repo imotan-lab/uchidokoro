@@ -1344,7 +1344,7 @@
   "slug": "dmm_5113",
   "name": "L魔法少女にあこがれて",
   "seo": {
-   "title": "L魔法少女にあこがれて スペック・基本情報"
+   "title": "L魔法少女にあこがれて 天井・狙い目"
   },
   "info": "",
   "strategy": "",
@@ -1378,7 +1378,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-19",
+   "decided_at": "2026-11-11",
    "input_digest": "sha256:08769fbb2292f237b9b19f5175ad2c3da8c746995f61d0373ea74c01e347c795"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
