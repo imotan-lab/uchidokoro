@@ -10295,6 +10295,13 @@ MUTATIONS = [
         "after": "        if False:\n",
         "run": ["scripts/legacy_release.py"],
     },
+    {
+        "why": "★育成：書く直前の確かめ直しに導入日を渡さない（延期だけの日は書けない・Codex指摘）★",
+        "file": "scripts/grow_machine.py",
+        "before": "                         verify=lambda *a, **k: {\"problems\": [], \"release\": _planned_release})\n",
+        "after": "                         verify=lambda *a, **k: {\"problems\": [], \"release\": \"\"})\n",
+        "run": ["scripts/grow_machine.py"],
+    },
 ]
 
 

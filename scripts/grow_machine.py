@@ -3205,8 +3205,12 @@ def apply_one(got: dict) -> dict:
                 out["problems"].append(
                     f"計画したときから中身が変わっています: "
                     f"{os.path.relpath(p, BASE)}")
+        # ★★計画のときにDMMで確かめた導入日を引き継ぐ★★（2026-11-10・Codexの指摘＝実害）＝
+        #   空で渡すと古い導入日で作り直し、導入日だけが変わる（延期を受け取った）日は
+        #   「育てるものがありません」で必ず止まって書けなかった。
+        _planned_release = str((machine or {}).get("release_date") or "")
         again = plan_one(slug, gather=_regather(got),
-                         verify=lambda *a, **k: {"problems": [], "release": ""})
+                         verify=lambda *a, **k: {"problems": [], "release": _planned_release})
         # ↑ 取得はやり直さない。前提（区分・方針・台帳・目印）だけ見直す
         #   ★材料は計画のときの控えを渡す★（2026-10-25）＝空にすると、
         #   名鑑から読んだ値が「消える」と判定され、書く直前で必ず止まった
@@ -4390,6 +4394,10 @@ def selftest() -> int:
     t("★★2AIが受け取った導入日がまだ当たっていなければ見送らない★★",
       "受け取った" in release_drift(_cur_rd, {("market_release_date", "2026-11-16", "2026-12-07")},
                                   lambda c: "2026-11-16", _today_rd))
+    t("★★（配線）書く直前の確かめ直しに、計画でDMMから確かめた導入日を渡す★★"
+      "（Codexの指摘＝空で渡すと古い導入日で作り直し、延期だけの日は書けなかった）",
+      '"release": _planned_release' in inspect.getsource(apply_one)
+      and '_planned_release = str((machine or {}).get("release_date") or "")' in inspect.getsource(apply_one))
     t("　（配線）見送りの判定の前に導入日の変化を見ている",
       "release_drift(cur, identity_accepted(slug), release_probe)" in _src_pl.split("def selftest", 1)[0]
       and "and not confirmed_drift(slug) and not _rd" in _src_pl.split("def selftest", 1)[0])
