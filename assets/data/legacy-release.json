@@ -1,0 +1,99 @@
+{
+ "schema": "legacy-release/v1",
+ "machines": {
+  "animal_dotch": {
+   "release": "2026-04-20",
+   "url": "https://p-town.dmm.com/machines/4964",
+   "checked": "2026-11-10"
+  },
+  "azurlane": {
+   "release": "2025-08-04",
+   "url": "https://p-town.dmm.com/machines/4847",
+   "checked": "2026-11-10"
+  },
+  "basilisk_tenzen": {
+   "release": "2023-12-18",
+   "url": "https://p-town.dmm.com/machines/4466",
+   "checked": "2026-11-10"
+  },
+  "chibaryo2": {
+   "release": "2024-03-04",
+   "url": "https://p-town.dmm.com/machines/4530",
+   "checked": "2026-11-10"
+  },
+  "enen2": {
+   "release": "2026-02-02",
+   "url": "https://p-town.dmm.com/machines/4926",
+   "checked": "2026-11-10"
+  },
+  "kengan_ashura": {
+   "release": "2023-11-20",
+   "url": "https://p-town.dmm.com/machines/4434",
+   "checked": "2026-11-10"
+  },
+  "koukaku": {
+   "release": "2026-02-02",
+   "url": "https://p-town.dmm.com/machines/4931",
+   "checked": "2026-11-10"
+  },
+  "madomagi_forte": {
+   "release": "2023-11-06",
+   "url": "https://p-town.dmm.com/machines/4420",
+   "checked": "2026-11-10"
+  },
+  "midoridon_viva": {
+   "release": "2025-05-07",
+   "url": "https://p-town.dmm.com/machines/4763",
+   "checked": "2026-11-10"
+  },
+  "okidoki_gorgeous": {
+   "release": "2024-12-02",
+   "url": "https://p-town.dmm.com/machines/4674",
+   "checked": "2026-11-10"
+  },
+  "onepunchman": {
+   "release": "2024-08-05",
+   "url": "https://p-town.dmm.com/machines/4623",
+   "checked": "2026-11-10"
+  },
+  "sao": {
+   "release": "2023-05-15",
+   "url": "https://p-town.dmm.com/machines/4352",
+   "checked": "2026-11-10"
+  },
+  "takt_opus": {
+   "release": "2026-05-11",
+   "url": "https://p-town.dmm.com/machines/5000",
+   "checked": "2026-11-10"
+  },
+  "umineko2": {
+   "release": "2026-02-02",
+   "url": "https://p-town.dmm.com/machines/4925",
+   "checked": "2026-11-10"
+  },
+  "youjitsu": {
+   "release": "2025-05-07",
+   "url": "https://p-town.dmm.com/machines/4770",
+   "checked": "2026-11-10"
+  }
+ },
+ "tries": {
+  "animal_dotch": "2026-11-10",
+  "azurlane": "2026-11-10",
+  "basilisk_tenzen": "2026-11-10",
+  "chibaryo2": "2026-11-10",
+  "enen2": "2026-11-10",
+  "kengan_ashura": "2026-11-10",
+  "koukaku": "2026-11-10",
+  "madomagi_forte": "2026-11-10",
+  "midoridon_viva": "2026-11-10",
+  "okidoki_gorgeous": "2026-11-10",
+  "onepunchman": "2026-11-10",
+  "sao": "2026-11-10",
+  "takt_opus": "2026-11-10",
+  "umineko2": "2026-11-10",
+  "youjitsu": "2026-11-10"
+ },
+ "applied": {},
+ "kept": {}
+}
