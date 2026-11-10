@@ -35,7 +35,7 @@
   "scripts/page_corpus.py": "7019d1e19ec774a228111b7f5271324d7d5f7e6c92db8c025998f90642affa02",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/page_reading.py": "d993398c2b658fa06753f45262b5b8795e9591a739d1b1d75d2e35f273642589",
-  "scripts/pending_machines.py": "5d7c195f2287c4f06aa8a38929fa04f98d234460f3174fb04f4de1427fa66510",
+  "scripts/pending_machines.py": "34bd3d7ef01671c4449303bc3b5676b26c8c1b36c9fbc2ec828ba1bde77d7c30",
   "scripts/read_failure.py": "be1280280387ea03708afdd281a97289c311a9aa70ef53a62dffd438de9b96fe",
   "scripts/selftest_log_guard.py": "0de496b6ac4774489492a6c66f47c80ca3c546aa30f77209bbd0c69fee8b3aab",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",

@@ -11199,13 +11199,6 @@ MUTATIONS = [
         "run": ["scripts/automation_policy.py"],
     },
     {
-        "why": "★チェッカー：50枚あたりG数の逐語に「その数G」が無くても書く（代役9回目）★",
-        "file": "scripts/checker_verdict.py",
-        "before": "    if not any(_ai._canon(n) == v and u == \"G\" for n, u in _dn_c.numbers_with_unit(q)):\n",
-        "after": "    if False:\n",
-        "run": ["scripts/checker_verdict.py"],
-    },
-    {
         "why": "★チェッカー：50枚あたりG数の逐語が記事に無くても書く（代役9回目）★",
         "file": "scripts/checker_verdict.py",
         "before": "    if not any(_at_boundary(s9) for s9 in _article_strings(slug)):\n",
@@ -11236,7 +11229,7 @@ MUTATIONS = [
     {
         "why": "★チェッカー：50枚あたりG数の逐語に「50枚」「コイン持ち」などが無くても通す（代役10回目）★",
         "file": "scripts/checker_verdict.py",
-        "before": "    if not any(w in q for w in COIN_CONTEXT):\n",
+        "before": "    if not coin_near(q, v):\n",
         "after": "    if False:\n",
         "run": ["scripts/checker_verdict.py"],
     },
@@ -11253,6 +11246,27 @@ MUTATIONS = [
         "before": "        **({\"release_seen\": _today()} if str(release or \"\").strip() else {}),\n",
         "after": "",
         "run": ["scripts/pending_machines.py"],
+    },
+    {
+        "why": "★待ち行列：既にある控えで、導入日を受け取った日を新しくしない（代役11回目）★",
+        "file": "scripts/pending_machines.py",
+        "before": "            it[\"release_seen\"] = _today()\n",
+        "after": "            pass\n",
+        "run": ["scripts/pending_machines.py"],
+    },
+    {
+        "why": "★新台の見張り：未定の新台の🔴を、導入日を過ぎても出す（代役11回目）★",
+        "file": "scripts/add_machine_health.py",
+        "before": "            if len(str(rel)) == 10 and _fresh and _td <= str(rel) and not far_from_release(rel, today):\n",
+        "after": "            if len(str(rel)) == 10 and _fresh and not far_from_release(rel, today):\n",
+        "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★新台の見張り：未定の新台の🔴を、古い日付でも出す（代役11回目）★",
+        "file": "scripts/add_machine_health.py",
+        "before": "            if len(str(rel)) == 10 and _fresh and _td <= str(rel) and not far_from_release(rel, today):\n",
+        "after": "            if len(str(rel)) == 10 and _td <= str(rel) and not far_from_release(rel, today):\n",
+        "run": ["scripts/add_machine_health.py"],
     },
 ]
 

@@ -608,8 +608,11 @@ def selftest() -> int:
       set(a1) == {"queue_id", "state", "name", "identity_url", "maker",
                   "release", "identity_source", "source_machine_id",
                   "first_seen", "last_try", "tries", "last_reason", "release_seen"})
+    d["items"]["q_0001"]["release_seen"] = "2000-01-01"
     add(d, "テスト機", DMM + "5049", "m", "2026-09", "まだ無い",
         source_machine_id="5049")
+    t("★★既にある控えでも、導入日を受け取ったら受け取った日を新しくする★★（代役の指摘＝未定の新台の🔴は既存の控えで決まる）",
+      d["items"]["q_0001"].get("release_seen") == _today())
     t("★★同じ機種を二重に持たない（試した回数が増える）★★",
       len(d["items"]) == 1 and d["items"]["q_0001"]["tries"] == 2)
     # ★★URLが変わっても同じ機種と分かる★★（v2の要）

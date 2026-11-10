@@ -587,6 +587,16 @@ def selftest() -> int:
           len(_rt) == 1 and _rt[0].startswith(RED) and check_stuck("2026-10-01") == [])
         t("　導入日を過ぎたら🔴を出し続けない／古い日付（3日以上受け取っていない）でも出さない（代役の指摘）",
           check_stuck("2026-10-21") == [] and check_stuck("2026-10-20") == [])
+        _fake({"q_1": {"name": "導入日を過ぎた未定の機種", "state": "READY",
+                       "release": "2026-10-19", "release_seen": "2026-10-20", "tries": 30,
+                       "last_blocker": "RELEASE_TBD", "blocker_streak": 11, "release_tbd": True,
+                       "identity_url": "https://p-town.dmm.com/machines/1"}})
+        t("　（単独で）日付が新しくても、導入日を過ぎたら出さない", check_stuck("2026-10-20") == [])
+        _fake({"q_1": {"name": "古い日付の未定の機種", "state": "READY",
+                       "release": "2026-10-19", "release_seen": "2026-10-10", "tries": 30,
+                       "last_blocker": "RELEASE_TBD", "blocker_streak": 11, "release_tbd": True,
+                       "identity_url": "https://p-town.dmm.com/machines/1"}})
+        t("　（単独で）導入日の前でも、日付を3日以上受け取っていなければ出さない", check_stuck("2026-10-17") == [])
         _fake({"q_1": {"name": "試し直しで戻した機種", "state": "READY",
                        "release": "2026-07", "release_day": "2026-07-06", "runs": 0,
                        "revived_at": "2026-10-16",

@@ -1817,8 +1817,6 @@ COIN = "COIN_RATE"
 
 
 COIN_BASIS = _lp.doc("coin_rate_basis.json")
-# ★50枚あたりのG数だと分かる言葉★（逐語にどれか1つが要る＝言うだけでは通らない照合・意味の判断は2AI）
-COIN_CONTEXT = ("50枚", "５０枚", "1000円", "千円", "コイン持ち")
 
 
 def _article_strings(slug: str) -> list:
@@ -1839,6 +1837,20 @@ def _article_strings(slug: str) -> list:
                 walk(v)
     walk(_sj.read_json(p, expect=dict))
     return out
+
+
+def coin_near(q: str, v: str) -> bool:
+    """★その数Gのすぐ前後に「50枚あたり」と分かる言葉があるか★（2026-11-10・代役の指摘2回＝言葉が逐語のどこかに在るだけだと、
+    「0〜32Gの区間…コイン持ちは約31G/50枚」から 32 を通せた。「950枚」の中の「50枚」も数えていた）"""
+    import add_items as _ai
+    for mm in re.finditer(r"(?<![0-9.０-９．])([0-9０-９]+(?:[.．][0-9０-９]+)?)\s*[GＧ]", q):
+        if _ai._canon(mm.group(1).translate(str.maketrans("０１２３４５６７８９．", "0123456789."))) != v:
+            continue
+        before, after = q[max(0, mm.start() - 12):mm.start()], q[mm.end():mm.end() + 8]
+        if re.search(r"^\s*[/／（(]?\s*(?<![0-9０-９])(50|５０)枚", after) \
+                or re.search(r"(コイン持ち|(?<![0-9０-９])(50|５０)枚(あたり|当たり|で)|(?<![0-9０-９])(1000|１０００)円|千円)", before):
+            return True
+    return False
 
 
 def coin_basis_problems(slug: str, dec: dict) -> list:
@@ -1871,10 +1883,9 @@ def coin_basis_problems(slug: str, dec: dict) -> list:
         return False
     if not any(_at_boundary(s9) for s9 in _article_strings(slug)):
         return [f"{slug}: quote が記事にそのまま見当たりません（数の途中から切った逐語も不可）（{q[:40]}）"]
-    if not any(w in q for w in COIN_CONTEXT):
-        return [f"{slug}: quote に「50枚」「1000円」「コイン持ち」などの言葉がありません（50枚あたりのG数だと分かる逐語を挙げる）"]
-    if not any(_ai._canon(n) == v and u == "G" for n, u in _dn_c.numbers_with_unit(q)):
-        return [f"{slug}: quote の中に「{dec.get('coinRate')}G」がありません（数字を作らない）"]
+    if not coin_near(q, v):
+        return [f"{slug}: quote の中で「{dec.get('coinRate')}G」のすぐ前後に「50枚」「1000円」「コイン持ち」などがありません"
+                "（50枚あたりのG数だと分かる逐語を挙げる）"]
     return []
 
 
@@ -2075,7 +2086,8 @@ def show(slug: str) -> int:
     #   昔の機種は一覧の文が手書きで、線を変えても追いつかず、気づく道が無かった。rezero2・dark_haibi で食い違っていた）
     try:
         import recheck as _rc_s
-        _sv = _rc_s.check_strategy_vs_checker({"slug": slug})
+        # ★交換率を持つ機種は一覧の文を target_display が作り、push前の関所が見ているので知らせない★（代役の指摘＝monkeyv で誤報）
+        _sv = _rc_s.check_strategy_vs_checker({"slug": slug}) if not rate_keys(m) else {}
         if str(_sv.get("result") or "") == "FAIL":
             print("★一覧の文（strategy）とチェッカーの線が食い違っています★: " + str(_sv.get("detail") or _sv.get("why") or "")[:200]
                   + "＝2AIでどちらが正しいか決め、線を直すか決定に strategy を書いて一覧の文を直す（記事の狙い目の箱も decide_now で）")
@@ -3001,7 +3013,11 @@ def _coin_tests(t) -> None:
           any("見当たりません" in x for x in coin_problems(dict(base, coinRate=50, quote="50G+α・50枚あたり"), ms))
           and not coin_problems(dict(base, coinRate=31, quote="約31.0G/50枚"), ms))
         t("★★「50枚」「コイン持ち」などの言葉が無い逐語は断る★★（代役の指摘＝「ゾーンは32G」でも通った）",
-          any("言葉がありません" in x for x in coin_problems(dict(base, coinRate=31, quote="約31.0G"), ms)))
+          any("ありません" in x for x in coin_problems(dict(base, coinRate=31, quote="約31.0G"), ms)))
+        t("★★言葉はその数Gのすぐ前後に要る（同じ文の別の数は通さない・「950枚」の50枚は数えない）★★（代役の指摘）",
+          coin_near("コイン持ちは約31G/50枚", "31") and coin_near("50枚あたり約34.7G", "34.7")
+          and not coin_near("0〜32Gの区間は天国、コイン持ちは約31G/50枚", "32")
+          and not coin_near("約30G・約950枚のプラス", "30"))
         t("　出どころを言わなければ断る", any("出どころ" in x for x in coin_problems(dict(base, coinRate=31), ms)))
         t("　新台は育成が作るので断る",
           any("新台" in x for x in coin_problems(dict(base, coinRate=31, quote=q),

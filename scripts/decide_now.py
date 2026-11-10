@@ -465,7 +465,11 @@ def gather(slug: str) -> dict:
     # ★★一覧の文とチェッカーの線の食い違い★★（2026-11-10・代役の指摘＝観測の関数はあったが、どこにもつながっていなかった）
     try:
         import recheck as _rc_g
-        _sv = _rc_g.check_strategy_vs_checker({"slug": slug})
+        import checker_verdict as _cvd_g
+        _mrow = next((x for x in _sj.read_rows(os.path.join(BASE, "assets", "data", "machines.json"))
+                      if x.get("slug") == slug), {})
+        # ★交換率を持つ機種は一覧の文を target_display が作るので見ない★（代役の指摘＝monkeyv で誤報）
+        _sv = _rc_g.check_strategy_vs_checker({"slug": slug}) if not _cvd_g.rate_keys(_mrow) else {}
         if str(_sv.get("result") or "") == "FAIL":
             out["hints"].append(
                 {"kind": "一覧の文とチェッカーの線の食い違い", "section": "（機種データ・チェッカー）",
