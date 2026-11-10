@@ -11506,6 +11506,20 @@ MUTATIONS = [
         "after": "    if False:\n        return \"DMMの機種ページが未定で、導入カレンダーでも今の導入日を確かめられません\"\n",
         "run": ["scripts/grow_machine.py"],
     },
+    {
+        "why": "★未定の新台：機種ページが未定でカレンダーでも確かめられず止まったとき、2AIへ問いを出さない（Codex3回目）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        out[\"questions\"] += release_undecided_questions(slug, old_release, vo[\"problems\"])\n",
+        "after": "        pass\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★未定の新台：未定で止まったときの問いを、未定以外の失敗でも出す（Codex3回目）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    if not any(_dmq.RELEASE_UNDECIDED_MARK in str(x) for x in problems or []):\n        return []\n",
+        "after": "    if False:\n        return []\n",
+        "run": ["scripts/grow_machine.py"],
+    },
 ]
 
 

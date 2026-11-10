@@ -857,6 +857,22 @@ def release_change_questions(slug: str, old_release: str, problems) -> list:
     return out
 
 
+def release_undecided_questions(slug: str, old_release: str, problems) -> list:
+    """★機種ページが「未定」で、導入カレンダーでも今の導入日を確かめられずに止まったら2AIへ問う★（2026-11-11・Codexの指摘）
+
+    直す前は問いが出ず、育成が黙って止まり続けた（未定の失敗には段階の印が無く、導入日の変化の問いは変更後の日付を要する）。
+    """
+    import dmm_machine as _dmq
+    if not any(_dmq.RELEASE_UNDECIDED_MARK in str(x) for x in problems or []):
+        return []
+    return [{"kind": "grow_identity", "slug": slug, "text":
+             f"★DMMの機種ページの導入日が「未定」で、導入カレンダーでも見つかりません★（登録 {old_release or '不明'}）"
+             "／DMMの導入カレンダー（登録の月より先も）と機種ページを2AIで読み、★延期・中止か・今の導入日はいつか★を決めてください"
+             f"／同じ機種の新しい導入日が見つかれば決定ファイル（slug={slug}・field=market_release_date・before={old_release}・after=新しい日・by・why 15字以上）"
+             "を書いて python scripts/grow_machine.py --accept-identity <決定ファイル>（次の朝、カレンダーをその月から探し直す）"
+             "／見つからなければ育成は止まったまま（記事は無傷・毎朝この問いが出る）"}]
+
+
 def identity_change_questions(slug: str, problems) -> list:
     """★表記の変化で止まったら、2AIへの問いにする★（受け取れる項目のときだけ）"""
     out = []
@@ -2119,6 +2135,12 @@ def _carry_meta_tests(t) -> None:
       _rn == "2027-01-12" and _rn2 == RELEASE_UNCONFIRMED)
     _rdu = release_drift({"release_date": "2026-12-07"}, {}, lambda c: RELEASE_UNCONFIRMED, _dt.date(2026, 11, 20))
     t("　カレンダーでも確かめられなければ見送らない（Codexの再指摘）", "確かめられません" in _rdu)
+    _ruq = release_undecided_questions("zzz", "2026-12-07", ["IDENTITY_FAILED " + _dm_rt.RELEASE_UNDECIDED_MARK + ": 未定"])
+    t("★★未定のまま止まったら、2AIへ問いを出す（黙って止まり続けない・Codexの指摘）★★",
+      len(_ruq) == 1 and "before=2026-12-07" in _ruq[0]["text"]
+      and release_undecided_questions("zzz", "2026-12-07", ["別の理由"]) == [])
+    t("　（配線）本人性で止まったときの問いに入っている",
+      "out[\"questions\"] += release_undecided_questions(slug, old_release, vo[\"problems\"])" in inspect.getsource(plan_one))
     t("　カレンダーで見つからなければ止まったまま・未定以外の失敗では探さない",
       _r2 is _und and _r3 == {"problems": ["別の理由"]} and _calls_rt == [1])
     # ★昔の機種も載っている中身だけを名乗る★（2026-11-11・運営者の判断）＝判定はチェッカーのデータだけ
@@ -3040,6 +3062,8 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
         out["questions"] += maker_change_questions(slug, maker, vo["problems"])
         # ★★DMMの導入日が変わったときも、延期として受け取るかを2AIへ問う★★（2026-11-10）
         out["questions"] += release_change_questions(slug, old_release, vo["problems"])
+        # ★★機種ページが未定で、カレンダーでも確かめられずに止まったときも問う★★（2026-11-11・Codexの指摘）
+        out["questions"] += release_undecided_questions(slug, old_release, vo["problems"])
         # ★★型のついた失敗は、必ず問いにして返す★★（2026-09-10・CodexのP0）
         #   ★直す前はここで戻っていた★ので、
         #   ★育成レーンで毎朝止まる機種の問いが、どこにも出なかった★。
