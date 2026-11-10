@@ -1109,8 +1109,20 @@ def set_seo_title(machine: dict, detail: dict, mat: dict) -> None:
         machine.get("name") or "", ceil, _tp.synced(machine, detail))
 
 
+def content_changed(old_detail: dict, new_detail: dict) -> bool:
+    """★記事の中身が変わったか★（「最終更新」の日付 `updated` は見ない）"""
+    if new_detail is None:
+        return False
+
+    def _c(d):
+        return json.dumps({k: v for k, v in (d or {}).items() if k != "updated"},
+                          ensure_ascii=False, sort_keys=True)
+    return _c(old_detail) != _c(new_detail)
+
+
 def growth_reasons(nn: list, machine: dict, old_detail: dict,
-                   new_machine: dict = None) -> list:
+                   new_machine: dict = None, new_detail: dict = None,
+                   cv_changed: bool = False) -> list:
     """★今日この機種でやることがあるか★（2026-09-03・切り出した理由は下記）
 
     引数の `nn` は `nothing_new()` の答え
@@ -1135,6 +1147,12 @@ def growth_reasons(nn: list, machine: dict, old_detail: dict,
     #   （2026-09-06・Codexの指摘）★数えないと、本文に出ない確定値
     #   （型など）は永久に反映されない★＝書かずに指紋だけ控えるため。
     if nn and machine_row_drift(machine, new_machine):
+        return []
+    # ★★確定値が変わり、記事の中身も変わったなら書く★★（2026-11-10・代役の指摘）
+    #   ★直す前★＝値を差し替える訂正（97.5%→98.0%）は確定した中身の件数が増えないので
+    #   「育てるものがありません」になり、しかも確定値の指紋だけ控えて二度と見に行かなかった。
+    #   ★両方が要る★＝確定値が変わっていないのに記事だけ違うのは、作り方の揺れであって訂正ではない。
+    if nn and cv_changed and content_changed(old_detail, new_detail):
         return []
     return list(nn or [])
 
@@ -1748,15 +1766,13 @@ def _added_numbers_ok(sec: dict, detail: dict, row: dict, slug: str, confirmed=N
             continue
     if srcs:
         import decide_now as _dn1
-        frec = set()
-        for f in fields:
-            try:
-                for st in _ai.record_strings(f, ((conf or {}).get(f) or {}).get("value")):
-                    for tok, _u in _dn1.numbers_with_unit(st):
-                        frec.add(tok)
-                        frec.add(_ai._canon(tok))
-            except Exception:             # noqa: BLE001
-                continue
+        # ★★足したときと同じ数え方で照らす★★（2026-11-10・代役の指摘＝設定の番号〈設定1〜6〉や導入日は
+        #   ここで数えておらず、確定値が変わらなくても足した欄が毎朝落ちていた）
+        try:
+            frec, _miss = _ai._record_pool(slug, fields, conf or {})
+        except Exception:                 # noqa: BLE001
+            return False
+        rec |= set(frec)
         for sv in srcs:
             num, _, src = str(sv).rpartition("|")
             if src == "fields":
@@ -1983,6 +1999,17 @@ def _carry_meta_tests(t) -> None:
       _got_f == [])
     t("　確定値にまだ在れば持ち越す",
       carry_added_sections(_old_n, _new_n, "zzz_a", titles={"有利区間"}, confirmed=_conf_n) == ["有利区間"])
+    try:
+        globals()["added_basis"] = lambda s, ti, basis=None: (["114.9%|fields", "6|fields"], ["payout_rate"])
+        _old_s = {"sections": [{"title": "天井・恩恵", "body": ["a"]},
+                               {"title": "高設定の機械割", "body": ["設定6は114.9%です。"]}]}
+        _new_s = {"sections": [{"title": "天井・恩恵", "body": ["a"]}]}
+        _got_s = carry_added_sections(_old_s, _new_s, "zzz_a", titles={"高設定の機械割"},
+                                      confirmed={"payout_rate": {"value": {"1": "97.7%", "6": "114.9%"}}})
+    finally:
+        globals()["added_basis"] = _keep_ab
+    t("★★設定ごとの確定値から来た設定の番号（設定6）も、足したときと同じ数え方で照らす★★（代役の指摘＝毎朝落ちていた）",
+      _got_s == ["高設定の機械割"])
     t("　（配線）育成が足した欄を持ち越している",
       "carry_added_sections(old_detail, detail, slug, row=machine)" in inspect.getsource(plan_one))
     _new = {"aliases": [], "info": ""}
@@ -3150,7 +3177,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     # ★★やることがあるかの判断は `growth_reasons` の1か所★★
     #   （2026-09-03。★ここに埋めていたら、壊し方の道具が
     #     「この守りは試験で守られていません」と言った★）
-    _nn = growth_reasons(_nn, cur, old_detail, machine)
+    _nn = growth_reasons(_nn, cur, old_detail, machine, detail, confirmed_drift(slug))
     out["problems"] += _nn
     out["nothing_new_only"] = bool(_clean and _nn)
     # ★「前に載っていた内容が再現できない」は人へ回す★（黙って止め続けない）
@@ -4916,6 +4943,18 @@ def selftest() -> int:
       growth_reasons(["育てるものがありません（確定した中身が増えていません）"],
                      _m_g, _now_lead)
       == ["育てるものがありません（確定した中身が増えていません）"])
+    _nnv = ["育てるものがありません（確定した中身が増えていません）"]
+    _dv_old = {"lead": _now_lead["lead"], "sections": [{"title": "基本スペック", "body": ["機械割は97.5%です。"]}],
+               "updated": "2026-11-01"}
+    _dv_new = {"lead": _now_lead["lead"], "sections": [{"title": "基本スペック", "body": ["機械割は98.0%です。"]}],
+               "updated": "2026-11-10"}
+    _dv_same = dict(_dv_old, updated="2026-11-10")
+    t("★★確定値が変わり記事の中身も変わったなら、件数が増えなくても書く★★（値を差し替える訂正・代役の指摘）",
+      growth_reasons(_nnv, _m_g, _dv_old, None, _dv_new, True) == [])
+    t("　（対照）確定値が変わっていなければ、記事が違っても書く理由にしない",
+      growth_reasons(_nnv, _m_g, _dv_old, None, _dv_new, False) == _nnv)
+    t("　（対照）確定値が変わっても、記事が「最終更新」の日付しか違わなければ書かない",
+      growth_reasons(_nnv, _m_g, _dv_old, None, _dv_same, True) == _nnv)
     t("　材料が増えていれば、ずれの有無に関わらず通す",
       growth_reasons([], _m_g, _old_lead) == []
       and growth_reasons([], _m_g, _now_lead) == [])
@@ -4930,7 +4969,7 @@ def selftest() -> int:
       #   ★探していた文字列は3つ引数の古い形★で、どこにも無かった。
       and (lambda a, b: (a + b) in io.open(
           os.path.abspath(__file__), encoding="utf-8").read())(
-              "growth_reasons(_nn, cur, ", "old_detail, machine)"))
+              "growth_reasons(_nn, cur, ", "old_detail, machine, detail, confirmed_drift(slug))"))
     # ── ★ひな型のずれを見つける関数そのものを試す★（2026-09-03・罠⑤）
     #   ★上の様子見の試験は、この関数を丸ごと差し替える★ので、
     #   中の判定を空にしても緑のままだった（壊し方の道具が見つけた）。

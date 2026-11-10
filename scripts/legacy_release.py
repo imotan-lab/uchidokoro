@@ -19,7 +19,10 @@
 CLI:
   --refresh N [--apply]  … 結び付け済みで導入日の無い昔からの機種を、最後に試した日が古い順に N 件取り直す
                            （試した日 tries と確かめた日 checked を分ける）。終了コード 10＝控えが変わった／0＝変わらない／2＝読めない
-  --check                … 番人用。結び付け済みで導入日の無い機種があるのに、STALL_DAYS 日だれも試していない → 1／読めない → 2
+  --check                … 番人用。結び付け済みで導入日の無い機種があるのに、STALL_DAYS 日だれも試していない／
+                           結び付けを取り消したのに写した導入日（機種一覧・基本情報表）が残っている → 1／読めない → 2
+  --keep-release SLUG --by claude,codex --why-file F
+                         … 写した導入日の取り残しを、2AIが「いまの値のままでよい」と決めたときに見張りから外す
   --list / --selftest
 """
 from __future__ import annotations
@@ -70,6 +73,8 @@ def read(path: str = None) -> dict:
     d.setdefault("tries", {})
     if not isinstance(d.setdefault("applied", {}), dict):
         raise LegacyReleaseError("legacy-release.json の applied が壊れています")
+    if not isinstance(d.setdefault("kept", {}), dict):
+        raise LegacyReleaseError("legacy-release.json の kept が壊れています")
     return d
 
 
@@ -84,7 +89,9 @@ def _save(d: dict, path: str = None) -> None:
     d = {"schema": SCHEMA, "machines": dict(sorted(d["machines"].items())),
          "tries": dict(sorted(d.get("tries", {}).items())),
          # ★機種一覧へ写した導入日★（結び付けを取り消したら、残っていないか見張り番が見る）
-         "applied": dict(sorted((d.get("applied") or {}).items()))}
+         "applied": dict(sorted((d.get("applied") or {}).items())),
+         # ★写した導入日の取り残しを、2AIが「このままでよい」と決めた記録★（--keep-release）
+         "kept": dict(sorted((d.get("kept") or {}).items()))}
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(d, ensure_ascii=False, indent=1) + "\n")
     os.replace(tmp, p)
@@ -130,8 +137,10 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
     for s in list(d["machines"]):
         try:
             u = bound(s)
-        except Exception:                                        # noqa: BLE001
-            u = None
+        except Exception as e:                                   # noqa: BLE001
+            # ★★読めないときは捨てずに止める★★（2026-11-10・代役の指摘＝結び付けの控えが一時的に読めないだけで、
+            #   控えの導入日を全部捨てて保存していた）。書かずに例外で返す（呼ぶ側は「読めない」で終了コード2）
+            raise LegacyReleaseError(f"結び付けを読めないので、控えを確かめられません（{s}: {type(e).__name__}）")
         if not u or u != d["machines"][s].get("url"):
             d["machines"].pop(s)
             purged.append(s)
@@ -194,6 +203,61 @@ def applied_orphans(rows, d: dict) -> list:
                 and str(m.get("release_date") or "") == str(applied[s9]):
             out.append(s9)
     return out
+
+
+def fact_orphans(d: dict, basis=None, details_dir: str = None) -> list:
+    """★基本情報表へ足した導入日（add_items の add_fact・fields に legacy_release）のうち、
+    控えの記録が無くなったのに記事に残っているもの★（2026-11-10・代役の指摘＝機種一覧だけ見ていた）
+
+    控え（add_items の記録・リポジトリの外）が読めなければ例外（呼ぶ側が「読めない」として知らせる）。
+    """
+    import add_items as _ai
+    basis = _ai._read_json_or(_ai.BASIS, [], list) if basis is None else basis
+    ddir = details_dir or os.path.join(BASE, "assets", "data", "machine-details")
+    have = d.get("machines") or {}
+    kept = d.get("kept") or {}
+    out = []
+    for b in basis:
+        if not isinstance(b, dict):
+            continue
+        s9 = str(b.get("slug") or "")
+        if not s9 or s9 in have or s9 in kept or s9 in out:
+            continue
+        rows9 = [a.get("row") for a in (b.get("additions") or [])
+                 if isinstance(a, dict) and a.get("op") == "add_fact"
+                 and _ai.LEGACY_RELEASE_FIELD in (a.get("fields") or [])]
+        if not rows9:
+            continue
+        dp = os.path.join(ddir, s9 + ".json")
+        if not os.path.isfile(dp):
+            continue
+        ft = (json.loads(io.open(dp, encoding="utf-8").read()).get("factTable") or [])
+        if any(r in ft for r in rows9):
+            out.append(s9)
+    return out
+
+
+def keep_release(slug: str, by, why: str, path: str = None, today: str = None) -> list:
+    """★写した導入日の取り残しを、2AIが「いまの値のままでよい」と決めたら見張りから外す★
+
+    （2026-11-10・代役の指摘＝正しいページが無いと決まった機種は、取り残しの知らせが永久に消えなかった）
+    """
+    import confirmed_values as _cv
+    p = []
+    if _cv.judges_pair(sorted(x for x in (by or []) if str(x).strip())) is None:
+        p.append("判断者の組がそろっていません（claude と codex、または代役の2人）")
+    if len(str(why or "").strip()) < 15:
+        p.append("理由（why）は15字以上で書きます")
+    d = read(path)
+    if slug in (d.get("machines") or {}):
+        p.append("控えにいまの記録があります（取り残しではありません）")
+    if p:
+        return p
+    (d.get("applied") or {}).pop(slug, None)
+    d.setdefault("kept", {})[slug] = {"at": today or datetime.date.today().isoformat(),
+                                      "by": sorted(x for x in by if str(x).strip()), "why": str(why).strip()}
+    _save(d, path)
+    return []
 
 
 def mismatches(rows, d: dict) -> list:
@@ -264,6 +328,7 @@ def apply_release(slug: str, by, why: str, path: str = None, machines_path: str 
         row["release_date"] = rel
         _pub.write_atomic(mp, json.dumps(rows, ensure_ascii=False, indent=1) + "\n")
     d.setdefault("applied", {})[slug] = rel
+    (d.get("kept") or {}).pop(slug, None)
     _save(d, path)
     try:
         ok = (rebuild or _rebuild_pages)(slug)
@@ -394,6 +459,17 @@ def selftest() -> int:
                   today="2026-11-12", path=p, log=lambda *a: None)
     t("★★結び付けを取り消した機種の導入日は、控えから捨てる★★（Codexの指摘＝別の機種の日付が残った）",
       _r3["purged"] == ["a"] and release_for("a", p) == "")
+    _save({"machines": {"a": {"release": "2025-06-02", "url": U % 1, "checked": "2026-09-01"}},
+           "tries": {}}, p2)
+    _raised = False
+    try:
+        refresh(0, True, rows=rows, fetch=lambda u: "2025-06-02",
+                bound=lambda s9: (_ for _ in ()).throw(OSError("x")),
+                today="2026-11-12", path=p2, log=lambda *a: None)
+    except LegacyReleaseError:
+        _raised = True
+    t("★★結び付けが読めないときは、控えの導入日を捨てずに止める★★（代役の指摘＝一時的に読めないだけで全部消えた）",
+      _raised and release_for("a", p2) == "2025-06-02")
     refresh(1, True, rows=rows, fetch=lambda u: "2025-06-02", bound=bound, today="2026-11-12",
             path=p, log=lambda *a: None)
     _r4 = refresh(0, True, rows=rows, fetch=lambda u: "2025-06-02", bound={"a": U % 7, "d": U % 4}.get,
@@ -474,6 +550,23 @@ def selftest() -> int:
     t("★★結び付けを取り消して控えが消えたのに、写した導入日が機種一覧に残っていれば挙げる★★（Codexの指摘）",
       applied_orphans(after_ok, _da) == ["a"]
       and applied_orphans([{"slug": "a", "release_date": "2024-01-01"}], _da) == [])
+    _dd = tempfile.mkdtemp(prefix="lrel_det_")
+    with open(os.path.join(_dd, "a.json"), "w", encoding="utf-8") as f:
+        f.write(json.dumps({"factTable": [["導入日", "2025年6月2日"]]}, ensure_ascii=False))
+    _bas = [{"slug": "a", "additions": [{"op": "add_fact", "row": ["導入日", "2025年6月2日"],
+                                         "fields": ["legacy_release"]}]},
+            {"slug": "b", "additions": [{"op": "add_fact", "row": ["メーカー", "サミー"]}]}]
+    t("★★基本情報表へ足した導入日も、控えの記録が無くなって記事に残っていれば挙げる★★（代役の指摘）",
+      fact_orphans(_da, _bas, _dd) == ["a"]
+      and fact_orphans({"machines": {"a": {}}}, _bas, _dd) == [])
+    _pk = os.path.join(os.path.dirname(pz), "keep.json")
+    _save(dict(_da, applied={"a": "2025-06-02"}), _pk)
+    _k1 = keep_release("a", ["claude"], "正しいページが無いと2AIで決めたため", path=_pk)
+    _k2 = keep_release("a", ["claude", "codex"], "正しいページが無いと2AIで決めたため", path=_pk)
+    _dk = read(_pk)
+    t("★★2AIが「このままでよい」と決めたら、取り残しの見張りから外す（判断者の組が要る）★★（代役の指摘）",
+      _k1 and _k2 == [] and "a" not in _dk["applied"] and "a" in _dk["kept"]
+      and applied_orphans(after_ok, _dk) == [] and fact_orphans(_dk, _bas, _dd) == [])
     t("★★機種一覧の導入日がDMMの値と食い違う昔の機種を挙げる（月だけの書き方は食い違いにしない）★★",
       mismatches([{"slug": "a", "release_date": "2025-07-01"}, {"slug": "b", "release_date": "2025-06"}],
                  {"machines": {"a": {"release": "2025-06-02"}, "b": {"release": "2025-06-20"}}})
@@ -499,6 +592,8 @@ def main() -> int:
     ap.add_argument("--slug", nargs="+", help="担当が回ってきた機種だけ取り直す（30日以内でも）")
     ap.add_argument("--apply-release", metavar="SLUG",
                     help="2AIが決めたとき、控えの導入日を machines.json の release_date へ写す（--by と --why-file）")
+    ap.add_argument("--keep-release", metavar="SLUG",
+                    help="写した導入日の取り残しを、2AIが「このままでよい」と決めたら見張りから外す（--by と --why-file）")
     ap.add_argument("--by", default="")
     ap.add_argument("--why-file")
     ap.add_argument("--selftest", action="store_true")
@@ -520,8 +615,20 @@ def main() -> int:
         if not pr:
             print(f"{a.apply_release}: 導入日を機種一覧へ写し、ページと早見表を作り直しました")
         return 1 if pr else 0
+    if a.keep_release:
+        why = io.open(a.why_file, encoding="utf-8").read() if a.why_file else ""
+        pr = keep_release(a.keep_release, [x for x in a.by.split(",") if x.strip()], why)
+        for x in pr:
+            print("★書きません★ " + x)
+        if not pr:
+            print(f"{a.keep_release}: 写した導入日の取り残しを見張りから外しました")
+        return 1 if pr else 0
     if a.refresh is not None:
-        r = refresh(a.refresh, a.apply, only=a.slug)
+        try:
+            r = refresh(a.refresh, a.apply, only=a.slug)
+        except LegacyReleaseError as e:
+            print(f"🟠 {e}")
+            return 2
         for s9, mine, dmm in mismatches(rows, read()):
             if a.slug is None or s9 in a.slug:
                 print(f"★食い違い★ {s9}: 機種一覧 {mine} ／ DMM {dmm}（2AIで確かめて --apply-release）")
@@ -531,10 +638,15 @@ def main() -> int:
     if a.check:
         pr = stall_problem(rows, d, datetime.date.today().isoformat())
         _orph = applied_orphans(rows, d)
+        try:
+            _orph += [x for x in fact_orphans(d) if x not in _orph]
+        except Exception as e:                                   # noqa: BLE001
+            print(f"🟠 基本情報表へ足した導入日の記録を読めません（{type(e).__name__}: {e}）")
+            return 2
         if _orph:
             pr = ((pr + " ／ ") if pr else "") + (
-                f"結び付けを取り消したのに、機種一覧へ写した導入日が残っている機種が{len(_orph)}件: "
-                + "・".join(_orph[:5]) + "（2AIで正しい導入日を確かめ直す）")
+                f"結び付けを取り消したのに、写した導入日（機種一覧・基本情報表）が残っている機種が{len(_orph)}件: "
+                + "・".join(_orph[:5]) + "（2AIで正しい導入日を確かめ直す。いまの値でよければ --keep-release）")
         print(("🟡 " + pr) if pr else f"🟢 昔からの機種の導入日：控え {len(d['machines'])}件")
         return 1 if pr else 0
     if a.unbound:

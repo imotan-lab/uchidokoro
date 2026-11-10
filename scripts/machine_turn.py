@@ -46,6 +46,8 @@ _IN_SELFTEST = False
 TURN_SINCE_WEEK = "2026-11-16"
 # ★「点検済み」の日付（state.json の quality_review.last_reviewed）と突き合わせ始める日★
 TURN_SINCE_DAY = "2026-11-11"
+# ★点検済みの印を覆える点検表は、その日から何日前までに始めたものか★（LATER を翌朝に仕上げる分の余裕）
+REVIEW_TURN_DAYS = 3
 
 # ★項目の一覧★（キー → 何をするか・手順書のどの段の流れで）。並びは記事の上から下＋道具の順
 COMMON_ITEMS = (
@@ -215,7 +217,13 @@ def reviewed_without_turn(last_reviewed: dict, path: str = None) -> list:
         if day < TURN_SINCE_DAY:
             continue
         tr = d["turns"].get(s9)
-        if not tr or tr["started"] > day or (tr["started"] < day and _stale_turn(tr, day)):
+        # ★★点検済みの日より後に始めた点検表があれば、その印は挙げない★★（2026-11-10・代役の指摘＝
+        #   点検表は機種ごとに最新の1つしか残らないので、翌週の担当が始まると先週の印が「無い」と誤って出た）
+        #   ＝下の条件に「始めた日が点検済みの日より後」を入れない
+        # ★★点検済みの日の REVIEW_TURN_DAYS 日前より古い点検表では、その印を覆わない★★（代役の指摘＝
+        #   ずっと前の点検表に項目の記録があるだけで、その後の点検済みの印が全部通っていた）
+        lo = (_dt.date.fromisoformat(day) - _dt.timedelta(days=REVIEW_TURN_DAYS)).isoformat()
+        if not tr or tr["started"] < lo or (tr["started"] < day and _stale_turn(tr, day)):
             out.append(s9)
     return sorted(out)
 
@@ -348,6 +356,15 @@ def selftest() -> int:
     t("★★点検済みにしたのに、その日に点検表を始めていない機種を挙げる★★（Codexの指摘＝その他の機種は印だけ付けられた）",
       reviewed_without_turn({"zzz_l": "2026-11-17", "zzz_y": "2026-11-12", "zzz_old": "2026-11-01"}, p)
       == ["zzz_y"])
+    _p3 = p + ".rv.json"
+    with io.open(_p3, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"turns": {"zzz_o": {"started": "2026-11-11", "items": {
+            "mode": {"at": "2026-11-11", "result": "OK", "note": ""}}}}}))
+    t("★★点検済みの日より後に始めた点検表があれば、その前の印は挙げない★★（代役の指摘＝翌週の担当で誤って出た）",
+      reviewed_without_turn({"zzz_l": "2026-11-12"}, p) == [])
+    t("★★ずっと前の点検表では、その後の点検済みの印を覆わない（3日前まで）★★（代役の指摘）",
+      reviewed_without_turn({"zzz_o": "2026-11-20"}, _p3) == ["zzz_o"]
+      and reviewed_without_turn({"zzz_o": "2026-11-13"}, _p3) == [])
     with io.open(p, "w", encoding="utf-8") as f:
         f.write('{"turns": {"zzz_l": {"started": "", "items": {}}}}')
     try:

@@ -274,6 +274,12 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
                     _replace = False
                 if not _replace:
                     p.append(f"{w}: 「{title}」はもう記事にあります（add_rows か add_line で足す）")
+                else:
+                    # ★★置き換えるときは、古い欄の数字を「記事にある」に数えない★★（2026-11-10・代役の指摘＝
+                    #   数えると、確定値が直っても古い数字のまま「直した」ことにできた）
+                    pool = _ds.number_pool(dict(detail, sections=[
+                        s for s in (detail.get("sections") or []) if not (isinstance(s, dict) and s.get("title") == title)]),
+                        row or {})
             if title == RUMOR_TITLE or (isinstance(title, str) and title.startswith("噂")):
                 p.append(f"{w}: 噂の欄は rumor_verdict で書きます")
             has_body, has_tbl = bool(a.get("body")), bool(a.get("table"))
@@ -305,9 +311,11 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
                     done.append(f"欄「{title}」")
                 # ★足した数字の出どころを控える★（確定値から来た数字は、持ち越すとき今の確定値と照らす）
                 import decide_now as _dn0
+                # ★★名指しした確定値に在る数字は「確定値から」と控える（記事にもあっても）★★（2026-11-10・代役の指摘＝
+                #   記事の別の欄に同じ数字があると article と控え、確定値が直っても持ち越しで照らされなかった）
                 a["_number_sources"] = sorted({
-                    f"{nu[0]}{nu[1]}|" + ("article" if (nu in base_pool[0] or (nu[1] == "" and nu[0] in base_pool[1]))
-                                          else "fields")
+                    f"{nu[0]}{nu[1]}|" + ("fields" if (nu[0] in rec_toks or _canon(nu[0]) in rec_toks)
+                                          else "article")
                     for t0 in texts for nu in _dn0.numbers_with_unit(t0)})
         else:
             sec = next((s for s in secs if isinstance(s, dict) and s.get("title") == a.get("section")), None)
@@ -482,9 +490,10 @@ def apply_decision(path: str, apply_it: bool) -> dict:
         new_raw += "\n"
     if "\r\n" in raw:
         new_raw = new_raw.replace("\r\n", "\n").replace("\n", "\r\n")
-    basis.append({"at": _dt.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), "slug": slug,
-                  "by": dec["by"], "why": dec["why"], "compared": dec.get("compared") or [],
-                  "additions": dec["additions"], "old_sha256": now_sha, "new_sha256": article_sha(new_raw)})
+    _entry = {"at": _dt.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), "slug": slug,
+              "by": dec["by"], "why": dec["why"], "compared": dec.get("compared") or [],
+              "additions": dec["additions"], "old_sha256": now_sha, "new_sha256": article_sha(new_raw)}
+    basis.append(_entry)
     _write_atomic(BASIS, json.dumps(basis, ensure_ascii=False, indent=1) + "\n")
     new_titles = [a["title"] for a in dec["additions"] if a.get("op") == "add_section"]
     added_raw = io.open(ADDED, encoding="utf-8", newline="").read() if os.path.isfile(ADDED) else None
@@ -510,6 +519,13 @@ def apply_decision(path: str, apply_it: bool) -> dict:
                 rebuild_page(slug, _pd.is_auto(row))
             except Exception:                                    # noqa: BLE001
                 pass
+        # ★★控えの記録も外す★★（2026-11-10・代役の指摘＝書けなかった欄の出どころが残り、
+        #   同じ名前の欄を持ち越すときにそちらが「最後に足したとき」として読まれていた）
+        try:
+            _b2 = _read_json_or(BASIS, [], list)
+            _write_atomic(BASIS, json.dumps([x for x in _b2 if x != _entry], ensure_ascii=False, indent=1) + "\n")
+        except Exception as e:                                   # noqa: BLE001
+            got.setdefault("notes", []).append(f"控えの記録を外せませんでした: {type(e).__name__}: {e}")
         got["problems"] = ["ページを作り直せなかったので、記事を元に戻しました"]
         _log(f"{slug}: {got['problems'][0]}")
         return got
@@ -623,6 +639,12 @@ def selftest() -> int:
     t("★記事にもう在る数字（999G）は、確定値を名指ししなくても使える★", not r["problems"])
     r = plan(detail, row, dec({"op": "add_section", "title": "ゲーム性", "body": ["重ねて書く文です。"]}), conf)
     t("　記事に在る欄の名前では足さない（add_rows か add_line）", any("もう記事にあります" in x for x in r["problems"]))
+    _dd = dec({"op": "add_section", "title": "有利区間", "body": ["有利区間は最大3000Gまでです。"],
+               "fields": ["ceiling#yuuri"]})
+    _d3 = dict(detail, sections=list(detail["sections"]) + [{"title": "補足", "body": ["有利区間は3000Gです。"]}])
+    r = plan(_d3, row, _dd, conf)
+    t("★★名指しした確定値に在る数字は、記事の別の欄にもあっても「確定値から」と控える★★（代役の指摘）",
+      not r["problems"] and _dd["additions"][0].get("_number_sources") == ["3000G|fields"])
     r = plan(detail, row, dec({"op": "add_section", "title": "有利区間",
                                "body": ["スロパチクエストでは3000Gです。"], "fields": ["ceiling#yuuri"]}), conf)
     t("　サイト名は書けない", any("サイト名" in x for x in r["problems"]))
@@ -703,6 +725,8 @@ def selftest() -> int:
         t("★★ページを作り直せなければ記事を元に戻す（足した欄の一覧も戻す）★★",
           r["problems"] and io.open(dp, encoding="utf-8", newline="").read() == raw0
           and not os.path.exists(g["ADDED"]))
+        t("★★作り直せずに戻したら、控えの記録も残さない★★（代役の指摘＝書けなかった欄の出どころが読まれていた）",
+          json.loads(io.open(g["BASIS"], encoding="utf-8").read()) == [])
         g["rebuild_page"] = lambda s, a: True
         r = apply_decision(fp, True)
         now = json.loads(io.open(dp, encoding="utf-8").read())
@@ -728,6 +752,14 @@ def selftest() -> int:
           not r["problems"] and [s["title"] for s in r["sections"]].count("有利区間") == 1
           and any("終わると通常" in b for s in r["sections"] if s["title"] == "有利区間" for b in s["body"]))
         t("　足していない既存の欄は、同じ名前でも置き換えない", any("もう記事にあります" in x for x in r2["problems"]))
+        try:
+            _bna2.ADDED_SECTIONS = g["ADDED"]
+            r3 = plan(_now2, row, dec({"op": "add_section", "title": "有利区間",
+                                       "body": ["有利区間は最大3000Gまでです。"]}), conf)
+        finally:
+            _bna2.ADDED_SECTIONS = _keep_as
+        t("★★置き換えるとき、古い欄にしか無い数字は「記事にある」に数えない★★（代役の指摘＝確定値を名指しせず古い数字のまま直せた）",
+          any("無い数字" in x for x in r3["problems"]))
     finally:
         g.update(keep)
         _cvx.for_slug = keep_fs
