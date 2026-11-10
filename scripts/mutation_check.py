@@ -953,9 +953,9 @@ MUTATIONS = [
         "file": "scripts/grow_machine.py",
         "before": ("                if (_pr.get(\"skip\") "
                    "and not template_drift(cur, _od0)\n"
-                   "                        and not confirmed_drift(slug)):"),
+                   "                        and not confirmed_drift(slug) and not _rd):"),
         "after": ("                if (_pr.get(\"skip\")\n"
-                  "                        and not confirmed_drift(slug)):"),
+                  "                        and not confirmed_drift(slug) and not _rd):"),
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -5202,9 +5202,10 @@ MUTATIONS = [
         "file": "scripts/grow_machine.py",
         "before": ("                if (_pr.get(\"skip\") "
                    "and not template_drift(cur, _od0)\n"
-                   "                        and not confirmed_drift(slug)):"),
+                   "                        and not confirmed_drift(slug) and not _rd):"),
         "after": ("                if (_pr.get(\"skip\") "
-                  "and not template_drift(cur, _od0)):"),
+                  "and not template_drift(cur, _od0)\n"
+                  "                        and not _rd):"),
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -10250,6 +10251,49 @@ MUTATIONS = [
         "before": "            if not quarantined(rec) or orphaned(s, rec):\n",
         "after": "            if True:\n",
         "run": ["scripts/machine_sources.py"],
+    },
+    # ─── 2026-11-10・A〜J への Codex の指摘（実害4件）の直し ───
+    {
+        "why": "★育成：DMMだけが導入日を変えても、出典が同じなら見送る（延期を見逃す・Codex指摘）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    if now and now != old and not release_refined(old, now):\n",
+        "after": "    if False:\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★育成：2AIが受け取った導入日がまだ当たっていなくても見送る★",
+        "file": "scripts/grow_machine.py",
+        "before": "    if accepted_release(old, accepted) != old:\n",
+        "after": "    if False:\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★育成：見送りの判定に導入日の変化を入れない★",
+        "file": "scripts/grow_machine.py",
+        "before": "                        and not confirmed_drift(slug) and not _rd):\n",
+        "after": "                        and not confirmed_drift(slug)):\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★育成：導入日の受け取りを差し替えない（2回の延期で後の値が2つになり当たらない・Codex指摘）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    if dec[\"field\"] == \"market_release_date\":\n",
+        "after": "    if False:\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★新台の点検：試し直しで戻した機種を🔴にする（戻した翌朝に毎回🔴・Codex指摘）★",
+        "file": "scripts/add_machine_health.py",
+        "before": "        if it.get(\"revived_at\"):\n            continue\n",
+        "after": "",
+        "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★昔からの機種の導入日：結び付けを取り消しても控えの導入日を残す（別の機種の日付が残る・Codex指摘）★",
+        "file": "scripts/legacy_release.py",
+        "before": "        if not u or u != d[\"machines\"][s].get(\"url\"):\n",
+        "after": "        if False:\n",
+        "run": ["scripts/legacy_release.py"],
     },
 ]
 

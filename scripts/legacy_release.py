@@ -111,6 +111,19 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
     fetch = fetch or _fetch_release
     bound = bound or _bound
     today = today or datetime.date.today().isoformat()
+    # ★★結び付けが消えた・変わった機種の導入日は捨てる★★（2026-11-10・Codexの指摘＝実害）＝
+    #   誤った結び付けを2AIが取り消しても、その（別の機種の）導入日が残り、並べ替えが使い続けた。
+    #   ★結び付けが読めない機種も捨てる★（確かめられない値を並べ替えに使わない）。
+    purged = []
+    for s in list(d["machines"]):
+        try:
+            u = bound(s)
+        except Exception:                                        # noqa: BLE001
+            u = None
+        if not u or u != d["machines"][s].get("url"):
+            d["machines"].pop(s)
+            purged.append(s)
+            log(f"結び付けが無い・変わったので控えから外した {s}")
     cands = []
     for s in targets(rows):
         try:
@@ -137,10 +150,11 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
         d["machines"][s] = {"release": rel, "url": u, "checked": today}
         done.append((s, old, rel))
         log(f"確かめた {s}: {old} → {rel}")
-    changed = any(o != r for _s, o, r in done)
-    if apply and (done or failed):
+    changed = any(o != r for _s, o, r in done) or bool(purged)
+    if apply and (done or failed or purged):
         _save(d, path)
-    return {"done": done, "failed": failed, "candidates": len(cands), "changed": changed}
+    return {"done": done, "failed": failed, "candidates": len(cands), "changed": changed,
+            "purged": purged}
 
 
 def stall_problem(rows, d: dict, today: str, bound=None):
@@ -196,6 +210,17 @@ def selftest() -> int:
     t("★読めなければ書かず、前の記録は残す★",
       refresh(1, True, rows=rows, fetch=lambda u: (_ for _ in ()).throw(ValueError("x")), bound=bound,
               today="2026-11-12", path=p, log=lambda *a: None)["failed"] and release_for("a", p) == "2025-06-02")
+    _r3 = refresh(0, True, rows=rows, fetch=lambda u: "2025-06-02", bound={"d": U % 4}.get,
+                  today="2026-11-12", path=p, log=lambda *a: None)
+    t("★★結び付けを取り消した機種の導入日は、控えから捨てる★★（Codexの指摘＝別の機種の日付が残った）",
+      _r3["purged"] == ["a"] and release_for("a", p) == "")
+    refresh(1, True, rows=rows, fetch=lambda u: "2025-06-02", bound=bound, today="2026-11-12",
+            path=p, log=lambda *a: None)
+    _r4 = refresh(0, True, rows=rows, fetch=lambda u: "2025-06-02", bound={"a": U % 7, "d": U % 4}.get,
+                  today="2026-11-12", path=p, log=lambda *a: None)
+    t("　結び付けのURLが変わった機種の導入日も捨てる", "a" in _r4["purged"] and release_for("a", p) == "")
+    refresh(1, True, rows=rows, fetch=lambda u: "2025-06-02", bound=bound, today="2026-11-13",
+            path=p, log=lambda *a: None)
     t("★番人：導入日の無い結び付け済み機種があるのに3日だれも試していなければ知らせる★",
       stall_problem(rows, read(p), "2026-11-16", bound) is not None
       and stall_problem(rows, read(p), "2026-11-13", bound) is None)

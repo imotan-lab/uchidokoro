@@ -701,6 +701,12 @@ def accept_identity(path: str, store: str = "") -> int:
     except FileNotFoundError:
         got = {}
     rows = [r for r in (got.get(dec["slug"]) or []) if isinstance(r, dict)]
+    if dec["field"] == "market_release_date":
+        # ★★導入日は新しい受け取りで前の受け取りを差し替える★★（2026-11-10・Codexの指摘＝実害）＝
+        #   延期が2回あり、1回目を当てる前に2回目を受け取ると、後の値が2つになって accepted_release が
+        #   どちらとも決められず、同じ問いが繰り返された。導入日は「いちばん新しい2AIの決定」が正。
+        rows = [r for r in rows if not (r.get("field") == "market_release_date"
+                                        and r.get("before") == dec["before"])]
     rows.append({"field": dec["field"], "before": dec["before"], "after": dec["after"],
                  "by": dec["by"], "why": dec["why"],
                  "at": _dt.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")})
@@ -2372,8 +2378,41 @@ def _deliver_read(out: dict, src: dict | None) -> None:
             have.add(s)
 
 
+def dmm_release_now(cur: dict) -> str:
+    """★その機種のDMMの機種ページに、いま書いてある導入日★（読めない・未定・DMMの機種ページでなければ空）"""
+    import dmm_machine as _dmr
+    ident = (cur or {}).get("identity") or {}
+    m = re.match(r"^https://p-town\.dmm\.com/machines/([0-9]+)/?$", str(ident.get("official_product_url") or ""))
+    if not m:
+        return ""
+    try:
+        return str(_dmr.fetch(m.group(1)).get("release_date") or "")
+    except Exception:                     # noqa: BLE001
+        return ""
+
+
+def release_drift(cur: dict, accepted, release_probe=None, today=None) -> str:
+    """★見送ってはいけない導入日の変化★（理由の文 か 空）（2026-11-10・Codexの指摘＝実害）
+
+    出典が変わらない日は「今日は見送り」で、導入日を確かめる手前で戻っていた＝DMMだけが延期を載せても気づけない。
+    ①2AIが受け取った導入日の変化がまだ当たっていない ②導入前・新台期間の機種で、DMMの導入日が登録と違う
+    のどちらかなら見送らない（このあとの確かめ直しが問いを出す・受け取りを当てる）。
+    """
+    old = str((cur or {}).get("release_date") or "")
+    if not old:
+        return ""
+    if accepted_release(old, accepted) != old:
+        return "2AIが受け取った導入日の変化がまだ当たっていません"
+    if not in_new_window(old, today or _dt.date.today()):
+        return ""
+    now = (release_probe or dmm_release_now)(cur)
+    if now and now != old and not release_refined(old, now):
+        return f"DMMの導入日が登録と違います（{old} → {now}）"
+    return ""
+
+
 def plan_one(slug: str, gather=None, verify=None, probe=None,
-             find=None) -> dict:
+             find=None, release_probe=None) -> dict:
     """育てられるか調べて、新しい機種データ・記事を作る（★書き込まない★）。
 
     ★指紋は「読む前」に取る★（2026-08-05・Codex103回目の指摘1）
@@ -2452,8 +2491,18 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
                 _dp0 = _detail_path(slug)
                 _od0 = (_sj.read_json(_dp0, expect=dict)
                         if os.path.isfile(_dp0) else {})
+                # ★★導入日の変化があれば見送らない★★（2026-11-10・Codexの指摘）＝
+                #   試験で通信の差し替え（probe）を渡したときは、release_probe も渡したときだけ確かめる（通信しない）
+                _rd = ""
+                if _pr.get("skip") and (probe is None or release_probe is not None):
+                    try:
+                        _rd = release_drift(cur, identity_accepted(slug), release_probe)
+                    except Exception as e:        # noqa: BLE001
+                        _rd = f"導入日の変化を確かめられません（{type(e).__name__}）"
+                    if _rd:
+                        out.setdefault("notes", []).append(f"見送りません: {_rd}")
                 if (_pr.get("skip") and not template_drift(cur, _od0)
-                        and not confirmed_drift(slug)):
+                        and not confirmed_drift(slug) and not _rd):
                     out["problems"].append(
                         "出典の顔ぶれも中身も前回から変わっていません"
                         "／2AIの確定値も増えていません（今日は見送ります）")
@@ -4303,6 +4352,8 @@ def selftest() -> int:
       _src_pl.index("name, maker = apply_accepted_identity(name, maker, _id_ok)")
       < _src_pl.index("vo = verify(name, url, maker, _chk_release, require_recent=False)"))
     # ★★導入日の変化（延期など）も2AIが受け取れる★★（2026-11-10＝直す前は止まるだけで問いも出なかった）
+    _dt_mod = __import__("datetime")
+    _tf_rd = __import__("tempfile")
     _rdec = {"slug": "zzz", "field": "market_release_date", "before": "2026-11-16",
              "after": "2026-12-07", "by": ["claude", "codex"], "why": "DMMの機種ページで同じ機種の延期と確かめた"}
     t("★★導入日の変化を受け取る決定は通る★★（形は YYYY-MM か YYYY-MM-DD）",
@@ -4325,6 +4376,35 @@ def selftest() -> int:
       identity_same({"market_release_date": "2026-11-16"}, {"market_release_date": "2026-12-07"},
                     {("market_release_date", "2026-11-16", "2026-12-07")}) == []
       and identity_same({"market_release_date": "2026-11-16"}, {"market_release_date": "2026-12-07"}) != [])
+    # ★★出典が変わらない日でも、導入日の変化があれば見送らない★★（2026-11-10・Codexの指摘＝DMMだけの延期を見逃した）
+    _today_rd = _dt_mod.date(2026, 11, 10)
+    _cur_rd = {"release_date": "2026-11-16"}
+    t("★★導入前の機種で、DMMの導入日が登録と違えば見送らない★★",
+      "DMMの導入日" in release_drift(_cur_rd, frozenset(), lambda c: "2026-12-07", _today_rd))
+    t("　（対照）同じ導入日なら見送ってよい",
+      release_drift(_cur_rd, frozenset(), lambda c: "2026-11-16", _today_rd) == "")
+    _called = []
+    t("　導入から30日を過ぎた機種はDMMを見に行かない（通信を増やさない）",
+      release_drift({"release_date": "2026-01-05"}, frozenset(),
+                    lambda c: _called.append(1) or "2026-12-07", _today_rd) == "" and not _called)
+    t("★★2AIが受け取った導入日がまだ当たっていなければ見送らない★★",
+      "受け取った" in release_drift(_cur_rd, {("market_release_date", "2026-11-16", "2026-12-07")},
+                                  lambda c: "2026-11-16", _today_rd))
+    t("　（配線）見送りの判定の前に導入日の変化を見ている",
+      "release_drift(cur, identity_accepted(slug), release_probe)" in _src_pl.split("def selftest", 1)[0]
+      and "and not confirmed_drift(slug) and not _rd" in _src_pl.split("def selftest", 1)[0])
+    # ★★導入日は新しい受け取りで前の受け取りを差し替える★★（Codexの指摘＝2回の延期で当てられなくなった）
+    _ist_r = os.path.join(_tf_rd.mkdtemp(prefix="gid_r_"), "gid.json")
+    _rd_dir = os.path.dirname(_ist_r)
+    for _af in ("2026-12-07", "2026-12-14"):
+        _df = os.path.join(_rd_dir, "d.json")
+        with open(_df, "w", encoding="utf-8") as _f:
+            json.dump(dict(_rdec, after=_af), _f, ensure_ascii=False)
+        accept_identity(_df, _ist_r)
+    _acc_r = identity_accepted("zzz", _ist_r)
+    t("★★2回目の延期の受け取りが、1回目を差し替える（後の値が1つに決まる）★★",
+      _acc_r == frozenset({("market_release_date", "2026-11-16", "2026-12-14")})
+      and accepted_release("2026-11-16", _acc_r) == "2026-12-14")
     t("　（配線）確かめ直しで止まったら、導入日の問いも出している",
       'out["questions"] += release_change_questions(slug, old_release, vo["problems"])' in _src_pl.split(
           "def selftest", 1)[0]
