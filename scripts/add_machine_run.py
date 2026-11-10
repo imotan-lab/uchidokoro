@@ -2033,6 +2033,8 @@ def _verify_dmm(name: str, official_url: str, maker: str,
         "maker": page_maker,
         "release": out["release"],
         "release_precision": got.get("release_precision", ""),
+        # ★機種ページは「未定」で、導入日はDMMの導入カレンダーから採った★（2026-11-11）
+        **({"release_from_calendar": True} if got.get("release_from_calendar") else {}),
         "checked_at": __import__("datetime").date.today().isoformat()}
     _log(f"  DMMの機種ページで同定しました: {out['identity_name']} "
          f"/ 機種ID {mid} / {out['release']}"
@@ -2952,6 +2954,72 @@ def _dmm_machine_id(url: str) -> str:
     return m.group(1) if m else ""
 
 
+CALENDAR_FRESH_DAYS = 2
+
+
+def calendar_day(work: dict, today: str = "") -> str:
+    """★2日以内にDMMの導入カレンダーで見た日付★（無ければ空）
+
+    待ち行列は、カレンダーで見つけた日付を release（日まで）か release_day に、見た日を release_seen に持つ。
+    ★古い日付は使わない★＝カレンダーから消えた・延びた機種の日付で記事を作らない（番兵の🔴と同じ線）。
+    """
+    import datetime as _dtc
+    import re as _rec
+    day = ""
+    for k in ("release_day", "release"):
+        v = str(work.get(k) or "")
+        if _rec.fullmatch(r"20\d\d-\d\d-\d\d", v):
+            day = v
+            break
+    seen = str(work.get("release_seen") or "")
+    if not day or not _rec.fullmatch(r"20\d\d-\d\d-\d\d", seen):
+        return ""
+    try:
+        t = _dtc.date.fromisoformat(today or _pend._today())
+        if not 0 <= (t - _dtc.date.fromisoformat(seen)).days <= CALENDAR_FRESH_DAYS:
+            return ""
+        _dtc.date.fromisoformat(day)
+    except ValueError:
+        return ""
+    return day
+
+
+CALENDAR_LOOK_MONTHS = 4
+
+
+def calendar_lookup(machine_id: str, near: str, fetch_month=None) -> str:
+    """★DMMの導入カレンダーで、その機種の導入日を探し直す★（2026-11-11・運営者の判断「2A」）
+
+    公開済みの機種を育てるとき、機種ページがまだ「未定」なら、公開したときの日付（near）の月から
+    CALENDAR_LOOK_MONTHS か月ぶんのカレンダーを読み、同じ機種IDの日付を返す（延期にも追いつく）。
+    ★見つからない・読めない月がある・同じIDが2つの日に出る★なら空（＝今までどおり本人性で止まって2AIへ）。
+    """
+    import re as _rec
+    if not _rec.fullmatch(r"\d{1,7}", str(machine_id or "")) \
+            or not _rec.fullmatch(r"20\d\d-\d\d(-\d\d)?", str(near or "")):
+        return ""
+    if fetch_month is None:
+        import dmm_calendar as _dc
+        fetch_month = _dc.fetch
+    y, m = int(near[:4]), int(near[5:7])
+    hits = set()
+    for _ in range(CALENDAR_LOOK_MONTHS):
+        try:
+            rows = fetch_month(y, m)
+        except Exception as e:            # noqa: BLE001
+            _log(f"  DMMの導入カレンダー {y}年{m}月を読めません（日付を使いません）: {str(e)[:90]}")
+            return ""
+        hits |= {str(r.get("release_date") or "") for r in rows or []
+                 if str(r.get("id") or "") == str(machine_id)}
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    hits.discard("")
+    if len(hits) != 1:
+        if len(hits) > 1:
+            _log(f"  DMMの導入カレンダーに同じ機種が2つの日で出ています（使いません）: {sorted(hits)}")
+        return ""
+    return hits.pop()
+
+
 def _fill_missing_dmm(work: dict) -> dict:
     """★DMMの機種ページから名前と導入日を読み直す★（2026-08-16・台帳#376）
 
@@ -2964,6 +3032,10 @@ def _fill_missing_dmm(work: dict) -> dict:
     mid = _dmm_machine_id(work.get("identity_url", ""))
     if not mid:
         return work
+    # ★★機種ページが「未定」でも、2日以内にカレンダーで見た日付があればそれを使う★★（2026-11-11・運営者の判断「2A」）
+    _cal = calendar_day(work)
+    if _cal and _dm.use_calendar_day(mid, _cal):
+        _log(f"  DMMの導入カレンダーの日付を控えます（機種ページが未定のときに使う）: {_cal}")
     try:
         got = _dm.fetch(mid)
     except _dm.ReleaseUndecided:
@@ -5512,6 +5584,54 @@ def _selftest_body() -> int:
               "release_tbd" not in _w_day)
             t("★★DMMが「未定」と書いていれば印を付ける★★（番兵が知らせないため）",
               _w_tbd.get("release_tbd") is True)
+            # ★★カレンダーの日付（2日以内に見たものだけ）を、機種ページが未定のときに使う★★（2026-11-11・運営者の判断「2A」）
+            _cdk = [calendar_day({"release": "2026-12-07", "release_seen": "2026-11-10"}, "2026-11-11"),
+                   calendar_day({"release": "2026-12-07", "release_seen": "2026-11-08"}, "2026-11-11"),
+                   calendar_day({"release": "2026-12", "release_seen": "2026-11-11"}, "2026-11-11"),
+                   calendar_day({"release_day": "2026-12-21", "release": "2026-12",
+                                 "release_seen": "2026-11-11"}, "2026-11-11"),
+                   calendar_day({"release": "2026-12-07"}, "2026-11-11")]
+            t("★★カレンダーの日付は、日まであって2日以内に見たものだけ使う★★",
+              _cdk == ["2026-12-07", "", "", "2026-12-21", ""])
+            _keep_cal = dict(_dm_fm._CALENDAR_DAYS)
+            try:
+                _dm_fm._CALENDAR_DAYS.clear()
+                _dm_fm.fetch = _tbd
+                fill_missing({"name": "LB試験機X-300", "maker": "seiryu_japan",
+                              "identity_url": "https://p-town.dmm.com/machines/5089",
+                              "release": "2026-12-07", "release_seen": _pend._today()})
+                _hint = dict(_dm_fm._CALENDAR_DAYS)
+                _dm_fm._CALENDAR_DAYS.clear()
+                fill_missing({"name": "LB試験機X-300", "maker": "seiryu_japan",
+                              "identity_url": "https://p-town.dmm.com/machines/5089",
+                              "release": "2026-12-07", "release_seen": "2000-01-01"})
+                _hint_old = dict(_dm_fm._CALENDAR_DAYS)
+            finally:
+                _dm_fm.fetch = _real_dm_fetch
+                _dm_fm._CALENDAR_DAYS.clear()
+                _dm_fm._CALENDAR_DAYS.update(_keep_cal)
+            t("★★新台の晩：2日以内にカレンダーで見た日付を、機種ページを読む前に渡す★★（古い日付は渡さない）",
+              _hint == {"5089": "2026-12-07"} and _hint_old == {})
+
+            def _fake_month(rows_by):
+                def f(y, m):
+                    if (y, m) == ("x", "x"):
+                        raise RuntimeError
+                    v = rows_by.get((y, m))
+                    if isinstance(v, Exception):
+                        raise v
+                    return v or []
+                return f
+            _clk = [calendar_lookup("5118", "2026-12-07", _fake_month({(2026, 12): [{"id": "5118", "release_date": "2026-12-07"}]})),
+                   calendar_lookup("5118", "2026-12-07", _fake_month({(2027, 2): [{"id": "5118", "release_date": "2027-02-01"}]})),
+                   calendar_lookup("5118", "2026-12-07", _fake_month({})),
+                   calendar_lookup("5118", "2026-12-07", _fake_month({(2027, 1): RuntimeError("x"),
+                                                                      (2026, 12): [{"id": "5118", "release_date": "2026-12-07"}]})),
+                   calendar_lookup("5118", "2026-12-07", _fake_month({(2026, 12): [{"id": "5118", "release_date": "2026-12-07"}],
+                                                                      (2027, 1): [{"id": "5118", "release_date": "2027-01-11"}]})),
+                   calendar_lookup("5118", "2026-11-30", _fake_month({(2027, 3): [{"id": "5118", "release_date": "2027-03-01"}]}))]
+            t("★★育成：カレンダーで導入日を探し直す（延期した月にも追いつく・読めない月や2つの日があれば使わない・4か月まで）★★",
+              _clk == ["2026-12-07", "2027-02-01", "", "", "", ""])
             _dm_fm.fetch = lambda mid, get=None: {
                 "id": mid, "heading": "LB試験機X-300 （新台スマスロ）パチスロ｜天井",
                 "maker": "清龍ジャパン", "release_date": "2026-11",

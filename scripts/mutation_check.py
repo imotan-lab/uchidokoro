@@ -11366,6 +11366,62 @@ MUTATIONS = [
         "after": "        return \"設定判別・スペック\"\n",
         "run": ["scripts/grow_machine.py"],
     },
+    {
+        "why": "★未定の新台：機種ページが「未定」のとき、渡されたカレンダーの日付を使わない★",
+        "file": "scripts/dmm_machine.py",
+        "before": "                cal = _CALENDAR_DAYS.get(said or str(want_id), \"\")\n",
+        "after": "                cal = \"\"\n",
+        "run": ["scripts/dmm_machine.py"],
+    },
+    {
+        "why": "★未定の新台：カレンダーの日付の形を確かめずに受け取る★",
+        "file": "scripts/dmm_machine.py",
+        "before": "    if not re.fullmatch(r\"\\d{1,7}\", mid) or not re.fullmatch(r\"20\\d\\d-\\d\\d-\\d\\d\", d):\n        return False\n",
+        "after": "    if False:\n        return False\n",
+        "run": ["scripts/dmm_machine.py"],
+    },
+    {
+        "why": "★未定の新台：何日も前にカレンダーで見た古い日付まで使う★",
+        "file": "scripts/add_machine_run.py",
+        "before": "        if not 0 <= (t - _dtc.date.fromisoformat(seen)).days <= CALENDAR_FRESH_DAYS:\n",
+        "after": "        if False:\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★未定の新台：夜のタスクがカレンダーの日付を機種ページを読む前に渡さない★",
+        "file": "scripts/add_machine_run.py",
+        "before": "    if _cal and _dm.use_calendar_day(mid, _cal):\n",
+        "after": "    if False:\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★未定の新台：カレンダーで同じ機種が2つの日に出ても、どちらかを使う★",
+        "file": "scripts/add_machine_run.py",
+        "before": "    if len(hits) != 1:\n",
+        "after": "    if not hits:\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★未定の新台：読めない月があっても、読めた月だけで日付を決める★",
+        "file": "scripts/add_machine_run.py",
+        "before": "            _log(f\"  DMMの導入カレンダー {y}年{m}月を読めません（日付を使いません）: {str(e)[:90]}\")\n            return \"\"\n",
+        "after": "            _log(f\"  DMMの導入カレンダー {y}年{m}月を読めません（日付を使いません）: {str(e)[:90]}\")\n            continue\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★未定の新台：育成で、見つけたカレンダーの日付を渡さずに確かめ直す★",
+        "file": "scripts/grow_machine.py",
+        "before": "    if cal and _dm_c.use_calendar_day(mid, cal):\n",
+        "after": "    if cal:\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★未定の新台：育成で、機種ページが未定でもカレンダーを探さない★",
+        "file": "scripts/grow_machine.py",
+        "before": "    if not any(_dm_c.RELEASE_UNDECIDED_MARK in str(p) for p in (vo or {}).get(\"problems\") or []):\n        return vo\n",
+        "after": "    if True:\n        return vo\n",
+        "run": ["scripts/grow_machine.py"],
+    },
 ]
 
 

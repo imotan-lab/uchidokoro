@@ -216,6 +216,24 @@ def has_unconfirmed(slug: str, detail: dict | None = None) -> bool:
     return _walk(detail)
 
 
+def retry_with_calendar(vo: dict, url: str, near: str, again, lookup=None) -> dict:
+    """★機種ページが「未定」で本人性が止まったら、DMMの導入カレンダーの日付で1回だけ確かめ直す★
+
+    （2026-11-11・運営者の判断「2A」）＝カレンダーの日付で公開した機種が、機種ページに日付が載るまで毎朝止まらないように。
+    カレンダーで見つからなければ（延期で4か月より先・読めない月がある）今までどおり止まって2AIへ問いが出る。
+    """
+    import add_machine_run as _amr_c
+    import dmm_machine as _dm_c
+    if not any(_dm_c.RELEASE_UNDECIDED_MARK in str(p) for p in (vo or {}).get("problems") or []):
+        return vo
+    mid = _amr_c._dmm_machine_id(url)
+    cal = (lookup or _amr_c.calendar_lookup)(mid, near) if mid else ""
+    if cal and _dm_c.use_calendar_day(mid, cal):
+        _log(f"  機種ページは未定なので、DMMの導入カレンダーの日付（{cal}）で確かめ直します")
+        return again()
+    return vo
+
+
 def grow_scope_problem(m: dict) -> str:
     """★育てる対象か★を決める**唯一の場所**（空文字＝対象）
 
@@ -2058,6 +2076,28 @@ def _carry_meta_tests(t) -> None:
       _tt2 == "機Z 天井・狙い目" and _dd2.startswith("機Zの天井・狙い目。"))
     t("　説明文に「（公式確認）」を書かない（導入日はDMMの値）",
       "公式確認" not in _dd and "11月2日" in _dd)
+    # ★★育成：機種ページが「未定」で止まったら、カレンダーの日付で1回だけ確かめ直す★★（2026-11-11・運営者の判断「2A」）
+    import dmm_machine as _dm_rt
+    _keep_rt = dict(_dm_rt._CALENDAR_DAYS)
+    _calls_rt = []
+    try:
+        _dm_rt._CALENDAR_DAYS.clear()
+        _und = {"problems": ["IDENTITY_FAILED " + _dm_rt.RELEASE_UNDECIDED_MARK + ": 未定"]}
+        _r1 = retry_with_calendar(_und, "https://p-town.dmm.com/machines/5118", "2026-12-07",
+                                  lambda: (_calls_rt.append(1), {"problems": [], "release": "2026-12-07"})[1],
+                                  lambda mid, near: "2026-12-07" if mid == "5118" else "")
+        _h1 = dict(_dm_rt._CALENDAR_DAYS)
+        _r2 = retry_with_calendar(_und, "https://p-town.dmm.com/machines/5118", "2026-12-07",
+                                  lambda: (_calls_rt.append(2), {})[1], lambda mid, near: "")
+        _r3 = retry_with_calendar({"problems": ["別の理由"]}, "https://p-town.dmm.com/machines/5118", "2026-12-07",
+                                  lambda: (_calls_rt.append(3), {})[1], lambda mid, near: "2026-12-07")
+    finally:
+        _dm_rt._CALENDAR_DAYS.clear()
+        _dm_rt._CALENDAR_DAYS.update(_keep_rt)
+    t("★★育成：機種ページが「未定」なら、カレンダーの日付を渡して1回だけ確かめ直す★★",
+      _r1 == {"problems": [], "release": "2026-12-07"} and _h1 == {"5118": "2026-12-07"})
+    t("　カレンダーで見つからなければ止まったまま・未定以外の失敗では探さない",
+      _r2 is _und and _r3 == {"problems": ["別の理由"]} and _calls_rt == [1])
     # ★昔の機種も載っている中身だけを名乗る★（2026-11-11・運営者の判断）＝判定はチェッカーのデータだけ
     _set = {"unit": "G", "modes": [{"key": "normal", "label": "設定狙い"}],
             "normal": {"good": 99999, "caution": 99999, "excellent": 99999}}
@@ -2955,6 +2995,10 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     #   当てた導入日は機種行の作り直し（vo["release"]）に流れ、identity_same が (項目, 前, 後) を受け取り済みとして通す
     _chk_release = accepted_release(old_release, _id_ok)
     vo = verify(name, url, maker, _chk_release, require_recent=False)
+    # ★★機種ページが「未定」のままなら、DMMの導入カレンダーで日付を探し直して1回だけ確かめ直す★★
+    #   （2026-11-11・運営者の判断「2A」＝カレンダーの日付で公開した機種が、毎朝ここで止まらないように。延期にも追いつく）
+    vo = retry_with_calendar(vo, url, _chk_release or old_release,
+                             lambda: verify(name, url, maker, _chk_release, require_recent=False))
     if vo.get("problems"):
         out["problems"] += [f"本人性を確かめ直せません: {p}" for p in vo["problems"]]
         # ★★DMMのメーカー表記が変わったときは、受け取るかを2AIへ問う★★（Codex review 9fe1f3b5 の1）

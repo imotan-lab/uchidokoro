@@ -90,6 +90,10 @@ class MachineError(Exception):
         self.raw = raw
 
 
+# ★「未定」の失敗を見分ける印★（呼ぶ側は問題の文でしか受け取れないので、印は1か所に置く）
+RELEASE_UNDECIDED_MARK = "導入開始日は未定です"
+
+
 class ReleaseUndecided(MachineError):
     """★DMMが導入開始日を「未定」と書いている★（2026-10-02）
 
@@ -274,6 +278,7 @@ def parse(html: str, want_id: str = "") -> dict:
         maker = _maker_of(_one(spec["pairs"], "メーカー名"))
         rel_raw = _one(spec["pairs"], "導入開始日")
     d = _DATE.search(rel_raw)
+    from_cal = False
     # ② 足りなければ同定できない（★型式名は任意★）
     miss = [n for n, v in (("メーカー", maker),
                            ("導入開始日", rel_raw)) if not v]
@@ -287,9 +292,18 @@ def parse(html: str, want_id: str = "") -> dict:
         dm = _DATE_MONTH.search(rel_raw)
         if not dm:
             if "未定" in rel_raw:
-                raise ReleaseUndecided(f"導入開始日は未定です: {rel_raw[:40]}")
-            raise MachineError(f"導入開始日を読めません: {rel_raw[:40]}")
-        rel, prec = ("%s-%02d" % (dm.group(1), int(dm.group(2))), "month")
+                # ★★機種ページが「未定」でも、DMMのカレンダーが日付を出していればその日を使う★★
+                #   （2026-11-11・運営者の判断「2A」＝どちらもDMMの情報。読者に記事が無い状態を避ける）。
+                #   ★日付は呼ぶ側がこの実行の間だけ渡す（use_calendar_day）★＝2日以内にカレンダーで見た日だけ
+                cal = _CALENDAR_DAYS.get(said or str(want_id), "")
+                if not cal:
+                    raise ReleaseUndecided(f"{RELEASE_UNDECIDED_MARK}: {rel_raw[:40]}")
+                rel, prec, from_cal = cal, "day", True
+                rel_raw = f"{rel_raw[:40]}（DMMの導入カレンダーでは{cal}）"
+            else:
+                raise MachineError(f"導入開始日を読めません: {rel_raw[:40]}")
+        else:
+            rel, prec = ("%s-%02d" % (dm.group(1), int(dm.group(2))), "month")
     # ④ パチスロか
     title = _w.page_title(html) or ""
     body = html[:4000]
@@ -309,7 +323,24 @@ def parse(html: str, want_id: str = "") -> dict:
         "release_precision": prec,
         "release_raw": rel_raw,
         "planned": "予定" in rel_raw,
+        # ★導入日をカレンダーから採ったか★（機種ページは「未定」）
+        "release_from_calendar": from_cal,
     }
+
+
+# ★★機種ページが「未定」のときに使う、カレンダーの日付★★（2026-11-11・運営者の判断「2A」）
+#   鍵＝DMMの機種ID／値＝YYYY-MM-DD。呼ぶ側（add_machine_run）が、待ち行列の控えのうち
+#   ★2日以内にカレンダーで見た日付だけ★をこの実行の間だけ渡す。ファイルには残さない。
+_CALENDAR_DAYS: dict = {}
+
+
+def use_calendar_day(machine_id: str, day: str) -> bool:
+    """カレンダーの日付を渡す。形が違えば受け取らない（False）。"""
+    mid, d = str(machine_id or ""), str(day or "")
+    if not re.fullmatch(r"\d{1,7}", mid) or not re.fullmatch(r"20\d\d-\d\d-\d\d", d):
+        return False
+    _CALENDAR_DAYS[mid] = d
+    return True
 
 
 def _machine_name(html: str, title: str) -> str:
@@ -593,6 +624,27 @@ def selftest() -> int:
           _tbd != h and (lambda: (
               [isinstance(e, ReleaseUndecided)
                for e in [_catch(lambda: parse(_tbd, "5049"))]][0]))())
+        # ★★機種ページが「未定」でも、渡されたカレンダーの日付で読む★★（2026-11-11・運営者の判断「2A」）
+        _keep_cal = dict(_CALENDAR_DAYS)
+        try:
+            _CALENDAR_DAYS.clear()
+            _bad = [use_calendar_day("5049", "2026-9-7"), use_calendar_day("x", "2026-12-07")]
+            _ok_set = use_calendar_day("5049", "2026-12-07")
+            try:
+                _gc = parse(_tbd, "5049")
+            except MachineError as e:
+                _gc = e
+            _other = _catch(lambda: parse(_tbd.replace("/machines/5049", "/machines/5050"), "5050"))
+            _dated = parse(h, "5049")
+        finally:
+            _CALENDAR_DAYS.clear()
+            _CALENDAR_DAYS.update(_keep_cal)
+        t("★★機種ページが「未定」なら、渡されたカレンダーの日付（日まで）で読み、カレンダー由来と印を付ける★★",
+          _ok_set and _bad == [False, False] and isinstance(_gc, dict) and _gc["release_date"] == "2026-12-07"
+          and _gc["release_precision"] == "day" and _gc["release_from_calendar"] is True)
+        t("　（対照）別の機種IDには使わない・機種ページに日付があればそちらを使う",
+          isinstance(_other, ReleaseUndecided) and _dated["release_date"] == "2026-09-07"
+          and _dated["release_from_calendar"] is False)
         t("　（対照）読めない日付は今までどおりの失敗で、未定とは分ける",
           (lambda e: isinstance(e, MachineError)
            and not isinstance(e, ReleaseUndecided))(
