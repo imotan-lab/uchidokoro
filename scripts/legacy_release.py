@@ -107,7 +107,8 @@ def _fetch_release(url: str) -> str:
 
 
 def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str = None,
-            path: str = None, log=print) -> dict:
+            path: str = None, log=print, only=None) -> dict:
+    """only … 担当が回ってきた機種だけを取り直す（朝の STEP 1-T・確かめて30日以内でも取り直す）"""
     import safe_json as _sj
     d = read(path)
     rows = _sj.read_rows(MACHINES) if rows is None else rows
@@ -129,6 +130,8 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
             log(f"結び付けが無い・変わったので控えから外した {s}")
     cands = []
     for s in targets(rows):
+        if only is not None and s not in only:
+            continue
         try:
             u = bound(s)
         except Exception as e:                                   # noqa: BLE001
@@ -136,7 +139,7 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
             continue
         if u and _ID_RE.match(u):
             rec = d["machines"].get(s) or {}
-            if rec.get("url") == u and _DATE_RE.match(str(rec.get("checked") or "")) and (
+            if only is None and rec.get("url") == u and _DATE_RE.match(str(rec.get("checked") or "")) and (
                     datetime.date.fromisoformat(today)
                     - datetime.date.fromisoformat(rec["checked"])).days < RECHECK_DAYS:
                 continue
@@ -243,6 +246,9 @@ def selftest() -> int:
                    today="2026-11-09", path=p2, log=lambda *a: None)
     _r30 = refresh(5, True, rows=rows, fetch=lambda u: "2025-06-02", bound={"a": U % 1}.get,
                    today="2026-11-10", path=p2, log=lambda *a: None)
+    _ronly = refresh(5, True, rows=rows, fetch=lambda u: "2025-06-02", bound={"a": U % 1}.get,
+                     today="2026-11-09", path=p2, log=lambda *a: None, only=["a"])
+    t("★★担当の回（only）は、確かめて30日以内でも取り直す★★", [x[0] for x in _ronly["done"]] == ["a"])
     t("　30日たったら取り直す（29日なら取り直さない）",
       _r29["candidates"] == 0 and [x[0] for x in _r30["done"]] == ["a"])
     _save({"machines": {"a": {"release": "2025-06-02", "url": U % 1, "checked": "2026-09-01"}},
@@ -310,6 +316,7 @@ def main() -> int:
     ap.add_argument("--unbound", action="store_true",
                     help="導入日が無く、まだDMMと結び付けていない昔の機種（ランキングの候補外が先）")
     ap.add_argument("--limit", type=int, default=10)
+    ap.add_argument("--slug", nargs="+", help="担当が回ってきた機種だけ取り直す（30日以内でも）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -322,7 +329,7 @@ def main() -> int:
         print(f"🟠 昔からの機種の導入日の控えを読めません（{type(e).__name__}: {e}）")
         return 2
     if a.refresh is not None:
-        r = refresh(a.refresh, a.apply)
+        r = refresh(a.refresh, a.apply, only=a.slug)
         print(f"取り直し: {len(r['done'])}件／読めなかった {len(r['failed'])}件／対象 {r['candidates']}件"
               + ("（下見・書いていません）" if not a.apply else ""))
         return 10 if (a.apply and r["changed"]) else 0

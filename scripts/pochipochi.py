@@ -181,7 +181,7 @@ def status_override(slug: str, store: dict = None):
     return None
 
 
-def ko_due(slug: str, store: dict, today: datetime.date = None):
+def ko_due(slug: str, store: dict, today: datetime.date = None, turn: bool = False):
     """★自動で足した機種の、小役の差をもう一度探す番か★（理由の文 か None）
 
     ★見るのは2AIの記録だけ★（どの項目が小役かを機械は判定しない）。
@@ -192,6 +192,8 @@ def ko_due(slug: str, store: dict, today: datetime.date = None):
     rec = (store.get("ko_checked") or {}).get(slug)
     if not rec:
         return "小役の差を2AIでまだ探していない"
+    if turn and rec["checked"] != (today or datetime.date.today()).isoformat():
+        return "担当の回（間隔に関係なく、小役の差・表の訂正を確かめ直す：足すなら EXTEND・直すなら ADD・変わらなければ KO_CHECK）"
     if rec["result"] == "NONE":
         today = today or datetime.date.today()
         days = (today - datetime.date.fromisoformat(rec["checked"])).days
@@ -204,7 +206,7 @@ def ko_due(slug: str, store: dict, today: datetime.date = None):
         days = (today - datetime.date.fromisoformat(rec["checked"])).days
         if days >= KO_HAS_RECHECK_DAYS:
             return (f"小役の差を確かめた日から{days}日たった（{KO_HAS_RECHECK_DAYS}日で確かめ直す："
-                    "訂正や小役の追加があれば EXTEND、変わらなければ KO_CHECK で ko=HAS）")
+                    "小役の追加は EXTEND・値の訂正は ADD（表全体）・変わらなければ KO_CHECK で ko=HAS）")
     return None
 
 
@@ -362,7 +364,7 @@ def shape_problems(d: dict, rows: dict, static: set) -> list:
     return p + config_problems(d)
 
 
-def status_line(slug: str, state: tuple, store: dict, static: set, today=None) -> str:
+def status_line(slug: str, state: tuple, store: dict, static: set, today=None, turn: bool = False) -> str:
     """★STEP 1-P の対象かを1行で★（純関数＝試験はここを直接呼ぶ）
 
     対象は4通り＝①使えない（設定差なしと決まっていない）②自動の機種で小役をまだ探していない（ko_due）
@@ -371,15 +373,17 @@ def status_line(slug: str, state: tuple, store: dict, static: set, today=None) -
     """
     ok, why = state
     head = f"{slug}: {'使える' if ok else '使えない（' + why + '）'}"
+    # ★★担当が回ってきた機種（turn）は、間隔に関係なく確かめ直す★★（2026-11-10・運営者「その機種を一つ一つ完璧に」）
+    #   ＝今日もう確かめた記録があるときだけ対象外。間隔（60・90・180日）は担当が回ってこないときの保険
     if slug in static:
-        if recheck_due(store, "hand_checked", slug, today):
+        if recheck_due(store, "hand_checked", slug, today, turn):
             return head + " → STEP 1-P 対象（手書き：2AIで確かめ直す・TAKE_OVER か HAND_KEEP）"
         return head + " → STEP 1-P 対象外"
     if ok:
-        ko = ko_due(slug, store, today)
+        ko = ko_due(slug, store, today, turn)
         return head + (f" → STEP 1-P 対象（小役：{ko}）" if ko else " → STEP 1-P 対象外")
     if why == NO_DIFF_REASON:
-        if recheck_due(store, "diff_checked", slug, today):
+        if recheck_due(store, "diff_checked", slug, today, turn):
             return head + " → STEP 1-P 対象（設定差なし：2AIで確かめ直す・ADD か DIFF_CHECK）"
         return head + " → STEP 1-P 対象外"
     return head + " → STEP 1-P 対象"
@@ -415,12 +419,14 @@ def remove_static_block(html: str, slug: str) -> str:
     return html[:start] + html[j:]
 
 
-def recheck_due(store: dict, key: str, slug: str, today: datetime.date = None) -> bool:
-    """★手書き・設定差なしの機種を、2AIが確かめ直す番か★（記録が無いか HAND_RECHECK_DAYS 日たった）"""
+def recheck_due(store: dict, key: str, slug: str, today: datetime.date = None, turn: bool = False) -> bool:
+    """★手書き・設定差なしの機種を、2AIが確かめ直す番か★（記録が無いか HAND_RECHECK_DAYS 日たった／担当の回なら今日まだ見ていない）"""
     rec = (store.get(key) or {}).get(slug)
     if not rec:
         return True
     today = today or datetime.date.today()
+    if turn:
+        return rec["checked"] != today.isoformat()
     return (today - datetime.date.fromisoformat(rec["checked"])).days >= HAND_RECHECK_DAYS
 
 
@@ -1089,6 +1095,16 @@ def selftest() -> int:
     _sn = json.loads(json.dumps(st_a))
     _sn["ko_checked"]["zzz_a"] = {"result": "NONE", "checked": "2026-09-11"}
     t("★NONE は60日たったらもう一度探す★", ko_due("zzz_a", _sn, _today) is not None)
+    _st = json.loads(json.dumps(_sn))
+    _st["ko_checked"]["zzz_a"]["checked"] = "2026-11-09"
+    t("★★担当の回（turn）は、間隔に関係なく確かめ直す（今日まだ見ていなければ）★★",
+      ko_due("zzz_a", _st, _today) is None and ko_due("zzz_a", _st, _today, turn=True) is not None)
+    _st["ko_checked"]["zzz_a"]["checked"] = "2026-11-10"
+    t("　今日もう確かめた機種は、担当の回でも対象外", ko_due("zzz_a", _st, _today, turn=True) is None)
+    _sth = {"hand_checked": {"zzz_h": {"result": "HAND_KEEP", "checked": "2026-11-01"}}}
+    t("★担当の回は、手書き・設定差なしの機種も間隔に関係なく確かめ直す★",
+      recheck_due(_sth, "hand_checked", "zzz_h", _today) is False
+      and recheck_due(_sth, "hand_checked", "zzz_h", _today, turn=True) is True)
     _sn["ko_checked"]["zzz_a"]["checked"] = "2026-09-12"
     t("　（対照）59日なら探さない", ko_due("zzz_a", _sn, _today) is None)
 
@@ -1260,6 +1276,8 @@ def main() -> int:
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--status", nargs="+", metavar="SLUG",
                     help="その機種のポチポチくんが使えるか・STEP 1-P の対象かを出す")
+    ap.add_argument("--turn", action="store_true",
+                    help="担当が回ってきた機種として見る（間隔に関係なく、今日まだ見ていなければ対象）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -1292,7 +1310,7 @@ def main() -> int:
             if slug not in rows:
                 print(f"{slug}: 機種一覧にありません")
                 continue
-            print(status_line(slug, _b.pochipochi_state(rows[slug], reasons), store, static))
+            print(status_line(slug, _b.pochipochi_state(rows[slug], reasons), store, static, turn=a.turn))
         return 0
     if a.list:
         d = load()

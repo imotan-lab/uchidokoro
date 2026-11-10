@@ -469,6 +469,26 @@ def mode_section(box_state: str, tables=None):
     return {"title": MODE_TITLE, "type": "table", "tables": out}
 
 
+ADDED_SECTIONS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              "assets", "data", "added-sections.json")
+
+
+def added_section_titles(slug: str, path: str = None) -> list:
+    """★大手と比べて2AIが足した欄の名前（add_items）★＝リポジトリの中の一覧（CIでも同じ答えになるように）
+
+    無ければ空。★壊れていたら例外★（黙って「足した欄なし」と読むと、足した欄のある記事が契約違反で止まる）。
+    """
+    p = path or ADDED_SECTIONS
+    if not os.path.isfile(p):
+        return []
+    with open(p, encoding="utf-8") as f:
+        d = json.load(f)
+    if not isinstance(d, dict) or not all(isinstance(v, list) and all(isinstance(x, str) for x in v)
+                                          for v in d.values()):
+        raise BuildError("added-sections.json の形が違います（slug → 欄の名前の並び）")
+    return list(d.get(str(slug or ""), []))
+
+
 def expected_titles(detail) -> list:
     """★この記事に出るはずの箱の並び★（噂の箱は中身があるときだけ）
 
@@ -490,6 +510,9 @@ def expected_titles(detail) -> list:
     for _title, _pos in OPTIONAL_SECTIONS:
         if _title in titles:
             want = want[:_pos] + [_title] + want[_pos:]
+    # ★★大手と比べて2AIが足した欄は、在るとき噂の欄の前に数える★★（2026-11-10・add_items）
+    _added = added_section_titles(detail.get("slug"))
+    want = want + [x for x in titles if x in _added and x not in want]
     if titles and titles[-1] == RUMOR_SECTION["title"]:
         want = want + [RUMOR_SECTION["title"]]
     return want
@@ -2137,6 +2160,31 @@ def selftest() -> int:
       and not article_contract_problems({"slug": "zzz_n", "sections": list(_nd.values())}))
     t("★★天井が無いと確かめたら、狙い目の欄にそう書く★★",
       _nd["当サイトの狙い目"]["body"] == [TARGET_NONE_TEXT])
+    # ★★大手と比べて2AIが足した欄は、新台の記事の契約でも在るときだけ数える★★（2026-11-10・add_items）
+    import tempfile as _tfa
+    global ADDED_SECTIONS
+    _keep_added = ADDED_SECTIONS
+    _ad = os.path.join(_tfa.mkdtemp(prefix="added_"), "a.json")
+    try:
+        with open(_ad, "w", encoding="utf-8") as _f:
+            json.dump({"zzz_ad": ["有利区間"]}, _f, ensure_ascii=False)
+        ADDED_SECTIONS = _ad
+        _base_t = expected_titles({"slug": "zzz_ad", "sections": []})
+        _det_t = {"slug": "zzz_ad", "sections": [{"title": x} for x in _base_t] + [{"title": "有利区間"}]}
+        _det_o = {"slug": "zzz_other", "sections": _det_t["sections"]}
+        t("★★足した欄（added-sections.json に載った名前）は、記事の決まった欄の並びに数える★★",
+          expected_titles(_det_t) == _base_t + ["有利区間"]
+          and expected_titles(_det_o) == _base_t)
+        with open(_ad, "w", encoding="utf-8") as _f:
+            _f.write('{"zzz_ad": "有利区間"}')
+        try:
+            expected_titles(_det_t)
+            _broken_ok = False
+        except BuildError:
+            _broken_ok = True
+        t("　一覧が壊れていたら例外（黙って「足した欄なし」と読まない）", _broken_ok)
+    finally:
+        ADDED_SECTIONS = _keep_added
     # ★★検索向けの題名は、載っている中身だけを名乗る★★（2026-11-10）
     t("★★題名＝狙い目が出ていれば「天井・狙い目」／天井だけなら「天井・スペック」／どちらも無ければ「スペック・基本情報」★★",
       seo_title("機X", True, True) == "機X 天井・狙い目"

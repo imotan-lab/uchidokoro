@@ -249,13 +249,16 @@ def page_url(slug: str, autos: dict):
 # ───────────────────────── 取り直す ─────────────────────────
 
 def refresh(n: int, apply: bool, fetch=None, today: str = None, rows=None,
-            path: str = None, log=print) -> dict:
+            path: str = None, log=print, only=None) -> dict:
+    """only … 担当が回ってきた機種だけを取り直す（朝の STEP 1-T）。ランキングの候補でなければ何もしない"""
     data = read(path)
     data.setdefault("tries", {})
     before = excluded(data)
     today = today or datetime.date.today().isoformat()
     fetch = fetch or _fetch_shops
     cands = candidates(rows)
+    if only is not None:
+        cands = [s for s in cands if s in only]
     # ★控え全体が読めないときは機種ごとの失敗にしない★（Codex）＝84件すべてが「使えない結び付け」に
     #   吸収されて終了コード0になり、手順書の「読めない→2→🟠」を通らなかった。ここで例外にする。
     import legacy_binding as _lb
@@ -459,6 +462,9 @@ def selftest() -> int:
             got["https://p-town.dmm.com/machines/11"] = page(300, 300)
             r = refresh(1, True, fetch=lambda u: got[u], today="2026-11-10", path=p, log=lambda *_: None)
             t("古い順に1件だけ取り直す", [x[0] for x in r["done"]] == ["s1"])
+            _ro = refresh(5, False, fetch=lambda u: got[u], today="2026-11-10", path=p, log=lambda *_: None,
+                          only=["s2"])
+            t("★★担当の回（only）は、その機種だけ取り直す★★", [x[0] for x in _ro["done"]] == ["s2"])
             t("増えたら戻す", r["restored"] == ["s1"] and excluded(read(p)) == set())
             got["https://p-town.dmm.com/machines/12"] = page(5, 6)
             r = refresh(5, True, fetch=lambda u: got[u], today="2026-11-11", path=p, log=lambda *_: None)
@@ -585,6 +591,7 @@ def main() -> int:
     g.add_argument("--selftest", action="store_true")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--slug", nargs="+", help="担当が回ってきた機種だけ取り直す（--refresh と一緒に）")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
@@ -611,7 +618,7 @@ def main() -> int:
         print("線＝全国%d店未満を外す／外している機種 %d" % (data["line"], len(ex)))
         return 0
     try:
-        r = refresh(a.refresh, a.apply)
+        r = refresh(a.refresh, a.apply, only=a.slug)
     except Exception as ex:                                  # noqa: BLE001
         print("控えか結び付けが読めないので何もしません:", ex)
         return 2
