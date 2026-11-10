@@ -154,11 +154,15 @@ def _record_pool(slug: str, fields: list, confirmed: dict) -> tuple:
 
 def _canon(tok: str) -> str:
     """数の書き方をそろえる（31.0 → 31・31.50 → 31.5）。数でなければそのまま"""
+    import decimal
     try:
-        v = float(tok)
-    except ValueError:
+        v = decimal.Decimal(tok)          # ★十進数のまま比べる★（float だと 31.000000000000001 が 31 になる・Codexの指摘）
+    except decimal.InvalidOperation:
         return tok
-    return str(int(v)) if v.is_integer() else ("%s" % v)
+    if not v.is_finite():
+        return tok
+    t = format(v.normalize(), "f")
+    return t if "." not in t else t.rstrip("0").rstrip(".")
 
 
 def _place(secs: list, title: str) -> int:
@@ -531,6 +535,9 @@ def selftest() -> int:
     r = plan(detail, row, dec({"op": "add_section", "title": "回転数の目安",
                                "body": ["コイン持ちは約31Gです。"], "fields": ["games_per_50"]}), conf)
     t("　照合した値（31.0）は 31G と書いても使える（数の書き方をそろえる・Codexの指摘）", not r["problems"])
+    t("　書き方をそろえても、違う数は同じにしない（31.000000000000001 は 31 ではない）",
+      _canon("31.0") == "31" and _canon("31.50") == "31.5" and _canon("31.000000000000001") != "31"
+      and _canon("100") == "100")
     r = plan(detail, row, dec({"op": "add_section", "title": "継続の目安",
                                "body": ["継続ゲーム数は6Gです。"], "fields": ["ceiling#six"]}), conf)
     t("★設定別でない項目では、数字の鍵（\"6\"）を設定の番号として使わない★（Codexの指摘）",
