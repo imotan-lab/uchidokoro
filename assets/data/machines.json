@@ -165,9 +165,15 @@
   "seo": {
    "title": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン 天井・狙い目"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "ガンゲイル",
+   "ガンゲイル・オンライン",
+   "GGO",
+   "がんげいる",
+   "SAOオルタナティブ"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -239,7 +245,8 @@
     "target": 200
    }
   },
-  "targetProjection": "6a7d10edf22193c9"
+  "targetProjection": "6a7d10edf22193c9",
+  "series": "ソードアート・オンライン"
  },
  {
   "slug": "dmm_5079",
