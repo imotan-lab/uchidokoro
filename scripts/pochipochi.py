@@ -68,6 +68,7 @@ END = "  // ★POCHI-AUTO-END★"
 NO_DIFF_REASON = "小役による設定差なし"
 KO_RESULTS = ("HAS", "NONE")
 KO_RECHECK_DAYS = 60
+KO_HAS_RECHECK_DAYS = 180   # ★小役の差が「ある」と決めた機種も、解析の訂正・追加に合わせて確かめ直す★（2026-11-10）
 HAND_RECHECK_DAYS = 90   # 手書きの機種と「設定差なし」の機種を、2AIが確かめ直す間隔
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MIN_WHY = 15
@@ -196,6 +197,14 @@ def ko_due(slug: str, store: dict, today: datetime.date = None):
         days = (today - datetime.date.fromisoformat(rec["checked"])).days
         if days >= KO_RECHECK_DAYS:
             return f"小役の差が見つからなかった日から{days}日たった（{KO_RECHECK_DAYS}日でもう一度探す）"
+    # ★★HAS も確かめ直す★★（2026-11-10・洗い出し2回目）＝直す前は一度「ある」と決めると二度と見なかった
+    #   （解析の訂正や小役の追加が反映されない）。2AIは EXTEND で足すか、KO_CHECK（ko=HAS）で日付だけ控える
+    elif rec["result"] == "HAS":
+        today = today or datetime.date.today()
+        days = (today - datetime.date.fromisoformat(rec["checked"])).days
+        if days >= KO_HAS_RECHECK_DAYS:
+            return (f"小役の差を確かめた日から{days}日たった（{KO_HAS_RECHECK_DAYS}日で確かめ直す："
+                    "訂正や小役の追加があれば EXTEND、変わらなければ KO_CHECK で ko=HAS）")
     return None
 
 
@@ -1072,8 +1081,11 @@ def selftest() -> int:
     t("　手で書いた機種・表の無い機種は扱わない",
       ko_due("hokuto", st_a, _today) is None and ko_due("zzz_none", st_a, _today) is None)
     _sh = json.loads(json.dumps(st_a))
-    _sh["ko_checked"]["zzz_a"] = {"result": "HAS", "checked": "2026-01-01"}
-    t("　HAS と記録した機種は探し直さない（日がたっても）", ko_due("zzz_a", _sh, _today) is None)
+    _sh["ko_checked"]["zzz_a"] = {"result": "HAS", "checked": (_today - datetime.timedelta(days=179)).isoformat()}
+    t("　HAS と記録した機種は180日までは探し直さない", ko_due("zzz_a", _sh, _today) is None)
+    _sh["ko_checked"]["zzz_a"]["checked"] = (_today - datetime.timedelta(days=180)).isoformat()
+    t("★★HAS も180日たったら確かめ直す★★（直す前は一度「ある」と決めると二度と見なかった）",
+      ko_due("zzz_a", _sh, _today) is not None)
     _sn = json.loads(json.dumps(st_a))
     _sn["ko_checked"]["zzz_a"] = {"result": "NONE", "checked": "2026-09-11"}
     t("★NONE は60日たったらもう一度探す★", ko_due("zzz_a", _sn, _today) is not None)

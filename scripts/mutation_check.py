@@ -10284,8 +10284,8 @@ MUTATIONS = [
     {
         "why": "★新台の点検：試し直しで戻した機種を🔴にする（戻した翌朝に毎回🔴・Codex指摘）★",
         "file": "scripts/add_machine_health.py",
-        "before": "        if it.get(\"revived_at\"):\n            continue\n",
-        "after": "",
+        "before": "        if rel and not far_from_release(rel, today) and not it.get(\"revived_at\"):\n",
+        "after": "        if rel and not far_from_release(rel, today):\n",
         "run": ["scripts/add_machine_health.py"],
     },
     {

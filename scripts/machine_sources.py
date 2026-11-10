@@ -514,7 +514,10 @@ def _judgement(why: str, by: list) -> list:
     who = [x for x in (by or []) if x]
     if not who:
         raise SourceError("--by（誰が判断したか）は必ず書きます")
-    bad = [x for x in who if x not in JUDGES]
+    # ★Codexが利用制限のときの代役（claude-agent-a / claude-agent-b）も使える★（2026-11-10・洗い出し2回目）＝
+    #   直す前は名前の段で断り、代役の日は出典を1件も控えられなかった。代役の名前は確定値の控えの1か所を読む
+    import confirmed_values as _cvj
+    bad = [x for x in who if x not in JUDGES and x not in _cvj.STANDIN_JUDGES]
     if bad:
         raise SourceError("判断者に使えない名前です（%s のみ）: %s"
                           % ("/".join(JUDGES), ",".join(bad)))
@@ -1302,6 +1305,17 @@ def _selftest_body() -> int:
     def t(name, cond):
         results.append((name, bool(cond)))
         print(("✅" if cond else "❌") + " " + name)
+
+    # ★★Codexが利用制限のときの代役の名前も判断者として通す★★（2026-11-10・直す前は名前の段で断っていた）
+    t("★★代役（claude-agent-a・claude-agent-b）を判断者として受け取る★★",
+      _judgement("題と導入日で同じ機種と判断", ["claude-agent-a", "claude-agent-b"])
+      == ["claude-agent-a", "claude-agent-b"])
+    try:
+        _judgement("題と導入日で同じ機種と判断", ["誰か"])
+        _bad_ok = False
+    except SourceError:
+        _bad_ok = True
+    t("　（対照）知らない名前は今までどおり断る", _bad_ok)
 
     global STORE
     keep = STORE

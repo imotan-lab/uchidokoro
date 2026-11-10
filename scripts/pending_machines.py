@@ -415,6 +415,10 @@ def revive(data: dict, today: str = "") -> list:
             continue
         back = {k: v for k, v in data["gave_up"].pop(qid).items() if k != "gave_up_at"}
         back["runs"] = 0
+        # ★止まった回数も0から数え直す★（2026-11-10）＝朝の点検（check_stuck）は戻した機種も
+        #   「同じ理由で続けて止まる」で知らせるので、外す前の回数が残ると戻した翌朝に必ず鳴る
+        back["tries"] = 0
+        back["blocker_streak"] = 0
         back["revived_at"] = today[:10]
         data["items"][qid] = back
         out.append(back)
@@ -691,6 +695,8 @@ def selftest() -> int:
     t("★★外して30日たったら待ち行列へ戻す（試した回数は0に戻す）★★",
       len(_rv) == 1 and d5["items"]["q_0001"]["runs"] == 0
       and d5["items"]["q_0001"]["revived_at"] == "2027-02-28" and "q_0001" not in d5["gave_up"])
+    t("　戻すとき止まった回数も0から数え直す（外す前の回数で翌朝に鳴らない）",
+      d5["items"]["q_0001"].get("tries") == 0 and d5["items"]["q_0001"].get("blocker_streak") == 0)
     t("　戻した機種も、1回試すまでは外さない（1回だけ試す）",
       give_up(d5, "2027-02-28") == [] and "q_0001" in d5["items"])
     _old = _empty()

@@ -298,15 +298,15 @@ def check_stuck(today=None) -> list:
         #   次に止まるまで古いまま残るので、符丁で黙ると決まった機種まで隠れる。
         if it.get("release_tbd"):
             continue
-        # ★★一度外して、30日ごとの試し直しで戻した機種は知らせない★★（2026-11-10・Codexの指摘）＝
+        # ★★一度外して、30日ごとの試し直しで戻した機種は🔴にしない★★（2026-11-10・Codexの指摘）＝
         #   導入から60日以上たった機種なので、ここを通すと戻した翌朝に毎回🔴になる。
-        #   外したことは外した晩に知らせ済み（PENDING_GAVE_UP）・試し直しの結果は夜のログに残る。
-        if it.get("revived_at"):
-            continue
+        #   外したことは外した晩に知らせ済み（PENDING_GAVE_UP）。
+        #   ★外すのは🔴だけ★（洗い出し2回目）＝直す前は「同じ理由で続けて止まる」などの🟡まで黙っていた。
+        #   戻すとき回数を0にしている（pending_machines.revive）ので、戻したあとの止まり方だけで数える。
         # ★★導入3日前を過ぎても記事にできていない＝運営者へ🔴★★（2026-10-02）
         #   ★止まった理由は問わない★（Codex review200 の指摘）＝取得の失敗や
         #   うちの都合で止まっていても、読者から見れば「導入日に記事が無い」。
-        if rel and not far_from_release(rel, today):
+        if rel and not far_from_release(rel, today) and not it.get("revived_at"):
             ng.append(
                 f"{RED}{it.get('name')} は導入日（{rel}）の"
                 f"{OWNER_ALERT_DAYS}日前を過ぎましたが、まだ記事にできていません"
@@ -571,6 +571,15 @@ def selftest() -> int:
                        "identity_url": "https://p-town.dmm.com/machines/1"}})
         t("★★外して30日ごとの試し直しで戻した機種は🔴にしない★★（2026-11-10・Codexの指摘＝戻した翌朝に毎回🔴だった）",
           check_stuck("2026-10-17") == [])
+        _fake({"q_1": {"name": "戻したあとも同じ理由で止まる機種", "state": "READY",
+                       "release": "2026-07", "release_day": "2026-07-06", "runs": 0,
+                       "revived_at": "2026-10-16", "tries": 2, "last_blocker": "TAIL_CONFLICT",
+                       "blocker_streak": BLOCKER_STREAK,
+                       "identity_url": "https://p-town.dmm.com/machines/1"}})
+        _rv = check_stuck("2026-10-17")
+        t("★★戻した機種でも、戻したあと同じ理由で続けて止まれば知らせる（🔴ではない）★★"
+          "（直す前は戻した機種を全部黙らせていた）",
+          len(_rv) == 1 and not _rv[0].startswith(RED) and "続けて止まって" in _rv[0])
         _fake({"q_1": {"name": "カレンダー待ちの機種",
                        "state": "AWAITING_DMM_ID",
                        "release": "2026-10", "release_day": "2026-10-19"}})
