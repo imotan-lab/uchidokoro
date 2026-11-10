@@ -2102,7 +2102,8 @@ def _selftest() -> int:
           _try_fail(lambda: withdraw(f14, _why11, ["claude"])))
         t("★★封のあと（合意の前）に2AIが「直さない」と決めた記録も取り下げられる★★"
           "（直す前は閉じる道が無く、その機種の点検済みの印を毎回断らせた）",
-          withdraw(f14, _why11, ["claude", "codex"])["state"] == WITHDRAWN)
+          not _try_fail(lambda: withdraw(f14, _why11, ["claude", "codex"]))
+          and load(f14)["state"] == WITHDRAWN)
         t("★★同じ記事のまま見つけ直しても、立て直さない★★"
           "（★書けない合意を作り直して、また居座らせない★）",
           detect("zzz11", "text_gone", "十一番の文です。",
