@@ -1979,7 +1979,8 @@
       "note": "7.0枚では540G〜が狙い目ラインです（AT後にCZをスルーしていない台の目安です）。"
      }
     },
-    "target": 410
+    "target": 410,
+    "ceiling": 1000
    },
    "at": {
     "excellent": 900,
@@ -2016,7 +2017,8 @@
       "note": "7.0枚ではAT間620G〜が狙い目ラインです（AT後にCZをスルーしていない台の目安です）。"
      }
     },
-    "target": 470
+    "target": 470,
+    "ceiling": 1500
    },
    "defaultRate": "eq56",
    "exchangeRates": [
