@@ -157,6 +157,26 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
             "purged": purged}
 
 
+def unbound(rows, bound=None, ranked=None) -> list:
+    """★導入日が無く、まだDMMと結び付けていない昔の機種★（2026-11-10・洗い出し2回目）
+
+    ★なぜ★＝結び付けの一覧（hall_presence --unbound）はランキングに入りうる機種しか出さないので、
+    ジャグラー系・ハナハナ系など27機種は結ばれず、導入日が永久に入らなかった。
+    ★ランキングの候補（ranked）は後ろへ★（そちらは hall_presence --unbound が先に出す）。
+    """
+    bound = bound or _bound
+    out = []
+    for s in targets(rows):
+        try:
+            u = bound(s)
+        except Exception:                                        # noqa: BLE001
+            u = "（読めない）"
+        if not u:
+            out.append(s)
+    ranked = set(ranked or [])
+    return [s for s in out if s not in ranked] + [s for s in out if s in ranked]
+
+
 def stall_problem(rows, d: dict, today: str, bound=None):
     bound = bound or _bound
     need = []
@@ -224,6 +244,9 @@ def selftest() -> int:
     t("★番人：導入日の無い結び付け済み機種があるのに3日だれも試していなければ知らせる★",
       stall_problem(rows, read(p), "2026-11-16", bound) is not None
       and stall_problem(rows, read(p), "2026-11-13", bound) is None)
+    t("★★結び付けていない昔の機種を挙げる（ランキングの候補外が先）★★",
+      unbound(rows, bound, ranked=["e"]) == ["e"]
+      and unbound([{"slug": "x"}, {"slug": "y"}], {}.get, ranked=["x"]) == ["y", "x"])
     with open(p, "w", encoding="utf-8") as f:
         f.write('{"schema": "legacy-release/v1", "machines": {"a": {"release": "いつか"}}}')
     try:
@@ -263,6 +286,9 @@ def main() -> int:
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--unbound", action="store_true",
+                    help="導入日が無く、まだDMMと結び付けていない昔の機種（ランキングの候補外が先）")
+    ap.add_argument("--limit", type=int, default=10)
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -283,6 +309,18 @@ def main() -> int:
         pr = stall_problem(rows, d, datetime.date.today().isoformat())
         print(("🟡 " + pr) if pr else f"🟢 昔からの機種の導入日：控え {len(d['machines'])}件")
         return 1 if pr else 0
+    if a.unbound:
+        import hall_presence as _hp
+        try:
+            ranked = _hp.candidates()
+        except Exception:                                        # noqa: BLE001
+            ranked = []
+        names = {m.get("slug"): m.get("name") for m in rows if isinstance(m, dict)}
+        got = unbound(rows, ranked=ranked)
+        for s in got[:max(0, a.limit)]:
+            print(f"{s}  {names.get(s)}")
+        print(f"まだ結び付けていない導入日の無い昔の機種 {len(got)}件")
+        return 0
     if a.list:
         for s, e in sorted(d["machines"].items()):
             print(f"{s}: {e['release']}（{e['checked']}）")

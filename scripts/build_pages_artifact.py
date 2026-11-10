@@ -111,6 +111,8 @@ APPROVED_INPUTS = frozenset({
     "scripts/tableize_spec.py",
     # ★2026-11-10に足した★＝新台の「狙い目の根拠・ヤメ時・立ち回り」を記事データへ書く（decide_now と同じ役）
     "scripts/derived_sections.py",
+    # ★2026-11-10に足した★＝新台の通称・タイプを機種行へ書く（同じ役）
+    "scripts/machine_meta.py",
     # ★★狙い目の文を全機種ぶん作る側★★（2026-09-11）
     #   machines.json の strategy / strategyByRate と、
     #   machine-details の狙い目の箱を**全機種まとめて**書き換える。
