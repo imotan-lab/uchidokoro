@@ -10732,7 +10732,7 @@ MUTATIONS = [
     {
         "why": "★大手との差：確定値の数と単位を組み立てない（777G が使えない・Codex）★",
         "file": "scripts/add_items.py",
-        "before": "            for tok, _unit in _dn.numbers_with_unit(st):\n                toks.add(tok)\n",
+        "before": "            for tok, _unit in _dn.numbers_with_unit(st):\n                toks.add(tok)\n                toks.add(_canon(tok))          # ★31.0 と 31 は同じ数★（Codexの指摘）\n",
         "after": "            pass\n",
         "run": ["scripts/add_items.py"],
     },
