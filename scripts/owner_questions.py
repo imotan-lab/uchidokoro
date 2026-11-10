@@ -93,8 +93,14 @@ def unanswered(path: Path, now: str = None, days: int = UNANSWERED_DAYS) -> list
     """
     import datetime as _dt
     # ★日時として比べる★（Codexの指摘＝区切りの空白と T を文字のまま比べ、最大1日早く出ていた）
+    import re as _re
+
     def _dt_of(x):
-        return _dt.datetime.fromisoformat(str(x)[:19].replace(" ", "T"))
+        # ★決まった書式だけ読む★（末尾に余計な文字・時差つきなどは「読めない」＝答え待ちとして出す）
+        t = str(x)
+        if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}", t):
+            raise ValueError(t)
+        return _dt.datetime.fromisoformat(t.replace(" ", "T"))
     now_d = _dt_of(now or _now())
     out = []
     for it in _load(path)["items"]:
@@ -103,7 +109,7 @@ def unanswered(path: Path, now: str = None, days: int = UNANSWERED_DAYS) -> list
         try:
             if now_d - _dt_of(it["sent_at"]) >= _dt.timedelta(days=days):
                 out.append(it)
-        except ValueError:
+        except (ValueError, TypeError):
             out.append(it)                 # ★読めない日時は「答え待ち」として出す（黙って外さない）★
     return out
 
@@ -199,6 +205,13 @@ def selftest() -> int:
         _save(p, _d2)
         t("　7日の判定は日時で比べる（11/1 23時に送った質問は 11/8 9時にはまだ出ない・11/9 0時には出る）",
           unanswered(p, "2026-11-08 09:00:00") == [] and [i["id"] for i in unanswered(p, "2026-11-09 00:00:00")] == [e2])
+        _d3 = _load(p)
+        for _it in _d3["items"]:
+            if _it["id"] == e2:
+                _it["sent_at"] = "2026-11-09 09:00:00broken"
+        _save(p, _d3)
+        t("　壊れた日時は「読めない」として答え待ちに出す（黙って外さない・Codexの指摘）",
+          [i["id"] for i in unanswered(p, "2026-11-09 10:00:00")] == [e2])
         p.write_text("[]", encoding="utf-8")
         try:
             pending(p)

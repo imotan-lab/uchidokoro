@@ -10918,6 +10918,13 @@ MUTATIONS = [
         "after": "    return [u for u in units if not (len(u) >= 2 and u[1] in gone)]\n",
         "run": ["scripts/grow_machine.py"],
     },
+    {
+        "why": "★運営者への質問：壊れた日時を先頭19字に切って読む（読めない日時が答え待ちから消える・Codex）★",
+        "file": "scripts/owner_questions.py",
+        "before": "        if not _re.fullmatch(r\"\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}\", t):\n",
+        "after": "        t = t[:19]\n        if False:\n",
+        "run": ["scripts/owner_questions.py"],
+    },
 ]
 
 
