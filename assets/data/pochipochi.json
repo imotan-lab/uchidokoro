@@ -3447,6 +3447,10 @@
   "diff_checked": {},
   "hand_checked": {},
   "ko_checked": {
+    "mr_juggler": {
+      "checked": "2026-11-11",
+      "result": "NONE"
+    },
     "revue_starlight": {
       "checked": "2026-11-11",
       "result": "HAS"
