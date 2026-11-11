@@ -2771,7 +2771,7 @@
   "slug": "dmm_5086",
   "name": "L 転生王女と天才令嬢の魔法革命",
   "seo": {
-   "title": "L 転生王女と天才令嬢の魔法革命 スペック・基本情報"
+   "title": "L 転生王女と天才令嬢の魔法革命 天井・スペック"
   },
   "info": "",
   "strategy": "",
@@ -2800,13 +2800,12 @@
     "ceiling:GAME:ボーナス間",
     "cz:エピソードバトル",
     "cz:輪廻転天チャレンジ",
-    "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-19",
-   "input_digest": "sha256:22ba47c08f51f4c7994c01b1ad37df4b3cf9c8761e97f842c82646d557028550"
+   "decided_at": "2026-11-12",
+   "input_digest": "sha256:dab1aa78d16ec57f7e1e428655c16a05d4404bddbf66124a8633c2796bb3cd7e"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
@@ -2822,17 +2821,6 @@
    "_observed_model_code_sources": [
     "p-town.dmm.com"
    ]
-  },
-  "checker": {
-   "coinRate": 32.0,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {}
   }
  },
  {
