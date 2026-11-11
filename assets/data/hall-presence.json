@@ -13,6 +13,16 @@
    "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/4847"
   },
+  "baki": {
+   "stores": 15,
+   "checked": "2026-11-11",
+   "url": "https://p-town.dmm.com/machines/4242"
+  },
+  "banchou4": {
+   "stores": 1126,
+   "checked": "2026-11-11",
+   "url": "https://p-town.dmm.com/machines/4553"
+  },
   "basilisk_tenzen": {
    "stores": 2682,
    "checked": "2026-11-10",
@@ -23,29 +33,34 @@
    "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/4530"
   },
+  "darlifra": {
+   "stores": 755,
+   "checked": "2026-11-11",
+   "url": "https://p-town.dmm.com/machines/4855"
+  },
   "dmm_5073": {
-   "stores": 2938,
-   "checked": "2026-11-09",
+   "stores": 2974,
+   "checked": "2026-11-11",
    "url": "https://p-town.dmm.com/machines/5073"
   },
   "dmm_5095": {
-   "stores": 4189,
-   "checked": "2026-11-09",
+   "stores": 4193,
+   "checked": "2026-11-11",
    "url": "https://p-town.dmm.com/machines/5095"
   },
   "dmm_5113": {
-   "stores": 2274,
-   "checked": "2026-11-09",
+   "stores": 2277,
+   "checked": "2026-11-11",
    "url": "https://p-town.dmm.com/machines/5113"
   },
   "dmm_5119": {
-   "stores": 3596,
-   "checked": "2026-11-09",
+   "stores": 3658,
+   "checked": "2026-11-11",
    "url": "https://p-town.dmm.com/machines/5119"
   },
   "dmm_5120": {
-   "stores": 2960,
-   "checked": "2026-11-09",
+   "stores": 3011,
+   "checked": "2026-11-11",
    "url": "https://p-town.dmm.com/machines/5120"
   },
   "dmm_5121": {
@@ -59,14 +74,24 @@
    "url": "https://p-town.dmm.com/machines/4669"
   },
   "enen2": {
-   "stores": 4279,
-   "checked": "2026-11-09",
+   "stores": 4288,
+   "checked": "2026-11-11",
    "url": "https://p-town.dmm.com/machines/4926"
   },
   "garei_zero_re": {
    "stores": 1935,
    "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/5028"
+  },
+  "gundam_seed": {
+   "stores": 152,
+   "checked": "2026-11-11",
+   "url": "https://p-town.dmm.com/machines/4788"
+  },
+  "hanma_baki": {
+   "stores": 501,
+   "checked": "2026-11-11",
+   "url": "https://p-town.dmm.com/machines/4941"
   },
   "kengan_ashura": {
    "stores": 3,
@@ -89,9 +114,14 @@
    "url": "https://p-town.dmm.com/machines/4763"
   },
   "nangoku_special": {
-   "stores": 1726,
-   "checked": "2026-11-09",
+   "stores": 1734,
+   "checked": "2026-11-11",
    "url": "https://p-town.dmm.com/machines/5031"
+  },
+  "neoplanet": {
+   "stores": 1001,
+   "checked": "2026-11-11",
+   "url": "https://p-town.dmm.com/machines/4873"
   },
   "okidoki_gorgeous": {
    "stores": 670,
@@ -109,8 +139,8 @@
    "url": "https://p-town.dmm.com/machines/5057"
   },
   "pw_10503": {
-   "stores": 4594,
-   "checked": "2026-11-09",
+   "stores": 4602,
+   "checked": "2026-11-11",
    "url": "https://p-town.dmm.com/machines/5033"
   },
   "pw_10521": {
@@ -120,7 +150,7 @@
   },
   "pw_10523": {
    "stores": 1314,
-   "checked": "2026-11-09",
+   "checked": "2026-11-11",
    "url": "https://p-town.dmm.com/machines/5059"
   },
   "pw_10543": {
@@ -144,18 +174,33 @@
    "url": "https://p-town.dmm.com/machines/5025"
   },
   "ssb1": {
-   "stores": 3268,
-   "checked": "2026-11-09",
+   "stores": 3275,
+   "checked": "2026-11-11",
    "url": "https://p-town.dmm.com/machines/5064"
+  },
+  "super_rio_ace2": {
+   "stores": 3214,
+   "checked": "2026-11-11",
+   "url": "https://p-town.dmm.com/machines/4984"
   },
   "takt_opus": {
    "stores": 1719,
    "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/5000"
   },
+  "tokyo_ghoul": {
+   "stores": 4863,
+   "checked": "2026-11-11",
+   "url": "https://p-town.dmm.com/machines/4742"
+  },
+  "ultraman_final": {
+   "stores": 722,
+   "checked": "2026-11-11",
+   "url": "https://p-town.dmm.com/machines/5048"
+  },
   "umineko2": {
-   "stores": 990,
-   "checked": "2026-11-10",
+   "stores": 993,
+   "checked": "2026-11-11",
    "url": "https://p-town.dmm.com/machines/4925"
   },
   "valvrave2": {
@@ -172,35 +217,44 @@
  "tries": {
   "animal_dotch": "2026-11-10",
   "azurlane": "2026-11-10",
+  "baki": "2026-11-11",
+  "banchou4": "2026-11-11",
   "basilisk_tenzen": "2026-11-10",
   "chibaryo2": "2026-11-10",
-  "dmm_5073": "2026-11-09",
-  "dmm_5095": "2026-11-09",
-  "dmm_5113": "2026-11-09",
-  "dmm_5119": "2026-11-09",
-  "dmm_5120": "2026-11-09",
+  "darlifra": "2026-11-11",
+  "dmm_5073": "2026-11-11",
+  "dmm_5095": "2026-11-11",
+  "dmm_5113": "2026-11-11",
+  "dmm_5119": "2026-11-11",
+  "dmm_5120": "2026-11-11",
   "dmm_5121": "2026-11-10",
   "dumbbell": "2026-11-11",
-  "enen2": "2026-11-09",
+  "enen2": "2026-11-11",
   "garei_zero_re": "2026-11-10",
+  "gundam_seed": "2026-11-11",
+  "hanma_baki": "2026-11-11",
   "kengan_ashura": "2026-11-10",
   "koukaku": "2026-11-10",
   "madomagi_forte": "2026-11-10",
   "midoridon_viva": "2026-11-10",
-  "nangoku_special": "2026-11-09",
+  "nangoku_special": "2026-11-11",
+  "neoplanet": "2026-11-11",
   "okidoki_gorgeous": "2026-11-10",
   "onepunchman": "2026-11-10",
   "prskkm": "2026-11-10",
-  "pw_10503": "2026-11-09",
+  "pw_10503": "2026-11-11",
   "pw_10521": "2026-11-10",
-  "pw_10523": "2026-11-09",
+  "pw_10523": "2026-11-11",
   "pw_10543": "2026-11-10",
   "revue_starlight": "2026-11-11",
   "sao": "2026-11-10",
   "sao2": "2026-11-10",
-  "ssb1": "2026-11-09",
+  "ssb1": "2026-11-11",
+  "super_rio_ace2": "2026-11-11",
   "takt_opus": "2026-11-10",
-  "umineko2": "2026-11-10",
+  "tokyo_ghoul": "2026-11-11",
+  "ultraman_final": "2026-11-11",
+  "umineko2": "2026-11-11",
   "valvrave2": "2026-11-11",
   "youjitsu": "2026-11-10"
  }
