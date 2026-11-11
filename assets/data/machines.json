@@ -13103,7 +13103,7 @@
   "slug": "dmm_5131",
   "name": "Ｌブルーリフレクション帝",
   "seo": {
-   "title": "Ｌブルーリフレクション帝 スペック・基本情報"
+   "title": "Ｌブルーリフレクション帝 天井・スペック"
   },
   "info": "",
   "strategy": "",
@@ -13134,7 +13134,7 @@
     "payout_range"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-03",
+   "decided_at": "2026-11-11",
    "input_digest": "sha256:c85c5eabcda42337bb8c003b69f9f76e0b13fbb9363ac3f7571f67d4d6ff3654"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
