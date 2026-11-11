@@ -254,9 +254,13 @@
   "seo": {
    "title": "スマスロ ラグナドール 天井・スペック"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "ラグナドール",
+   "らぐなどーる",
+   "ラグナ"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -314,7 +318,8 @@
     }
    ],
    "normal": {}
-  }
+  },
+  "series": ""
  },
  {
   "slug": "dmm_5120",
