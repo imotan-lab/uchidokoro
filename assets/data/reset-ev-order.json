@@ -1,6 +1,8 @@
 {
  "schema": "reset-ev-order/v1",
  "order": [
-  "dmm_5073"
+  "dmm_5073",
+  "midoridon_viva",
+  "enen2"
  ]
 }
