@@ -847,11 +847,15 @@ const MACHINE_CONFIGS = {
       {"id": "czHit", "label": "CZ確率", "sub": "初当りの回数", "rateKey": "czHit"},
       {"id": "atHit", "label": "AT確率", "sub": "初当りの回数", "rateKey": "atHit"},
       {"id": "bonusTotal", "label": "ボーナス合算", "sub": "BIGとREGの合計", "rateKey": "bonusTotal"},
+      {"id": "blueBig", "label": "青BIG", "sub": "ボーナス出現率", "rateKey": "blueBig"},
+      {"id": "reg", "label": "REG", "sub": "ボーナス出現率", "rateKey": "reg"},
     ],
     rates: {
       atHit: {1:1/359.6,2:1/346.8,4:1/277.1,5:1/255.7,6:1/232.5},
+      blueBig: {1:1/479.0,2:1/472.3,4:1/440.0,5:1/428.9,6:1/421.8},
       bonusTotal: {1:1/184.8,2:1/182.2,4:1/169.9,5:1/165.4,6:1/160.6},
       czHit: {1:1/265.9,2:1/254.7,4:1/207.6,5:1/190.3,6:1/179.5},
+      reg: {1:1/621.9,2:1/604.3,4:1/526.3,5:1/499.7,6:1/465.0},
     }
   },
   rezero2: {
