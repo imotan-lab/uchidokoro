@@ -2147,12 +2147,13 @@
      },
      "rate45": {
       "caution": 600,
-      "excellent": 1000,
+      "excellent": 999,
       "target": 800,
       "good": 800,
       "note": "7.0枚交換ではCZ間800Gからが実戦ラインです。"
      }
-    }
+    },
+    "ceiling": 999
    },
    "bonus": {
     "excellent": 1200,
