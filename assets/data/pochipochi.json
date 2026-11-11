@@ -3444,7 +3444,11 @@
       ]
     }
   },
-  "diff_checked": {},
+  "diff_checked": {
+    "valvrave2": {
+      "checked": "2026-11-11"
+    }
+  },
   "hand_checked": {},
   "ko_checked": {
     "mr_juggler": {
