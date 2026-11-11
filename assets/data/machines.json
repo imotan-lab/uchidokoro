@@ -3128,7 +3128,7 @@
   "slug": "pw_10501",
   "name": "パチスロ見える子ちゃん",
   "seo": {
-   "title": "パチスロ見える子ちゃん スペック・基本情報"
+   "title": "パチスロ見える子ちゃん 天井・スペック"
   },
   "info": "",
   "strategy": "",
@@ -3155,13 +3155,12 @@
     "at:MAIN_AT",
     "ceiling:GAME:通常時",
     "cz:恐怖トノ遭遇",
-    "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-25",
-   "input_digest": "sha256:829351ac53180e525c28347d16749871ae6e7f71f32518d010d2ddc7634f0687"
+   "decided_at": "2026-11-12",
+   "input_digest": "sha256:3ab71f40f59b297ebd839a144caa30975c00018f3d99a37c1bcb65f1feeff335"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -3173,16 +3172,15 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5042 型式=L見える子ちゃんSC メーカー=パイオニア 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
+   "_legacy_evidence_ref": "pworld:10501 型式=L見える子ちゃんSC 検定=6S0265 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10501",
+   "regulatory_model_code": "L見える子ちゃんSC",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ],
-   "_legacy_evidence_ref": "pworld:10501 型式=L見える子ちゃんSC 検定=6S0265 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10501",
-   "regulatory_model_code": "L見える子ちゃんSC"
+   ]
   },
   "checker": {
-   "coinRate": 30.0,
    "unit": "G",
    "modes": [
     {
