@@ -51,6 +51,11 @@
    "url": "https://p-town.dmm.com/machines/4763",
    "checked": "2026-11-10"
   },
+  "mr_juggler": {
+   "release": "2024-07-22",
+   "url": "https://p-town.dmm.com/machines/4588",
+   "checked": "2026-11-11"
+  },
   "okidoki_gorgeous": {
    "release": "2024-12-02",
    "url": "https://p-town.dmm.com/machines/4674",
@@ -61,10 +66,20 @@
    "url": "https://p-town.dmm.com/machines/4623",
    "checked": "2026-11-10"
   },
+  "revue_starlight": {
+   "release": "2025-03-03",
+   "url": "https://p-town.dmm.com/machines/4706",
+   "checked": "2026-11-11"
+  },
   "sao": {
    "release": "2023-05-15",
    "url": "https://p-town.dmm.com/machines/4352",
    "checked": "2026-11-10"
+  },
+  "sf5": {
+   "release": "2024-06-03",
+   "url": "https://p-town.dmm.com/machines/4583",
+   "checked": "2026-11-11"
   },
   "shinuchi_yoshimune": {
    "release": "2026-04-06",
@@ -80,6 +95,11 @@
    "release": "2026-02-02",
    "url": "https://p-town.dmm.com/machines/4925",
    "checked": "2026-11-10"
+  },
+  "valvrave2": {
+   "release": "2025-11-04",
+   "url": "https://p-town.dmm.com/machines/4885",
+   "checked": "2026-11-11"
   },
   "youjitsu": {
    "release": "2025-05-07",
@@ -98,12 +118,16 @@
   "koukaku": "2026-11-10",
   "madomagi_forte": "2026-11-10",
   "midoridon_viva": "2026-11-10",
+  "mr_juggler": "2026-11-11",
   "okidoki_gorgeous": "2026-11-10",
   "onepunchman": "2026-11-10",
+  "revue_starlight": "2026-11-11",
   "sao": "2026-11-10",
+  "sf5": "2026-11-11",
   "shinuchi_yoshimune": "2026-11-11",
   "takt_opus": "2026-11-10",
   "umineko2": "2026-11-10",
+  "valvrave2": "2026-11-11",
   "youjitsu": "2026-11-10"
  },
  "applied": {

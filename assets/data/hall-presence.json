@@ -128,6 +128,11 @@
    "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/5065"
   },
+  "revue_starlight": {
+   "stores": 1865,
+   "checked": "2026-11-11",
+   "url": "https://p-town.dmm.com/machines/4706"
+  },
   "sao": {
    "stores": 596,
    "checked": "2026-11-10",
@@ -152,6 +157,11 @@
    "stores": 990,
    "checked": "2026-11-10",
    "url": "https://p-town.dmm.com/machines/4925"
+  },
+  "valvrave2": {
+   "stores": 4357,
+   "checked": "2026-11-11",
+   "url": "https://p-town.dmm.com/machines/4885"
   },
   "youjitsu": {
    "stores": 119,
@@ -185,11 +195,13 @@
   "pw_10521": "2026-11-10",
   "pw_10523": "2026-11-09",
   "pw_10543": "2026-11-10",
+  "revue_starlight": "2026-11-11",
   "sao": "2026-11-10",
   "sao2": "2026-11-10",
   "ssb1": "2026-11-09",
   "takt_opus": "2026-11-10",
   "umineko2": "2026-11-10",
+  "valvrave2": "2026-11-11",
   "youjitsu": "2026-11-10"
  }
 }
