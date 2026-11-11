@@ -41,7 +41,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-11",
+   "decided_at": "2026-11-12",
    "input_digest": "sha256:1f550aa13988cd6b2453f003fb0dd30b58d81fbdf153f5c404dd63170e948445"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -74,8 +74,8 @@
     "target": 600
    }
   },
-  "targetProjection": "deb3b0bf03305c8f",
-  "series": "ゴジラ"
+  "series": "ゴジラ",
+  "targetProjection": "deb3b0bf03305c8f"
  },
  {
   "slug": "dmm_5104",
