@@ -11,6 +11,16 @@
    "url": "https://p-town.dmm.com/machines/4847",
    "checked": "2026-11-10"
   },
+  "baki": {
+   "release": "2022-11-21",
+   "url": "https://p-town.dmm.com/machines/4242",
+   "checked": "2026-11-11"
+  },
+  "banchou4": {
+   "release": "2024-04-22",
+   "url": "https://p-town.dmm.com/machines/4553",
+   "checked": "2026-11-11"
+  },
   "basilisk_tenzen": {
    "release": "2023-12-18",
    "url": "https://p-town.dmm.com/machines/4466",
@@ -21,6 +31,11 @@
    "url": "https://p-town.dmm.com/machines/4530",
    "checked": "2026-11-10"
   },
+  "darlifra": {
+   "release": "2025-08-04",
+   "url": "https://p-town.dmm.com/machines/4855",
+   "checked": "2026-11-11"
+  },
   "dumbbell": {
    "release": "2024-12-16",
    "url": "https://p-town.dmm.com/machines/4669",
@@ -30,6 +45,16 @@
    "release": "2026-02-02",
    "url": "https://p-town.dmm.com/machines/4926",
    "checked": "2026-11-10"
+  },
+  "gundam_seed": {
+   "release": "2025-05-07",
+   "url": "https://p-town.dmm.com/machines/4788",
+   "checked": "2026-11-11"
+  },
+  "hanma_baki": {
+   "release": "2026-02-02",
+   "url": "https://p-town.dmm.com/machines/4941",
+   "checked": "2026-11-11"
   },
   "kengan_ashura": {
    "release": "2023-11-20",
@@ -54,6 +79,11 @@
   "mr_juggler": {
    "release": "2024-07-22",
    "url": "https://p-town.dmm.com/machines/4588",
+   "checked": "2026-11-11"
+  },
+  "neoplanet": {
+   "release": "2025-11-17",
+   "url": "https://p-town.dmm.com/machines/4873",
    "checked": "2026-11-11"
   },
   "okidoki_gorgeous": {
@@ -91,6 +121,11 @@
    "url": "https://p-town.dmm.com/machines/5000",
    "checked": "2026-11-10"
   },
+  "tokyo_ghoul": {
+   "release": "2025-02-03",
+   "url": "https://p-town.dmm.com/machines/4742",
+   "checked": "2026-11-11"
+  },
   "umineko2": {
    "release": "2026-02-02",
    "url": "https://p-town.dmm.com/machines/4925",
@@ -110,15 +145,21 @@
  "tries": {
   "animal_dotch": "2026-11-10",
   "azurlane": "2026-11-10",
+  "baki": "2026-11-11",
+  "banchou4": "2026-11-11",
   "basilisk_tenzen": "2026-11-10",
   "chibaryo2": "2026-11-10",
+  "darlifra": "2026-11-11",
   "dumbbell": "2026-11-11",
   "enen2": "2026-11-10",
+  "gundam_seed": "2026-11-11",
+  "hanma_baki": "2026-11-11",
   "kengan_ashura": "2026-11-10",
   "koukaku": "2026-11-10",
   "madomagi_forte": "2026-11-10",
   "midoridon_viva": "2026-11-10",
   "mr_juggler": "2026-11-11",
+  "neoplanet": "2026-11-11",
   "okidoki_gorgeous": "2026-11-10",
   "onepunchman": "2026-11-10",
   "revue_starlight": "2026-11-11",
@@ -126,6 +167,7 @@
   "sf5": "2026-11-11",
   "shinuchi_yoshimune": "2026-11-11",
   "takt_opus": "2026-11-10",
+  "tokyo_ghoul": "2026-11-11",
   "umineko2": "2026-11-10",
   "valvrave2": "2026-11-11",
   "youjitsu": "2026-11-10"
