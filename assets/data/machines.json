@@ -327,9 +327,14 @@
   "seo": {
    "title": "スロット Vivy -Fluorite Eye’s Song- 天井・狙い目"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "Vivy",
+   "ヴィヴィ",
+   "ゔぃゔぃ",
+   "ビビ"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -391,7 +396,8 @@
     "target": 550
    }
   },
-  "targetProjection": "d9017d3adaea3f1b"
+  "targetProjection": "d9017d3adaea3f1b",
+  "series": ""
  },
  {
   "slug": "pw_10503",
