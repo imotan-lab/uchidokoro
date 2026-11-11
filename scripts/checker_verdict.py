@@ -31,6 +31,7 @@
   python scripts/checker_verdict.py --apply <決定ファイル>   # 書く
   python scripts/checker_verdict.py --apply <決定ファイル> --dry-run
   python scripts/checker_verdict.py --selftest
+  ★止めた回数の欄（Phase 0 の `_disabled`）は "decision": "COUNT_MODE" で回数ごとの表に作り直す（2026-11-11）★
 """
 from __future__ import annotations
 
@@ -1565,6 +1566,210 @@ def apply_revise(dec: dict, ms: list, dry_run: bool = False) -> int:
     return 0
 
 
+def _count_mode_tests(t) -> None:
+    """★止めた回数の欄を作り直す★（2026-11-11）＝本番の machines.json と一覧には触らない"""
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    global MACHINES, DETAILS, ADDS_STORE
+    _bak_kc = globals()["known_ceilings"]
+    _bak_rb = globals()["_rebuild_target_text"]
+    keep = (MACHINES, DETAILS, ADDS_STORE)
+    tmpd = tempfile.mkdtemp(prefix="ckcount_")
+    try:
+        globals()["known_ceilings"] = lambda s, m=None: {800}
+        globals()["_rebuild_target_text"] = lambda: 0
+        DETAILS = os.path.join(tmpd, "details")
+        os.makedirs(DETAILS)
+        MACHINES = os.path.join(tmpd, "machines.json")
+        ADDS_STORE = os.path.join(tmpd, "adds.json")
+
+        def mk(rates=False):
+            ck = {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                  "normal": {"ceiling": 800, "caution": 300, "good": 400, "excellent": 600},
+                  "suru": {"excellent": 6, "good": 5, "caution": 4, "suruMax": 6,
+                           "note": "6スルー後の7回目で確定。5スルーから狙い目。",
+                           "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定"},
+                  "cycle": {"note": "周期天井は最大3周期。", "_disabled": "x"}}
+            if rates:
+                ck["exchangeRates"] = [{"key": "eq56", "label": "5.6枚"}, {"key": "rate50", "label": "6.5枚"}]
+                ck["defaultRate"] = "eq56"
+            return {"slug": "zzz_cnt", "name": "試験機", "checker": ck}
+
+        def d(**kw):
+            x = {"slug": "zzz_cnt", "decision": COUNT_MODE, "judges": ["claude", "codex"],
+                 "why": "6スルー後の7回目で確定なので回数ごとに浅くする（試験）",
+                 "key": "suru", "kind": "suru", "label": "スルー回数",
+                 "rows": [{"count": 0, "good": 400, "excellent": 600}, {"count": 1, "good": 350, "excellent": 550},
+                          {"count": 2, "good": 300, "excellent": 500},
+                          {"count": 3, "good": 250, "caution": 150, "excellent": 400},
+                          {"count": 4, "good": 100, "excellent": 200},
+                          {"count": 5, "good": 0, "excellent": 0, "note": "5スルーは0Gから。7回目で確定です。"},
+                          {"count": 6, "good": 0, "excellent": 0}]}
+            x.update(kw)
+            return x
+
+        _ms = [mk()]
+        t("★★止めた欄を回数ごとの表で作り直す決定は通る★★", count_mode_problems(d(), _ms) == [])
+        _a = count_merged(_ms[0], d())
+        _c = _a["checker"]["suru"]
+        t("　書いたあとは回数の表とスルーの上限だけ（古い回数の線・止めた印・古い注記は残さない）",
+          set(_c) == {"suru", "suruMax"} and _c["suruMax"] == 6 and "_disabled" not in _c)
+        t("　欄の一覧に hasSuru つきで並ぶ（画面に回数の入力欄が出る）",
+          {"key": "suru", "label": "スルー回数", "hasSuru": True} in _a["checker"]["modes"])
+        import gates as _gt0
+        t("　書いたあとの姿は二軸の契約を通る（止めた理由そのもの）",
+          _gt0._axis_conflict("suru", _c, "G", {"hasSuru": True}) is None
+          and _gt0._axis_conflict("suru", {k: v for k, v in _ms[0]["checker"]["suru"].items() if k != "_disabled"},
+                                  "G", {"hasSuru": True}) is not None)
+
+        def refused(dec, part, ms=None):
+            return any(part in p for p in count_mode_problems(dec, ms or _ms))
+
+        t("★止めた欄でなければ断る★（動いている欄を丸ごと置き換える道具にしない）",
+          refused(d(key="normal"), "止めた欄ではありません"))
+        t("★スルーの表は0スルーから★（無いと少ない回数の読者に深い回数の線が出る）",
+          refused(d(rows=[{"count": 1, "good": 300, "excellent": 500}, {"count": 2, "good": 0, "excellent": 0}]), "0 から上限まで"))
+        t("★回数の抜けがあれば断る★（行の無い回数は別の回数の線で判定される）",
+          refused(d(rows=[{"count": 0, "good": 300, "excellent": 500}, {"count": 2, "good": 0, "excellent": 0}]), "0 から上限まで"))
+        t("★周期の表は1周期目から続けて★（画面は行の数を上限にする）",
+          refused(d(key="cycle", kind="cycle", label="周期",
+                    rows=[{"count": 1, "good": 300, "excellent": 500}, {"count": 3, "good": 0, "excellent": 0}]),
+                  "1 から上限まで"))
+        _cy = d(key="cycle", kind="cycle", label="周期",
+                rows=[{"count": 1, "good": 300, "excellent": 500}, {"count": 2, "good": 0, "excellent": 0}])
+        t("　対照：周期1・2と続けて書けば通る", count_mode_problems(_cy, _ms) == [])
+        t("★回数が小さい順に1回ずつでなければ断る★",
+          refused(d(rows=[{"count": 0, "good": 400, "excellent": 600}, {"count": 3, "good": 100, "excellent": 300}, {"count": 2, "good": 200, "excellent": 400}]), "小さい順"))
+        t("★各行に good が要る★", refused(d(rows=[{"count": 0, "caution": 100, "excellent": 500}]), "good（その回数"))
+        t("★各行に excellent が要る★（画面の早見表）", refused(d(rows=[{"count": 0, "good": 400}]), "excellent（大きく"))
+        t("★caution ≦ good ≦ excellent でなければ断る★",
+          refused(d(rows=[{"count": 0, "good": 400, "caution": 500, "excellent": 600}], max_why="試験の1行の表で、上限の検査とは別のことを確かめる"), "caution ≦ good ≦ excellent"))
+        t("★確かめた天井（800）を超える線は断る★", refused(d(rows=[{"count": 0, "good": 700, "excellent": 900}]), "超えています"))
+        t("★注記に作った数字は断る★（止めた欄の注記の数字・線・回数は書ける）",
+          refused(d(rows=[{"count": 0, "good": 400, "excellent": 600, "note": "期待値は1200枚です。"}], max_why="試験の1行の表で、上限の検査とは別のことを確かめる"), "注記に")
+          and count_mode_problems(d(rows=[{"count": 0, "good": 400, "excellent": 600, "note": "6スルー後の7回目で確定。0スルーは400Gから。"}], max_why="試験の1行の表で、上限の検査とは別のことを確かめる"), _ms) == [])
+        t("★交換率の切替が無い機種に byRate は書けない★",
+          refused(d(rows=[{"count": 0, "good": 400, "excellent": 600, "byRate": {"eq56": {"good": 350}}}]), "byRate は書けません"))
+        _mr = [mk(rates=True)]
+        t("★交換率が良いほうが深い線は断る★（書いたあとの画面と同じ姿で見る）",
+          refused(d(rows=[{"count": 0, "good": 400, "excellent": 600, "byRate": {"eq56": {"good": 450}, "rate50": {"good": 380}}}], max_why="試験の1行の表で、上限の検査とは別のことを確かめる"),
+                  "交換率が良いほうが深く", _mr)
+          and count_mode_problems(d(rows=[{"count": 0, "good": 400, "excellent": 600, "byRate": {"eq56": {"good": 380},
+                                                                               "rate50": {"good": 450}}}], max_why="試験の1行の表で、上限の検査とは別のことを確かめる"), _mr) == [])
+        t("★★止めた欄の上限（6）より手前で表が終われば、理由が無いと断る★★（行の書き落としで上限が縮む）",
+          refused(d(rows=[{"count": 0, "good": 400, "excellent": 600}, {"count": 1, "good": 0, "excellent": 0}]),
+                  "max_why")
+          and count_mode_problems(d(rows=[{"count": 0, "good": 400, "excellent": 600}, {"count": 1, "good": 0, "excellent": 0}],
+                                    max_why="出典では2回目で確定なので上限は1スルーです（試験）"), _ms) == [])
+        t("★★スルーの上限を持っていた欄を周期の表にするなら、理由が無いと断る★★（r2 の1）",
+          refused(d(kind="cycle", rows=[{"count": 1, "good": 0, "excellent": 0}, {"count": 2, "good": 0, "excellent": 0}]),
+                  "max_why"))
+        import gates as _gt3
+        _keep_av3 = _gt3.audit_view
+        try:
+            _gt3.audit_view = lambda mm, dd=None, ll=None: {
+                "errors": [], "dropped": ([] if "_disabled" in ((mm.get("checker") or {}).get("suru") or {})
+                                          else [{"path": "checker", "reason": "試験：チェッカーごと外す"}]),
+                "gates": {"checker_modes": ["normal", "suru"]}}
+            t("★★関所がチェッカーごと外すなら断る★★（r3 の1＝誤りを返さずに外して終わる形）",
+              refused(d(), "チェッカー（checker）を外します"))
+            _gt3.audit_view = lambda mm, dd=None, ll=None: {"errors": [], "dropped": [], "gates": {"checker_modes": ["normal"]}}
+            t("★★作り直した欄が公開される欄の一覧に入らなければ断る★★", refused(d(), "公開される欄の一覧に入りません"))
+        finally:
+            _gt3.audit_view = _keep_av3
+        import gates as _gt2
+        _keep_av2 = _gt2.audit_view
+        try:
+            _gt2.audit_view = lambda mm, dd=None, ll=None: {"errors": ["前からある誤り"], "dropped": []}
+            t("★★当てる前から関所の誤りがある機種では書かない★★（r2 の2＝作り直した欄まで検査されたか分からない）",
+              refused(d(), "当てる前から公開の関所の誤り"))
+        finally:
+            _gt2.audit_view = _keep_av2
+        t("★★呼び名が既存の欄と重なれば、公開の関所の答えで断る★★（欄の名前を含まない誤りも拾う）",
+          refused(d(label="通常"), "公開の関所が止めます"))
+        t("★判断者が2つ要る★", refused(d(judges=["claude"]), "判断者"))
+        t("★書けない項目は断る★（strategy など）", refused(d(strategy="5スルー〜"), "書けない項目"))
+
+        # ★★公開の関所の検査が配線されている★★（関所だけが止める形を、関所の答えで断る）
+        import gates as _gt1
+        _keep_av = _gt1.audit_view
+        try:
+            _gt1.audit_view = lambda mm, dd=None, ll=None: (
+                {"errors": [], "dropped": []} if "_disabled" in ((mm.get("checker") or {}).get("suru") or {})
+                else {"errors": [{"path": "checker.modes", "reason": "試験の止め"}], "dropped": []})
+            t("★★公開の関所が止める形は、書く前に断る★★（試し書きで行の抜けを関所だけが止めた）",
+              refused(d(), "公開の関所が止めます"))
+        finally:
+            _gt1.audit_view = _keep_av
+        # ★★割り当て★★＝止めた欄のある機種だけ・人気順・直近7日に試した機種は除く
+        _qm = [mk(), {"slug": "zzz_plain", "checker": {"unit": "G", "modes": [{"key": "normal"}], "normal": {"good": 1}}},
+               dict(mk(), slug="zzz_pop"), dict(mk(), slug="zzz_tried")]
+        _qs = {"tried": {"zzz_tried": {"at": "2026-11-08", "result": "UNDECIDED", "n": 1}}}
+        t("★★止めた欄の割り当て★★＝人気順・止めた欄の無い機種と直近7日に試した機種は除く",
+          count_next(5, "2026-11-11", _qm, _qs, popular=["zzz_pop"]) == ["zzz_pop", "zzz_cnt"]
+          and count_next(5, "2026-11-16", _qm, _qs, popular=["zzz_pop"]) == ["zzz_pop", "zzz_cnt", "zzz_tried"])
+        # ★★本物の書き込みを通す★★（一時の置き場）
+        with open(MACHINES, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps([mk()], ensure_ascii=False, indent=1) + "\n")
+        dp = os.path.join(tmpd, "dec.json")
+        with open(dp, "w", encoding="utf-8") as fh:
+            json.dump(d(), fh, ensure_ascii=False)
+        with contextlib.redirect_stdout(_io.StringIO()):
+            rc = apply_decision(dp)
+        _back = json.load(open(MACHINES, encoding="utf-8"))[0]
+        got = adds_all() if os.path.exists(ADDS_STORE) else []
+        t("★★書けば機種行が作り直され、足した欄の一覧に残る★★（突き合わせの検査が想定に足す）",
+          rc == 0 and "suru" in _mode_keys(_back) and "_disabled" not in _back["checker"]["suru"]
+          and [(x["slug"], x["mode"]) for x in got] == [("zzz_cnt", "suru")])
+        with open(dp, "w", encoding="utf-8") as fh:
+            json.dump(d(), fh, ensure_ascii=False)
+        with contextlib.redirect_stdout(_io.StringIO()):
+            rc2 = apply_decision(dp)
+        t("　同じ決定をもう一度流すと、書かずに文の作り直しだけ流して終わる（書いたあと止まった回を先へ進める）",
+          rc2 == 0 and json.load(open(MACHINES, encoding="utf-8"))[0] == _back)
+        globals()["_rebuild_target_text"] = lambda: 1
+        with contextlib.redirect_stdout(_io.StringIO()):
+            rc3 = apply_decision(dp)
+        globals()["_rebuild_target_text"] = lambda: 0
+        t("　（対照）作り直しが失敗すれば再実行も 1 を返す（黙って 0 にしない）", rc3 == 1)
+        _other = dict(d(), rows=[{"count": 0, "good": 300, "excellent": 500}, {"count": 1, "good": 0, "excellent": 0}],
+                      max_why="上限は1スルーで、2回目で確定と出典にあるため（試験）")
+        with open(dp, "w", encoding="utf-8") as fh:
+            json.dump(_other, fh, ensure_ascii=False)
+        with contextlib.redirect_stdout(_io.StringIO()):
+            rc4 = apply_decision(dp)
+        t("　（対照）違う表の決定は、作り直したあとでは「止めた欄ではありません」で断る", rc4 == 1)
+        _bk = json.load(open(MACHINES, encoding="utf-8"))
+        _bk[0]["checker"]["modes"].append({"key": "zz_other", "label": "ほかの欄"})
+        t("★★ほかの欄をあとで足しても、同じ決定の再実行は書けている扱い★★（r2 の3＝一覧の並びに頼らない）",
+          count_applied(_bk[0], d()))
+        _bk2 = json.load(open(MACHINES, encoding="utf-8"))
+        _bk2[0]["checker"]["modeData"] = {"suru": dict(_bk2[0]["checker"]["suru"])}
+        _bk2[0]["checker"]["suru"] = dict(_bk2[0]["checker"]["suru"], suruMax=99)
+        t("★★直下と modeData の片方だけ食い違えば、書けている扱いにしない★★（r3 の2）", not count_applied(_bk2[0], d()))
+        _bk3 = json.load(open(MACHINES, encoding="utf-8"))
+        _bk3[0]["checker"]["modeData"] = {"suru": dict(_bk3[0]["checker"]["suru"])}
+        _bk3[0]["checker"]["suru"] = "broken"
+        _bk4 = json.load(open(MACHINES, encoding="utf-8"))
+        _bk4[0]["checker"]["modeData"] = "broken"
+        t("★★壊れた値（辞書でないもの）があれば、書けている扱いにしない★★（r4）",
+          not count_applied(_bk3[0], d()) and not count_applied(_bk4[0], d()))
+        _bk5 = json.load(open(MACHINES, encoding="utf-8"))
+        _bk5[0]["checker"]["modeData"] = {"suru": dict(_bk5[0]["checker"]["suru"])}
+        _bk5[0]["checker"]["suru"] = None
+        _bk6 = json.load(open(MACHINES, encoding="utf-8"))
+        _bk6[0]["checker"]["modeData"] = {"suru": None}
+        t("★★null が置かれていれば、書けている扱いにしない★★（r5＝鍵が在るかで見る）",
+          not count_applied(_bk5[0], d()) and not count_applied(_bk6[0], d()))
+    finally:
+        MACHINES, DETAILS, ADDS_STORE = keep
+        globals()["known_ceilings"] = _bak_kc
+        globals()["_rebuild_target_text"] = _bak_rb
+        shutil.rmtree(tmpd, ignore_errors=True)
+
+
 def _rows_tests(t) -> None:
     """★回数の表の行を書き換える★（2026-10-29）＝バキの形（CZ間＋スルーの行に交換率ごとの線）"""
     _bak_kc = globals()["known_ceilings"]
@@ -2007,6 +2212,413 @@ def apply_coin(dec: dict, ms: list, dry_run: bool = False) -> int:
     return 0
 
 
+# ★★止めた回数の欄（スルー・周期）を、回数ごとのG数の表で作り直す★★（2026-11-11・運営者の判断「3A」）
+#   ★止めた理由★（2026-07-24 Phase 0）＝読者は「G数」を入れるのに、線が「回数」（5スルー〜）だった
+#   ＝★回数とG数を取り違えた判定★が出ていたので、21機種の欄を画面から消した（`_disabled` の印）。
+#   ★正しい形★＝回数ごとに「何Gから狙えるか」の行を持つ（valvrave2・banchou4 と同じ二軸）。
+#   ★機械が見るのは形と筋だけ★（何Gにするかは2AI）＝止めた欄だけ／回数の並び（スルーは0から・周期は1から続けて）／
+#   各行 caution ≦ good ≦ excellent／天井を超えない／交換率が悪いほど同じか深い／注記に作った数字が無い／
+#   書いたあとの姿が二軸の契約（gates._axis_conflict）を通る。
+COUNT_MODE = "COUNT_MODE"
+COUNT_MAX_ROWS = 20
+
+
+def stopped_keys(m: dict | None) -> list:
+    """★止めた欄（`_disabled` の印がある欄）の鍵★（直下と modeData の両方を見る）"""
+    ck = (m or {}).get("checker") or {}
+    out = []
+    md = ck.get("modeData") if isinstance(ck.get("modeData"), dict) else {}
+    for src in (ck, md):
+        for k, v in src.items():
+            if isinstance(v, dict) and "_disabled" in v and k not in out:
+                out.append(k)
+    return out
+
+
+def _stopped_notes(m: dict, key: str) -> list:
+    """★止めた欄に残っている注記の文★（注記に書いてよい数字の出どころ）"""
+    ck = (m or {}).get("checker") or {}
+    md = ck.get("modeData") if isinstance(ck.get("modeData"), dict) else {}
+    out = []
+    for conf in (ck.get(key), md.get(key)):
+        if not isinstance(conf, dict):
+            continue
+        out.append(conf.get("note"))
+        for rv in (conf.get("byRate") or {}).values() if isinstance(conf.get("byRate"), dict) else []:
+            if isinstance(rv, dict):
+                out.append(rv.get("note"))
+    return [x for x in out if isinstance(x, str) and x.strip()]
+
+
+def count_merged(m: dict, dec: dict) -> dict:
+    """★止めた欄を、決めた回数の表で置き換えた姿★（書かずに作るだけ）
+
+    ★古い線（回数で書いた excellent/good/caution・交換率ごとの線・注記）は残さない★＝
+    直下に線が残ると二軸の契約が止める（回数入力なのにG数判定、の形そのもの）。
+    """
+    out = json.loads(json.dumps(m, ensure_ascii=False))
+    ck = out.get("checker") or {}
+    key, kind = str(dec.get("key") or ""), str(dec.get("kind") or "")
+    rows = json.loads(json.dumps(dec.get("rows") or [], ensure_ascii=False))
+    conf = {kind: rows}
+    if kind == "suru":
+        conf["suruMax"] = int(rows[-1]["count"])
+    if "ceiling" in dec:
+        conf["ceiling"] = dec["ceiling"]
+    md = ck.get("modeData") if isinstance(ck.get("modeData"), dict) else None
+    if md is not None and isinstance(md.get(key), dict):
+        md = dict(md)
+        md[key] = json.loads(json.dumps(conf, ensure_ascii=False))
+        ck["modeData"] = md
+    if isinstance(ck.get(key), dict) or md is None or key not in (md or {}):
+        ck[key] = json.loads(json.dumps(conf, ensure_ascii=False))
+    modes = [x for x in (ck.get("modes") or []) if not (isinstance(x, dict) and x.get("key") == key)]
+    modes.append({"key": key, "label": str(dec.get("label") or "").strip(),
+                  ("hasSuru" if kind == "suru" else "hasCycle"): True})
+    ck["modes"] = modes
+    out["checker"] = ck
+    return out
+
+
+def _write_machines_same_format(ms: list, tmp: str) -> None:
+    """★machines.json を、ほかの書き手と同じ書式（字下げ1・LF）で置き換える★（止めた欄の作り直し用）"""
+    with io.open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(ms, indent=1, ensure_ascii=False) + "\n")
+    os.replace(tmp, MACHINES)
+
+
+def count_mode_problems(dec, ms=None) -> list:
+    """★止めた回数の欄を作り直す決定が受け取れる形か★（1件でも駄目なら何も書かない）"""
+    ng, m = _common_problems(dec, ms)
+    if m is None:
+        return ng
+    slug = str(dec.get("slug") or "")
+    ck = m.get("checker") or {}
+    if str(ck.get("unit") or "G") not in ("G",):
+        ng.append(f"{slug}: G数以外の機種（{ck.get('unit')}）の止めた欄はまだ作り直せません")
+    unknown = sorted(set(dec) - {"slug", "decision", "judges", "why", "key", "kind", "label",
+                                 "rows", "ceiling", "max_why"})
+    if unknown:
+        ng.append(f"書けない項目があります（{'・'.join(unknown)}）")
+    key, kind = str(dec.get("key") or ""), str(dec.get("kind") or "")
+    stopped = stopped_keys(m)
+    if key not in stopped:
+        return ng + [f"「{key}」は止めた欄ではありません（作り直せるのは止めた欄だけ：{'・'.join(stopped) or 'なし'}）"]
+    if not isinstance(ck.get("modes"), list) or not ck["modes"]:
+        return ng + [f"{slug}: 欄の一覧（modes）が無い機種です（先に今の欄を一覧にしてください）"]
+    if kind not in ROW_KINDS:
+        return ng + [f"kind は {'・'.join(ROW_KINDS)} のどちらかです（いま: {kind!r}）"]
+    if not str(dec.get("label") or "").strip():
+        ng.append("label（読者に出る欄の呼び名）が空です")
+    rows = dec.get("rows")
+    if not isinstance(rows, list) or not rows or len(rows) > COUNT_MAX_ROWS:
+        return ng + [f"rows は1〜{COUNT_MAX_ROWS}行で書いてください"]
+    if not all(isinstance(r, dict) for r in rows):
+        return ng + ["rows に辞書でない行があります"]
+    counts = [r.get("count") for r in rows]
+    if not all(isinstance(c, int) and not isinstance(c, bool) and c >= 0 for c in counts):
+        return ng + ["count は0以上の整数で書いてください"]
+    if counts != sorted(set(counts)):
+        ng.append(f"count が小さい順に1回ずつになっていません（{counts}）")
+    # ★★回数は始まりから上限まで1回ずつ全部の行を書く★★＝スルーは0から・周期は1から（machine.html の初期値）。
+    #   ★行の無い回数があると、画面は別の回数の行で判定する★（公開の関所 gates._row_coverage_gap も止める）。
+    #   スルーの上限（suruMax）は最後の行の回数、周期の上限は行の数になる。
+    first = 0 if kind == "suru" else 1
+    if counts != list(range(first, first + len(counts))):
+        ng.append(f"{'スルー' if kind == 'suru' else '周期'}の表は {first} から上限まで1回ずつ全部の行を書いてください"
+                  f"（いま {counts}・行の無い回数は別の回数の線で判定されます）")
+    # ★★止めた欄が持っていた上限（suruMax）と最後の行が違うなら、理由を書かせる★★（Codex review_count_mode_1111 の1）＝
+    #   行を書き落とすと入力の上限まで縮み、読者が上の回数を入力できなくなる（mhrise に0・1スルーだけ渡すと上限1）。
+    #   ★上限を決めるのは2AI★（止めた欄の値も誤りでありうる）＝違うときは max_why（15字以上）で理由を残す
+    _old_max = None
+    for _oc in (ck.get(key), (ck.get("modeData") or {}).get(key) if isinstance(ck.get("modeData"), dict) else None):
+        if isinstance(_oc, dict) and _int(_oc.get("suruMax")) is not None:
+            _old_max = _int(_oc.get("suruMax"))
+    #   ★スルーの上限を持っていた欄を周期の表にするときも同じ★（Codex review_count_mode_1111 r2 の1＝
+    #   kind を cycle にすると上限の確認を抜け、6スルーまで入力できなくなっていた）
+    if _old_max is not None and counts and (kind != "suru" or counts[-1] != _old_max) \
+            and len(str(dec.get("max_why") or "").strip()) < MIN_WHY:
+        ng.append(f"止めた欄の上限は {_old_max}スルーですが、表は "
+                  + (f"{counts[-1]}スルーまでです。" if kind == "suru" else f"周期の表（{counts[-1]}周期まで）です。")
+                  + f"上限まで行を書くか、上限・種類を変える理由を max_why（{MIN_WHY}字以上）に書いてください")
+    rates = rate_keys(m)
+    nums = known_ceilings(slug, m)
+    limit, why = (max(nums), "確かめてある天井のいちばん深いところ") if nums else (None, "")
+    if "ceiling" in dec:
+        ce = _int(dec.get("ceiling"))
+        if ce is None or not (0 < ce <= MAX_VALUE):
+            ng.append(f"ceiling が 1〜{MAX_VALUE} の整数ではありません")
+        elif ce not in nums:
+            ng.append(f"天井 {ce} は確かめた記録にありません（確かめてあるのは {sorted(nums)}）")
+        else:
+            limit, why = ce, "その欄の天井"
+    import decide_now as _dn_num
+    old_notes = _stopped_notes(m, key)
+    all_vals = [_int(r.get(lv)) for r in rows for lv in LEVELS if _int(r.get(lv)) is not None]
+    for r in rows:
+        for rv in (r.get("byRate") or {}).values() if isinstance(r.get("byRate"), dict) else []:
+            if isinstance(rv, dict):
+                all_vals += [_int(rv.get(lv)) for lv in LEVELS if _int(rv.get(lv)) is not None]
+    cnt_unit = "ス" if kind == "suru" else "周"
+    for j, row in enumerate(rows):
+        rowt = f"rows[{j}]"
+        cnt = row.get("count")
+        bad = sorted(set(row) - {"count", "note", "byRate"} - set(LEVELS))
+        if bad:
+            ng.append(f"{rowt}: 書けない項目があります（{'・'.join(bad)}）")
+
+        def _lv(where, src, need_good):
+            got = {}
+            for lv in LEVELS:
+                if lv not in src:
+                    continue
+                v = _int(src.get(lv))
+                if v is None or not (0 <= v <= MAX_VALUE):
+                    ng.append(f"{where}: {lv} が 0〜{MAX_VALUE} の整数ではありません")
+                    continue
+                if limit is not None and v > limit:
+                    ng.append(f"{where}: {lv}（{v}）が、{why}（{limit}）を超えています")
+                got[lv] = v
+            # ★good と excellent の両方が要る★（画面の早見表は両方で行を作る＝gates._judgeable と同じ）
+            if need_good and "good" not in got:
+                ng.append(f"{where}: good（その回数の狙い目のG数）がありません")
+            if need_good and "excellent" not in got:
+                ng.append(f"{where}: excellent（大きく超えた目安のG数）がありません（画面の早見表に要る）")
+            return got
+
+        _lv(rowt, row, True)
+
+        def _note(where, nt):
+            if not isinstance(nt, str) or not nt.strip():
+                ng.append(f"{where}: note（注記）が空です")
+                return
+            ok_n = _row_nums_allowed(m, old_notes, all_vals, nums, cnt)
+            made = [n + u for n, u in _dn_num.numbers_with_unit(nt)
+                    if (n, u) not in ok_n and (n, u) != (str(cnt), cnt_unit)]
+            if made:
+                ng.append(f"{where}: 注記に、線にも天井にも止めた欄の注記にも無い数字があります: "
+                          + " / ".join(made[:4]) + "（数字を作らない）")
+
+        if "note" in row:
+            _note(rowt, row.get("note"))
+        by = row.get("byRate")
+        if by is not None:
+            if not rates:
+                ng.append(f"{rowt}: この機種は交換率の切替を持たないので byRate は書けません")
+            elif not isinstance(by, dict) or not by:
+                ng.append(f"{rowt}: byRate が辞書ではありません")
+            else:
+                for rk, rv in by.items():
+                    rrt = f"{rowt}.byRate.{rk}"
+                    if rk not in set(rates):
+                        ng.append(f"{rrt}: この機種に無い交換率です（あるのは {'・'.join(rates)}）")
+                        continue
+                    if not isinstance(rv, dict) or not rv:
+                        ng.append(f"{rrt}: 辞書ではありません")
+                        continue
+                    bad = sorted(set(rv) - {"note"} - set(LEVELS))
+                    if bad:
+                        ng.append(f"{rrt}: 書けない項目があります（{'・'.join(bad)}）")
+                    _lv(rrt, rv, False)
+                    if "note" in rv:
+                        _note(rrt, rv.get("note"))
+    if ng:
+        return ng
+    after = count_merged(m, dec)
+    pseudo = {"modes": [{"key": key, "rows": rows}]}
+    out = row_view_problems(after, pseudo, m)
+    out += new_note_problems(m, after, {key})
+    # ★★書いたあとの姿が、二軸の契約を通ること★★（止めた理由そのものを機械で確かめる）
+    import gates as _gt
+    _conf = _mode_conf(after, key)
+    _decl = next((x for x in after["checker"]["modes"] if isinstance(x, dict) and x.get("key") == key), {})
+    _ax = _gt._axis_conflict(key, _conf, after["checker"].get("unit"), _decl)
+    if _ax:
+        out.append(f"当てたあと: 二軸の契約を通りません（{_ax}）")
+    if key in stopped_keys(after):
+        out.append(f"当てたあと: 「{key}」に止めた印が残っています")
+    # ★★公開の関所そのもの（gates.audit_view）にも通す★★（2026-11-11・試し書きで、行の抜けを関所だけが止めた）
+    #   ★見るのは関所と同じ入口★（crosscheck_gates と同じく build_ledger.provisional を通す）
+    #   ★その欄の名前が入った誤りだけでなく、この変更で新しく生まれた誤りは全部拾う★（Codex review_count_mode_1111 の2＝
+    #   呼び名が既存の欄と重なると、誤りは checker.modes[1].label に出て、欄の名前を含まない）
+    try:
+        import build_ledger as _bl
+
+        def _errs(mm):
+            _av = _gt.audit_view(_bl.provisional(mm), None)
+            return [e if isinstance(e, str) else f"{e.get('path') or ''} {e.get('reason') or ''}".strip()
+                    for e in list(_av.get("errors") or []) + list(_av.get("dropped") or [])]
+        _was = set(_errs(m))
+        # ★★作り直す前から関所の誤りがある機種では書かない★★（Codex review_count_mode_1111 r2 の2＝
+        #   関所は最初の誤りで止まることがあり、前後で同じ誤りだけが返ると、作り直した欄まで検査されたか分からない）。
+        #   ★2026-11-11時点の21機種は0件★（中身を外して見せる扱い〈dropped〉は止めた欄そのものなので数えない）
+        _was_err = [x for x in _gt.audit_view(_bl.provisional(m), None).get("errors") or []]
+        if _was_err:
+            out.append("当てる前から公開の関所の誤りがあります（作り直した欄まで検査されたか確かめられないので書きません）: "
+                       + str(_was_err[0])[:160])
+        for _txt in _errs(after):
+            if _txt not in _was:
+                out.append(f"当てたあと: 公開の関所が止めます（{_txt[:200]}）")
+        # ★★作り直した欄が、公開される欄の一覧に本当に入ること★★（Codex review_count_mode_1111 r3 の1＝
+        #   既存の欄の呼び名が公開できないと、関所は誤りを返さずにチェッカー全体を外して終わるので、
+        #   誤りの差だけでは作り直した欄が検査されたか分からない）。
+        #   ★ほかの欄が部分的に外される扱い（checker.reset など）は止めた欄と関係ないので受け入れる★
+        _av_after = _gt.audit_view(_bl.provisional(after), None)
+        for _d in _av_after.get("dropped") or []:
+            _pth = str(_d.get("path") or "") if isinstance(_d, dict) else str(_d)
+            if _pth in ("checker", "checker.modes") or _pth.startswith(f"checker.{key}") \
+                    or _pth.startswith("checker.modes["):
+                out.append(f"当てたあと: 公開の関所がチェッカー（{_pth}）を外します（作り直した欄が出ません）")
+        if key not in ((_av_after.get("gates") or {}).get("checker_modes") or []):
+            out.append(f"当てたあと: 作り直した欄「{key}」が公開される欄の一覧に入りません")
+    except Exception as e:                                   # noqa: BLE001
+        out.append(f"当てたあと: 公開の関所の検査を動かせません（{type(e).__name__}: {e}）")
+    return out
+
+
+# ★★止めた回数の欄の割り当て★★（2026-11-11）＝毎朝 STEP 1-V が1日 COUNT_PER_DAY 機種ずつ、2AIで作り直す。
+#   ★作り直せた機種は一覧から自然に消える★（止めた印が無くなるので）。決められなかった機種は
+#   COUNT_RETRY_DAYS 日あけて、材料を足してもう一度（止めた欄は読者に出ていないので、急がず確実に）。
+COUNT_QUEUE = _lp.doc("count_mode_queue.json")
+COUNT_PER_DAY = 2
+COUNT_RETRY_DAYS = 7
+COUNT_RESULTS = ("UNDECIDED", "NO_DATA", "ERROR")
+
+
+def _count_store() -> dict:
+    if not os.path.exists(COUNT_QUEUE):
+        return {"schema_version": "count-mode-queue/v1", "tried": {}}
+    got = _sj.read_json(COUNT_QUEUE, expect=dict)
+    if not isinstance(got.get("tried"), dict):
+        raise ValueError("count_mode_queue.json の中身が壊れています")
+    return got
+
+
+def count_next(n: int, today: str, ms=None, store=None, popular=None) -> list:
+    """★今日作り直す機種★＝止めた欄がある機種のうち、直近 COUNT_RETRY_DAYS 日に試していないもの。
+    並び＝DMMの人気順（読者が多い順）→ machines.json の並び。"""
+    import datetime as _dtq
+    ms = _machines() if ms is None else ms
+    store = _count_store() if store is None else store
+    if popular is None:
+        try:
+            import popular_machines as _pm
+            popular = _pm.popular_slugs(ms)
+        except Exception:                                    # noqa: BLE001
+            popular = []
+    lim = (_dtq.date.fromisoformat(today) - _dtq.timedelta(days=COUNT_RETRY_DAYS)).isoformat()
+    rank = {s: i for i, s in enumerate(popular or [])}
+    got = []
+    for i, m in enumerate(ms):
+        s = str(m.get("slug") or "")
+        if not s or not stopped_keys(m):
+            continue
+        last = str(((store.get("tried") or {}).get(s) or {}).get("at") or "")[:10]
+        if last and last > lim:
+            continue
+        got.append((rank.get(s, 10 ** 6), i, s))
+    return [x[2] for x in sorted(got)][:max(0, int(n))]
+
+
+def count_tried(slug: str, result: str, today: str) -> dict:
+    """★作り直せなかった回を控える★（COUNT_RETRY_DAYS 日あけてまた選ぶ）"""
+    if result not in COUNT_RESULTS:
+        raise ValueError(f"--result は {'・'.join(COUNT_RESULTS)} のどれかです")
+    m = _find(_machines(), slug)
+    if m is None or not stopped_keys(m):
+        raise ValueError(f"{slug}: 止めた欄のある機種ではありません")
+    st = _count_store()
+    cur = st["tried"].get(slug) or {}
+    st["tried"][slug] = {"at": today, "result": result, "n": int(cur.get("n") or 0) + 1}
+    tmp = COUNT_QUEUE + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(st, ensure_ascii=False, indent=1) + "\n")
+    os.replace(tmp, COUNT_QUEUE)
+    return st["tried"][slug]
+
+
+def count_applied(m: dict, dec: dict) -> bool:
+    """★同じ決定がもう書けているか★＝止めた印が無く、欄の中身と一覧の行が決定どおり
+    （書いたあと、一覧の文の作り直しで止まった回を、同じ決定の再実行で先へ進めるため・Codex review_count_mode_1111 の3）"""
+    key = str((dec or {}).get("key") or "")
+    if not key or key in stopped_keys(m) or not isinstance(dec.get("rows"), list) or not dec["rows"]:
+        return False
+    try:
+        want = count_merged(m, dec)
+    except (KeyError, TypeError, ValueError):
+        return False
+    #   ★見るのはこの欄の中身と一覧の行だけ★（Codex review_count_mode_1111 r2 の3＝ほかの欄をあとで作り直すと
+    #   一覧の並びが変わり、一覧全体で比べると再実行を断っていた）
+    def _entry(mm):
+        return [x for x in ((mm.get("checker") or {}).get("modes") or []) if isinstance(x, dict) and x.get("key") == key]
+
+    #   ★直下と modeData の両方を比べる★（r3 の2＝_mode_conf は modeData を先に見るので、直下だけ食い違っても見逃していた）
+    def _places(mm):
+        ck = mm.get("checker") or {}
+        md = ck.get("modeData") if isinstance(ck.get("modeData"), dict) else {}
+        return (ck.get(key), md.get(key))
+    #   ★壊れた値（辞書でないもの）どうしの一致を「書けている」にしない★（r4＝直下を "broken" にしても通っていた）
+    _ck_m = m.get("checker") if isinstance(m.get("checker"), dict) else {}
+    if "modeData" in _ck_m and not isinstance(_ck_m.get("modeData"), dict):
+        return False
+    #   ★在るかは値ではなく鍵で見る★（r5＝null を「置いていない」と取り違えて通っていた）
+    _md_m = _ck_m.get("modeData") if isinstance(_ck_m.get("modeData"), dict) else {}
+    _have = [src[key] for src in (_ck_m, _md_m) if key in src]
+    if not _have or not all(isinstance(x, dict) for x in _have):
+        return False
+    return _places(want) == _places(m) and _entry(want) == _entry(m) and len(_entry(m)) == 1
+
+
+def apply_count_mode(dec: dict, ms: list, dry_run: bool = False) -> int:
+    _cur = _find(ms, str(dec.get("slug") or "")) if isinstance(dec, dict) else None
+    if _cur is not None and count_applied(_cur, dec) and not _common_problems(dec, ms)[0]:
+        print(f"{dec.get('slug')}: すでにこの表で作り直してあります（書きません・一覧と箱の文の作り直しだけ流します）")
+        if dry_run:
+            return 0
+        if "publication_policy" in _cur and not _cur.get("targetProjection") and _unsync_article(str(dec["slug"])) != 0:
+            return 1
+        return _rebuild_target_text()
+    ng = count_mode_problems(dec, ms)
+    if ng:
+        print("★書きません★（1件でも通らなければ何も書かない）")
+        for x in ng:
+            print("  ・" + x)
+        return 1
+    slug, key = str(dec.get("slug") or ""), str(dec.get("key") or "")
+    i = next(i for i, m in enumerate(ms) if str(m.get("slug") or "") == slug)
+    new = count_merged(ms[i], dec)
+    if dry_run:
+        print(f"{slug}: こう書きます →")
+        print("  " + json.dumps(_mode_conf(new, key), ensure_ascii=False)[:800])
+        return 0
+    # ★★画面に出る欄が1つ増える★★＝突き合わせの検査（crosscheck_gates）の想定に足すため、
+    #   足した欄の一覧へ先に書く（機種行の書き込みが途中で落ちても、同じ決定の再実行で収束する）
+    if "publication_policy" not in ms[i]:
+        try:
+            _had = _baseline_keys(slug, _mode_keys(ms[i]))
+            _record_adds(slug, [key], dec, had_checker=bool(_had))
+        except (OSError, ValueError, RuntimeError) as e:
+            print(f"★書きません★: 足した欄の一覧へ書けません（{type(e).__name__}: {e}）")
+            return 1
+    ms[i] = new
+    tmp = MACHINES + ".tmp"
+    # ★書式はほかの書き手と同じ★（字下げ1・LF）
+    _write_machines_same_format(ms, tmp)
+    if _find(_machines(), slug) != new:
+        print("★書いた後の読み直しが合いません★（手で確かめてください）")
+        return 1
+    if "publication_policy" in new and not new.get("targetProjection") and _unsync_article(slug) != 0:
+        return 1
+    # ★一覧と箱の文を作り直す★（交換率を持つ機種は、回数の表の両端が狙い目の文に入る）
+    if _rebuild_target_text() != 0:
+        return 1
+    print(f"{slug}: 止めた欄「{key}」を回数ごとの表（{len(dec.get('rows') or [])}行）で作り直しました")
+    print(f"★次にやること★ python scripts/build_machine_pages.py --legacy --slug {slug}"
+          "（ページを作り直す）→ python scripts/build_hub_pages.py --legacy（スルー天井の一覧の件数が変わる）"
+          "→ python scripts/crosscheck_gates.py")
+    return 0
+
+
 def apply_decision(path: str, dry_run: bool = False) -> int:
     dec = _sj.read_json(path, expect=dict)
     ms = _machines()
@@ -2014,6 +2626,8 @@ def apply_decision(path: str, dry_run: bool = False) -> int:
         return apply_revise(dec, ms, dry_run)
     if str(dec.get("decision") or "") == COIN:
         return apply_coin(dec, ms, dry_run)
+    if str(dec.get("decision") or "") == COUNT_MODE:
+        return apply_count_mode(dec, ms, dry_run)
     # ★★「線を引かない」という結論も受け取る★★（2026-09-21・台帳#704）
     #   ★天井が分かっても、座ってよいゲーム数を出せないことはある★
     #   （平均投資・当選時の期待枚数が確認できていない機種）。
@@ -2156,6 +2770,16 @@ def show(slug: str) -> int:
         if _over:
             print(f"★入力の上限（limit {_lim}）を超える線があります★: {_over[:6]}＝読者が入力できない／天井より深い線の疑い。"
                   "2AIで線（byRate 含む）を確かめて直す")
+    # ★★止めた回数の欄を知らせる★★（2026-11-11・運営者の判断「3A」＝Phase 0 で止めた21機種を作り直す）
+    for _sk in stopped_keys(m):
+        _sc = _mode_conf(m, _sk)
+        print(f"★止めた欄「{_sk}」があります★（{str(_sc.get('_disabled') or '')[:80]}）＝読者の画面に出ていません。"
+              "回数（スルー・周期）ごとに何Gから狙えるかを2AIで確かめ、"
+              '{"decision": "COUNT_MODE", "key": "%s", "kind": "suru か cycle", "label": "<呼び名>", '
+              '"rows": [{"count": 0, "caution": .., "good": .., "excellent": .., '
+              '"byRate": {..}, "note": ".."}, ...], "judges": ["claude", "codex"], "why": ".."} で作り直す'
+              "（スルーは0から・周期は1から、上限まで1回ずつ全部の行・各行に good と excellent）。いまの注記: "
+              % _sk + repr(str(_sc.get("note") or "")[:120]))
     if not isinstance(m.get("checker"), dict) or not (m.get("checker") or {}).get("modes"):
         # ★★チェッカーの無い機種を知らせる★★（2026-11-10・代役の指摘＝昔の機種5台が、一覧の文「算定中」のまま3か月
         #   止まっていた。書く道具はあるのに、問いを出す所が新台だけだった）
@@ -3028,6 +3652,7 @@ def selftest() -> int:
     _coin_tests(t)
     _revise_tests(t)
     _rows_tests(t)
+    _count_mode_tests(t)
     _adds_tests(t)
     _unsync_tests(t)
     _format_tests(t)
@@ -3288,9 +3913,29 @@ def main() -> int:
     ap.add_argument("--apply", default="")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--stopped-next", type=int, default=None, metavar="件数",
+                    help="止めた回数の欄を作り直す今日の機種（人気順・直近7日に試した機種は除く）")
+    ap.add_argument("--stopped-tried", default="", metavar="slug",
+                    help="作り直せなかった回を控える（--result UNDECIDED|NO_DATA|ERROR）")
+    ap.add_argument("--result", default="")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.stopped_next is not None or a.stopped_tried:
+        import datetime as _dtm
+        _today = _dtm.date.today().isoformat()
+        try:
+            if a.stopped_tried:
+                got = count_tried(a.stopped_tried, a.result, _today)
+                print(f"{a.stopped_tried}: 作り直せなかった回を控えました（{got['result']}・{got['n']}回目・{COUNT_RETRY_DAYS}日あけてまた選びます）")
+                return 0
+            nxt = count_next(a.stopped_next, _today)
+        except (OSError, ValueError) as e:
+            print(f"★止めた欄の割り当てを読めません★（{type(e).__name__}: {e}）")
+            return 2
+        left = sum(1 for m in _machines() if stopped_keys(m))
+        print(f"止めた回数の欄が残っている機種: {left} 件／今日作り直す機種: " + ("、".join(nxt) or "なし"))
+        return 0
     if a.apply:
         return apply_decision(a.apply, dry_run=a.dry_run)
     if a.slug:

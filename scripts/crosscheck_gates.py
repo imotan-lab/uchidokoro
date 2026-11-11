@@ -446,13 +446,16 @@ def axis_regression() -> list[str]:
     #   ★2AIが消した欄は想定から外す★（checker-mode-drops.json）
     #   ★2AIが足した欄は、止まる側・通る側のどちらに入っても受け入れる★（元の想定に無い欄なので）
     _dr, _ad = _mode_changes()[:2]
-    for label, got, want in (("止まるべきmode", stopped, (EXPECTED_AXIS_STOPPED - _dr) | (stopped & _ad)),
+    # ★★止めた欄を2AIが回数ごとの表で作り直したら（checker_verdict の COUNT_MODE が足した欄の一覧に残す）、
+    #   止まる側の想定から外す★★（2026-11-11）＝直す前は作り直すと「止まるべきmodeが止まらなくなった」で止まった。
+    #   ★作り直した欄も、止まる側・通る側のどちらに入っても受け入れる★（ほかの足した欄と同じ）
+    for label, got, want in (("止まるべきmode", stopped, (EXPECTED_AXIS_STOPPED - _dr - _ad) | (stopped & _ad)),
                              ("通るべきmode", passed, (EXPECTED_AXIS_PASSED - _dr) | (passed & _ad))):
         for x in sorted(want - got):
             ng.append(f"軸回帰: {label}が{'止まらなくなった' if label == "止まるべきmode" else '止まるようになった'}: {x[0]}.{x[1]}")
         for x in sorted(got - want):
             ng.append(f"軸回帰: 想定外に{'止まった' if label == "止まるべきmode" else '通った'}: {x[0]}.{x[1]}")
-    print(f"軸契約の回帰: 止まる {len(stopped)} 件（想定 {len(EXPECTED_AXIS_STOPPED - _dr)}）/ "
+    print(f"軸契約の回帰: 止まる {len(stopped)} 件（想定 {len(EXPECTED_AXIS_STOPPED - _dr - _ad)}）/ "
           f"通る {len(passed)} 件（想定 {len(EXPECTED_AXIS_PASSED - _dr)}）")
     return ng
 

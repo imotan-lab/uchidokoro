@@ -637,6 +637,69 @@ def plan_today(today, budget: int, machines=None, store=None) -> dict:
             "stale": got_at if (got_at and got_at < wk) else ""}
 
 
+# ★その他の機種は、最後に点検した日からこの日数のあいだ選ばない★（一周＝約35日より必ず短く保つ）
+OTHERS_SKIP_DAYS = 10
+
+
+def others_order(today, rows, last_reviewed: dict, stuck_slugs=(), exclude=()) -> list:
+    """★★「その他」の機種を担当する順番★★（2026-11-11・見張り番の🟡＝60日を超えて点検されない機種3件）
+
+    ★直す前★＝手順書の文（「最後に見た日の古い順・直近10日は飛ばす」）をタスクが読んで選んでいたので、
+    新台経路の機種（新台期間を過ぎたもの）と、点検の記録が一度も無い機種が毎回漏れていた
+    （pw_10513 は 8/13 から・dmm_5089 は一度も）。止まったままの直しの記録がある機種も、
+    担当が回ってくるまで誰も片づけなかった（61日・71日）。
+    ★機械が並べるのは順番だけ★（どこをどう直すかは2AI）。並び＝
+      ①止まったままの直しの記録がある機種 ②点検の記録が無い機種 ③最後に点検した日の古い順
+      （同じ日なら machines.json の並び）。
+    ★外すもの★＝直近 OTHERS_SKIP_DAYS 日に点検した機種／新台期間と導入前の新台（育成の担当）／
+      導入日も点検の記録も無い新台（`machine_turn.stale_reviews` と同じ数え方）／exclude（今日の人気機種）。
+    """
+    import datetime as _dt
+    import grow_machine as _gm
+    if isinstance(today, str):
+        today = _dt.date.fromisoformat(today)
+    iso = today.isoformat()
+    lim = (today - _dt.timedelta(days=OTHERS_SKIP_DAYS)).isoformat()
+    stuck_set, skip = set(stuck_slugs or ()), set(exclude or ())
+    got = []
+    for i, m in enumerate(rows or []):
+        if not isinstance(m, dict) or not isinstance(m.get("slug"), str) or not m["slug"]:
+            continue
+        s = m["slug"]
+        if s in skip:
+            continue
+        rel = str(m.get("release_date") or "")
+        if "publication_policy" in m and (_gm.is_new_machine(rel or None, today) or rel[:len(iso)] > iso):
+            continue
+        last = str((last_reviewed or {}).get(s) or "")[:10]
+        if not last and "publication_policy" in m and not rel:
+            continue
+        if last and last >= lim:
+            continue
+        got.append((0 if s in stuck_set else 1, last, i, s))
+    return [x[3] for x in sorted(got)]
+
+
+def others_today(today, n: int, machines=None) -> dict:
+    """★今日の「その他」の候補を、担当する順に n 件★（読めないものは理由つきで返す・黙って空にしない）"""
+    import datetime as _dt
+    if isinstance(today, str):
+        today = _dt.date.fromisoformat(today)
+    rows = _sj.read_json(MACHINES, expect=list) if machines is None else machines
+    st = _sj.read_json(_lp.doc("state.json"), expect=dict)
+    lr = ((st.get("quality_review") or {}).get("last_reviewed") or {})
+    warn = ""
+    try:
+        import repair_journal as _rj
+        stuck_slugs = [x.get("slug") for x in _rj.stuck()]
+    except Exception as e:                                   # noqa: BLE001
+        stuck_slugs, warn = [], f"止まったままの直しの記録を読めません（{type(e).__name__}）＝その分は先頭に来ません"
+    pop = plan_today(today, 6, machines=rows).get("popular") or []
+    order = others_order(today, rows, lr, stuck_slugs, exclude=pop)
+    return {"others": order[:max(0, int(n))], "stuck": [s for s in order if s in set(stuck_slugs)],
+            "candidates": len(order), "warn": warn}
+
+
 def mark_done(slug: str, today) -> dict:
     """★今週ぶんの人気機種を1件、見終わったと控える★
 
@@ -1171,6 +1234,26 @@ def selftest() -> int:
       and rank_stale_problem("2026-11-09", "2026-11-17") is None
       and rank_stale_problem("", "2026-11-17") is not None)
 
+    # ★★その他の順番★★（2026-11-11・見張り番の🟡＝新台経路の機種と点検の記録が無い機種が漏れていた）
+    _rows = [{"slug": "old"}, {"slug": "never"}, {"slug": "recent"},
+             {"slug": "auto_old", "publication_policy": "page-decision/v2", "release_date": "2026-08-03"},
+             {"slug": "auto_new", "publication_policy": "page-decision/v2", "release_date": "2026-11-01"},
+             {"slug": "auto_future", "publication_policy": "page-decision/v2", "release_date": "2026-12-01"},
+             {"slug": "auto_norel", "publication_policy": "page-decision/v2"},
+             {"slug": "stuck_one"}, {"slug": "pop"}, {"slug": "older"}]
+    _lr = {"old": "2026-09-27", "recent": "2026-11-05", "stuck_one": "2026-10-17",
+           "older": "2026-08-13", "pop": "2026-08-01", "auto_new": "2026-08-01"}
+    _got = others_order("2026-11-11", _rows, _lr, stuck_slugs=["stuck_one"], exclude=["pop"])
+    t("★★止まった直しの記録→点検の記録なし→古い順★★",
+      _got == ["stuck_one", "never", "auto_old", "older", "old"])
+    t("　直近10日に点検した機種は選ばない（10/31 は選ぶ・11/01 は選ばない＝手順書と同じ「10日前の日付以降は飛ばす」）",
+      others_order("2026-11-11", [{"slug": "a"}, {"slug": "b"}],
+                   {"a": "2026-10-31", "b": "2026-11-01"}) == ["a"])
+    t("　新台期間・導入前・導入日も記録も無い新台は外す（育成の担当）",
+      not ({"auto_new", "auto_future", "auto_norel"} & set(_got)))
+    t("　新台期間を過ぎた新台は記録が無くても選ぶ（直す前に漏れていた形）", "auto_old" in _got)
+    t("　今日の人気機種は外す", "pop" not in _got)
+
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
@@ -1191,6 +1274,8 @@ def main() -> int:
                     help="2AIで話しても決まらなかった回を1つ数える")
     ap.add_argument("--plan", type=int, metavar="件数",
                     help="今日の枠を人気機種とその他へ割り振って表示する")
+    ap.add_argument("--others", type=int, metavar="件数",
+                    help="今日の「その他」の候補を担当する順に表示する（止まった直しの記録→点検の記録なし→古い順）")
     ap.add_argument("--done", metavar="slug",
                     help="その人気機種を今週ぶんとして見終わったと控える")
     ap.add_argument("--apply", action="store_true")
@@ -1268,6 +1353,19 @@ def main() -> int:
         print(f"今日の人気機種 {len(p['popular'])} 件: "
               + ("、".join(p["popular"]) or "なし"))
         print(f"今日のその他 {p['other']} 件")
+        return 0
+    if a.others is not None:
+        import datetime as _dt
+        try:
+            o = others_today(_dt.date.today(), a.others)
+        except Exception as e:                               # noqa: BLE001
+            print(f"★その他の候補を作れません★（{type(e).__name__}: {e}）")
+            return 2
+        if o["warn"]:
+            print("★" + o["warn"] + "★")
+        print(f"その他の候補（選べるのは {o['candidates']} 件・この順に担当する）: " + ("、".join(o["others"]) or "なし"))
+        if o["stuck"]:
+            print("止まったままの直しの記録がある機種（先頭に置いた）: " + "、".join(o["stuck"]))
         return 0
     if a.done:
         import datetime as _dt

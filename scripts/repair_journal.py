@@ -1393,6 +1393,18 @@ def _selftest() -> int:
         if not cond:
             ng.append(name)
 
+    import subprocess as _sp_u
+    _env_u = dict(os.environ, PYTHONIOENCODING="cp932")
+    _r_u = _sp_u.run([sys.executable, "-c",
+                      "import sys;sys.path.insert(0,%r);import repair_journal as r;r._utf8_out();print(chr(0x1f7e1))"
+                      % os.path.dirname(os.path.abspath(__file__))],
+                     capture_output=True, env=_env_u)
+    t("★★出力の設定が cp932 でも 🟡 を書いて落ちない★★（見張り番の指摘）",
+      _r_u.returncode == 0 and chr(0x1f7e1).encode("utf-8") in _r_u.stdout)
+    import inspect as _ins_u
+    t("　入口（main）が最初に _utf8_out を呼んでいる",
+      _ins_u.getsource(main).split("\n")[1].strip() == "_utf8_out()")
+
     _missing, _extra = _ops_in_sync()
     t("★★記事を直す道具と、合意の名簿がそろっている★★"
       "（★ずれると、2AIが決めた直しが記事に届かない★）",
@@ -2617,7 +2629,18 @@ def _try_fail(fn) -> bool:
         return True
 
 
+def _utf8_out() -> None:
+    """★出力を utf-8 にそろえる★（2026-11-11・見張り番の指摘＝出力の文字の設定が cp932 だと、
+    --stuck の 🟡 を書くところで落ちていた。番兵は設定を変えて読んでいたが、道具の側で直す）"""
+    for _s in (sys.stdout, sys.stderr):
+        try:
+            _s.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 def main() -> int:
+    _utf8_out()
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--state", default=None)
