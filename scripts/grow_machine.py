@@ -6528,6 +6528,11 @@ def selftest() -> int:
                 _oq.add = _keep_add
             # ★★育成が書き込みまで通ったら、その機種の『育てる処理を止めています』の質問を閉じる★★（2026-11-12）
             #   ★本物の控えの関数を通す★（置き場は上で一時の場所へ向けてある）
+            # ★★この区間は本番の控えへ戻したあとにあるので、自分で一時の置き場へ向ける★★（2026-11-12）
+            #   ★向け直さずに本番の控えへ試験の行を288件書いていた（mutation_check の写しも本番の控えを使う）★
+            _real_q = _oq.STORE
+            _real_q_before = _real_q.read_bytes() if _real_q.exists() else None
+            _oq.STORE = _oq.Path(tempfile.mkdtemp()) / "owner_questions.json"
             _qa = _oq.add(_oq.STORE, f"zzz_q: {STUCK_TITLE}", "詰まった")
             _qb = _oq.add(_oq.STORE, f"zzz_q: {DEMOTE_TITLE}", "降りる")
             _qc = _oq.add(_oq.STORE, f"zzz_other: {STUCK_TITLE}", "別の機種")
@@ -6540,6 +6545,9 @@ def selftest() -> int:
             t("★★その機種の『育てる処理を止めています』の2つの題を閉じる★★（2AIで片づいたのに同じ質問が3回メールされた）",
               sorted(_cl) == sorted([_qa, _qb]) and _qa not in _open and _qb not in _open)
             t("　ほかの機種の質問・育成以外の題の質問は閉じない", _qc in _open and _qd in _open)
+            _oq.STORE = _real_q
+            t("★★質問を閉じる試験は本番の控えに書かない★★（2026-11-12＝288件の試験の行が本番に残り、番人のメールに載るところだった）",
+              (_real_q.read_bytes() if _real_q.exists() else None) == _real_q_before)
             import inspect as _ins_q
             # ★この区間は globals()["_main"] を差し替えているので、取り込み時に控えた本物（main.__wrapped__）を見る★
             _src_main = _ins_q.getsource(main.__wrapped__)
