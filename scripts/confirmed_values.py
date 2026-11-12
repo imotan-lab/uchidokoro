@@ -1421,7 +1421,35 @@ def record(slug: str, field: str, value, sources: list, by: list,
     if _wng:
         raise ConfirmedError("／".join(_wng[:3]))
     # ★引用が本当にそのページにあるか・そのページがその機種かを確かめる★
+    # ★★断られる前に確かめた出典は、記録し直すときも取り直さない★★（2026-11-13）
+    #   ★なぜ★＝ちょんぼりすたは 2026-11-03 から取得を断る。確かめ直し（reverify）は
+    #   断られる前の引用を据え置く（kept_without_refetch）が、記録し直し（record）は
+    #   全部を取り直していたので、★もう一方の出典（なな徹）の同定の根拠を差し替えるだけの
+    #   記録し直しが必ず403で止まった★（2026-11-13・6件。育成が止まったまま直せない）。
+    #   ★据え置くのは「いまの控えに、同じURL・同じ引用・同じ確かめた日で既にある出典」だけ★＝
+    #   新しく渡された出典や、確かめた日を書き換えた出典は今までどおり取りに行く。
+    _prev = {}
+    try:
+        _prev_rec = ((load(strict=False, require_exists=True).get("machines") or {})
+                     .get(slug) or {}).get(field) or {}
+        for _ps in (_prev_rec.get("sources") or []):
+            if isinstance(_ps, dict):
+                _prev[(_ps.get("url"), _ps.get("quote"), _ps.get("verified_at"))] = _ps
+    except Exception:                                        # noqa: BLE001
+        _prev = {}
+
+    _all_src = [dict(s) for s in sources]
+    _kept_at = {}
+    for _i, s in enumerate(_all_src):
+        _k = (s.get("url"), s.get("quote"), s.get("verified_at"))
+        if (s.get("verified_at") and _k in _prev
+                and kept_without_refetch(s.get("url"), s.get("verified_at"))):
+            _kept_at[_i] = dict(_prev[_k])
+    sources = [s for _i, s in enumerate(_all_src) if _i not in _kept_at]
     sources = [verify_source(dict(s), name, fetch, judged_by=by) for s in sources]
+    _fresh = iter(sources)
+    sources = [_kept_at[_i] if _i in _kept_at else next(_fresh)
+               for _i in range(len(_all_src))]
     # ★控えが無いときは作らない★（2026-08-24・Codexの9回目）
     #   初回は `--init`、消失は復旧。ここで黙って作ると両者を区別できない。
     data = load(strict=False, require_exists=True)
@@ -2711,6 +2739,62 @@ def selftest() -> int:
         r = rec()
         t("　2人が一致し、独立2系列の引用が実在すれば記録できる",
           r["state"] == "RECORDED" and len(r["lineages"]) == 2)
+
+        # ★★記録し直すとき、断られる前に確かめた出典は取り直さない★★（2026-11-13）
+        #   ★直す前★＝もう一方の出典の同定の根拠を差し替えるだけの記録し直しが、
+        #   ちょんぼりすたの403で必ず止まった。
+        _rk_keep = _KEEP_POLICY_FOR_TEST
+        _KEEP_POLICY_FOR_TEST = {"hosts": {"chonborista.com": {
+            "status": "BLOCKED", "keep_verified_before": "2026-11-04"}}}
+        _rk_hits = []
+
+        def _rk_raises(fn):
+            try:
+                fn()
+                return False
+            except ConfirmedError:
+                return True
+
+        def _rk_fetch(u):
+            _rk_hits.append(u)
+            if "chonborista" in u:
+                raise RuntimeError("HTTP 403")
+            return fake_fetch(u)
+        try:
+            _rk_data = load(strict=False)
+            for _s in _rk_data["machines"]["x"]["ceiling"]["sources"]:
+                if "chonborista" in _s["url"]:
+                    _s["verified_at"] = "2026-10-01"
+            _save(_rk_data)
+            _rk_old = [dict(s) for s in for_slug("x")["ceiling"]["sources"]]
+            try:
+                _rk_r = rec(sources=_rk_old, fetch=_rk_fetch)
+            except ConfirmedError as _e:              # ★落ちても❌として数える★
+                _rk_r = {"state": "REFUSED: " + str(_e)[:80]}
+            _rk_after = for_slug("x")["ceiling"]["sources"]
+            t("★★記録し直しでも、断られる前に確かめた出典は取りに行かずそのまま残る★★",
+              _rk_r["state"] == "RECORDED"
+              and not [u for u in _rk_hits if "chonborista" in u]
+              and [u for u in _rk_hits if "nana-press" in u]
+              and any(s.get("verified_at") == "2026-10-01" and "chonborista" in s["url"]
+                      for s in _rk_after))
+            _rk_hits.clear()
+            _rk_new = [dict(s) for s in _rk_old]
+            for _s in _rk_new:
+                if "chonborista" in _s["url"]:
+                    _s["quote"] = Q1 + "。"
+            t("　控えに無い引用（書き換えた引用）は据え置かず、取りに行って止まる",
+              _rk_raises(lambda: rec(sources=_rk_new, fetch=_rk_fetch))
+              and [u for u in _rk_hits if "chonborista" in u])
+            _rk_hits.clear()
+            _rk_new2 = [dict(s) for s in _rk_old]
+            for _s in _rk_new2:
+                if "chonborista" in _s["url"]:
+                    _s["verified_at"] = "2026-09-01"
+            t("　確かめた日を書き換えた出典は据え置かない",
+              _rk_raises(lambda: rec(sources=_rk_new2, fetch=_rk_fetch)))
+        finally:
+            _KEEP_POLICY_FOR_TEST = _rk_keep
 
         mat = {}
         added = merge_into(mat, "x")

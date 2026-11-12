@@ -14,7 +14,7 @@
   "scripts/ceiling_dismiss.py": "a0e9bee6afbea29cbc97e3be9ea58239fc3bf47036d001206aa90f999605e9d8",
   "scripts/ceiling_lookup.py": "17cd802e6d8e5eb90bcc13354cef0d602f7c3693ab5419434643c4b1edac0118",
   "scripts/collect_evidence.py": "a3ca8a9f76f057886ad5ad6134b9841fb53eb6ed72b56aa23173f70434d4dbab",
-  "scripts/confirmed_values.py": "0f1b8e96bc083f7a0691dd355d4fff7032921dd80b2dd5d83829982bf4ad9e4e",
+  "scripts/confirmed_values.py": "588367b0d69db183562d296390edc813e86e41efe922fad55c7039a70ef1cb20",
   "scripts/cz_lookup.py": "0af48b371f0800d956270a1b50a08a259520c53f24ca424cc2c719ae49a4fbaf",
   "scripts/directory_index.py": "5f8d9ae8689a3b57f6300607b8b5e35a4bf4a1f8f5436414171f71ecf73aa4b9",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
@@ -295,6 +295,5 @@
    "page_reading",
    "read_failure"
   ]
- },
- "_deps_changed_why": "pending_machines の自己試験が dmm_discover を取り込むようになった（2026-11-11・Codexの指摘の修正）。巡回が待ち行列へ入れる2か所とも、カレンダーで見た日付を専用の欄（calendar_day・calendar_seen）に残しているかを確かめる配線の試験のため。dmm_discover は既に材料の契約の集合に入っている（DMM側の取得器）。"
+ }
 }

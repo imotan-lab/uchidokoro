@@ -11772,6 +11772,21 @@ MUTATIONS = [
         "after": "    _have = [src[key] for src in (_ck_m, _md_m) if src.get(key) is not None]\n",
         "run": ["scripts/checker_verdict.py"],
     },
+    # ─── 2026-11-13・朝タスクの自己修正（記録し直しで、断られる前に確かめた出典を取り直さない） ───
+    {
+        "why": "★確定値の記録し直し：断られる前に確かめた出典も取り直す（403で必ず止まる＝なな徹の根拠の差し替えができない・2026-11-13）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "        if (s.get(\"verified_at\") and _k in _prev\n",
+        "after": "        if (False and s.get(\"verified_at\") and _k in _prev\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値の記録し直し：控えに無い出典（書き換えた引用）まで据え置く★",
+        "file": "scripts/confirmed_values.py",
+        "before": "        if (s.get(\"verified_at\") and _k in _prev\n",
+        "after": "        if (s.get(\"verified_at\") and (_k in _prev or _prev.setdefault(_k, s))\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
 ]
 
 
