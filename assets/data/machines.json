@@ -3085,9 +3085,15 @@
   "seo": {
    "title": "モグモグ風林火山 大海戦の巻 天井・狙い目"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "モグモグ",
+   "もぐもぐ",
+   "モグモグ風林火山",
+   "もぐもぐふうりんかざん",
+   "大海戦"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -3156,7 +3162,8 @@
     "target": 400
    }
   },
-  "targetProjection": "b70c7eededc19d63"
+  "targetProjection": "b70c7eededc19d63",
+  "series": ""
  },
  {
   "slug": "pw_10501",
