@@ -922,9 +922,14 @@
   "seo": {
    "title": "スマスロ 獣王 天井・狙い目"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "獣王",
+   "じゅうおう",
+   "ジュウオウ",
+   "スマスロ獣王"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -1010,7 +1015,8 @@
     "target": 250
    }
   },
-  "targetProjection": "abeb0676d126baa8"
+  "targetProjection": "abeb0676d126baa8",
+  "series": ""
  },
  {
   "slug": "sao2",
