@@ -56,6 +56,16 @@
    "url": "https://p-town.dmm.com/machines/4941",
    "checked": "2026-11-11"
   },
+  "hihou": {
+   "release": "2025-12-22",
+   "url": "https://p-town.dmm.com/machines/4929",
+   "checked": "2026-11-12"
+  },
+  "kabaneri": {
+   "release": "2026-03-02",
+   "url": "https://p-town.dmm.com/machines/4930",
+   "checked": "2026-11-12"
+  },
   "kengan_ashura": {
    "release": "2023-11-20",
    "url": "https://p-town.dmm.com/machines/4434",
@@ -75,6 +85,11 @@
    "release": "2025-05-07",
    "url": "https://p-town.dmm.com/machines/4763",
    "checked": "2026-11-10"
+  },
+  "monkeyv": {
+   "release": "2023-12-04",
+   "url": "https://p-town.dmm.com/machines/4450",
+   "checked": "2026-11-12"
   },
   "mr_juggler": {
    "release": "2024-07-22",
@@ -111,6 +126,11 @@
    "url": "https://p-town.dmm.com/machines/4583",
    "checked": "2026-11-11"
   },
+  "shaman_king": {
+   "release": "2025-02-03",
+   "url": "https://p-town.dmm.com/machines/4719",
+   "checked": "2026-11-12"
+  },
   "shinuchi_yoshimune": {
    "release": "2026-04-06",
    "url": "https://p-town.dmm.com/machines/4983",
@@ -140,6 +160,11 @@
    "release": "2025-05-07",
    "url": "https://p-town.dmm.com/machines/4770",
    "checked": "2026-11-10"
+  },
+  "zombieland_saga": {
+   "release": "2024-07-22",
+   "url": "https://p-town.dmm.com/machines/4603",
+   "checked": "2026-11-12"
   }
  },
  "tries": {
@@ -154,10 +179,13 @@
   "enen2": "2026-11-10",
   "gundam_seed": "2026-11-11",
   "hanma_baki": "2026-11-11",
+  "hihou": "2026-11-12",
+  "kabaneri": "2026-11-12",
   "kengan_ashura": "2026-11-10",
   "koukaku": "2026-11-10",
   "madomagi_forte": "2026-11-10",
   "midoridon_viva": "2026-11-10",
+  "monkeyv": "2026-11-12",
   "mr_juggler": "2026-11-11",
   "neoplanet": "2026-11-11",
   "okidoki_gorgeous": "2026-11-10",
@@ -165,12 +193,14 @@
   "revue_starlight": "2026-11-11",
   "sao": "2026-11-10",
   "sf5": "2026-11-11",
+  "shaman_king": "2026-11-12",
   "shinuchi_yoshimune": "2026-11-11",
   "takt_opus": "2026-11-10",
   "tokyo_ghoul": "2026-11-11",
   "umineko2": "2026-11-10",
   "valvrave2": "2026-11-11",
-  "youjitsu": "2026-11-10"
+  "youjitsu": "2026-11-10",
+  "zombieland_saga": "2026-11-12"
  },
  "applied": {
   "dumbbell": "2024-12-16",
