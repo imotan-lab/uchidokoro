@@ -3018,9 +3018,13 @@
   "seo": {
    "title": "スマスロ タコスロ スペック・基本情報"
   },
-  "info": "",
+  "info": "スマスロBT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "タコスロ",
+   "たこすろ",
+   "スマスロタコスロ"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -3077,7 +3081,8 @@
     }
    ],
    "normal": {}
-  }
+  },
+  "series": ""
  },
  {
   "slug": "pw_10523",
