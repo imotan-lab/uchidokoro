@@ -817,9 +817,15 @@
   "seo": {
    "title": "スマスロ モンスターハンターライズ：サンブレイク 天井・狙い目"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "サンブレイク",
+   "モンハンサンブレイク",
+   "モンハンサンブレ",
+   "サンブレ",
+   "もんはんさんぶれいく"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -907,7 +913,8 @@
     "target": 390
    }
   },
-  "targetProjection": "cf663efe2b860baa"
+  "targetProjection": "cf663efe2b860baa",
+  "series": "モンスターハンター"
  },
  {
   "slug": "pw_10521",
