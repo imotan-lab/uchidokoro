@@ -3132,6 +3132,7 @@
    "claims": [
     "at:MAIN_AT",
     "at_prob",
+    "ceiling:CYCLE:ポイント周期",
     "ceiling:GAME:",
     "ceiling:THROUGH:CZ",
     "cz:モグモグ大戦",
@@ -3141,8 +3142,8 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-11",
-   "input_digest": "sha256:f267946610230403394fdbb5756a95b69be46e5c7e9a0dea20fe67bdf4c9f592"
+   "decided_at": "2026-11-13",
+   "input_digest": "sha256:8eb08607f68299421402bb339030b8e9cfd4fd4b4d3291b4fb292d350016d312"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -3179,8 +3180,8 @@
     "target": 400
    }
   },
-  "targetProjection": "b70c7eededc19d63",
-  "series": ""
+  "series": "",
+  "targetProjection": "b70c7eededc19d63"
  },
  {
   "slug": "pw_10501",
