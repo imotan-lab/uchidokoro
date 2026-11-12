@@ -3479,9 +3479,15 @@
   "seo": {
    "title": "LBトリプルクラウンX-300 スペック・基本情報"
   },
-  "info": "",
+  "info": "スマスロBT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "トリクラX",
+   "トリプルクラウンX",
+   "トリプルクラウン",
+   "X300",
+   "とりぷるくらうん"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -3521,7 +3527,8 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5089 型式=未掲載 メーカー=清龍ジャパン 導入=2026-08-03 確認日=2026-08-25",
    "market_release_date": "2026-08-03"
-  }
+  },
+  "series": "トリプルクラウン"
  },
  {
   "slug": "karakuri2",
