@@ -2793,9 +2793,15 @@
   "seo": {
    "title": "L 転生王女と天才令嬢の魔法革命 天井・スペック"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "転天",
+   "てんてん",
+   "テンテン",
+   "転生王女",
+   "スマスロ転天"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -2841,7 +2847,8 @@
    "_observed_model_code_sources": [
     "p-town.dmm.com"
    ]
-  }
+  },
+  "series": ""
  },
  {
   "slug": "pw_10513",
