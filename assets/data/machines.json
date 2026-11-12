@@ -2856,9 +2856,15 @@
   "seo": {
    "title": "マイジャグラーVI スペック・基本情報"
   },
-  "info": "",
+  "info": "Aタイプ",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "マイジャグ6",
+   "マイジャグラー6",
+   "まいじゃぐ6",
+   "まいじゃぐらー6",
+   "マイジャグ"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -2902,7 +2908,8 @@
    "_observed_model_code_sources": [
     "p-world.co.jp"
    ]
-  }
+  },
+  "series": "ジャグラー"
  },
  {
   "slug": "pw_10543",
