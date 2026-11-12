@@ -741,9 +741,14 @@
   "seo": {
    "title": "L牙狼 闇を照らす者 天井・狙い目"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "牙狼",
+   "ガロ",
+   "がろ",
+   "スマスロ牙狼"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -803,7 +808,8 @@
     "target": 660
    }
   },
-  "targetProjection": "1c082c0cdc071eef"
+  "targetProjection": "1c082c0cdc071eef",
+  "series": ""
  },
  {
   "slug": "dmm_5095",
