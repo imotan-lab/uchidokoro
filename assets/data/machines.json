@@ -4592,6 +4592,160 @@
   }
  },
  {
+  "slug": "hihou",
+  "name": "スマスロ秘宝伝",
+  "seo": {
+   "title": "秘宝伝 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常(BIG後)480G〜 / REG後330G〜 / リセット180G〜",
+  "strategyByRate": {
+   "eq56": "通常(BIG後)480G〜 / REG後330G〜 / リセット180G〜",
+   "rate55": "通常(BIG後)490G〜 / REG後340G〜 / リセット200G〜",
+   "rate50": "通常(BIG後)520G〜 / REG後370G〜 / リセット230G〜",
+   "rate45": "通常(BIG後)550G〜 / REG後400G〜 / リセット260G〜"
+  },
+  "aliases": [
+   "秘宝伝",
+   "ヒホウデン"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常(BIG後)"
+    },
+    {
+     "key": "reg",
+     "label": "REG後"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 750,
+    "good": 480,
+    "caution": 380,
+    "byRate": {
+     "eq56": {
+      "excellent": 750,
+      "good": 480,
+      "caution": 380,
+      "note": "5.6枚交換ならBIG後480Gから狙い目。天井799G+α。"
+     },
+     "rate55": {
+      "excellent": 750,
+      "good": 490,
+      "caution": 390,
+      "note": "6.0枚交換ならBIG後490Gから。"
+     },
+     "rate50": {
+      "excellent": 750,
+      "good": 520,
+      "caution": 420,
+      "note": "6.5枚交換ならBIG後520Gから。"
+     },
+     "rate45": {
+      "excellent": 750,
+      "good": 550,
+      "caution": 450,
+      "note": "7.0枚交換ならBIG後550Gから。"
+     }
+    },
+    "note": "BIG後天井799G+α。"
+   },
+   "reg": {
+    "excellent": 600,
+    "good": 330,
+    "caution": 250,
+    "byRate": {
+     "eq56": {
+      "excellent": 600,
+      "good": 330,
+      "caution": 250,
+      "note": "5.6枚交換ならREG後330Gから狙い目。REG後天井649G+α。"
+     },
+     "rate55": {
+      "excellent": 600,
+      "good": 340,
+      "caution": 260,
+      "note": "6.0枚交換ならREG後340Gから。"
+     },
+     "rate50": {
+      "excellent": 600,
+      "good": 370,
+      "caution": 290,
+      "note": "6.5枚交換ならREG後370Gから。"
+     },
+     "rate45": {
+      "excellent": 600,
+      "good": 400,
+      "caution": 310,
+      "note": "7.0枚交換ならREG後400Gから。"
+     }
+    },
+    "note": "REG後天井649G+α。BIG後より150G短縮。"
+   },
+   "reset": {
+    "excellent": 450,
+    "good": 180,
+    "caution": 100,
+    "byRate": {
+     "eq56": {
+      "excellent": 450,
+      "good": 180,
+      "caution": 100,
+      "note": "リセット時は天井499G+αに短縮。180Gから狙い目。"
+     },
+     "rate55": {
+      "excellent": 450,
+      "good": 200,
+      "caution": 120,
+      "note": "リセット時は499G+α。"
+     },
+     "rate50": {
+      "excellent": 450,
+      "good": 230,
+      "caution": 150,
+      "note": "リセット時は499G+α。"
+     },
+     "rate45": {
+      "excellent": 450,
+      "good": 260,
+      "caution": 170,
+      "note": "リセット時は499G+α。"
+     }
+    },
+    "note": "リセット時は天井499G+αに短縮。"
+   }
+  },
+  "limit": 799,
+  "tenjo_display": "BIG後799G+α／REG後649G+α",
+  "tenjo_games": 799
+ },
+ {
   "slug": "neoplanet",
   "name": "スマスロネオプラネット",
   "seo": {
@@ -5229,6 +5383,166 @@
   "release_date": "2025-03-03"
  },
  {
+  "slug": "shaman_king",
+  "name": "スマスロ シャーマンキング",
+  "seo": {
+   "title": "スマスロ シャーマンキング 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常500G〜 / リセット後250G〜",
+  "aliases": [
+   "シャーマンキング",
+   "マンキン",
+   "シャーマン",
+   "Shaman King",
+   "shaman"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット後"
+    }
+   ],
+   "normal": {
+    "excellent": 700,
+    "good": 500,
+    "caution": 350,
+    "byRate": {
+     "eq56": {
+      "excellent": 700,
+      "good": 500,
+      "caution": 350,
+      "note": "5.6枚は500G〜が狙い目。天井ボーナス間800G+α。"
+     },
+     "rate55": {
+      "excellent": 720,
+      "good": 530,
+      "caution": 370,
+      "note": "6.0枚交換は530G〜。"
+     },
+     "rate50": {
+      "excellent": 750,
+      "good": 560,
+      "caution": 400,
+      "note": "6.5枚交換は560G〜。"
+     },
+     "rate45": {
+      "excellent": 780,
+      "good": 600,
+      "caution": 430,
+      "note": "7.0枚交換は600G〜。"
+     }
+    },
+    "note": "天井ボーナス間800G+α。等価/5.6枚は500G〜が狙い目。スルー天井と組み合わせて判断する。"
+   },
+   "suru": {
+    "excellent": 8,
+    "good": 6,
+    "caution": 4,
+    "byRate": {
+     "eq56": {
+      "excellent": 8,
+      "good": 6,
+      "caution": 4,
+      "note": "8スルー以上は0Gから即打ち。6スルーは200G〜から狙い目。"
+     },
+     "rate55": {
+      "excellent": 8,
+      "good": 6,
+      "caution": 4,
+      "note": "8スルー以上は0Gから即打ち。"
+     },
+     "rate50": {
+      "excellent": 9,
+      "good": 7,
+      "caution": 5,
+      "note": "6.5枚は7スルー〜が基準。"
+     },
+     "rate45": {
+      "excellent": 9,
+      "good": 8,
+      "caution": 6,
+      "note": "7.0枚は8スルー〜が基準。"
+     }
+    },
+    "note": "10スルー後（11回目のボーナス）でAT確定。8スルー以上はG数関係なく即打ち可能。",
+    "suruMax": 10,
+    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+   },
+   "reset": {
+    "excellent": 400,
+    "good": 250,
+    "caution": 150,
+    "byRate": {
+     "eq56": {
+      "excellent": 400,
+      "good": 250,
+      "caution": 150,
+      "note": "リセット後天井500G+α。5.6枚は250G〜から狙い目。"
+     },
+     "rate55": {
+      "excellent": 420,
+      "good": 280,
+      "caution": 170,
+      "note": "6.0枚交換は280G〜。"
+     },
+     "rate50": {
+      "excellent": 450,
+      "good": 320,
+      "caution": 200,
+      "note": "6.5枚交換は320G〜。"
+     },
+     "rate45": {
+      "excellent": 480,
+      "good": 350,
+      "caution": 220,
+      "note": "7.0枚交換は350G〜。"
+     }
+    },
+    "note": "リセット後天井500G+αに短縮。等価/5.6枚は250G〜が狙い目。"
+   }
+  },
+  "limit": 900,
+  "tenjo_display": "ボーナス間800G+α",
+  "tenjo_games": 800,
+  "original": {
+   "title": "シャーマンキング",
+   "kind": "漫画",
+   "search": "シャーマンキング 漫画"
+  },
+  "strategyByRate": {
+   "eq56": "通常500G〜 / リセット後250G〜",
+   "rate55": "通常530G〜 / リセット後280G〜",
+   "rate50": "通常560G〜 / リセット後320G〜",
+   "rate45": "通常600G〜 / リセット後350G〜"
+  }
+ },
+ {
   "slug": "dumbbell",
   "name": "Lパチスロ ダンベル何キロ持てる?",
   "seo": {
@@ -5595,6 +5909,56 @@
   "limit": null,
   "series": "ジャグラー",
   "release_date": "2024-07-22"
+ },
+ {
+  "slug": "zombieland_saga",
+  "name": "スロット ゾンビランドサガ",
+  "seo": {
+   "title": "スロット ゾンビランドサガ 狙い目"
+  },
+  "info": "スマスロST",
+  "strategy": "チェッカー基準 通常550G〜 / リセット300G〜",
+  "aliases": [
+   "ゾンビランドサガ",
+   "ゾンサガ",
+   "ぞんさが",
+   "ぞんびらんどさが",
+   "zombie",
+   "zombieland"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 777,
+    "good": 550,
+    "caution": 450,
+    "note": "天井ボーナス&ST間777G。有利区間ランプで状態確認可。"
+   },
+   "reset": {
+    "excellent": 450,
+    "good": 300,
+    "caution": 240,
+    "note": "設定変更後は555Gに短縮。朝一は300G〜が狙い目ライン。300G以上で本命。"
+   }
+  },
+  "limit": 800,
+  "tenjo_display": "ボーナス&ST間777G（超高確へ移行）",
+  "tenjo_games": 777,
+  "original": {
+   "title": "ゾンビランドサガ",
+   "kind": "アニメ",
+   "search": "ゾンビランドサガ Blu-ray"
+  }
  },
  {
   "slug": "sf5",
@@ -9040,160 +9404,6 @@
   "limit": 999
  },
  {
-  "slug": "hihou",
-  "name": "スマスロ秘宝伝",
-  "seo": {
-   "title": "秘宝伝 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常(BIG後)480G〜 / REG後330G〜 / リセット180G〜",
-  "strategyByRate": {
-   "eq56": "通常(BIG後)480G〜 / REG後330G〜 / リセット180G〜",
-   "rate55": "通常(BIG後)490G〜 / REG後340G〜 / リセット200G〜",
-   "rate50": "通常(BIG後)520G〜 / REG後370G〜 / リセット230G〜",
-   "rate45": "通常(BIG後)550G〜 / REG後400G〜 / リセット260G〜"
-  },
-  "aliases": [
-   "秘宝伝",
-   "ヒホウデン"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常(BIG後)"
-    },
-    {
-     "key": "reg",
-     "label": "REG後"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 750,
-    "good": 480,
-    "caution": 380,
-    "byRate": {
-     "eq56": {
-      "excellent": 750,
-      "good": 480,
-      "caution": 380,
-      "note": "5.6枚交換ならBIG後480Gから狙い目。天井799G+α。"
-     },
-     "rate55": {
-      "excellent": 750,
-      "good": 490,
-      "caution": 390,
-      "note": "6.0枚交換ならBIG後490Gから。"
-     },
-     "rate50": {
-      "excellent": 750,
-      "good": 520,
-      "caution": 420,
-      "note": "6.5枚交換ならBIG後520Gから。"
-     },
-     "rate45": {
-      "excellent": 750,
-      "good": 550,
-      "caution": 450,
-      "note": "7.0枚交換ならBIG後550Gから。"
-     }
-    },
-    "note": "BIG後天井799G+α。"
-   },
-   "reg": {
-    "excellent": 600,
-    "good": 330,
-    "caution": 250,
-    "byRate": {
-     "eq56": {
-      "excellent": 600,
-      "good": 330,
-      "caution": 250,
-      "note": "5.6枚交換ならREG後330Gから狙い目。REG後天井649G+α。"
-     },
-     "rate55": {
-      "excellent": 600,
-      "good": 340,
-      "caution": 260,
-      "note": "6.0枚交換ならREG後340Gから。"
-     },
-     "rate50": {
-      "excellent": 600,
-      "good": 370,
-      "caution": 290,
-      "note": "6.5枚交換ならREG後370Gから。"
-     },
-     "rate45": {
-      "excellent": 600,
-      "good": 400,
-      "caution": 310,
-      "note": "7.0枚交換ならREG後400Gから。"
-     }
-    },
-    "note": "REG後天井649G+α。BIG後より150G短縮。"
-   },
-   "reset": {
-    "excellent": 450,
-    "good": 180,
-    "caution": 100,
-    "byRate": {
-     "eq56": {
-      "excellent": 450,
-      "good": 180,
-      "caution": 100,
-      "note": "リセット時は天井499G+αに短縮。180Gから狙い目。"
-     },
-     "rate55": {
-      "excellent": 450,
-      "good": 200,
-      "caution": 120,
-      "note": "リセット時は499G+α。"
-     },
-     "rate50": {
-      "excellent": 450,
-      "good": 230,
-      "caution": 150,
-      "note": "リセット時は499G+α。"
-     },
-     "rate45": {
-      "excellent": 450,
-      "good": 260,
-      "caution": 170,
-      "note": "リセット時は499G+α。"
-     }
-    },
-    "note": "リセット時は天井499G+αに短縮。"
-   }
-  },
-  "limit": 799,
-  "tenjo_display": "BIG後799G+α／REG後649G+α",
-  "tenjo_games": 799
- },
- {
   "slug": "gineiden_dnt",
   "name": "スマスロ 銀河英雄伝説 Die Neue These",
   "seo": {
@@ -12084,166 +12294,6 @@
   }
  },
  {
-  "slug": "shaman_king",
-  "name": "スマスロ シャーマンキング",
-  "seo": {
-   "title": "スマスロ シャーマンキング 狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常500G〜 / リセット後250G〜",
-  "aliases": [
-   "シャーマンキング",
-   "マンキン",
-   "シャーマン",
-   "Shaman King",
-   "shaman"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット後"
-    }
-   ],
-   "normal": {
-    "excellent": 700,
-    "good": 500,
-    "caution": 350,
-    "byRate": {
-     "eq56": {
-      "excellent": 700,
-      "good": 500,
-      "caution": 350,
-      "note": "5.6枚は500G〜が狙い目。天井ボーナス間800G+α。"
-     },
-     "rate55": {
-      "excellent": 720,
-      "good": 530,
-      "caution": 370,
-      "note": "6.0枚交換は530G〜。"
-     },
-     "rate50": {
-      "excellent": 750,
-      "good": 560,
-      "caution": 400,
-      "note": "6.5枚交換は560G〜。"
-     },
-     "rate45": {
-      "excellent": 780,
-      "good": 600,
-      "caution": 430,
-      "note": "7.0枚交換は600G〜。"
-     }
-    },
-    "note": "天井ボーナス間800G+α。等価/5.6枚は500G〜が狙い目。スルー天井と組み合わせて判断する。"
-   },
-   "suru": {
-    "excellent": 8,
-    "good": 6,
-    "caution": 4,
-    "byRate": {
-     "eq56": {
-      "excellent": 8,
-      "good": 6,
-      "caution": 4,
-      "note": "8スルー以上は0Gから即打ち。6スルーは200G〜から狙い目。"
-     },
-     "rate55": {
-      "excellent": 8,
-      "good": 6,
-      "caution": 4,
-      "note": "8スルー以上は0Gから即打ち。"
-     },
-     "rate50": {
-      "excellent": 9,
-      "good": 7,
-      "caution": 5,
-      "note": "6.5枚は7スルー〜が基準。"
-     },
-     "rate45": {
-      "excellent": 9,
-      "good": 8,
-      "caution": 6,
-      "note": "7.0枚は8スルー〜が基準。"
-     }
-    },
-    "note": "10スルー後（11回目のボーナス）でAT確定。8スルー以上はG数関係なく即打ち可能。",
-    "suruMax": 10,
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   },
-   "reset": {
-    "excellent": 400,
-    "good": 250,
-    "caution": 150,
-    "byRate": {
-     "eq56": {
-      "excellent": 400,
-      "good": 250,
-      "caution": 150,
-      "note": "リセット後天井500G+α。5.6枚は250G〜から狙い目。"
-     },
-     "rate55": {
-      "excellent": 420,
-      "good": 280,
-      "caution": 170,
-      "note": "6.0枚交換は280G〜。"
-     },
-     "rate50": {
-      "excellent": 450,
-      "good": 320,
-      "caution": 200,
-      "note": "6.5枚交換は320G〜。"
-     },
-     "rate45": {
-      "excellent": 480,
-      "good": 350,
-      "caution": 220,
-      "note": "7.0枚交換は350G〜。"
-     }
-    },
-    "note": "リセット後天井500G+αに短縮。等価/5.6枚は250G〜が狙い目。"
-   }
-  },
-  "limit": 900,
-  "tenjo_display": "ボーナス間800G+α",
-  "tenjo_games": 800,
-  "original": {
-   "title": "シャーマンキング",
-   "kind": "漫画",
-   "search": "シャーマンキング 漫画"
-  },
-  "strategyByRate": {
-   "eq56": "通常500G〜 / リセット後250G〜",
-   "rate55": "通常530G〜 / リセット後280G〜",
-   "rate50": "通常560G〜 / リセット後320G〜",
-   "rate45": "通常600G〜 / リセット後350G〜"
-  }
- },
- {
   "slug": "tenken",
   "name": "パチスロ 転生したら剣でした",
   "seo": {
@@ -12611,56 +12661,6 @@
    "title": "ルパン三世",
    "kind": "漫画",
    "search": "ルパン三世 漫画"
-  }
- },
- {
-  "slug": "zombieland_saga",
-  "name": "スロット ゾンビランドサガ",
-  "seo": {
-   "title": "スロット ゾンビランドサガ 狙い目"
-  },
-  "info": "スマスロST",
-  "strategy": "チェッカー基準 通常550G〜 / リセット300G〜",
-  "aliases": [
-   "ゾンビランドサガ",
-   "ゾンサガ",
-   "ぞんさが",
-   "ぞんびらんどさが",
-   "zombie",
-   "zombieland"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 777,
-    "good": 550,
-    "caution": 450,
-    "note": "天井ボーナス&ST間777G。有利区間ランプで状態確認可。"
-   },
-   "reset": {
-    "excellent": 450,
-    "good": 300,
-    "caution": 240,
-    "note": "設定変更後は555Gに短縮。朝一は300G〜が狙い目ライン。300G以上で本命。"
-   }
-  },
-  "limit": 800,
-  "tenjo_display": "ボーナス&ST間777G（超高確へ移行）",
-  "tenjo_games": 777,
-  "original": {
-   "title": "ゾンビランドサガ",
-   "kind": "アニメ",
-   "search": "ゾンビランドサガ Blu-ray"
   }
  },
  {
