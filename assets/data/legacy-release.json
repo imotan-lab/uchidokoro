@@ -146,6 +146,11 @@
    "url": "https://p-town.dmm.com/machines/4742",
    "checked": "2026-11-11"
   },
+  "triple_crown_7": {
+   "release": "2026-04-06",
+   "url": "https://p-town.dmm.com/machines/4986",
+   "checked": "2026-11-13"
+  },
   "umineko2": {
    "release": "2026-02-02",
    "url": "https://p-town.dmm.com/machines/4925",
@@ -197,6 +202,7 @@
   "shinuchi_yoshimune": "2026-11-11",
   "takt_opus": "2026-11-10",
   "tokyo_ghoul": "2026-11-11",
+  "triple_crown_7": "2026-11-13",
   "umineko2": "2026-11-10",
   "valvrave2": "2026-11-11",
   "youjitsu": "2026-11-10",
