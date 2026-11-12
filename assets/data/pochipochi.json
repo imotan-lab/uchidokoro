@@ -3454,6 +3454,10 @@
   },
   "hand_checked": {},
   "ko_checked": {
+    "dmm_5120": {
+      "checked": "2026-11-12",
+      "result": "NONE"
+    },
     "mr_juggler": {
       "checked": "2026-11-11",
       "result": "NONE"
