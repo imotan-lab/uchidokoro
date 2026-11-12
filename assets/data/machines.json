@@ -3263,7 +3263,7 @@
   "slug": "garei_zero_re",
   "name": "Lパチスロ 喰霊-零-Re",
   "seo": {
-   "title": "Lパチスロ 喰霊-零-Re スペック・基本情報"
+   "title": "Lパチスロ 喰霊-零-Re 天井・狙い目"
   },
   "info": "",
   "strategy": "",
@@ -3298,7 +3298,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-10-26",
+   "decided_at": "2026-11-13",
    "input_digest": "sha256:4f28ecd7655ec3c2c4589206cc2fc347617cda42d0b1e59bcf224c26f23075de"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
