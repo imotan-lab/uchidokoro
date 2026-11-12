@@ -11341,7 +11341,9 @@
    "kind": "小説",
    "search": "銭形平次 野村胡堂"
   },
-  "release_date": "2025-10-06"
+  "release_date": "2025-10-06",
+  "tenjo_games": 1250,
+  "tenjo_display": "1250G+α（通常A）"
  },
  {
   "slug": "mushoku",
