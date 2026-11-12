@@ -1,8 +1,10 @@
 {
  "schema": "reset-ev-order/v1",
  "order": [
+  "kabaneri",
   "dmm_5073",
   "midoridon_viva",
-  "enen2"
+  "enen2",
+  "goblin"
  ]
 }
