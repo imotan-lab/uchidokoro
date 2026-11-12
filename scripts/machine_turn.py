@@ -447,13 +447,18 @@ def selftest() -> int:
       check_problem("2026-11-11", rows, p) is not None)
     t("★★古い担当（8日以上前に始めた）でも、そろっていなければ知らせ続ける★★（Codexの指摘）",
       check_problem("2026-11-30", rows, p) is not None)
-    try:
-        done("zzz_l", "mode", "LATER", note="短い", rows=rows, today="2026-11-10", path=p)
-        _short = False
-    except TurnError:
-        _short = True
-    t("　LATER・NA は理由（10字以上）が要る", _short)
     _B = {"deadline_hhmm": "11:00", "deadline_by_task": {}}
+    # ★時刻を必ず渡す★（2026-11-12）＝渡さないと試験を動かした時刻で決まり、GitHub（UTC）の 05:00〜10:15 には
+    #   「締切前は LATER にできない」で断られて、理由の検査を壊しても赤にならなかった（罠⑳-b）
+    _short_why = ""
+    try:
+        done("zzz_l", "mode", "LATER", note="短い", rows=rows, today="2026-11-10", path=p,
+             now_hhmm="10:20", budget=_B)
+        _short = False
+    except TurnError as e:
+        _short, _short_why = True, str(e)
+    t("　LATER・NA は理由（10字以上）が要る（★断った理由まで見る★）", _short and "理由" in _short_why
+      and "10:15" not in _short_why)
     try:
         done("zzz_l", "mode", "LATER", note="締切までに回し切れないので翌日へ", rows=rows, today="2026-11-10", path=p,
              now_hhmm="09:30", budget=_B)
