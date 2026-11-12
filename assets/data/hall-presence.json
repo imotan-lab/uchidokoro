@@ -233,6 +233,11 @@
    "checked": "2026-11-12",
    "url": "https://p-town.dmm.com/machines/4770"
   },
+  "zenigata5": {
+   "stores": 1678,
+   "checked": "2026-11-13",
+   "url": "https://p-town.dmm.com/machines/4877"
+  },
   "zombieland_saga": {
    "stores": 671,
    "checked": "2026-11-12",
@@ -286,6 +291,7 @@
   "umineko2": "2026-11-11",
   "valvrave2": "2026-11-11",
   "youjitsu": "2026-11-12",
+  "zenigata5": "2026-11-13",
   "zombieland_saga": "2026-11-12"
  }
 }

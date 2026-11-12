@@ -166,6 +166,11 @@
    "url": "https://p-town.dmm.com/machines/4770",
    "checked": "2026-11-10"
   },
+  "zenigata5": {
+   "release": "2025-10-06",
+   "url": "https://p-town.dmm.com/machines/4877",
+   "checked": "2026-11-13"
+  },
   "zombieland_saga": {
    "release": "2024-07-22",
    "url": "https://p-town.dmm.com/machines/4603",
@@ -206,6 +211,7 @@
   "umineko2": "2026-11-10",
   "valvrave2": "2026-11-11",
   "youjitsu": "2026-11-10",
+  "zenigata5": "2026-11-13",
   "zombieland_saga": "2026-11-12"
  },
  "applied": {
