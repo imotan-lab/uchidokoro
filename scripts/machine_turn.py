@@ -13,13 +13,15 @@
 使い方（朝の更新タスク STEP 1-T）：
   python scripts/machine_turn.py --start <slug>            担当を始める（その機種の項目の記録を今日から数え直す）
   python scripts/machine_turn.py --plan <slug>             その機種でやる項目と、今回の結果を並べる
-  python scripts/machine_turn.py --done <slug> --item <項目> --result OK|FIXED|ADDED|ASKED|NA|LATER [--note-file F]
+  python scripts/machine_turn.py --done <slug> --item <項目> --result OK|FIXED|ADDED|ASKED|NA|LATER [--note-file F] [--codex-limited]
+  python scripts/machine_turn.py --can-finish     # 朝のタスクが終わってよいか（0=よい／1=まだ続ける）
   python scripts/machine_turn.py --pending                 全項目そろっていない担当（翌日まず仕上げる）
   python scripts/machine_turn.py --check                   見張り番：前の日までに始めて、そろっていない担当（1＝🟡／2＝読めない）
   python scripts/machine_turn.py --selftest
 
 結果の意味：OK＝確かめて変わりなし／FIXED＝直した／ADDED＝足りない項目を足した／ASKED＝運営者へ回した（owner_questions）／
-  NA＝この機種には当てはまらない（理由を --note-file に）／LATER＝締切・利用制限で翌日に回す（理由を --note-file に）。
+  NA＝この機種には当てはまらない（理由を --note-file に）／LATER＝締切で翌日に回す（理由を --note-file に）。
+  ★LATER は締切の45分前からしか受け付けない★（Codexの利用制限で天井を回すときだけ --codex-limited で前でも可）。
 ★LATER と記録の無い項目が残る担当は「そろっていない」★＝翌朝の STEP 1-T が新しい機種より先に仕上げる。
 ★どの項目をどう直すかは2AI★（このファイルは並べて記録するだけ）。
 """
@@ -50,6 +52,15 @@ TURN_SINCE_DAY = "2026-11-11"
 REVIEW_STALE_DAYS = 60
 # ★点検済みの印を覆える点検表は、その日から何日前までに始めたものか★（LATER を翌朝に仕上げる分の余裕）
 REVIEW_TURN_DAYS = 3
+# ★★LATER（翌日へ回す）は締切のこの分数前からしか受け付けない★★（2026-11-12）
+#   なぜ＝11/11の朝、6機種とも重い5項目を「締切（11:00）までに回し切れない」と見込んで LATER にし、9:36に終わった
+#   （1時間半残っていた）。翌朝はその残りから片づけるので、新しい機種が減り、その他の一周が延びる。
+#   ★見込みでは翌日へ回させない★＝締切が本当に近づいたときだけ。
+LATER_WINDOW_MIN = 45
+# ★朝のタスクの時間帯★（この時刻から締切の LATER_WINDOW_MIN 分前までは LATER と「終わってよいか」を断る）
+#   ★これより前・締切の45分前を過ぎた後（対話セッションが午後に記録するなど）は断らない★
+MORNING_FROM = "05:00"
+UPDATE_TASK = "uchidokoro-update-machine"
 
 # ★項目の一覧★（キー → 何をするか・手順書のどの段の流れで）。並びは記事の上から下＋道具の順
 COMMON_ITEMS = (
@@ -146,13 +157,41 @@ def start(slug: str, today: str = None, path: str = None) -> dict:
     return d["turns"][slug]
 
 
+def later_window(budget=None) -> tuple:
+    """（LATER を受け付け始める時刻, 締切）。締切は task-budget.json の朝のタスクの締切"""
+    import task_guard as _tg
+    b = _tg.budget() if budget is None else budget
+    dl = _tg.deadline_for(UPDATE_TASK, b)
+    if not dl or len(dl) != 5 or dl[2] != ":":
+        raise TurnError(f"朝のタスクの締切が読めません: {dl!r}")
+    t = int(dl[:2]) * 60 + int(dl[3:]) - LATER_WINDOW_MIN
+    return f"{t // 60:02d}:{t % 60:02d}", dl
+
+
+def _in_work_hours(now_hhmm: str, budget=None) -> tuple:
+    """（いまが朝のタスクの時間帯で、まだ LATER を受け付けない時刻か, 受け付け始める時刻, 締切）"""
+    start, dl = later_window(budget)
+    return (MORNING_FROM <= now_hhmm < start), start, dl
+
+
+def _now_hhmm() -> str:
+    return _dt.datetime.now().strftime("%H:%M")
+
+
 def done(slug: str, item: str, result: str, note: str = "", rows=None, today: str = None,
-         path: str = None) -> dict:
+         path: str = None, now_hhmm: str = None, codex_limited: bool = False, budget=None) -> dict:
     today = today or _dt.date.today().isoformat()
     if result not in RESULTS:
         raise TurnError(f"結果は {'/'.join(RESULTS)} のどれかです")
     if result in NEED_NOTE and len(str(note or "").strip()) < 10:
         raise TurnError(f"{result} は理由（--note-file・10字以上）が要ります")
+    if codex_limited and not (result == "LATER" and item == "ceiling"):
+        raise TurnError("Codexの利用制限で翌日へ回せるのは天井（ceiling）だけです（ほかは STEP 4-F のエージェント2体で続ける）")
+    if result == "LATER" and not codex_limited:
+        _early, _start, _dl = _in_work_hours(now_hhmm or _now_hhmm(), budget)
+        if _early:
+            raise TurnError(f"★締切（{_dl}）の{LATER_WINDOW_MIN}分前（{_start}）までは LATER にできません★"
+                            "＝見込みで翌日へ回さず、この項目を続けてください")
     rows = _rows() if rows is None else rows
     row = next((m for m in rows if isinstance(m, dict) and m.get("slug") == slug), None)
     if row is None:
@@ -165,6 +204,8 @@ def done(slug: str, item: str, result: str, note: str = "", rows=None, today: st
     if tr is None:
         raise TurnError(f"{slug} の担当が始まっていません（先に --start）")
     tr["items"][item] = {"at": today, "result": result, "note": str(note or "").strip()[:300]}
+    if codex_limited:
+        tr["items"][item]["codex_limited"] = True
     _save(d, path)
     _log(f"{slug}: {item} = {result}" + (f"（{str(note).strip()[:120]}）" if note else ""))
     return tr
@@ -189,6 +230,32 @@ def pending(rows=None, path: str = None) -> list:
         if left:
             out.append((tr["started"], s, left))
     return [(s, left) for _st, s, left in sorted(out)]
+
+
+def finish_problem(today: str = None, now_hhmm: str = None, rows=None, path: str = None,
+                   budget=None):
+    """★★朝のタスクがまだ終わってはいけない理由★★（2026-11-12・終わってよければ None）
+
+    締切の LATER_WINDOW_MIN 分前までに、そろっていない担当（記録の無い項目・LATER の項目）が残っていれば終われない。
+    ★例外＝今日 Codexの利用制限で翌日へ回した天井★（その日はもう決められない）。
+    """
+    today = today or _dt.date.today().isoformat()
+    _early, _start, _dl = _in_work_hours(now_hhmm or _now_hhmm(), budget)
+    if not _early:
+        return None
+    rows = _rows() if rows is None else rows
+    d = read(path)
+    left = []
+    for s, tr in sorted(d["turns"].items(), key=lambda kv: kv[1]["started"]):
+        its = tr.get("items") or {}
+        miss = [k for k in missing(s, tr, rows)
+                if not (its.get(k, {}).get("codex_limited") and its.get(k, {}).get("at") == today)]
+        if miss:
+            left.append(f"{s}（{'・'.join(miss)}）")
+    if not left:
+        return None
+    return (f"まだ {_start} 前です（締切 {_dl}）。そろっていない担当が{len(left)}件あります＝続けてください: "
+            + " ／ ".join(left[:8]))
 
 
 def popular_without_turn(today: str, done_this_week: list, week: str, path: str = None) -> list:
@@ -259,6 +326,10 @@ def stale_reviews(last_reviewed: dict, rows, today: str) -> list:
     return out
 
 
+class _NotProduction(Exception):
+    """試験の点検表を見ているので、本番の控えは読まない"""
+
+
 def check_problem(today: str = None, rows=None, path: str = None):
     """★見張り番：前の日までに始めたのに、そろっていない担当★
 
@@ -277,23 +348,35 @@ def check_problem(today: str = None, rows=None, path: str = None):
     msgs = []
     if bad:
         msgs.append(f"担当したのに全項目そろっていない機種が{len(bad)}件あります: " + " ／ ".join(bad[:8]))
+    # ★★本番の控え（人気機種の今週の記録・点検済みの記録）を読むのは、本番の点検表を見るときだけ★★（2026-11-12）
+    #   なぜ＝試験の点検表に本番の点検済みの記録を突き合わせ、11/11以降の本物の記録のせいで手元の自己試験が赤になっていた
+    #   （CIには控えが無いので緑＝手元でだけ落ちる）。stale_reviews と同じ決まりにそろえる。
     try:
+        if path is not None:
+            raise _NotProduction()
         import popular_machines as _pm
         st = _pm.load_store()
         rot = st.get("rotation") or {}
         wk = _pm.week_start(today)
         nt = popular_without_turn(today, rot.get("done") if rot.get("week") == wk else [], wk, path)
+    except _NotProduction:
+        nt = []
     except Exception as e:                                   # noqa: BLE001
         nt = []
         msgs.append(f"人気機種の今週の記録を読めません（{type(e).__name__}）")
     if nt:
         msgs.append(f"人気機種を今週見終わったと印したのに、点検表（STEP 1-T）を始めていない機種が{len(nt)}件: "
                     + "・".join(nt[:8]))
+    _st = {}
     try:
+        if path is not None:
+            raise _NotProduction()
         import json as _js2
         _sp = _lp.doc("state.json")
         _st = _js2.loads(io.open(_sp, encoding="utf-8").read()) if os.path.isfile(_sp) else {}
         rv = reviewed_without_turn(((_st.get("quality_review") or {}).get("last_reviewed") or {}), path)
+    except _NotProduction:
+        rv = []
     except Exception as e:                                   # noqa: BLE001
         rv = []
         msgs.append(f"点検済みの記録を読めません（{type(e).__name__}）")
@@ -370,8 +453,38 @@ def selftest() -> int:
     except TurnError:
         _short = True
     t("　LATER・NA は理由（10字以上）が要る", _short)
-    done("zzz_l", "mode", "LATER", note="Codexが利用制限のため翌日に回す", rows=rows, today="2026-11-10", path=p)
+    _B = {"deadline_hhmm": "11:00", "deadline_by_task": {}}
+    try:
+        done("zzz_l", "mode", "LATER", note="締切までに回し切れないので翌日へ", rows=rows, today="2026-11-10", path=p,
+             now_hhmm="09:30", budget=_B)
+        _early_later = False
+    except TurnError:
+        _early_later = True
+    t("★★締切の45分前（10:15）までは LATER にできない（見込みで翌日へ回さない）★★（11/11に9:36で終えた）", _early_later)
+    t("★★そろっていない担当があれば、10:15前は「まだ終われない」★★",
+      finish_problem("2026-11-10", "09:30", rows, p, _B) is not None
+      and finish_problem("2026-11-10", "10:20", rows, p, _B) is None)
+    t("　朝のタスクの時間帯の外（午後の対話セッションなど）は断らない",
+      finish_problem("2026-11-10", "14:00", rows, p, _B) is None)
+    try:
+        done("zzz_l", "mode", "LATER", note="Codexが利用制限のため翌日に回す", rows=rows, today="2026-11-10", path=p,
+             now_hhmm="09:30", codex_limited=True, budget=_B)
+        _cl_other = False
+    except TurnError:
+        _cl_other = True
+    t("　Codexの利用制限で翌日へ回せるのは天井だけ", _cl_other)
+    done("zzz_l", "mode", "LATER", note="締切が近いので翌日に回す", rows=rows, today="2026-11-10", path=p,
+         now_hhmm="10:20", budget=_B)
     t("★LATER の項目は、まだそろっていない扱い★", pending(rows, p) == [("zzz_l", ["mode"])])
+    _p4 = p + ".cl.json"
+    with io.open(_p4, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"turns": {"zzz_l": {"started": "2026-11-10", "items": {
+            k: {"at": "2026-11-10", "result": "OK", "note": ""} for k in kl if k != "ceiling"}}}}))
+    done("zzz_l", "ceiling", "LATER", note="Codexが利用制限のため翌日に回す", rows=rows, today="2026-11-10", path=_p4,
+         now_hhmm="06:00", codex_limited=True, budget=_B)
+    t("★Codexの利用制限で今日回した天井は、締切前でも終わってよい（翌日はまた残り扱い）★",
+      finish_problem("2026-11-10", "06:00", rows, _p4, _B) is None
+      and finish_problem("2026-11-11", "06:00", rows, _p4, _B) is not None)
     done("zzz_l", "mode", "FIXED", rows=rows, today="2026-11-11", path=p)
     t("　全項目がそろえば、そろっていない担当から外れる", pending(rows, p) == []
       and check_problem("2026-11-12", rows, p) is None)
@@ -435,6 +548,10 @@ def main() -> int:
     ap.add_argument("--note-file")
     ap.add_argument("--pending", action="store_true")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--can-finish", action="store_true",
+                    help="朝のタスクが終わってよいか（そろっていない担当が残り、締切の45分前より前なら1）")
+    ap.add_argument("--codex-limited", action="store_true",
+                    help="Codexの利用制限で天井（ceiling）を翌日へ回す（LATER のときだけ・締切前でも可）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -452,7 +569,7 @@ def main() -> int:
             if a.note_file:
                 with io.open(a.note_file, encoding="utf-8") as f:
                     note = f.read().strip()
-            done(a.done, a.item, a.result, note)
+            done(a.done, a.item, a.result, note, codex_limited=a.codex_limited)
             print(plan_text(a.done))
             return 0
         if a.pending:
@@ -462,6 +579,10 @@ def main() -> int:
             if not got:
                 print("そろっていない担当はありません")
             return 0
+        if a.can_finish:
+            fp = finish_problem()
+            print(("⏳ " + fp) if fp else "🟢 終わってよい（そろっていない担当が無いか、締切の45分前を過ぎています）")
+            return 1 if fp else 0
         if a.check:
             pr = check_problem()
             print(("🟡 " + pr) if pr else "🟢 担当した機種は全項目そろっています")

@@ -2429,6 +2429,34 @@ def _stuck_clear(slug: str) -> None:
         _stuck_save(got)
 
 
+# ★育成が運営者へ回す質問の題★（ledger_once の呼び出しと、解けたときに閉じる側で同じものを使う）
+STUCK_TITLE = "確認済みだった内容を再現できません（育てる処理を止めています）"
+DEMOTE_TITLE = "作り直すと検索から外れるので書けません（育てる処理を止めています）"
+
+
+def _close_stuck_questions(slug: str) -> list:
+    """★★育成が書き込みまで通ったので、その機種について運営者へ回した「育てる処理を止めています」の質問を閉じる★★（2026-11-12）
+
+    なぜ＝朝のタスクが2AIで片づけて育成が通るようになっても質問は開いたままで、番人が答えようのない古い質問を
+    運営者へ3回メールした（dmm_5086・garei_zero_re）。★閉じるのは育成が出した2つの題だけ★（題の完全一致）。
+    ★呼ぶのは `--apply` が通った2か所だけ★（書けた／最後まで読み比べて足すものが無かった＝内容は再現できている）。
+    ★下見（--apply なし）・見送り（出典に変化なし）では閉じない★（Codexの指摘＝書き込み前に閉じると、その後失敗しても閉じたまま）。
+    閉じられなくても育成は止めない（ログに残す）。返すのは閉じた番号。
+    """
+    closed = []
+    for _title in (STUCK_TITLE, DEMOTE_TITLE):
+        try:
+            _ids = _oq.close_resolved(_oq.STORE, f"{slug}: {_title}",
+                                      "育成が書き込みまで通った（詰まりが解けた）", "grow_machine")
+        except BaseException as e:            # noqa: BLE001
+            _log(f"  運営者への質問を閉じられませんでした: {type(e).__name__}: {e}")
+            continue
+        if _ids:
+            _log(f"  運営者への質問 #{'・#'.join(str(i) for i in _ids)} を閉じました（{slug} の育成が通った）")
+            closed += _ids
+    return closed
+
+
 # ★足りない理由を、読者に分かる言葉へ★（★機械が決めた符丁のまま渡さない★）
 #   ★これは表示の言い換えであって、採否も可否も決めていない★
 #   ★知らない符丁はそのまま出す★（黙って捨てない）
@@ -3355,10 +3383,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
                 out.setdefault("notes", []).append(
                     f"2AIに聞きます（{_act['round']}回目・運営者へは回しません）")
             else:
-                ledger_once(
-                    slug,
-                    "確認済みだった内容を再現できません（育てる処理を止めています）",
-                    _act["detail"], round_=_act["round"])
+                ledger_once(slug, STUCK_TITLE, _act["detail"], round_=_act["round"])
     if out["problems"]:
         return out
     try:
@@ -3392,9 +3417,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
             out.setdefault("notes", []).append(
                 f"2AIに聞きます（{_act['round']}回目・運営者へは回しません）")
         else:
-            ledger_once(slug,
-                        "作り直すと検索から外れるので書けません（育てる処理を止めています）",
-                        _act["detail"], round_=_act["round"])
+            ledger_once(slug, DEMOTE_TITLE, _act["detail"], round_=_act["round"])
         return out
     # ★★うまく育ったので、行き詰まりの回数を0に戻す★★（2026-08-27）
     #   ★昔の失敗をいつまでも数えない★（数え続けると、次に1回詰まっただけで
@@ -6503,6 +6526,28 @@ def selftest() -> int:
                   and _wrote == ["zzz_g"])
             finally:
                 _oq.add = _keep_add
+            # ★★育成が書き込みまで通ったら、その機種の『育てる処理を止めています』の質問を閉じる★★（2026-11-12）
+            #   ★本物の控えの関数を通す★（置き場は上で一時の場所へ向けてある）
+            _qa = _oq.add(_oq.STORE, f"zzz_q: {STUCK_TITLE}", "詰まった")
+            _qb = _oq.add(_oq.STORE, f"zzz_q: {DEMOTE_TITLE}", "降りる")
+            _qc = _oq.add(_oq.STORE, f"zzz_other: {STUCK_TITLE}", "別の機種")
+            _qd = _oq.add(_oq.STORE, "zzz_q: 別の題", "育成以外の質問")
+            grow_result("zzz_q", True)
+            t("★★下見の段（grow_result）では質問を閉じない★★（Codexの指摘＝書き込み前に閉じると失敗しても閉じたまま）",
+              _qa in [i["id"] for i in _oq.pending(_oq.STORE)])
+            _cl = _close_stuck_questions("zzz_q")
+            _open = [i["id"] for i in _oq.pending(_oq.STORE)]
+            t("★★その機種の『育てる処理を止めています』の2つの題を閉じる★★（2AIで片づいたのに同じ質問が3回メールされた）",
+              sorted(_cl) == sorted([_qa, _qb]) and _qa not in _open and _qb not in _open)
+            t("　ほかの機種の質問・育成以外の題の質問は閉じない", _qc in _open and _qd in _open)
+            import inspect as _ins_q
+            # ★この区間は globals()["_main"] を差し替えているので、取り込み時に控えた本物（main.__wrapped__）を見る★
+            _src_main = _ins_q.getsource(main.__wrapped__)
+            t("★★閉じるのは --apply が通った2か所だけ（書けた／読み比べて足すものが無い）・下見の段では呼ばない★★",
+              _src_main.count("_close_stuck_questions(a.slug)   # ★読み比べて足すものが無い") == 1
+              and _src_main.count("_close_stuck_questions(a.slug)       # ★書けた★") == 1
+              and "_close_stuck_questions" not in _ins_q.getsource(grow_result)
+              and "_close_stuck_questions" not in _ins_q.getsource(plan_one))
             # ★★読めていない出典がある日は数えない★★（2026-10-12）
             _a3u = grow_result("zzz_s", False, "理由", today="2026-08-03",
                                count=False)
@@ -6816,6 +6861,7 @@ def _main() -> int:
             #   `_absorbed()` が False で、正しく終わっても控えられず
             #   次回もう一度ぜんぶやり直していた。
             remember_after_write(a.slug, got.get("cv_used") or "")
+            _close_stuck_questions(a.slug)   # ★読み比べて足すものが無い＝内容は再現できている★
         print("できません:")
         for p in got["problems"]:
             print("  -", p)
@@ -6832,6 +6878,7 @@ def _main() -> int:
         _absorbed()
         # ★★指紋は probe_rows の有無に関係なく控える★★（Codexの指摘4）
         remember_after_write(a.slug, got.get("cv_used") or "")
+        _close_stuck_questions(a.slug)       # ★書けた★
     for p in r["problems"]:
         print("  -", p)
     if r["wrote"]:

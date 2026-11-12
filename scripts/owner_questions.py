@@ -63,7 +63,14 @@ def add(path: Path, title: str, detail: str) -> int:
     for it in d["items"]:
         # ★同じ題で答えが出ていないものは重ねない★（本文だけ新しくする＝届け直す）
         # ★取り下げた質問は使い回さない★（Codexの指摘＝取り下げの印が残ったまま本文だけ変わり、二度と届かなかった）
-        if it.get("title") == title and not it.get("answered_at") and not it.get("retracted_at"):
+        # ★機械が「片づいた」と閉じた質問（resolved_at）も使い回さない★（2026-11-12）
+        if it.get("title") == title and not _closed(it):
+            # ★★本文が同じなら届け直さない★★（2026-11-12・運営者に同じ質問が 11/06・11/09・11/12 と3回届いた＝
+            #   育成が詰まるたびに同じ題・同じ本文で出し直し、そのたび送った印を消していた）。
+            #   ★答えの無いまま7日たった質問は unanswered が🟡で思い出させる★ので、同じ文を送り直す必要は無い。
+            if it.get("detail") == detail and it.get("sent_at"):
+                print(f"#{it['id']} は同じ本文で送り済みです（届け直しません）")
+                return it["id"]
             it["detail"] = detail
             it.pop("sent_at", None)
             _save(path, d)
@@ -77,9 +84,13 @@ def add(path: Path, title: str, detail: str) -> int:
     return n
 
 
+def _closed(it: dict) -> bool:
+    """答えが出た・2AIが取り下げた・機械が片づいたと閉じた質問"""
+    return bool(it.get("answered_at") or it.get("retracted_at") or it.get("resolved_at"))
+
+
 def pending(path: Path) -> list:
-    return [it for it in _load(path)["items"]
-            if not it.get("sent_at") and not it.get("answered_at") and not it.get("retracted_at")]
+    return [it for it in _load(path)["items"] if not it.get("sent_at") and not _closed(it)]
 
 
 UNANSWERED_DAYS = 7
@@ -104,7 +115,7 @@ def unanswered(path: Path, now: str = None, days: int = UNANSWERED_DAYS) -> list
     now_d = _dt_of(now or _now())
     out = []
     for it in _load(path)["items"]:
-        if not it.get("sent_at") or it.get("answered_at") or it.get("retracted_at"):
+        if not it.get("sent_at") or _closed(it):
             continue
         try:
             if now_d - _dt_of(it["sent_at"]) >= _dt.timedelta(days=days):
@@ -141,6 +152,35 @@ def retract(path: Path, qid: int, why: str, by) -> int:
     return 0
 
 
+def close_resolved(path: Path, title: str, why: str, by: str) -> list:
+    """★★問いを出した道具が、問いの元になった詰まりが解けたのを見て、その質問を閉じる★★（2026-11-12）
+
+    なぜ＝育成が「確認済みだった内容を再現できません」で運営者へ回した後、朝のタスクが2AIで片づけて
+    育成が通るようになっても、質問は開いたままで、番人が古い質問をメールし続けた（運営者は答えようがない）。
+    ★閉じてよいのは、その題を出した道具が「詰まりが解けた」と自分で確かめたときだけ★（題の完全一致）。
+    答えたことにも、2AIの取り下げにもしない（resolved_at と resolve_why・resolved_by で分ける）。
+    返すのは閉じた質問の番号。
+    """
+    why = str(why or "").strip()
+    by = str(by or "").strip()
+    if len(why) < 10 or not by:
+        raise SystemExit("★閉じる理由（10字以上）と閉じた道具の名前が要ります★")
+    if not path.is_file():
+        return []
+    d = _load(path)
+    hits = [it for it in d["items"] if it.get("title") == title and not _closed(it)]
+    if not hits:
+        return []
+    for it in hits:
+        it["resolved_at"] = _now()
+        it["resolve_why"] = why
+        it["resolved_by"] = by
+    _save(path, d)
+    for it in hits:
+        print(f"#{it['id']} を閉じました（{by}：{why}）")
+    return [it["id"] for it in hits]
+
+
 def mark(path: Path, qid: int, key: str, note: str = "") -> int:
     d = _load(path)
     hit = next((it for it in d["items"] if it.get("id") == qid), None)
@@ -153,6 +193,14 @@ def mark(path: Path, qid: int, key: str, note: str = "") -> int:
     _save(path, d)
     print(f"#{qid} に {key} を付けました")
     return 0
+
+
+def _raises(fn) -> bool:
+    try:
+        fn()
+        return False
+    except SystemExit:
+        return True
 
 
 def selftest() -> int:
@@ -194,6 +242,38 @@ def selftest() -> int:
         t("★★2AIで片づいた質問は取り下げられ、答えの無い一覧から外れる★★",
           retract(p, e, "2AIで落としてよいと決めて片づいたので聞く必要が無い", ["claude", "codex"]) == 0
           and unanswered(p, "2026-11-09T09:00:00") == [])
+        f = add(p, "同じ本文", "本文はこのまま")
+        mark(p, f, "sent_at")
+        t("★★同じ題・同じ本文で出し直しても、送った印を消さない（届け直さない）★★（同じ質問が3回届いた）",
+          add(p, "同じ本文", "本文はこのまま") == f and f not in [i["id"] for i in pending(p)])
+        t("　本文が変われば届け直す", add(p, "同じ本文", "本文が変わった") == f
+          and f in [i["id"] for i in pending(p)])
+        g = add(p, "zzz: 再現できません", "詰まった")
+        g2 = add(p, "zzz: 再現できませんX", "題が少し違う")   # ★閉じる前から開いている、題の一部が同じ質問★
+        mark(p, g, "sent_at")
+        _dg = _load(p)
+        for _it in _dg["items"]:
+            if _it["id"] == g:
+                _it["sent_at"] = "2026-11-01 09:00:00"
+        _save(p, _dg)
+        t("　（前提）送ってから7日たった質問は答え待ちに出る",
+          g in [i["id"] for i in unanswered(p, "2026-11-12 09:00:00")])
+        t("　閉じる理由と道具の名前が要る", _raises(lambda: close_resolved(p, "zzz: 再現できません", "短い", "x"))
+          and _raises(lambda: close_resolved(p, "zzz: 再現できません", "育成が通るようになった", "")))
+        t("★★問いを出した道具が詰まりの解けたのを確かめたら、その質問を閉じる（届け直し・答え待ちから外れる）★★",
+          close_resolved(p, "zzz: 再現できません", "育成が通るようになった", "grow_machine") == [g]
+          and g not in [i["id"] for i in pending(p)]
+          and g not in [i["id"] for i in unanswered(p, "2026-11-12 09:00:00")])
+        t("★題の一部が同じ別の質問は閉じない（題の完全一致）★（Codexの指摘＝閉じる前から開いている質問で確かめる）",
+          g2 in [i["id"] for i in pending(p)])
+        t("★★まだ送っていない質問も、閉じたら届け直しの一覧から外れる★★（Codexの指摘＝送り済みの質問では空振り）",
+          close_resolved(p, "zzz: 再現できませんX", "育成が通るようになった", "grow_machine") == [g2]
+          and g2 not in [i["id"] for i in pending(p)])
+        t("　題が違う質問・閉じた質問は閉じない（題の完全一致）",
+          close_resolved(p, "zzz: 再現できませ", "育成が通るようになった", "grow_machine") == []
+          and close_resolved(p, "zzz: 再現できません", "育成が通るようになった", "grow_machine") == [])
+        t("★閉じた質問と同じ題でまた詰まれば、新しい質問として控えて届ける★",
+          (lambda h: h != g and h in [i["id"] for i in pending(p)])(add(p, "zzz: 再現できません", "また詰まった")))
         e2 = add(p, "別の天井", "新しく割れた")
         t("★★取り下げた質問と同じ題でも、新しい質問として控えて届ける★★（Codexの指摘）",
           e2 != e and e2 in [i["id"] for i in pending(p)] and e not in [i["id"] for i in pending(p)])
