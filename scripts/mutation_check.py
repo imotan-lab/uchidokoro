@@ -8021,6 +8021,14 @@ MUTATIONS = [
         "run": ["scripts/dmm_machine.py"],
     },
     {
+        "why": "★DMMの種別の札「（スマスロ）」を機種名として読み、自分のページを後継機の疑いで外す"
+               "（モグモグ風林火山・見える子ちゃんの材料が消えた）★",
+        "file": "scripts/dmm_machine.py",
+        "before": "    ok2, why2 = _ci.check_tags(name_part, tags, [core])\n",
+        "after": "    ok2, why2 = _ci.check_tags(head, tags, [core])\n",
+        "run": ["scripts/dmm_machine.py"],
+    },
+    {
         "why": "★DMMの見出しの種別の括弧より後ろの宣伝語まで機種名として読む"
                "（★「ボーナストリガー」が加わった日からタコスロの育成が毎朝止まる★）★",
         "file": "scripts/dmm_machine.py",

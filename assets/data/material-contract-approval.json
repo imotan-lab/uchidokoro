@@ -19,7 +19,7 @@
   "scripts/directory_index.py": "5f8d9ae8689a3b57f6300607b8b5e35a4bf4a1f8f5436414171f71ecf73aa4b9",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
   "scripts/dmm_discover.py": "d063ca427d6d477ff7d5464f73f8a369d44d592f277aec1723375bf9b67815ac",
-  "scripts/dmm_machine.py": "702b317e3d87b5d69fa2facfbb5334a2dd0eab933bd9757e5964caedc2d9e414",
+  "scripts/dmm_machine.py": "e2c347ac3c78171e1047e8bdc90e33506068e17feadeca643636d1af31408d8b",
   "scripts/fetched_page.py": "825d7d5280e5dde535a271be76eac73bcb1e0c158552b6daf5e1ce0587e9a5ef",
   "scripts/html_check.py": "2d58882be96adbeb8710638ccb47d3f784ab3d1b091f5eff74894ca7bba1d112",
   "scripts/html_tables.py": "5d0f32d7e988ce0696e07b4ac118d119ea4c4e2280b57acee89e0c6ebaa78c3e",
