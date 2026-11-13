@@ -5961,7 +5961,9 @@
    "limit": 1330,
    "coinRate": 33.2
   },
-  "limit": 1280
+  "limit": 1280,
+  "tenjo_games": 1280,
+  "tenjo_display": "AT・ボーナス間1280G"
  },
  {
   "slug": "gundam_seed",
