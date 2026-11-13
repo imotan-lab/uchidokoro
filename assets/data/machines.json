@@ -5956,7 +5956,8 @@
     "good": 250,
     "caution": 150
    },
-   "limit": 1330
+   "limit": 1330,
+   "coinRate": 33.2
   },
   "limit": 1280
  },
