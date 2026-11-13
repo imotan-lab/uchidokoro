@@ -6045,7 +6045,8 @@
    },
    "limit": 800,
    "hasSuru": true,
-   "suruMax": 3
+   "suruMax": 3,
+   "coinRate": 31.5
   },
   "original": {
    "title": "機動戦士ガンダムSEED",
