@@ -71,6 +71,11 @@
    "url": "https://p-town.dmm.com/machines/4752",
    "checked": "2026-11-14"
   },
+  "goji_eva": {
+   "release": "2024-02-05",
+   "url": "https://p-town.dmm.com/machines/4501",
+   "checked": "2026-11-14"
+  },
   "gundam_seed": {
    "release": "2025-05-07",
    "url": "https://p-town.dmm.com/machines/4788",
@@ -247,6 +252,7 @@
   "enen": "2026-11-14",
   "enen2": "2026-11-10",
   "godzilla": "2026-11-14",
+  "goji_eva": "2026-11-14",
   "gundam_seed": "2026-11-14",
   "gundam_uc2": "2026-11-13",
   "hanma_baki": "2026-11-11",
