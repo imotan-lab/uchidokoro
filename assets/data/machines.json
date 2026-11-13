@@ -12179,7 +12179,8 @@
      }
     ]
    },
-   "limit": 1050
+   "limit": 1050,
+   "coinRate": 33
   },
   "tenjo_display": "ボーナス間最大1000G",
   "tenjo_games": 1000
