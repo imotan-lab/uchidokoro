@@ -12187,7 +12187,8 @@
    "coinRate": 33
   },
   "tenjo_display": "ボーナス間最大1000G",
-  "tenjo_games": 1000
+  "tenjo_games": 1000,
+  "release_date": "2024-02-05"
  },
  {
   "slug": "burning_express",
