@@ -7495,7 +7495,8 @@
    },
    "limit": 450,
    "hasSuru": true,
-   "suruMax": 7
+   "suruMax": 7,
+   "coinRate": 35.5
   },
   "original": {
    "title": "ケンガンアシュラ",
