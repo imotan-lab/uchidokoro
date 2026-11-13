@@ -31,6 +31,11 @@
    "url": "https://p-town.dmm.com/machines/4530",
    "checked": "2026-11-10"
   },
+  "code_geass": {
+   "release": "2024-02-05",
+   "url": "https://p-town.dmm.com/machines/4477",
+   "checked": "2026-11-13"
+  },
   "darlifra": {
    "release": "2025-08-04",
    "url": "https://p-town.dmm.com/machines/4855",
@@ -184,6 +189,7 @@
   "banchou4": "2026-11-11",
   "basilisk_tenzen": "2026-11-10",
   "chibaryo2": "2026-11-10",
+  "code_geass": "2026-11-13",
   "darlifra": "2026-11-11",
   "dumbbell": "2026-11-11",
   "enen2": "2026-11-10",
