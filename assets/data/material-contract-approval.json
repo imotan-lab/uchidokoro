@@ -28,7 +28,7 @@
   "scripts/machine_sources.py": "e45402fcd5b8074020351a158017e21f0ee9087a4343bc5ea20875adb780abdb",
   "scripts/maker_identity_cache.py": "d83fe41062a795090aac85d104e1b529278f70e7957194c65a19ab3177bdb77b",
   "scripts/mode_apply.py": "863b49b831162feb8656d7b3cbe3938f7c7317db6b30eab9b8ba10b802e12dcb",
-  "scripts/mode_ask.py": "b4891cbe65e959ed957d3c11e5a85137ea8202efb016940c5c8f30394f782bd4",
+  "scripts/mode_ask.py": "aa38d97b3a27d48c8903c98ae693ac9cff30d06cfef91b75eb0a0a29f180f513",
   "scripts/mode_verdict.py": "7f313105487573ebdd4287276337805aa567d12f5730197d23a3305cbed2390a",
   "scripts/model_code_lookup.py": "b21a1a43658617cfbc536fd25e6d1526233d1bcafe56acaba1e673e8a26de9b4",
   "scripts/new_machine_watch.py": "12e8f8e3efecd61c9f8426bf4663b86a6ca874de80d18edfd90403ac6f73a3ec",
@@ -227,6 +227,7 @@
    "directory_index",
    "fetched_page",
    "html_check",
+   "machine_sources",
    "new_machine_watch",
    "page_corpus",
    "source_lineage"
@@ -295,5 +296,6 @@
    "page_reading",
    "read_failure"
   ]
- }
+ },
+ "_deps_changed_why": "mode_ask が machine_sources を取り込むようになった（名鑑の一覧で機種ページが決まらないとき、2AIで控えた出典を材料集めの起点にするため）。machine_sources はすでに材料の契約の集合（CONTRACT_INPUTS）に入っている。"
 }

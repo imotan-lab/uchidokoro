@@ -120,6 +120,69 @@ def catalog_of(url: str) -> dict:
     return {}
 
 
+def find_roots(directory_urls, control_recs) -> list:
+    """★証拠の集合の起点（名鑑の機種ページ）を決める★（2026-11-14）
+
+    ①名鑑の一覧で決まれば、その結果だけを使う（今までどおり）。
+    ②決まらないとき（候補が前作と続編で割れる等）だけ、2AIで控えた出典
+      （machine_sources の控え）のうち、稼働中（ACTIVE）の名鑑の機種ページの形をしたものを使う。
+    ★control_recs は呼べるもの（関数）でもよい★＝①で決まったときは呼ばない
+      （一覧で決まったのに、控えが読めないだけで止まらないように・Codexの指摘3）。
+    ★隔離された控え（別のページに変わった疑い）と、取得を止めた名鑑は使わない★（Codexの指摘2）。
+    ★使う直前に同じページのままかを確かめるのは呼ぶ側★（control_pick・Codexの指摘1）。
+    ★なぜ★＝①だけだと、2AIで出典を控えても「名鑑の機種ページが見つかりません」で
+      何も集めず、モードの欄を作る道が無かった（炎炎ノ消防隊・2026-11-14）。
+    """
+    got = [u for u in (directory_urls or []) if catalog_of(u)]
+    if got:
+        return got
+    import machine_sources as _ms
+    recs = control_recs() if callable(control_recs) else control_recs
+    out = []
+    for r in recs or []:
+        if not isinstance(r, dict):
+            continue
+        if _ms.quarantined(r):
+            continue
+        u = str(r.get("url") or "")
+        if u and active_catalog(u) and u not in out:
+            out.append(u)
+    return out
+
+
+def active_catalog(url: str) -> bool:
+    """★取りに行ってよい名鑑の機種ページか★（status が ACTIVE のものだけ）。"""
+    return str(catalog_of(url).get("status") or "") == "ACTIVE"
+
+
+def control_pick(slug: str, recs, recheck, ok_state: str):
+    """★控えの出典を、使う直前に確かめる★（2026-11-14・Codexの指摘1）
+
+    返り: (使ってよい控えの行, {URL: (確かめたときの本文, 到達先)})
+    ★確かめたときに取った本文を、そのまま材料に使う★（取り直して別の本文を使わない）。
+    ★同じページのままと確かめられなかった控えは使わない★（読めない・変わった疑い）。
+    """
+    keep, bodies = [], {}
+    for r in recs or []:
+        if not isinstance(r, dict):
+            continue
+        u = str(r.get("url") or "")
+        if not u or not active_catalog(u):
+            continue
+        got = recheck(slug, r) or {}
+        if got.get("state") == ok_state and got.get("html"):
+            keep.append(r)
+            bodies[u] = (got.get("html"), str(got.get("final_url") or u))
+        else:
+            print(f"  控えの出典を使いません（{u}）: {got.get('state')} {str(got.get('why') or '')[:80]}")
+    return keep, bodies
+
+
+def roots_for(slug: str, name: str, directory_urls, controls) -> list:
+    """★run が起点を決める道（配線）★＝一覧の結果 → 決まらなければ控え。試験もこの関数を通す。"""
+    return find_roots(directory_urls(name), controls)
+
+
 def gather(slug: str, fetch, text_of, find_urls) -> dict:
     """★その機種の証拠の集合を、複数サイトぶん組み立てる★
 
@@ -228,12 +291,30 @@ def run(slug: str) -> int:
     import directory_index as _di
     import source_lineage as _sl
 
+    import machine_sources as _ms
+
+    bodies = {}
+
+    def _controls():
+        # ★一覧で決まらなかったときだけ呼ばれる★＝控えを読み、使う直前に同じページか確かめる
+        keep, got_bodies = control_pick(slug, _ms.urls_for(slug), _ms.recheck, _ms.CHECK_OK)
+        bodies.update(got_bodies)
+        return keep
+
+    def _get(u):
+        # ★確かめたときの本文をそのまま使う★（取り直して別の本文を使わない）
+        if u in bodies:
+            html, fin = bodies[u]
+            _nmw.LAST_FINAL_URL["url"] = fin
+            return html
+        return _nmw._get(u)
+
     def _find(name):
-        return _di.found_urls(_di.find(name))
+        return roots_for(slug, name, lambda n: _di.found_urls(_di.find(n)), _controls)
 
     os.makedirs(WORK, exist_ok=True)
     with _nmw.fetching("claim_material"):
-        got = gather(slug, lambda u: _fp.fetch(u, "claim_material"),
+        got = gather(slug, lambda u: _fp.fetch(u, "claim_material", get=_get),
                      lambda pg: _hc.visible_text(pg.cleaned_html), _find)
     if got["why"]:
         print("★集められませんでした★ " + got["why"])
@@ -326,6 +407,91 @@ def selftest() -> int:
 
     t("★機種一覧に無ければ集めない★",
       gather("zzz_no_such_machine", _fetch, _text, lambda n: [])["why"] != "")
+
+    # ★★名鑑の一覧で機種ページが決まらないときは、2AIで控えた出典を起点にする★★（2026-11-14）
+    #   ★直す前は★、名鑑の一覧の候補が前作と続編で割れる（AMBIGUOUS_CANDIDATES）と
+    #   「名鑑の機種ページが見つかりません」で何も集めず、2AIで出典を控えてもモードの欄を作れなかった（炎炎ノ消防隊）。
+    _C1 = "https://nana-press.com/kaiseki/machine/738/"
+    _C2 = "https://pachiseven.jp/machines/6927"
+    _recs = [{"url": _C1}, {"url": _C2},
+             {"url": "https://nana-press.com/kaiseki/machine/526/",
+              "last_check": {"state": "CHANGED"}},
+             {"url": "https://example.invalid/not-a-catalog/1"}, "壊れた行"]
+    t("★一覧で決まれば一覧の結果を使う（控えは使わない）★",
+      find_roots(["https://nana-press.com/kaiseki/machine/644/"], _recs)
+      == ["https://nana-press.com/kaiseki/machine/644/"])
+    t("★一覧で決まらなければ2AIの控えを使う★",
+      find_roots([], _recs) == [_C1, _C2])
+    t("　隔離された控え・名鑑の機種ページでないURL・壊れた行は使わない",
+      _C1 in find_roots([], _recs)
+      and "https://nana-press.com/kaiseki/machine/526/" not in find_roots([], _recs)
+      and "https://example.invalid/not-a-catalog/1" not in find_roots([], _recs))
+    t("　控えも無ければ空（今までどおり集めない）", find_roots([], []) == [])
+
+    # ★Codexの指摘3★＝一覧で決まったときは控えを読まない（読めないだけで止まらない）
+    def _boom():
+        raise RuntimeError("控えが壊れている")
+    try:
+        _r3 = find_roots(["https://nana-press.com/kaiseki/machine/644/"], _boom)
+    except Exception:                                   # noqa: BLE001
+        _r3 = None
+    t("★一覧で決まったときは控えを読まない（控えが壊れていても止まらない）★",
+      _r3 == ["https://nana-press.com/kaiseki/machine/644/"])
+    t("　一覧で決まらないときだけ控え（関数）を呼ぶ",
+      find_roots([], lambda: [{"url": _C1}]) == [_C1])
+    # ★Codexの指摘2★＝取得を止めた名鑑（相手に拒否された等）の控えは起点にしない
+    t("★取得を止めた名鑑の控えは起点にしない★",
+      find_roots([], [{"url": "https://chonborista.com/slot/sankyo-slot/252081/"}, {"url": _C2}]) == [_C2])
+    # ★Codexの指摘1★＝控えは使う直前に同じページか確かめ、確かめた本文をそのまま使う
+    def _rc(slug, r):
+        if r["url"] == _C1:
+            return {"state": "OK", "html": "<html>確かめた本文</html>", "final_url": _C1}
+        return {"state": "CHANGED", "why": "題が変わりました"}
+    _keep, _bodies = control_pick("zzz_x", [{"url": _C1}, {"url": _C2},
+                                            {"url": "https://chonborista.com/slot/sankyo-slot/252081/"}],
+                                  _rc, "OK")
+    t("★確かめて同じページのままの控えだけ使う★",
+      [r["url"] for r in _keep] == [_C1])
+    t("　確かめたときの本文を持ち帰る（取り直さない）",
+      _bodies == {_C1: ("<html>確かめた本文</html>", _C1)})
+    _called = []
+    t("　取得を止めた名鑑の控えは確かめにも行かない",
+      control_pick("zzz_x", [{"url": "https://chonborista.com/slot/sankyo-slot/252081/"}],
+                   lambda s, r: _called.append(r) or {"state": "OK", "html": "x"}, "OK")[0] == []
+      and _called == [])
+    # ★runの配線★＝run は roots_for → control_pick（machine_sources の recheck）を通る
+    import sys as _sys
+    import types as _types
+    _seen = {}
+    _fake_di = _types.SimpleNamespace(find=lambda n: {}, found_urls=lambda r: [])
+    _fake_ms = _types.SimpleNamespace(
+        urls_for=lambda s: [{"url": _C1}],
+        recheck=lambda s, r: {"state": "OK", "html": "<p>x</p>", "final_url": _C1},
+        CHECK_OK="OK", quarantined=lambda r: False)
+    _saved = {k: _sys.modules.get(k) for k in ("directory_index", "machine_sources")}
+    _real_gather = globals()["gather"]
+
+    def _spy_gather(slug, fetch, text_of, find_urls):
+        _seen["roots"] = find_urls("x")
+        return {"pages": {}, "manifest": {}, "roots": [], "why": "試験で止める"}
+    try:
+        _sys.modules["directory_index"] = _fake_di
+        _sys.modules["machine_sources"] = _fake_ms
+        globals()["gather"] = _spy_gather
+        import io as _io
+        _out = _io.StringIO()
+        import contextlib as _cl
+        with _cl.redirect_stdout(_out):
+            run("zzz_wiring")
+    finally:
+        globals()["gather"] = _real_gather
+        for _k, _v in _saved.items():
+            if _v is None:
+                _sys.modules.pop(_k, None)
+            else:
+                _sys.modules[_k] = _v
+    t("★run は一覧で決まらないとき、確かめた控えを起点にする（配線）★",
+      _seen.get("roots") == [_C1])
 
     # ★★1サイトでも読めなければ、その機種は読めていない★★
     #   （2026-09-02・Codexのレビュー36の重大①）

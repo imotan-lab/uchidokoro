@@ -11795,6 +11795,48 @@ MUTATIONS = [
         "after": "        if (s.get(\"verified_at\") and (_k in _prev or _prev.setdefault(_k, s))\n",
         "run": ["scripts/confirmed_values.py"],
     },
+    {
+        "why": "★モードの材料集め：名鑑の一覧で決まらないとき2AIの控えを起点にしない（★炎炎ノ消防隊で何も集めなかった・2026-11-14★）★",
+        "file": "scripts/mode_ask.py",
+        "before": "    if got:\n        return got\n    import machine_sources as _ms\n",
+        "after": "    if True:\n        return got\n    import machine_sources as _ms\n",
+        "run": ["scripts/mode_ask.py"],
+    },
+    {
+        "why": "★モードの材料集め：隔離された控え（別のページに変わった疑い）まで起点にする★",
+        "file": "scripts/mode_ask.py",
+        "before": "        if _ms.quarantined(r):\n            continue\n",
+        "after": "        if False and _ms.quarantined(r):\n            continue\n",
+        "run": ["scripts/mode_ask.py"],
+    },
+    {
+        "why": "★モードの材料集め：取得を止めた名鑑（相手に拒否された等）の控えまで起点にする（Codexの指摘2）★",
+        "file": "scripts/mode_ask.py",
+        "before": "    return str(catalog_of(url).get(\"status\") or \"\") == \"ACTIVE\"\n",
+        "after": "    return bool(catalog_of(url))\n",
+        "run": ["scripts/mode_ask.py"],
+    },
+    {
+        "why": "★モードの材料集め：控えを使う直前の確かめ直しで駄目でも使う（Codexの指摘1）★",
+        "file": "scripts/mode_ask.py",
+        "before": "        if got.get(\"state\") == ok_state and got.get(\"html\"):\n",
+        "after": "        if got.get(\"html\") or True:\n",
+        "run": ["scripts/mode_ask.py"],
+    },
+    {
+        "why": "★モードの材料集め：一覧で決まっても控えを読みに行く（読めないと止まる・Codexの指摘3）★",
+        "file": "scripts/mode_ask.py",
+        "before": "    got = [u for u in (directory_urls or []) if catalog_of(u)]\n    if got:\n",
+        "after": "    got = [u for u in (directory_urls or []) if catalog_of(u)]\n    _ = control_recs() if callable(control_recs) else None\n    if got:\n",
+        "run": ["scripts/mode_ask.py"],
+    },
+    {
+        "why": "★モードの材料集め：run が一覧の結果しか見ない（控えへの配線が外れる）★",
+        "file": "scripts/mode_ask.py",
+        "before": "        return roots_for(slug, name, lambda n: _di.found_urls(_di.find(n)), _controls)\n",
+        "after": "        return _di.found_urls(_di.find(name))\n",
+        "run": ["scripts/mode_ask.py"],
+    },
 ]
 
 
