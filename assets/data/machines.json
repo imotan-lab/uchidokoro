@@ -12103,13 +12103,17 @@
    "normal": {
     "excellent": 800,
     "good": 640,
-    "caution": 450
+    "caution": 450,
+    "ceiling": 1000,
+    "target": 640
    },
    "reset": {
     "excellent": 550,
     "good": 360,
     "caution": 250,
-    "limit": 750
+    "limit": 750,
+    "ceiling": 700,
+    "target": 360
    },
    "suru": {
     "suruMax": 8,
