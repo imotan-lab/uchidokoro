@@ -6002,7 +6002,9 @@
     "excellent": 700,
     "good": 500,
     "caution": 400,
-    "note": "CZ間777Gで天井。CZ当選。"
+    "note": "CZ間777Gで天井。CZ当選。",
+    "ceiling": 777,
+    "target": 500
    },
    "suru": {
     "suruMax": 3,
