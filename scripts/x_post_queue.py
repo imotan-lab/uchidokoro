@@ -321,13 +321,26 @@ def selftest() -> int:
     # ★★同時に足しても1件も消えない★★（書き込みロックはOSのファイルロック・Codexの再指摘）
     import threading
     p5 = os.path.join(os.path.dirname(p), "q5.json")
-    ths = [threading.Thread(target=add, args=("promotion", "zzz_t%d" % k),
-                            kwargs={"now": now, "rng": _R(), "path": p5}) for k in range(12)]
+    # ★取り合いで控えが壊れた・足す途中で例外が出た、も赤として数える★（2026-11-13）＝守りを外すと
+    #   GitHub（Linux）では控えが壊れて読み込みが例外になり、試験が「赤」を出さずに落ちていた（罠⑩）
+    _errs5 = []
+
+    def _add5(k):
+        try:
+            add("promotion", "zzz_t%d" % k, now=now, rng=_R(), path=p5)
+        except Exception as e:                                   # noqa: BLE001
+            _errs5.append(type(e).__name__)
+    ths = [threading.Thread(target=_add5, args=(k,)) for k in range(12)]
     for th in ths:
         th.start()
     for th in ths:
         th.join()
-    t("★★同時に12件足しても、全部残る（取り合いで上書きして消さない）★★", len(read(p5)["items"]) == 12)
+    try:
+        _n5 = len(read(p5)["items"])
+    except Exception as e:                                       # noqa: BLE001
+        _n5, _errs5 = -1, _errs5 + ["read:" + type(e).__name__]
+    t("★★同時に12件足しても、全部残る（取り合いで上書きして消さない・控えも壊さない）★★",
+      _n5 == 12 and not _errs5)
     try:
         with _WriteLock(p5):
             with _WriteLock(p5, timeout=0.2):
