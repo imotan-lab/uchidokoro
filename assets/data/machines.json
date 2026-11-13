@@ -1376,9 +1376,14 @@
   "seo": {
    "title": "L魔法少女にあこがれて 天井・狙い目"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "まほあこ",
+   "まほうしょうじょにあこがれて",
+   "魔法少女にあこがれて",
+   "スマスロまほあこ"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -1453,7 +1458,8 @@
     "target": 250
    }
   },
-  "targetProjection": "b77bbafa7eaa787d"
+  "targetProjection": "b77bbafa7eaa787d",
+  "series": ""
  },
  {
   "slug": "enen2",
