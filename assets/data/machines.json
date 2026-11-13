@@ -6905,7 +6905,9 @@
    "normal": {
     "excellent": 850,
     "good": 520,
-    "caution": 320
+    "caution": 320,
+    "ceiling": 850,
+    "target": 520
    },
    "reset": {
     "excellent": 650,
