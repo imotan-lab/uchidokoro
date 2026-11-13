@@ -4245,6 +4245,173 @@
   "tenjo_games": 999
  },
  {
+  "slug": "gundam_uc2",
+  "name": "Lパチスロ 機動戦士ガンダムユニコーン 覚醒DRIVE",
+  "seo": {
+   "title": "ガンダムユニコーン 覚醒DRIVE 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 CZ間700G〜 / AT間1100G〜",
+  "aliases": [
+   "ガンダムユニコーン",
+   "ガンダムUC",
+   "UC2",
+   "覚醒DRIVE",
+   "ユニコーン",
+   "gundam_uc",
+   "ガンダム"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "CZ間"
+    },
+    {
+     "key": "at",
+     "label": "AT間"
+    }
+   ],
+   "normal": {
+    "excellent": 800,
+    "good": 700,
+    "caution": 580,
+    "note": "CZ間天井800G（リセット後400G）。"
+   },
+   "at": {
+    "excellent": 1400,
+    "good": 1100,
+    "caution": 950,
+    "note": "AT間天井1400G（液晶G数・リセット後1000G）。"
+   },
+   "suru": {
+    "excellent": 6,
+    "good": 5,
+    "caution": 4,
+    "note": "CZ6スルーで7回目確定（ボーナス当選）。等価4スルー以上から狙い目。",
+    "suruMax": 6,
+    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+   }
+  },
+  "limit": 1400,
+  "tenjo_display": "CZ間800G+α／AT間1400G+α",
+  "tenjo_games": 800,
+  "original": {
+   "title": "機動戦士ガンダムUC",
+   "kind": "小説",
+   "search": "機動戦士ガンダムUC 小説"
+  }
+ },
+ {
+  "slug": "yorumungando",
+  "name": "スマスロヨルムンガンド",
+  "seo": {
+   "title": "スマスロヨルムンガンド 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 通常840G〜 / リセット180G〜",
+  "aliases": [
+   "ヨルムンガンド",
+   "よるむんがんど",
+   "ヨルムン",
+   "jormungand"
+  ],
+  "original": {
+   "title": "ヨルムンガンド",
+   "kind": "漫画",
+   "search": "ヨルムンガンド 漫画"
+  },
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 999,
+    "good": 840,
+    "caution": 760,
+    "note": "天井AT間最大999G+α。AT間でも抽選で450G+αの仮天井が選ばれることがあります。"
+   },
+   "reset": {
+    "excellent": 370,
+    "good": 180,
+    "caution": 100,
+    "note": "設定変更後は天井450G+αに短縮。リセット台なら浅いラインから候補です。"
+   },
+   "limit": 999
+  },
+  "limit": 999
+ },
+ {
+  "slug": "akudama",
+  "name": "Lアクダマドライブ",
+  "seo": {
+   "title": "Lアクダマドライブ 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 通常530G〜",
+  "aliases": [
+   "アクダマ",
+   "アクダマドライブ",
+   "あくだま",
+   "AKUDAMA"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "excellent": 967,
+    "good": 530,
+    "caution": 500,
+    "note": "天井ボーナス間967G+α。745G以降のボーナスでAT非突入時・上位AT終了後は589G+αに短縮。"
+   },
+   "suru": {
+    "suruMax": 6,
+    "excellent": 6,
+    "good": 4,
+    "caution": 2,
+    "note": "ボーナス6スルーで7回目のボーナスがエピソードボーナス（AT濃厚）。スルー回数天井あり。",
+    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+   }
+  },
+  "limit": 967,
+  "original": {
+   "title": "アクダマドライブ",
+   "kind": "アニメ",
+   "search": "アクダマドライブ Blu-ray"
+  }
+ },
+ {
+  "slug": "triple_crown_7",
+  "name": "LBトリプルクラウンセブン",
+  "seo": {
+   "title": "LBトリプルクラウンセブン スペックまとめ"
+  },
+  "info": "スマスロBT",
+  "strategy": "設定狙い主体・天井なし（BIG比率70%）",
+  "aliases": [
+   "トリプルクラウン",
+   "トリクラ",
+   "トリプルクラウンセブン",
+   "トリクラ7"
+  ],
+  "series": "トリプルクラウン",
+  "release_date": "2026-04-06"
+ },
+ {
   "slug": "koukaku",
   "name": "スマスロ 攻殻機動隊",
   "seo": {
@@ -4818,6 +4985,262 @@
   "tenjo_games": 799
  },
  {
+  "slug": "okidoki_encore",
+  "name": "L沖ドキ!DUOアンコール",
+  "seo": {
+   "title": "沖ドキDUOアンコール 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロ疑似ボーナス",
+  "strategy": "5.6枚 通常520G〜",
+  "strategyByRate": {
+   "eq56": "通常520G〜",
+   "rate55": "通常530G〜",
+   "rate50": "通常560G〜",
+   "rate45": "通常600G〜"
+  },
+  "aliases": [
+   "沖ドキ",
+   "DUOアンコール",
+   "沖ドキアンコール",
+   "沖ドキDUOアンコール",
+   "おきどきあんこーる",
+   "沖ドキDUO",
+   "OKIDOKI"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "excellent": 750,
+    "good": 520,
+    "caution": 400,
+    "byRate": {
+     "eq56": {
+      "excellent": 750,
+      "good": 520,
+      "caution": 400,
+      "note": "5.6枚交換なら520Gから狙い目。天井800G。301〜400Gにゾーン。"
+     },
+     "rate55": {
+      "excellent": 750,
+      "good": 530,
+      "caution": 410,
+      "note": "6.0枚交換なら530Gから。"
+     },
+     "rate50": {
+      "excellent": 750,
+      "good": 560,
+      "caution": 440,
+      "note": "6.5枚交換なら560Gから。"
+     },
+     "rate45": {
+      "excellent": 750,
+      "good": 600,
+      "caution": 480,
+      "note": "7.0枚交換なら600Gから。"
+     }
+    },
+    "note": "G数天井800G。301〜400Gにゾーン（約80%ボーナス）。"
+   },
+   "through": {
+    "excellent": 9,
+    "good": 5,
+    "caution": 2,
+    "byRate": {
+     "eq56": {
+      "excellent": 9,
+      "good": 5,
+      "caution": 2,
+      "note": "スルー天井は最大10回。5回到達でドキドキ以上濃厚。"
+     },
+     "rate55": {
+      "excellent": 9,
+      "good": 5,
+      "caution": 2,
+      "note": "5回到達でドキドキ以上濃厚。"
+     },
+     "rate50": {
+      "excellent": 9,
+      "good": 5,
+      "caution": 3,
+      "note": "5回到達でドキドキ以上濃厚。"
+     },
+     "rate45": {
+      "excellent": 9,
+      "good": 5,
+      "caution": 3,
+      "note": "5回到達でドキドキ以上濃厚。"
+     }
+    },
+    "note": "スルー天井は最大10回。5回到達でドキドキ以上濃厚。",
+    "suruMax": 9,
+    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+   }
+  },
+  "limit": 800
+ },
+ {
+  "slug": "prismnana",
+  "name": "スマスロ まじかるすいーとプリズム・ナナ",
+  "seo": {
+   "title": "スマスロ まじかるすいーとプリズム・ナナ 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常500G〜 / リセット後90G〜",
+  "aliases": [
+   "プリズムナナ",
+   "ぷりずむなな",
+   "プリズム",
+   "まじかるすいーとプリズム",
+   "プリズム・ナナ",
+   "カントクスロット"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット後"
+    }
+   ],
+   "normal": {
+    "excellent": 700,
+    "good": 500,
+    "caution": 350,
+    "target": 500,
+    "note": "天井899G+αで初当たり当選（プロローグを経てST【バーニングゾーン】へ）。最大7周期。",
+    "byRate": {
+     "eq56": {
+      "excellent": 700,
+      "good": 500,
+      "caution": 350,
+      "target": 500,
+      "note": "500G〜が狙い目ライン。天井899G+αを意識して深追いも可。"
+     },
+     "rate55": {
+      "excellent": 720,
+      "good": 510,
+      "caution": 360,
+      "target": 510,
+      "note": "6.0枚なら510G〜。"
+     },
+     "rate50": {
+      "excellent": 780,
+      "good": 570,
+      "caution": 420,
+      "target": 570,
+      "note": "6.5枚なら570G〜。"
+     },
+     "rate45": {
+      "excellent": 850,
+      "good": 640,
+      "caution": 490,
+      "target": 640,
+      "note": "7.0枚なら640G〜。"
+     }
+    }
+   },
+   "reset": {
+    "excellent": 140,
+    "good": 90,
+    "caution": 50,
+    "target": 90,
+    "note": "リセット後（設定変更・ST駆け抜け後）は天井555G+αに短縮。モード通常B以上確定。",
+    "byRate": {
+     "eq56": {
+      "excellent": 140,
+      "good": 90,
+      "caution": 50,
+      "target": 90,
+      "note": "リセット後90G〜。天井555G+α・モード通常B以上確定。"
+     },
+     "rate55": {
+      "excellent": 140,
+      "good": 90,
+      "caution": 50,
+      "target": 90,
+      "note": "6.0枚リセット後90G〜。"
+     },
+     "rate50": {
+      "excellent": 150,
+      "good": 90,
+      "caution": 50,
+      "target": 90,
+      "note": "6.5枚リセット後90G〜。"
+     },
+     "rate45": {
+      "excellent": 150,
+      "good": 90,
+      "caution": 50,
+      "target": 90,
+      "note": "7.0枚リセット後90G〜。"
+     }
+    }
+   },
+   "ok": "狙いOK",
+   "ng": "まだ早い"
+  },
+  "limit": 899,
+  "original": {
+   "title": "まじかるすいーと プリズム・ナナ",
+   "kind": "アニメ",
+   "search": "まじかるすいーと プリズム ナナ Blu-ray"
+  },
+  "strategyByRate": {
+   "eq56": "通常500G〜 / リセット後90G〜",
+   "rate55": "通常510G〜 / リセット後90G〜",
+   "rate50": "通常570G〜 / リセット後90G〜",
+   "rate45": "通常640G〜 / リセット後90G〜"
+  }
+ },
+ {
   "slug": "neoplanet",
   "name": "スマスロネオプラネット",
   "seo": {
@@ -4946,6 +5369,60 @@
    "スマスロネオプラネット"
   ],
   "limit": 777
+ },
+ {
+  "slug": "zenigata5",
+  "name": "L主役は銭形5",
+  "seo": {
+   "title": "L主役は銭形5 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 通常750G〜 / リセット後400G〜",
+  "aliases": [
+   "銭形5",
+   "ぜにがた5",
+   "主役は銭形5",
+   "L銭形5",
+   "ゼニガタ5",
+   "ぜにがた",
+   "銭形ルパン5"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット後"
+    }
+   ],
+   "normal": {
+    "excellent": 1250,
+    "good": 750,
+    "caution": 650,
+    "note": "天井ボーナス間1250G+α。750G〜から狙い目です。",
+    "target": 750
+   },
+   "reset": {
+    "excellent": 850,
+    "good": 400,
+    "caution": 300,
+    "note": "設定変更後は天井が850G+αに短縮。リセット台は400G〜から狙い目です。",
+    "target": 400
+   }
+  },
+  "limit": 1250,
+  "original": {
+   "title": "銭形平次",
+   "kind": "小説",
+   "search": "銭形平次 野村胡堂"
+  },
+  "release_date": "2025-10-06",
+  "tenjo_games": 1250,
+  "tenjo_display": "1250G+α（通常A）"
  },
  {
   "slug": "azurlane",
@@ -5153,6 +5630,168 @@
    "title": "ダーリン・イン・ザ・フランキス",
    "kind": "アニメ",
    "search": "ダーリン イン ザ フランキス Blu-ray"
+  }
+ },
+ {
+  "slug": "tenken",
+  "name": "パチスロ 転生したら剣でした",
+  "seo": {
+   "title": "パチスロ 転生したら剣でした 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 AT間530G〜 / ボーナス間1000G〜 / リセット後160G〜",
+  "aliases": [
+   "転生したら剣でした",
+   "転剣",
+   "てんけん",
+   "転生剣",
+   "tenken"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "AT間"
+    },
+    {
+     "key": "bonus_gap",
+     "label": "ボーナス間"
+    },
+    {
+     "key": "reset",
+     "label": "リセット後"
+    }
+   ],
+   "normal": {
+    "excellent": 750,
+    "good": 530,
+    "caution": 380,
+    "byRate": {
+     "eq56": {
+      "excellent": 750,
+      "good": 530,
+      "caution": 380,
+      "note": "AT間天井970G+α。5.6枚は530G〜が狙い目。"
+     },
+     "rate55": {
+      "excellent": 780,
+      "good": 610,
+      "caution": 430,
+      "note": "6.0枚交換は610G〜。"
+     },
+     "rate50": {
+      "excellent": 800,
+      "good": 650,
+      "caution": 460,
+      "note": "6.5枚交換は650G〜。"
+     },
+     "rate45": {
+      "excellent": 820,
+      "good": 700,
+      "caution": 500,
+      "note": "7.0枚交換は700G〜。"
+     }
+    },
+    "note": "AT間天井970G+α。ボーナス間のゲーム数（1000G〜）も確認。"
+   },
+   "bonus_gap": {
+    "excellent": 1200,
+    "good": 1000,
+    "caution": 750,
+    "byRate": {
+     "eq56": {
+      "excellent": 1200,
+      "good": 1000,
+      "caution": 750,
+      "note": "ボーナス間天井1280G+α。1000G〜から狙い目。"
+     },
+     "rate55": {
+      "excellent": 1220,
+      "good": 1020,
+      "caution": 780,
+      "note": "6.0枚交換は1020G〜。"
+     },
+     "rate50": {
+      "excellent": 1240,
+      "good": 1050,
+      "caution": 800,
+      "note": "6.5枚交換は1050G〜。"
+     },
+     "rate45": {
+      "excellent": 1260,
+      "good": 1070,
+      "caution": 820,
+      "note": "7.0枚交換は1070G〜。"
+     }
+    },
+    "note": "ボーナス間天井1280G+α（設定変更時980G+α）。AT当選ではリセットされず、AT中も数えます。この線は設定変更後でない台の目安です。"
+   },
+   "reset": {
+    "excellent": 400,
+    "good": 160,
+    "caution": 80,
+    "byRate": {
+     "eq56": {
+      "excellent": 400,
+      "good": 160,
+      "caution": 80,
+      "note": "リセット後AT間天井600G+αに短縮。5.6枚は160G〜から狙い目。"
+     },
+     "rate55": {
+      "excellent": 430,
+      "good": 200,
+      "caution": 100,
+      "note": "6.0枚交換は200G〜。"
+     },
+     "rate50": {
+      "excellent": 460,
+      "good": 240,
+      "caution": 130,
+      "note": "6.5枚交換は240G〜。"
+     },
+     "rate45": {
+      "excellent": 490,
+      "good": 280,
+      "caution": 160,
+      "note": "7.0枚交換は280G〜。"
+     }
+    },
+    "note": "リセット後AT間天井600G+αに短縮。5.6枚交換は160G〜が狙い目。"
+   }
+  },
+  "limit": 1400,
+  "tenjo_display": "AT間970G+α／ボーナス間1280G+α",
+  "tenjo_games": 970,
+  "original": {
+   "title": "転生したら剣でした",
+   "kind": "ライトノベル",
+   "search": "転生したら剣でした 小説"
+  },
+  "strategyByRate": {
+   "eq56": "AT間530G〜 / ボーナス間1000G〜 / リセット後160G〜",
+   "rate55": "AT間610G〜 / ボーナス間1020G〜 / リセット後200G〜",
+   "rate50": "AT間650G〜 / ボーナス間1050G〜 / リセット後240G〜",
+   "rate45": "AT間700G〜 / ボーナス間1070G〜 / リセット後280G〜"
   }
  },
  {
@@ -6072,6 +6711,191 @@
   "release_date": "2024-06-03"
  },
  {
+  "slug": "bofuri",
+  "name": "スマスロ防振り",
+  "seo": {
+   "title": "スマスロ防振り 狙い目・天井・設定判別まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常670G〜 / リセット300G〜",
+  "strategyByRate": {
+   "eq56": "通常670G〜 / リセット300G〜",
+   "rate55": "通常700G〜 / リセット320G〜",
+   "rate50": "通常730G〜 / リセット340G〜",
+   "rate45": "通常770G〜 / リセット360G〜"
+  },
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "normal": {
+    "excellent": 800,
+    "good": 670,
+    "caution": 600,
+    "target": 670,
+    "byRate": {
+     "eq56": {
+      "excellent": 800,
+      "good": 670,
+      "caution": 600,
+      "target": 670,
+      "note": "5.6枚なら600Gから候補、670G以上で本線です。天井950G+αへの到達期待値が高まる750G超えは強め。"
+     },
+     "rate55": {
+      "excellent": 820,
+      "good": 700,
+      "caution": 630,
+      "target": 700,
+      "note": "6.0枚は700G基準です。630G台は候補止まりで、深い台優先が安全です。"
+     },
+     "rate50": {
+      "excellent": 850,
+      "good": 730,
+      "caution": 660,
+      "target": 730,
+      "note": "6.5枚は730G基準です。持ちメダルのない場面は670G以深に絞ってください。"
+     },
+     "rate45": {
+      "excellent": 880,
+      "good": 770,
+      "caution": 700,
+      "target": 770,
+      "note": "7.0枚は770G基準です。浅い台には広げず深め台だけに絞るのが安全です。"
+     }
+    },
+    "note": "天井950G+αのAT機。670G〜（5.6枚）が狙い目ラインです。ボーナス後即ヤメ厳禁（防御状態必須）。"
+   },
+   "reset": {
+    "excellent": 400,
+    "good": 300,
+    "caution": 220,
+    "target": 300,
+    "byRate": {
+     "eq56": {
+      "excellent": 400,
+      "good": 300,
+      "caution": 220,
+      "target": 300,
+      "note": "設定変更後は天井450G(70%)/650G(30%)の振り分け。5.6枚なら220G〜候補、300G以上で本線。"
+     },
+     "rate55": {
+      "excellent": 410,
+      "good": 320,
+      "caution": 240,
+      "target": 320,
+      "note": "6.0枚のリセット台は320G基準です。朝一確認が取れない台は深めに設定してください。"
+     },
+     "rate50": {
+      "excellent": 430,
+      "good": 340,
+      "caution": 260,
+      "target": 340,
+      "note": "6.5枚のリセット台は340G基準です。朝一根拠が弱ければ通常と混ぜず別管理してください。"
+     },
+     "rate45": {
+      "excellent": 450,
+      "good": 360,
+      "caution": 280,
+      "target": 360,
+      "note": "7.0枚のリセット台は360G基準です。根拠が薄い場合は400G以深に絞ってください。"
+     }
+    },
+    "note": "設定変更後は天井450G(70%)か650G(30%)に短縮。朝一リセット確認が取れた台は200G台後半から狙えます。"
+   },
+   "ok": "狙い目OK",
+   "ng": "まだ早い",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ]
+  },
+  "aliases": [
+   "防振り",
+   "ぼうふり",
+   "bofuri",
+   "痛いのは嫌なので防御力に極振りしたいと思います",
+   "防御力に極振り",
+   "スマスロ防振り"
+  ],
+  "limit": 1000,
+  "tenjo_display": "950G+α",
+  "tenjo_games": 950,
+  "original": {
+   "title": "痛いのは嫌なので防御力に極振りしたいと思います。",
+   "kind": "ライトノベル",
+   "search": "防振り 小説"
+  }
+ },
+ {
+  "slug": "enen",
+  "name": "Lパチスロ炎炎ノ消防隊",
+  "seo": {
+   "title": "Lパチスロ炎炎ノ消防隊 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 通常520G〜 / リセット後370G〜",
+  "aliases": [
+   "炎炎ノ消防隊",
+   "えんえんのしょうぼうたい",
+   "炎炎消防隊",
+   "炎炎",
+   "enen"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット後"
+    }
+   ],
+   "normal": {
+    "excellent": 850,
+    "good": 520,
+    "caution": 320
+   },
+   "reset": {
+    "excellent": 650,
+    "good": 370,
+    "caution": 220
+   },
+   "limit": 850
+  },
+  "limit": 850,
+  "original": {
+   "title": "炎炎ノ消防隊",
+   "kind": "漫画",
+   "search": "炎炎ノ消防隊 漫画"
+  }
+ },
+ {
   "slug": "banchou4",
   "name": "押忍！番長4",
   "seo": {
@@ -6454,6 +7278,47 @@
   }
  },
  {
+  "slug": "code_geass",
+  "name": "スマスロ コードギアス 反逆のルルーシュ/復活のルルーシュ",
+  "seo": {
+   "title": "コードギアス 反逆のルルーシュ/復活のルルーシュ 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 通常700G〜",
+  "aliases": [
+   "ギアス",
+   "コードギアス",
+   "ルルーシュ",
+   "こーどぎあす"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "excellent": 800,
+    "good": 700,
+    "caution": 450,
+    "note": "天井はAT間最大1000G+αです（ボーナス当選ではゲーム数がリセットされません）。",
+    "target": 700
+   },
+   "limit": 1050
+  },
+  "original": {
+   "title": "コードギアス 反逆のルルーシュ",
+   "kind": "アニメ",
+   "search": "コードギアス Blu-ray"
+  },
+  "limit": 1000,
+  "release_date": "2024-02-05",
+  "tenjo_games": 1000,
+  "tenjo_display": "AT間1000G+α"
+ },
+ {
   "slug": "basilisk_tenzen",
   "name": "スマスロバジリスク～甲賀忍法帖～絆2 天膳 BLACK EDITION",
   "seo": {
@@ -6663,6 +7528,96 @@
    "kind": "アニメ",
    "search": "魔法少女まどか マギカ Blu-ray"
   }
+ },
+ {
+  "slug": "sengoku_otome4",
+  "name": "L戦国乙女4 戦乱に閃く炯眼の軍師",
+  "seo": {
+   "title": "戦国乙女4 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常460G〜",
+  "strategyByRate": {
+   "eq56": "通常460G〜",
+   "rate55": "通常470G〜",
+   "rate50": "通常500G〜",
+   "rate45": "通常530G〜"
+  },
+  "aliases": [
+   "戦国乙女",
+   "乙女4",
+   "おとめ",
+   "せんごくおとめ"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "excellent": 700,
+    "good": 450,
+    "caution": 300,
+    "byRate": {
+     "eq56": {
+      "excellent": 700,
+      "good": 460,
+      "caution": 300,
+      "note": "5.6枚なら460G〜が狙い目。300Gゾーンが強い。天井799G+前兆。"
+     },
+     "rate55": {
+      "excellent": 700,
+      "good": 470,
+      "caution": 320,
+      "note": "6.0枚交換なら470Gから。"
+     },
+     "rate50": {
+      "excellent": 720,
+      "good": 500,
+      "caution": 350,
+      "note": "6.5枚交換なら500Gから。"
+     },
+     "rate45": {
+      "excellent": 750,
+      "good": 530,
+      "caution": 380,
+      "note": "7.0枚交換なら530Gから。"
+     }
+    },
+    "note": "天井799G+前兆。AT終了後30G引き戻し確認でヤメ。"
+   },
+   "suru": {
+    "excellent": 6,
+    "good": 5,
+    "caution": 4,
+    "suruMax": 6,
+    "note": "ボーナス6スルー後の7回目でエピソードボーナス確定（AT濃厚）。5スルーから狙い目。",
+    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+   }
+  },
+  "limit": 799
  },
  {
   "slug": "gogo_juggler3",
@@ -7567,65 +8522,6 @@
   }
  },
  {
-  "slug": "gundam_uc2",
-  "name": "Lパチスロ 機動戦士ガンダムユニコーン 覚醒DRIVE",
-  "seo": {
-   "title": "ガンダムユニコーン 覚醒DRIVE 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "チェッカー基準 CZ間700G〜 / AT間1100G〜",
-  "aliases": [
-   "ガンダムユニコーン",
-   "ガンダムUC",
-   "UC2",
-   "覚醒DRIVE",
-   "ユニコーン",
-   "gundam_uc",
-   "ガンダム"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "CZ間"
-    },
-    {
-     "key": "at",
-     "label": "AT間"
-    }
-   ],
-   "normal": {
-    "excellent": 800,
-    "good": 700,
-    "caution": 580,
-    "note": "CZ間天井800G（リセット後400G）。"
-   },
-   "at": {
-    "excellent": 1400,
-    "good": 1100,
-    "caution": 950,
-    "note": "AT間天井1400G（液晶G数・リセット後1000G）。"
-   },
-   "suru": {
-    "excellent": 6,
-    "good": 5,
-    "caution": 4,
-    "note": "CZ6スルーで7回目確定（ボーナス当選）。等価4スルー以上から狙い目。",
-    "suruMax": 6,
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   }
-  },
-  "limit": 1400,
-  "tenjo_display": "CZ間800G+α／AT間1400G+α",
-  "tenjo_games": 800,
-  "original": {
-   "title": "機動戦士ガンダムUC",
-   "kind": "小説",
-   "search": "機動戦士ガンダムUC 小説"
-  }
- },
- {
   "slug": "kyokousuiri",
   "name": "L虚構推理",
   "seo": {
@@ -7754,97 +8650,6 @@
    }
   },
   "limit": null
- },
- {
-  "slug": "yorumungando",
-  "name": "スマスロヨルムンガンド",
-  "seo": {
-   "title": "スマスロヨルムンガンド 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "チェッカー基準 通常840G〜 / リセット180G〜",
-  "aliases": [
-   "ヨルムンガンド",
-   "よるむんがんど",
-   "ヨルムン",
-   "jormungand"
-  ],
-  "original": {
-   "title": "ヨルムンガンド",
-   "kind": "漫画",
-   "search": "ヨルムンガンド 漫画"
-  },
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 999,
-    "good": 840,
-    "caution": 760,
-    "note": "天井AT間最大999G+α。AT間でも抽選で450G+αの仮天井が選ばれることがあります。"
-   },
-   "reset": {
-    "excellent": 370,
-    "good": 180,
-    "caution": 100,
-    "note": "設定変更後は天井450G+αに短縮。リセット台なら浅いラインから候補です。"
-   },
-   "limit": 999
-  },
-  "limit": 999
- },
- {
-  "slug": "akudama",
-  "name": "Lアクダマドライブ",
-  "seo": {
-   "title": "Lアクダマドライブ 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "チェッカー基準 通常530G〜",
-  "aliases": [
-   "アクダマ",
-   "アクダマドライブ",
-   "あくだま",
-   "AKUDAMA"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "excellent": 967,
-    "good": 530,
-    "caution": 500,
-    "note": "天井ボーナス間967G+α。745G以降のボーナスでAT非突入時・上位AT終了後は589G+αに短縮。"
-   },
-   "suru": {
-    "suruMax": 6,
-    "excellent": 6,
-    "good": 4,
-    "caution": 2,
-    "note": "ボーナス6スルーで7回目のボーナスがエピソードボーナス（AT濃厚）。スルー回数天井あり。",
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   }
-  },
-  "limit": 967,
-  "original": {
-   "title": "アクダマドライブ",
-   "kind": "アニメ",
-   "search": "アクダマドライブ Blu-ray"
-  }
  },
  {
   "slug": "thunder_v",
@@ -9786,96 +10591,6 @@
   }
  },
  {
-  "slug": "sengoku_otome4",
-  "name": "L戦国乙女4 戦乱に閃く炯眼の軍師",
-  "seo": {
-   "title": "戦国乙女4 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常460G〜",
-  "strategyByRate": {
-   "eq56": "通常460G〜",
-   "rate55": "通常470G〜",
-   "rate50": "通常500G〜",
-   "rate45": "通常530G〜"
-  },
-  "aliases": [
-   "戦国乙女",
-   "乙女4",
-   "おとめ",
-   "せんごくおとめ"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "excellent": 700,
-    "good": 450,
-    "caution": 300,
-    "byRate": {
-     "eq56": {
-      "excellent": 700,
-      "good": 460,
-      "caution": 300,
-      "note": "5.6枚なら460G〜が狙い目。300Gゾーンが強い。天井799G+前兆。"
-     },
-     "rate55": {
-      "excellent": 700,
-      "good": 470,
-      "caution": 320,
-      "note": "6.0枚交換なら470Gから。"
-     },
-     "rate50": {
-      "excellent": 720,
-      "good": 500,
-      "caution": 350,
-      "note": "6.5枚交換なら500Gから。"
-     },
-     "rate45": {
-      "excellent": 750,
-      "good": 530,
-      "caution": 380,
-      "note": "7.0枚交換なら530Gから。"
-     }
-    },
-    "note": "天井799G+前兆。AT終了後30G引き戻し確認でヤメ。"
-   },
-   "suru": {
-    "excellent": 6,
-    "good": 5,
-    "caution": 4,
-    "suruMax": 6,
-    "note": "ボーナス6スルー後の7回目でエピソードボーナス確定（AT濃厚）。5スルーから狙い目。",
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   }
-  },
-  "limit": 799
- },
- {
   "slug": "tolove_darkness",
   "name": "L ToLOVEるダークネス",
   "seo": {
@@ -10430,125 +11145,6 @@
    }
   },
   "limit": 999
- },
- {
-  "slug": "okidoki_encore",
-  "name": "L沖ドキ!DUOアンコール",
-  "seo": {
-   "title": "沖ドキDUOアンコール 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロ疑似ボーナス",
-  "strategy": "5.6枚 通常520G〜",
-  "strategyByRate": {
-   "eq56": "通常520G〜",
-   "rate55": "通常530G〜",
-   "rate50": "通常560G〜",
-   "rate45": "通常600G〜"
-  },
-  "aliases": [
-   "沖ドキ",
-   "DUOアンコール",
-   "沖ドキアンコール",
-   "沖ドキDUOアンコール",
-   "おきどきあんこーる",
-   "沖ドキDUO",
-   "OKIDOKI"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "excellent": 750,
-    "good": 520,
-    "caution": 400,
-    "byRate": {
-     "eq56": {
-      "excellent": 750,
-      "good": 520,
-      "caution": 400,
-      "note": "5.6枚交換なら520Gから狙い目。天井800G。301〜400Gにゾーン。"
-     },
-     "rate55": {
-      "excellent": 750,
-      "good": 530,
-      "caution": 410,
-      "note": "6.0枚交換なら530Gから。"
-     },
-     "rate50": {
-      "excellent": 750,
-      "good": 560,
-      "caution": 440,
-      "note": "6.5枚交換なら560Gから。"
-     },
-     "rate45": {
-      "excellent": 750,
-      "good": 600,
-      "caution": 480,
-      "note": "7.0枚交換なら600Gから。"
-     }
-    },
-    "note": "G数天井800G。301〜400Gにゾーン（約80%ボーナス）。"
-   },
-   "through": {
-    "excellent": 9,
-    "good": 5,
-    "caution": 2,
-    "byRate": {
-     "eq56": {
-      "excellent": 9,
-      "good": 5,
-      "caution": 2,
-      "note": "スルー天井は最大10回。5回到達でドキドキ以上濃厚。"
-     },
-     "rate55": {
-      "excellent": 9,
-      "good": 5,
-      "caution": 2,
-      "note": "5回到達でドキドキ以上濃厚。"
-     },
-     "rate50": {
-      "excellent": 9,
-      "good": 5,
-      "caution": 3,
-      "note": "5回到達でドキドキ以上濃厚。"
-     },
-     "rate45": {
-      "excellent": 9,
-      "good": 5,
-      "caution": 3,
-      "note": "5回到達でドキドキ以上濃厚。"
-     }
-    },
-    "note": "スルー天井は最大10回。5回到達でドキドキ以上濃厚。",
-    "suruMax": 9,
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   }
-  },
-  "limit": 800
  },
  {
   "slug": "fujiko_bt",
@@ -11275,77 +11871,6 @@
   }
  },
  {
-  "slug": "triple_crown_7",
-  "name": "LBトリプルクラウンセブン",
-  "seo": {
-   "title": "LBトリプルクラウンセブン スペックまとめ"
-  },
-  "info": "スマスロBT",
-  "strategy": "設定狙い主体・天井なし（BIG比率70%）",
-  "aliases": [
-   "トリプルクラウン",
-   "トリクラ",
-   "トリプルクラウンセブン",
-   "トリクラ7"
-  ],
-  "series": "トリプルクラウン",
-  "release_date": "2026-04-06"
- },
- {
-  "slug": "zenigata5",
-  "name": "L主役は銭形5",
-  "seo": {
-   "title": "L主役は銭形5 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "チェッカー基準 通常750G〜 / リセット後400G〜",
-  "aliases": [
-   "銭形5",
-   "ぜにがた5",
-   "主役は銭形5",
-   "L銭形5",
-   "ゼニガタ5",
-   "ぜにがた",
-   "銭形ルパン5"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット後"
-    }
-   ],
-   "normal": {
-    "excellent": 1250,
-    "good": 750,
-    "caution": 650,
-    "note": "天井ボーナス間1250G+α。750G〜から狙い目です。",
-    "target": 750
-   },
-   "reset": {
-    "excellent": 850,
-    "good": 400,
-    "caution": 300,
-    "note": "設定変更後は天井が850G+αに短縮。リセット台は400G〜から狙い目です。",
-    "target": 400
-   }
-  },
-  "limit": 1250,
-  "original": {
-   "title": "銭形平次",
-   "kind": "小説",
-   "search": "銭形平次 野村胡堂"
-  },
-  "release_date": "2025-10-06",
-  "tenjo_games": 1250,
-  "tenjo_display": "1250G+α（通常A）"
- },
- {
   "slug": "mushoku",
   "name": "L無職転生 〜異世界行ったら本気だす〜",
   "seo": {
@@ -11368,52 +11893,6 @@
    "title": "無職転生",
    "kind": "ライトノベル",
    "search": "無職転生 小説"
-  }
- },
- {
-  "slug": "enen",
-  "name": "Lパチスロ炎炎ノ消防隊",
-  "seo": {
-   "title": "Lパチスロ炎炎ノ消防隊 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "チェッカー基準 通常520G〜 / リセット後370G〜",
-  "aliases": [
-   "炎炎ノ消防隊",
-   "えんえんのしょうぼうたい",
-   "炎炎消防隊",
-   "炎炎",
-   "enen"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット後"
-    }
-   ],
-   "normal": {
-    "excellent": 850,
-    "good": 520,
-    "caution": 320
-   },
-   "reset": {
-    "excellent": 650,
-    "good": 370,
-    "caution": 220
-   },
-   "limit": 850
-  },
-  "limit": 850,
-  "original": {
-   "title": "炎炎ノ消防隊",
-   "kind": "漫画",
-   "search": "炎炎ノ消防隊 漫画"
   }
  },
  {
@@ -11506,47 +11985,6 @@
   },
   "tenjo_display": "Gポイント天井（モード別）／AT間最大2500G",
   "tenjo_games": null
- },
- {
-  "slug": "code_geass",
-  "name": "スマスロ コードギアス 反逆のルルーシュ/復活のルルーシュ",
-  "seo": {
-   "title": "コードギアス 反逆のルルーシュ/復活のルルーシュ 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "チェッカー基準 通常700G〜",
-  "aliases": [
-   "ギアス",
-   "コードギアス",
-   "ルルーシュ",
-   "こーどぎあす"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "excellent": 800,
-    "good": 700,
-    "caution": 450,
-    "note": "天井はAT間最大1000G+αです（ボーナス当選ではゲーム数がリセットされません）。",
-    "target": 700
-   },
-   "limit": 1050
-  },
-  "original": {
-   "title": "コードギアス 反逆のルルーシュ",
-   "kind": "アニメ",
-   "search": "コードギアス Blu-ray"
-  },
-  "limit": 1000,
-  "release_date": "2024-02-05",
-  "tenjo_games": 1000,
-  "tenjo_display": "AT間1000G+α"
  },
  {
   "slug": "rezero2",
@@ -11701,143 +12139,6 @@
   "tenjo_games": 1000
  },
  {
-  "slug": "prismnana",
-  "name": "スマスロ まじかるすいーとプリズム・ナナ",
-  "seo": {
-   "title": "スマスロ まじかるすいーとプリズム・ナナ 狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常500G〜 / リセット後90G〜",
-  "aliases": [
-   "プリズムナナ",
-   "ぷりずむなな",
-   "プリズム",
-   "まじかるすいーとプリズム",
-   "プリズム・ナナ",
-   "カントクスロット"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット後"
-    }
-   ],
-   "normal": {
-    "excellent": 700,
-    "good": 500,
-    "caution": 350,
-    "target": 500,
-    "note": "天井899G+αで初当たり当選（プロローグを経てST【バーニングゾーン】へ）。最大7周期。",
-    "byRate": {
-     "eq56": {
-      "excellent": 700,
-      "good": 500,
-      "caution": 350,
-      "target": 500,
-      "note": "500G〜が狙い目ライン。天井899G+αを意識して深追いも可。"
-     },
-     "rate55": {
-      "excellent": 720,
-      "good": 510,
-      "caution": 360,
-      "target": 510,
-      "note": "6.0枚なら510G〜。"
-     },
-     "rate50": {
-      "excellent": 780,
-      "good": 570,
-      "caution": 420,
-      "target": 570,
-      "note": "6.5枚なら570G〜。"
-     },
-     "rate45": {
-      "excellent": 850,
-      "good": 640,
-      "caution": 490,
-      "target": 640,
-      "note": "7.0枚なら640G〜。"
-     }
-    }
-   },
-   "reset": {
-    "excellent": 140,
-    "good": 90,
-    "caution": 50,
-    "target": 90,
-    "note": "リセット後（設定変更・ST駆け抜け後）は天井555G+αに短縮。モード通常B以上確定。",
-    "byRate": {
-     "eq56": {
-      "excellent": 140,
-      "good": 90,
-      "caution": 50,
-      "target": 90,
-      "note": "リセット後90G〜。天井555G+α・モード通常B以上確定。"
-     },
-     "rate55": {
-      "excellent": 140,
-      "good": 90,
-      "caution": 50,
-      "target": 90,
-      "note": "6.0枚リセット後90G〜。"
-     },
-     "rate50": {
-      "excellent": 150,
-      "good": 90,
-      "caution": 50,
-      "target": 90,
-      "note": "6.5枚リセット後90G〜。"
-     },
-     "rate45": {
-      "excellent": 150,
-      "good": 90,
-      "caution": 50,
-      "target": 90,
-      "note": "7.0枚リセット後90G〜。"
-     }
-    }
-   },
-   "ok": "狙いOK",
-   "ng": "まだ早い"
-  },
-  "limit": 899,
-  "original": {
-   "title": "まじかるすいーと プリズム・ナナ",
-   "kind": "アニメ",
-   "search": "まじかるすいーと プリズム ナナ Blu-ray"
-  },
-  "strategyByRate": {
-   "eq56": "通常500G〜 / リセット後90G〜",
-   "rate55": "通常510G〜 / リセット後90G〜",
-   "rate50": "通常570G〜 / リセット後90G〜",
-   "rate45": "通常640G〜 / リセット後90G〜"
-  }
- },
- {
   "slug": "burning_express",
   "name": "スマスロバーニングエクスプレス",
   "seo": {
@@ -11974,145 +12275,6 @@
    "title": "新世紀エヴァンゲリオン",
    "kind": "アニメ",
    "search": "新世紀エヴァンゲリオン Blu-ray"
-  }
- },
- {
-  "slug": "bofuri",
-  "name": "スマスロ防振り",
-  "seo": {
-   "title": "スマスロ防振り 狙い目・天井・設定判別まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常670G〜 / リセット300G〜",
-  "strategyByRate": {
-   "eq56": "通常670G〜 / リセット300G〜",
-   "rate55": "通常700G〜 / リセット320G〜",
-   "rate50": "通常730G〜 / リセット340G〜",
-   "rate45": "通常770G〜 / リセット360G〜"
-  },
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "normal": {
-    "excellent": 800,
-    "good": 670,
-    "caution": 600,
-    "target": 670,
-    "byRate": {
-     "eq56": {
-      "excellent": 800,
-      "good": 670,
-      "caution": 600,
-      "target": 670,
-      "note": "5.6枚なら600Gから候補、670G以上で本線です。天井950G+αへの到達期待値が高まる750G超えは強め。"
-     },
-     "rate55": {
-      "excellent": 820,
-      "good": 700,
-      "caution": 630,
-      "target": 700,
-      "note": "6.0枚は700G基準です。630G台は候補止まりで、深い台優先が安全です。"
-     },
-     "rate50": {
-      "excellent": 850,
-      "good": 730,
-      "caution": 660,
-      "target": 730,
-      "note": "6.5枚は730G基準です。持ちメダルのない場面は670G以深に絞ってください。"
-     },
-     "rate45": {
-      "excellent": 880,
-      "good": 770,
-      "caution": 700,
-      "target": 770,
-      "note": "7.0枚は770G基準です。浅い台には広げず深め台だけに絞るのが安全です。"
-     }
-    },
-    "note": "天井950G+αのAT機。670G〜（5.6枚）が狙い目ラインです。ボーナス後即ヤメ厳禁（防御状態必須）。"
-   },
-   "reset": {
-    "excellent": 400,
-    "good": 300,
-    "caution": 220,
-    "target": 300,
-    "byRate": {
-     "eq56": {
-      "excellent": 400,
-      "good": 300,
-      "caution": 220,
-      "target": 300,
-      "note": "設定変更後は天井450G(70%)/650G(30%)の振り分け。5.6枚なら220G〜候補、300G以上で本線。"
-     },
-     "rate55": {
-      "excellent": 410,
-      "good": 320,
-      "caution": 240,
-      "target": 320,
-      "note": "6.0枚のリセット台は320G基準です。朝一確認が取れない台は深めに設定してください。"
-     },
-     "rate50": {
-      "excellent": 430,
-      "good": 340,
-      "caution": 260,
-      "target": 340,
-      "note": "6.5枚のリセット台は340G基準です。朝一根拠が弱ければ通常と混ぜず別管理してください。"
-     },
-     "rate45": {
-      "excellent": 450,
-      "good": 360,
-      "caution": 280,
-      "target": 360,
-      "note": "7.0枚のリセット台は360G基準です。根拠が薄い場合は400G以深に絞ってください。"
-     }
-    },
-    "note": "設定変更後は天井450G(70%)か650G(30%)に短縮。朝一リセット確認が取れた台は200G台後半から狙えます。"
-   },
-   "ok": "狙い目OK",
-   "ng": "まだ早い",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ]
-  },
-  "aliases": [
-   "防振り",
-   "ぼうふり",
-   "bofuri",
-   "痛いのは嫌なので防御力に極振りしたいと思います",
-   "防御力に極振り",
-   "スマスロ防振り"
-  ],
-  "limit": 1000,
-  "tenjo_display": "950G+α",
-  "tenjo_games": 950,
-  "original": {
-   "title": "痛いのは嫌なので防御力に極振りしたいと思います。",
-   "kind": "ライトノベル",
-   "search": "防振り 小説"
   }
  },
  {
@@ -12370,168 +12532,6 @@
    "title": "七つの魔剣が支配する",
    "kind": "ライトノベル",
    "search": "七つの魔剣が支配する 小説"
-  }
- },
- {
-  "slug": "tenken",
-  "name": "パチスロ 転生したら剣でした",
-  "seo": {
-   "title": "パチスロ 転生したら剣でした 狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 AT間530G〜 / ボーナス間1000G〜 / リセット後160G〜",
-  "aliases": [
-   "転生したら剣でした",
-   "転剣",
-   "てんけん",
-   "転生剣",
-   "tenken"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "AT間"
-    },
-    {
-     "key": "bonus_gap",
-     "label": "ボーナス間"
-    },
-    {
-     "key": "reset",
-     "label": "リセット後"
-    }
-   ],
-   "normal": {
-    "excellent": 750,
-    "good": 530,
-    "caution": 380,
-    "byRate": {
-     "eq56": {
-      "excellent": 750,
-      "good": 530,
-      "caution": 380,
-      "note": "AT間天井970G+α。5.6枚は530G〜が狙い目。"
-     },
-     "rate55": {
-      "excellent": 780,
-      "good": 610,
-      "caution": 430,
-      "note": "6.0枚交換は610G〜。"
-     },
-     "rate50": {
-      "excellent": 800,
-      "good": 650,
-      "caution": 460,
-      "note": "6.5枚交換は650G〜。"
-     },
-     "rate45": {
-      "excellent": 820,
-      "good": 700,
-      "caution": 500,
-      "note": "7.0枚交換は700G〜。"
-     }
-    },
-    "note": "AT間天井970G+α。ボーナス間のゲーム数（1000G〜）も確認。"
-   },
-   "bonus_gap": {
-    "excellent": 1200,
-    "good": 1000,
-    "caution": 750,
-    "byRate": {
-     "eq56": {
-      "excellent": 1200,
-      "good": 1000,
-      "caution": 750,
-      "note": "ボーナス間天井1280G+α。1000G〜から狙い目。"
-     },
-     "rate55": {
-      "excellent": 1220,
-      "good": 1020,
-      "caution": 780,
-      "note": "6.0枚交換は1020G〜。"
-     },
-     "rate50": {
-      "excellent": 1240,
-      "good": 1050,
-      "caution": 800,
-      "note": "6.5枚交換は1050G〜。"
-     },
-     "rate45": {
-      "excellent": 1260,
-      "good": 1070,
-      "caution": 820,
-      "note": "7.0枚交換は1070G〜。"
-     }
-    },
-    "note": "ボーナス間天井1280G+α（設定変更時980G+α）。AT当選ではリセットされず、AT中も数えます。この線は設定変更後でない台の目安です。"
-   },
-   "reset": {
-    "excellent": 400,
-    "good": 160,
-    "caution": 80,
-    "byRate": {
-     "eq56": {
-      "excellent": 400,
-      "good": 160,
-      "caution": 80,
-      "note": "リセット後AT間天井600G+αに短縮。5.6枚は160G〜から狙い目。"
-     },
-     "rate55": {
-      "excellent": 430,
-      "good": 200,
-      "caution": 100,
-      "note": "6.0枚交換は200G〜。"
-     },
-     "rate50": {
-      "excellent": 460,
-      "good": 240,
-      "caution": 130,
-      "note": "6.5枚交換は240G〜。"
-     },
-     "rate45": {
-      "excellent": 490,
-      "good": 280,
-      "caution": 160,
-      "note": "7.0枚交換は280G〜。"
-     }
-    },
-    "note": "リセット後AT間天井600G+αに短縮。5.6枚交換は160G〜が狙い目。"
-   }
-  },
-  "limit": 1400,
-  "tenjo_display": "AT間970G+α／ボーナス間1280G+α",
-  "tenjo_games": 970,
-  "original": {
-   "title": "転生したら剣でした",
-   "kind": "ライトノベル",
-   "search": "転生したら剣でした 小説"
-  },
-  "strategyByRate": {
-   "eq56": "AT間530G〜 / ボーナス間1000G〜 / リセット後160G〜",
-   "rate55": "AT間610G〜 / ボーナス間1020G〜 / リセット後200G〜",
-   "rate50": "AT間650G〜 / ボーナス間1050G〜 / リセット後240G〜",
-   "rate45": "AT間700G〜 / ボーナス間1070G〜 / リセット後280G〜"
   }
  },
  {
