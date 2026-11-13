@@ -5963,7 +5963,8 @@
   },
   "limit": 1280,
   "tenjo_games": 1280,
-  "tenjo_display": "AT・ボーナス間1280G"
+  "tenjo_display": "AT・ボーナス間1280G",
+  "series": ""
  },
  {
   "slug": "gundam_seed",
