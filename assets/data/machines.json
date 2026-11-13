@@ -5843,7 +5843,9 @@
     "excellent": 800,
     "good": 520,
     "caution": 400,
-    "note": "AT間980G+αで天井。AT当選（約50%で追加恩恵）。"
+    "note": "AT間980G+αで天井。AT当選（約50%で追加恩恵）。",
+    "ceiling": 980,
+    "target": 520
    },
    "suru": {
     "suruMax": 7,
