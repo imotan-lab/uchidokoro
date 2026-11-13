@@ -84,8 +84,8 @@
    "url": "https://p-town.dmm.com/machines/4669"
   },
   "enen": {
-   "stores": 1875,
-   "checked": "2026-11-13",
+   "stores": 1873,
+   "checked": "2026-11-14",
    "url": "https://p-town.dmm.com/machines/4555"
   },
   "enen2": {
@@ -100,7 +100,7 @@
   },
   "gundam_seed": {
    "stores": 152,
-   "checked": "2026-11-11",
+   "checked": "2026-11-14",
    "url": "https://p-town.dmm.com/machines/4788"
   },
   "gundam_uc2": {
@@ -125,7 +125,7 @@
   },
   "kengan_ashura": {
    "stores": 3,
-   "checked": "2026-11-12",
+   "checked": "2026-11-14",
    "url": "https://p-town.dmm.com/machines/4434"
   },
   "koukaku": {
@@ -284,8 +284,8 @@
    "url": "https://p-town.dmm.com/machines/4970"
   },
   "youjitsu": {
-   "stores": 119,
-   "checked": "2026-11-12",
+   "stores": 120,
+   "checked": "2026-11-14",
    "url": "https://p-town.dmm.com/machines/4770"
   },
   "zenigata5": {
@@ -316,15 +316,15 @@
   "dmm_5120": "2026-11-11",
   "dmm_5121": "2026-11-12",
   "dumbbell": "2026-11-11",
-  "enen": "2026-11-13",
+  "enen": "2026-11-14",
   "enen2": "2026-11-11",
   "garei_zero_re": "2026-11-12",
-  "gundam_seed": "2026-11-11",
+  "gundam_seed": "2026-11-14",
   "gundam_uc2": "2026-11-13",
   "hanma_baki": "2026-11-11",
   "hihou": "2026-11-12",
   "kabaneri": "2026-11-12",
-  "kengan_ashura": "2026-11-12",
+  "kengan_ashura": "2026-11-14",
   "koukaku": "2026-11-12",
   "madomagi_forte": "2026-11-12",
   "midoridon_viva": "2026-11-14",
@@ -356,7 +356,7 @@
   "umineko2": "2026-11-13",
   "valvrave2": "2026-11-11",
   "yorumungando": "2026-11-13",
-  "youjitsu": "2026-11-12",
+  "youjitsu": "2026-11-14",
   "zenigata5": "2026-11-13",
   "zombieland_saga": "2026-11-12"
  }

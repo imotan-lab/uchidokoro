@@ -59,7 +59,7 @@
   "enen": {
    "release": "2024-05-07",
    "url": "https://p-town.dmm.com/machines/4555",
-   "checked": "2026-11-13"
+   "checked": "2026-11-14"
   },
   "enen2": {
    "release": "2026-02-02",
@@ -69,7 +69,7 @@
   "gundam_seed": {
    "release": "2025-05-07",
    "url": "https://p-town.dmm.com/machines/4788",
-   "checked": "2026-11-11"
+   "checked": "2026-11-14"
   },
   "gundam_uc2": {
    "release": "2026-04-20",
@@ -94,7 +94,7 @@
   "kengan_ashura": {
    "release": "2023-11-20",
    "url": "https://p-town.dmm.com/machines/4434",
-   "checked": "2026-11-10"
+   "checked": "2026-11-14"
   },
   "koukaku": {
    "release": "2026-02-02",
@@ -214,7 +214,7 @@
   "youjitsu": {
    "release": "2025-05-07",
    "url": "https://p-town.dmm.com/machines/4770",
-   "checked": "2026-11-10"
+   "checked": "2026-11-14"
   },
   "zenigata5": {
    "release": "2025-10-06",
@@ -239,14 +239,14 @@
   "code_geass": "2026-11-13",
   "darlifra": "2026-11-11",
   "dumbbell": "2026-11-11",
-  "enen": "2026-11-13",
+  "enen": "2026-11-14",
   "enen2": "2026-11-10",
-  "gundam_seed": "2026-11-11",
+  "gundam_seed": "2026-11-14",
   "gundam_uc2": "2026-11-13",
   "hanma_baki": "2026-11-11",
   "hihou": "2026-11-12",
   "kabaneri": "2026-11-12",
-  "kengan_ashura": "2026-11-10",
+  "kengan_ashura": "2026-11-14",
   "koukaku": "2026-11-10",
   "madomagi_forte": "2026-11-10",
   "midoridon_viva": "2026-11-14",
@@ -270,7 +270,7 @@
   "umineko2": "2026-11-10",
   "valvrave2": "2026-11-11",
   "yorumungando": "2026-11-13",
-  "youjitsu": "2026-11-10",
+  "youjitsu": "2026-11-14",
   "zenigata5": "2026-11-13",
   "zombieland_saga": "2026-11-12"
  },
