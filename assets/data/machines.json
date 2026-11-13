@@ -1516,9 +1516,15 @@
   "seo": {
    "title": "L青春ブタ野郎はバニーガール先輩の夢を見ない 天井・狙い目"
   },
-  "info": "",
+  "info": "スマスロST",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "青ブタ",
+   "青春ブタ野郎",
+   "スマスロ青ブタ",
+   "せいしゅんぶたやろう",
+   "せいしゅんぶたやろうはばにーがーるせんぱいのゆめをみない"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -1584,7 +1590,8 @@
     "target": 550
    }
   },
-  "targetProjection": "d95631c7d986f4f9"
+  "targetProjection": "d95631c7d986f4f9",
+  "series": ""
  },
  {
   "slug": "toaru_index2",
