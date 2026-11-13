@@ -11543,7 +11543,10 @@
    "kind": "アニメ",
    "search": "コードギアス Blu-ray"
   },
-  "limit": 1000
+  "limit": 1000,
+  "release_date": "2024-02-05",
+  "tenjo_games": 1000,
+  "tenjo_display": "AT間1000G+α"
  },
  {
   "slug": "rezero2",
