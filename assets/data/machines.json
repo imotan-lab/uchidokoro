@@ -10359,7 +10359,9 @@
     "excellent": 800,
     "good": 650,
     "caution": 500,
-    "note": "ST間1000G+αで天井。"
+    "note": "ST間1000G+αで天井。",
+    "ceiling": 1000,
+    "target": 650
    },
    "reset": {
     "excellent": 650,
