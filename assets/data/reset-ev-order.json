@@ -1,10 +1,15 @@
 {
  "schema": "reset-ev-order/v1",
  "order": [
+  "monkeyv",
   "kabaneri",
   "dmm_5073",
+  "burning_express",
   "midoridon_viva",
   "enen2",
-  "goblin"
+  "kaguya",
+  "goblin",
+  "prismnana",
+  "bandori"
  ]
 }
