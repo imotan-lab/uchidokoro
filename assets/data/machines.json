@@ -12242,7 +12242,8 @@
   "limit": 999,
   "tenjo_games": 999,
   "tenjo_display": "999G+α",
-  "release_date": "2025-12-01"
+  "release_date": "2025-12-01",
+  "series": ""
  },
  {
   "slug": "shake_bt",
