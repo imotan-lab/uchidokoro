@@ -3293,9 +3293,15 @@
   "seo": {
    "title": "Lパチスロ 喰霊-零-Re 天井・狙い目"
   },
-  "info": "",
+  "info": "スマスロA+ART",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "喰霊",
+   "喰霊零",
+   "がれい",
+   "ガレイ",
+   "喰霊Re"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -3364,7 +3370,8 @@
     "target": 600
    }
   },
-  "targetProjection": "04cfa54c42f29c03"
+  "targetProjection": "04cfa54c42f29c03",
+  "series": ""
  },
  {
   "slug": "yajikita_mairu",
