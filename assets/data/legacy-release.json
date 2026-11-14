@@ -76,6 +76,11 @@
    "url": "https://p-town.dmm.com/machines/4926",
    "checked": "2026-11-10"
   },
+  "eva_yakusoku": {
+   "release": "2025-07-07",
+   "url": "https://p-town.dmm.com/machines/4830",
+   "checked": "2026-11-15"
+  },
   "gineiden_dnt": {
    "release": "2025-12-08",
    "url": "https://p-town.dmm.com/machines/4895",
@@ -318,6 +323,7 @@
   "dumbbell": "2026-11-11",
   "enen": "2026-11-14",
   "enen2": "2026-11-10",
+  "eva_yakusoku": "2026-11-15",
   "gineiden_dnt": "2026-11-14",
   "godzilla": "2026-11-14",
   "goji_eva": "2026-11-14",
