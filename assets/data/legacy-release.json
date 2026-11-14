@@ -31,6 +31,11 @@
    "url": "https://p-town.dmm.com/machines/4466",
    "checked": "2026-11-10"
   },
+  "biohazard": {
+   "release": "2025-03-03",
+   "url": "https://p-town.dmm.com/machines/4754",
+   "checked": "2026-11-14"
+  },
   "bofuri": {
    "release": "2024-06-03",
    "url": "https://p-town.dmm.com/machines/4566",
@@ -106,6 +111,11 @@
    "url": "https://p-town.dmm.com/machines/4929",
    "checked": "2026-11-12"
   },
+  "iza_bancho": {
+   "release": "2025-06-02",
+   "url": "https://p-town.dmm.com/machines/4805",
+   "checked": "2026-11-14"
+  },
   "kabaneri": {
    "release": "2026-03-02",
    "url": "https://p-town.dmm.com/machines/4930",
@@ -114,6 +124,11 @@
   "kengan_ashura": {
    "release": "2023-11-20",
    "url": "https://p-town.dmm.com/machines/4434",
+   "checked": "2026-11-14"
+  },
+  "kizumonogatari": {
+   "release": "2023-09-04",
+   "url": "https://p-town.dmm.com/machines/4390",
    "checked": "2026-11-14"
   },
   "koukaku": {
@@ -146,10 +161,20 @@
    "url": "https://p-town.dmm.com/machines/4873",
    "checked": "2026-11-11"
   },
+  "okidoki_black": {
+   "release": "2024-07-01",
+   "url": "https://p-town.dmm.com/machines/4582",
+   "checked": "2026-11-14"
+  },
   "okidoki_encore": {
    "release": "2025-12-22",
    "url": "https://p-town.dmm.com/machines/4906",
    "checked": "2026-11-13"
+  },
+  "okidoki_gold": {
+   "release": "2022-12-19",
+   "url": "https://p-town.dmm.com/machines/4258",
+   "checked": "2026-11-14"
   },
   "okidoki_gorgeous": {
    "release": "2024-12-02",
@@ -165,6 +190,11 @@
    "release": "2025-12-08",
    "url": "https://p-town.dmm.com/machines/4904",
    "checked": "2026-11-13"
+  },
+  "railgun2": {
+   "release": "2025-11-04",
+   "url": "https://p-town.dmm.com/machines/4892",
+   "checked": "2026-11-14"
   },
   "revue_starlight": {
    "release": "2025-03-03",
@@ -196,6 +226,11 @@
    "url": "https://p-town.dmm.com/machines/4983",
    "checked": "2026-11-11"
   },
+  "super_blackjack": {
+   "release": "2025-02-03",
+   "url": "https://p-town.dmm.com/machines/4712",
+   "checked": "2026-11-14"
+  },
   "takt_opus": {
    "release": "2026-05-11",
    "url": "https://p-town.dmm.com/machines/5000",
@@ -210,6 +245,11 @@
    "release": "2025-02-03",
    "url": "https://p-town.dmm.com/machines/4742",
    "checked": "2026-11-11"
+  },
+  "tolove_darkness": {
+   "release": "2024-06-03",
+   "url": "https://p-town.dmm.com/machines/4571",
+   "checked": "2026-11-14"
   },
   "triple_crown_7": {
    "release": "2026-04-06",
@@ -230,6 +270,11 @@
    "release": "2026-04-06",
    "url": "https://p-town.dmm.com/machines/4970",
    "checked": "2026-11-13"
+  },
+  "yoshimune": {
+   "release": "2025-04-21",
+   "url": "https://p-town.dmm.com/machines/4778",
+   "checked": "2026-11-14"
   },
   "youjitsu": {
    "release": "2025-05-07",
@@ -254,6 +299,7 @@
   "baki": "2026-11-11",
   "banchou4": "2026-11-11",
   "basilisk_tenzen": "2026-11-10",
+  "biohazard": "2026-11-14",
   "bofuri": "2026-11-13",
   "burning_express": "2026-11-14",
   "chibaryo2": "2026-11-10",
@@ -269,31 +315,39 @@
   "gundam_uc2": "2026-11-13",
   "hanma_baki": "2026-11-11",
   "hihou": "2026-11-12",
+  "iza_bancho": "2026-11-14",
   "kabaneri": "2026-11-12",
   "kengan_ashura": "2026-11-14",
+  "kizumonogatari": "2026-11-14",
   "koukaku": "2026-11-10",
   "madomagi_forte": "2026-11-10",
   "midoridon_viva": "2026-11-14",
   "monkeyv": "2026-11-12",
   "mr_juggler": "2026-11-11",
   "neoplanet": "2026-11-11",
+  "okidoki_black": "2026-11-14",
   "okidoki_encore": "2026-11-13",
+  "okidoki_gold": "2026-11-14",
   "okidoki_gorgeous": "2026-11-10",
   "onepunchman": "2026-11-10",
   "prismnana": "2026-11-13",
+  "railgun2": "2026-11-14",
   "revue_starlight": "2026-11-11",
   "sao": "2026-11-10",
   "sengoku_otome4": "2026-11-13",
   "sf5": "2026-11-11",
   "shaman_king": "2026-11-12",
   "shinuchi_yoshimune": "2026-11-11",
+  "super_blackjack": "2026-11-14",
   "takt_opus": "2026-11-10",
   "tenken": "2026-11-13",
   "tokyo_ghoul": "2026-11-11",
+  "tolove_darkness": "2026-11-14",
   "triple_crown_7": "2026-11-13",
   "umineko2": "2026-11-10",
   "valvrave2": "2026-11-11",
   "yorumungando": "2026-11-13",
+  "yoshimune": "2026-11-14",
   "youjitsu": "2026-11-14",
   "zenigata5": "2026-11-13",
   "zombieland_saga": "2026-11-12"
