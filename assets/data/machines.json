@@ -12239,7 +12239,9 @@
    },
    "coinRate": 31
   },
-  "limit": 999
+  "limit": 999,
+  "tenjo_games": 999,
+  "tenjo_display": "999G+α"
  },
  {
   "slug": "shake_bt",
