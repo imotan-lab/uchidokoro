@@ -36,6 +36,11 @@
    "url": "https://p-town.dmm.com/machines/4566",
    "checked": "2026-11-13"
   },
+  "burning_express": {
+   "release": "2025-12-01",
+   "url": "https://p-town.dmm.com/machines/4896",
+   "checked": "2026-11-14"
+  },
   "chibaryo2": {
    "release": "2024-03-04",
    "url": "https://p-town.dmm.com/machines/4530",
@@ -250,6 +255,7 @@
   "banchou4": "2026-11-11",
   "basilisk_tenzen": "2026-11-10",
   "bofuri": "2026-11-13",
+  "burning_express": "2026-11-14",
   "chibaryo2": "2026-11-10",
   "code_geass": "2026-11-13",
   "darlifra": "2026-11-11",

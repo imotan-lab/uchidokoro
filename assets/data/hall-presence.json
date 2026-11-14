@@ -38,6 +38,11 @@
    "checked": "2026-11-13",
    "url": "https://p-town.dmm.com/machines/4566"
   },
+  "burning_express": {
+   "stores": 168,
+   "checked": "2026-11-14",
+   "url": "https://p-town.dmm.com/machines/4896"
+  },
   "chibaryo2": {
    "stores": 979,
    "checked": "2026-11-12",
@@ -317,6 +322,7 @@
   "banchou4": "2026-11-13",
   "basilisk_tenzen": "2026-11-12",
   "bofuri": "2026-11-13",
+  "burning_express": "2026-11-14",
   "chibaryo2": "2026-11-12",
   "darlifra": "2026-11-13",
   "dmm_5073": "2026-11-11",
