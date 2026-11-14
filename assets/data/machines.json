@@ -6858,7 +6858,8 @@
    "rate50": "通常560G〜 / リセット後320G〜",
    "rate45": "通常600G〜 / リセット後350G〜"
   },
-  "release_date": "2025-02-03"
+  "release_date": "2025-02-03",
+  "series": ""
  },
  {
   "slug": "super_blackjack",
