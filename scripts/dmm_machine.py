@@ -435,7 +435,10 @@ def fetch(machine_id: str, get=None) -> dict:
         with _w.fetching("machine_identity"):
             html = (get or _w._get)(u)
     except Exception as e:                 # noqa: BLE001
-        raise MachineError(f"取得できません（{u}）: {str(e)[:90]}")
+        # ★HTTPの状態番号を持ち回る★（2026-11-14）＝待ち行列が「ページが無い（404）」を
+        #   文の言い回しではなく番号で見分けるため（DMMが機種IDを振り直した古い控えを外す）
+        raise MachineError(f"取得できません（{u}）: {str(e)[:90]}", url=u,
+                           observations={"http_status": getattr(e, "status", None)})
     # ★転送された先も確かめる★（2026-08-16・Codex依頼212の指摘7）
     #   要求したIDのURLが別の機種へ転送されていたら、中身は別機種です。
     #   canonicalと二重に見ることで、片方だけ細工されても止まります。
@@ -631,6 +634,15 @@ def selftest() -> int:
         t("　（対照）機種名そのものにスマスロがある後継機のページは、今までどおり通さない",
           not ok_("スマスロ モグモグ風林火山 大海戦の巻 （新台スマスロ）パチスロ｜設定判別",
                   "モグモグ風林火山 大海戦の巻"))
+        # ★★取れなかったときは HTTP の状態番号を持ち回る★★（2026-11-14＝待ち行列が「ページが無い」を番号で見分ける）
+        def _raise404(u):
+            raise _w.WatchError("取得できません（HTTP 404）: " + u, status=404)
+        try:
+            fetch("5118", get=_raise404)
+            _st404 = None
+        except MachineError as _e404:
+            _st404 = (_e404.observations or {}).get("http_status")
+        t("★★取れなかったとき、HTTPの状態番号（404）を例外に残す★★", _st404 == 404)
         t("★★パチンコ版のページを通さない★★",
           not ok_("Pモグモグ風林火山 （新台パチンコ）パチンコ｜ボーダー",
                   "モグモグ風林火山 大海戦の巻"))

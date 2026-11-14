@@ -3039,13 +3039,20 @@ def _fill_missing_dmm(work: dict) -> dict:
     except _dm.ReleaseUndecided:
         # ★DMMが導入日を「未定」と書いている★（2026-10-02）
         #   読めないのではなく決まっていない。印を残し、番兵は知らせない。
+        _pend.clear_page_gone(work)       # ★ページは在る★
         work["release_tbd"] = True
         work.pop("release_day", None)     # ★未定になったら古い日は使わない★
         _log(f"  導入日はまだ未定です（DMM）: {work.get('identity_url', '')}")
         return work
     except _dm.MachineError as e:
         _log(f"  機種ページを見直せませんでした: {str(e)[:110]}")
+        # ★★ページが無い（404）晩を数える★★（2026-11-14）＝DMMが機種IDを振り直した古い控えを、
+        #   続けて404・カレンダーにも無い、の2つの事実で外すため（外すのは呼ぶ側＝page_gone_retire）
+        if (getattr(e, "observations", None) or {}).get("http_status") == 404:
+            _pend.note_page_gone(work)
+            _log(f"  機種ページがありません（404・{work['page_gone']['nights']}晩目）")
         return work
+    _pend.clear_page_gone(work)           # ★ページは在る★
     # ★取れた＝導入日は未定ではない★＝名前の照合より先に印を外す
     #   （2026-10-02・Codex review201。後ろで外すと、名前が食い違った機種が
     #     古い未定の印のまま毎晩黙って待ち続けた）
@@ -5582,6 +5589,31 @@ def _selftest_body() -> int:
               "release_tbd" not in _w_day)
             t("★★DMMが「未定」と書いていれば印を付ける★★（番兵が知らせないため）",
               _w_tbd.get("release_tbd") is True)
+            # ★★DMMの機種ページが404なら、404の晩を数える（ほかの失敗では数えない）★★（2026-11-14・5118→5147）
+            def _gone(mid, get=None):
+                raise _dm_fm.MachineError("取得できません（HTTP 404）", observations={"http_status": 404})
+
+            def _down(mid, get=None):
+                raise _dm_fm.MachineError("取得できません（HTTP 503）", observations={"http_status": 503})
+            try:
+                _dm_fm.fetch = _gone
+                _w_gone = fill_missing({"name": "LB試験機X-300", "maker": "seiryu_japan",
+                                        "identity_url": "https://p-town.dmm.com/machines/5089", "release": "2026-12"})
+                _dm_fm.fetch = _down
+                _w_down = fill_missing({"name": "LB試験機X-300", "maker": "seiryu_japan",
+                                        "identity_url": "https://p-town.dmm.com/machines/5089", "release": "2026-12"})
+                _dm_fm.fetch = _tbd
+                _w_back2 = fill_missing(dict(_w_gone))
+            finally:
+                _dm_fm.fetch = _real_dm_fetch
+            t("★★DMMの機種ページが404の晩を数える（503などほかの失敗では数えない）★★",
+              (_w_gone.get("page_gone") or {}).get("nights") == 1 and "page_gone" not in _w_down)
+            t("　ページがまた読めたら（未定でも）404の数をやめる", "page_gone" not in _w_back2)
+            _src_loop = _ins_pg.getsource(main) if (_ins_pg := __import__("inspect")) else ""
+            t("　（配線）夜の処理が、見直しのあとで「ページが消えた控え」を外す",
+              "if _pend.page_gone_retire(work, calendar_ok=\"dmm-ptown\" in (d.get(\"watched\") or [])):" in _src_loop
+              and _src_loop.index("work = fill_missing(work)") < _src_loop.index("if _pend.page_gone_retire(work,")
+              and "_pend.retire_gone(pend, work[\"queue_id\"])" in _src_loop)
             # ★★カレンダーの日付（2日以内に見たものだけ）を、機種ページが未定のときに使う★★（2026-11-11・運営者の判断「2A」）
             _cdk = [calendar_day({"calendar_day": "2026-12-07", "calendar_seen": "2026-11-10"}, "2026-11-11"),
                    calendar_day({"calendar_day": "2026-12-07", "calendar_seen": "2026-11-08"}, "2026-11-11"),
@@ -7310,6 +7342,23 @@ def _main() -> int:
             print(f"  ★{NEW_MACHINE_DEADLINE_HHMM} を過ぎました→残りは明晩★")
             break
         work = fill_missing(work)
+        # ★★DMMの機種ページが続けて無く、カレンダーにも無い控えは外す★★（2026-11-14）＝
+        #   DMMが機種IDを振り直すと古い控えが毎晩失敗し続けた（導入日が未定だと60日の打ち切りにも届かない）。
+        #   ★消さずに控え（gave_up）へ移す★＝30日ごとに revive が試し直す。★記録を残せたときだけ外す★
+        if _pend.page_gone_retire(work, calendar_ok="dmm-ptown" in (d.get("watched") or [])):
+            if apply_it:
+                if _record_issue("site", "structural", "MATERIAL", "PENDING_PAGE_GONE",
+                                 f"DMMの機種ページが{_pend.PAGE_GONE_NIGHTS}晩続けて無く、カレンダーにも無いので待ち行列から外しました",
+                                 f"{work.get('name', '')} / {work.get('identity_url', '')} / "
+                                 f"404 {work['page_gone'].get('first')}〜{work['page_gone'].get('last')}"
+                                 f"（{work['page_gone'].get('nights')}晩）／★外した機種の控えに残します（30日ごとに試し直す）★"):
+                    _pend.retire_gone(pend, work["queue_id"])
+                    _pend.save(pend)
+                else:
+                    _log(f"  ログに残せなかったので待ち行列に残します: {work.get('name', '')}")
+            else:
+                print(f"（下見）機種ページが続けて無いので --apply の実行が待ち行列から外します: {work.get('name', '')}")
+            continue
         # ★使い回しの疑いは公開処理へ進めない★（2026-08-02・Codex41回目）
         #   検知（recheck）と公開の停止がつながっていなかった。
         if work.get("_name_conflict"):

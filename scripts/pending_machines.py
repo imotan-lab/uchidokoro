@@ -425,13 +425,17 @@ def revive(data: dict, today: str = "") -> list:
             age = (date.fromisoformat(today[:10]) - date.fromisoformat(last)).days if last else None
         except ValueError:
             age = None
+        # ★ページが消えて外した控えは、導入日が分からなくても外した日から数えて試し直す★（Codexの指摘＝
+        #   未定のまま外すと二度と戻らず、ページが戻っても記事にならなかった）
+        if age is None and it.get("gone_reason"):
+            age = since
         if age is None or age > REVIVE_LIMIT_DAYS:
             continue
         if qid in data["items"] or (it.get("source_machine_id")
                                     and find_by_machine_id(data, str(it["source_machine_id"]))):
             data["gave_up"].pop(qid)
             continue
-        back = {k: v for k, v in data["gave_up"].pop(qid).items() if k != "gave_up_at"}
+        back = {k: v for k, v in data["gave_up"].pop(qid).items() if k not in ("gave_up_at", "gone_reason")}
         back["runs"] = 0
         # ★止まった回数も0から数え直す★（2026-11-10）＝朝の点検（check_stuck）は戻した機種も
         #   「同じ理由で続けて止まる」で知らせるので、外す前の回数が残ると戻した翌朝に必ず鳴る
@@ -441,6 +445,88 @@ def revive(data: dict, today: str = "") -> list:
         data["items"][qid] = back
         out.append(back)
     return out
+
+
+PAGE_GONE_NIGHTS = 3       # DMMの機種ページが続けて404だった晩の数（これに届いたら外す候補）
+PAGE_GONE_CALENDAR_DAYS = 2  # カレンダーでこの日数より最近に見ていれば外さない（add_machine_run.CALENDAR_FRESH_DAYS と同じ線）
+
+
+NIGHT_ROLLOVER_HOUR = 12   # task_guard.NIGHT_ROLLOVER_HOUR と同じ（★取り込まない＝材料の契約の依存を増やさない★）
+
+
+def _night(now=None) -> str:
+    """いまの「晩」の名前（task_guard._night_id と同じ決まり＝昼12時で切り替わる）。
+    ★暦日で数えない★＝23:30に始まる夜のタスクは0時をまたぐので、暦日だと「続けて」が途切れる"""
+    from datetime import timedelta
+    now = now or datetime.now()
+    if now.hour < NIGHT_ROLLOVER_HOUR:
+        now = now - timedelta(days=1)
+    return now.strftime("%Y-%m-%d")
+
+
+def note_page_gone(it: dict, night: str = "") -> None:
+    """★DMMの機種ページが404だった晩を数える★（同じ晩に何度呼んでも1晩と数える）
+
+    （2026-11-14）DMMが機種IDを振り直すと古い機種ページは404になり、新しいIDはカレンダーから
+    別の控えとして入る（Lアサルトリリィ＝5118→5147）。古い控えは導入日が「未定」のままなので
+    導入日から60日の打ち切りに届かず、毎晩5分ずつ試して失敗し続けた。
+    ★見るのは状態番号だけ★（機種名で「同じ機種か」を機械に決めさせない）。
+    ★数えるのは「続けて」404だった晩だけ★（Codexの指摘）＝前の404が前の晩でなければ1から数え直す
+    （503など別の失敗の晩・タスクが動かなかった晩をはさんだら続いていない）。
+    """
+    night = (night or _night())[:10]
+    g = dict(it.get("page_gone") or {})
+    if g.get("last") == night:
+        return
+    try:
+        cont = bool(g.get("last")) and (date.fromisoformat(night) - date.fromisoformat(str(g["last"])[:10])).days == 1
+    except ValueError:
+        cont = False
+    it["page_gone"] = {"first": g.get("first") if cont else night, "last": night,
+                       "nights": (int(g.get("nights", 0) or 0) + 1) if cont else 1}
+
+
+def clear_page_gone(it: dict) -> None:
+    """機種ページが読めたら、404の数をやめる（★1晩でも読めれば数え直し★）。"""
+    it.pop("page_gone", None)
+
+
+def page_gone_retire(it: dict, today: str = "", calendar_ok: bool = True) -> bool:
+    """★外してよいか★＝①今晩も404 ②PAGE_GONE_NIGHTS 晩以上続けて404 ③カレンダーで最近見ていない
+    ④★今晩カレンダーを正常に読めた★（calendar_ok・Codexの指摘＝読めなかった晩は「載っていない」と言えない）
+
+    ③が無いと、DMMの一時的な不具合で、カレンダーにまだ載っている機種まで外れる。
+    カレンダーの日付・見た日が読めないものは「最近見ていない」とみなす（カレンダーに無い）。
+    """
+    today = (today or _night())[:10]
+    if not calendar_ok:
+        return False
+    if it.get("state") != READY:
+        return False
+    g = it.get("page_gone") or {}
+    if g.get("last") != today or int(g.get("nights", 0) or 0) < PAGE_GONE_NIGHTS:
+        return False
+    seen = str(it.get("calendar_seen") or "")[:10]
+    try:
+        if seen and (date.fromisoformat(today) - date.fromisoformat(seen)).days <= PAGE_GONE_CALENDAR_DAYS:
+            return False
+    except ValueError:
+        pass
+    return True
+
+
+def retire_gone(data: dict, queue_id: str, today: str = "") -> dict | None:
+    """★機種ページが消えた控えを、待ち行列から外して控え（gave_up）へ移す★（消さない）
+
+    revive() が REVIVE_DAYS ごとに1回だけ戻して試し直す（ページが戻っていれば続けられる）。
+    外した項目を返す（無ければ None）。
+    """
+    today = (today or _today())[:10]
+    it = data["items"].pop(str(queue_id or ""), None)
+    if it is None:
+        return None
+    data.setdefault("gave_up", {})[str(queue_id)] = dict(it, gave_up_at=today, gone_reason="DMM_PAGE_GONE")
+    return it
 
 
 def month_end(ym: str) -> str:
@@ -731,6 +817,54 @@ def selftest() -> int:
                                   "source_machine_id": "77", "gave_up_at": "2026-10-01", "state": READY}}
     t("　同じ機種が待ち行列にもう在れば、戻さずに控えから消す",
       revive(_dup, "2026-11-10") == [] and "q_0050" not in _dup["gave_up"] and len(_dup["items"]) == 1)
+    # ★★DMMの機種ページが続けて404で、カレンダーにも無い控えは外して控えへ移す★★（2026-11-14・Lアサルトリリィ 5118→5147）
+    _pg = _empty()
+    add(_pg, "振り直された機種", DMM + "88", "m", "2026-12", source_machine_id="88")
+    _gi = _pg["items"]["q_0001"]
+    _gi["calendar_seen"] = "2026-11-12"
+    for _dd in ("2026-11-14", "2026-11-14", "2026-11-15"):
+        note_page_gone(_gi, _dd)
+    t("　同じ日に何度404でも1晩と数える", _gi["page_gone"] == {"first": "2026-11-14", "last": "2026-11-15", "nights": 2})
+    t("　2晩ではまだ外さない", not page_gone_retire(_gi, "2026-11-15"))
+    note_page_gone(_gi, "2026-11-16")
+    note_page_gone(_gi, "2026-11-16")     # ★同じ晩の2回目（打ち切り候補の見直しと記事づくりの見直し）★
+    t("　同じ晩に2回見直しても、続けて数えた晩は崩れない", _gi["page_gone"]["nights"] == 3)
+    t("　「晩」は昼12時で切り替わる（0時をまたいだ処理も前の晩のうち・task_guard と同じ）",
+      _night(datetime(2026, 11, 17, 0, 10)) == "2026-11-16" and _night(datetime(2026, 11, 16, 23, 36)) == "2026-11-16"
+      and _night(datetime(2026, 11, 17, 12, 0)) == "2026-11-17"
+      and NIGHT_ROLLOVER_HOUR == __import__("task_guard").NIGHT_ROLLOVER_HOUR)
+    t("★★3晩続けて404・カレンダーで2日より長く見ていなければ外す★★", page_gone_retire(_gi, "2026-11-16"))
+    t("　今晩404を見ていなければ外さない（前の晩の404だけでは決めない）", not page_gone_retire(_gi, "2026-11-17"))
+    t("★★カレンダーで最近見ていれば、404が続いても外さない（DMMの一時的な不具合）★★",
+      not page_gone_retire(dict(_gi, calendar_seen="2026-11-15"), "2026-11-16"))
+    _ok_again = dict(_gi)
+    clear_page_gone(_ok_again)
+    note_page_gone(_ok_again, "2026-11-16")
+    t("　1晩でも読めたら数え直す", _ok_again["page_gone"]["nights"] == 1 and not page_gone_retire(_ok_again, "2026-11-16"))
+    t("　DMMで確かめていない控え（READY でない）は外さない",
+      not page_gone_retire(dict(_gi, state=AWAITING_DMM_ID), "2026-11-16"))
+    t("★★今晩カレンダーを正常に読めなかったら外さない（載っていないとは言えない）★★（Codexの指摘）",
+      not page_gone_retire(_gi, "2026-11-16", calendar_ok=False))
+    _gap = {"state": READY}
+    for _dd in ("2026-11-01", "2026-11-03", "2026-11-05"):
+        note_page_gone(_gap, _dd)
+    t("★★間の空いた404（503の晩・動かなかった晩をはさむ）は続けてと数えない★★（Codexの指摘）",
+      _gap["page_gone"]["nights"] == 1 and _gap["page_gone"]["first"] == "2026-11-05"
+      and not page_gone_retire(_gap, "2026-11-05"))
+    _out = retire_gone(_pg, "q_0001", "2026-11-16")
+    t("★★外した控えは消さず、外した機種の控えへ移す（理由つき）★★",
+      _out is not None and "q_0001" not in _pg["items"]
+      and ((_pg.get("gave_up") or {}).get("q_0001") or {}).get("gone_reason") == "DMM_PAGE_GONE"
+      and ((_pg.get("gave_up") or {}).get("q_0001") or {}).get("gave_up_at") == "2026-11-16")
+    _rb = revive(_pg, "2026-12-16")
+    t("　30日たったら今までどおり1回だけ試し直す（理由の印は外す）",
+      len(_rb) == 1 and "gone_reason" not in (_pg["items"].get("q_0001") or {"gone_reason": 1}))
+    _pgu = _empty()
+    _pgu["gave_up"] = {"q_0070": {"queue_id": "q_0070", "name": "導入日が未定で消えた機種", "release": "",
+                                  "release_tbd": True, "state": READY, "gave_up_at": "2026-11-16",
+                                  "gone_reason": "DMM_PAGE_GONE"}}
+    t("★★導入日が分からないまま外した控えも、外した日から30日で試し直す★★（Codexの指摘＝二度と戻らなかった）",
+      len(revive(_pgu, "2026-12-16")) == 1 and "q_0070" in _pgu["items"])
     d6 = _empty()
     add(d6, "導入日が未定の機種", DMM + "6", "m", "", source_machine_id="6")
     d6["items"]["q_0001"]["first_seen"] = "2026-01-01"

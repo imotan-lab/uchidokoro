@@ -163,6 +163,9 @@ def check_log(day: str) -> list:
     #   自動では記事にならない。導入直前に外れた晩も🔴にするため、理由を問わず赤。
     for _code, _what, _mark in (("[PENDING_GAVE_UP]",
                                  "導入日から60日たっても記事にできず、待ち行列から外した", ""),
+                                # ★DMMの機種ページが続けて無く（404）カレンダーにも無いので外した★（2026-11-14）
+                                ("[PENDING_PAGE_GONE]",
+                                 "DMMの機種ページが無くなっていて（IDの振り直しなど）、待ち行列から外した", ""),
                                 ("[PENDING_PERMANENT_BLOCK]",
                                  "やり直しても記事にできない理由で、待ち行列から外した", RED)):
         _n = _night.count(_code)
