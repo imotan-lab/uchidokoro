@@ -2721,9 +2721,15 @@
   "seo": {
    "title": "スマスロパリピ孔明 天井・狙い目"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "パリピ孔明",
+   "パリピ",
+   "孔明",
+   "ぱりぴこうめい",
+   "スマスロ孔明"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -2799,7 +2805,8 @@
     "target": 250
    }
   },
-  "targetProjection": "0d04331576a212d4"
+  "targetProjection": "0d04331576a212d4",
+  "series": ""
  },
  {
   "slug": "dmm_5086",
