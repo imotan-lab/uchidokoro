@@ -216,6 +216,11 @@
    "url": "https://p-town.dmm.com/machines/4583",
    "checked": "2026-11-11"
   },
+  "shake_bt": {
+   "release": "2025-10-20",
+   "url": "https://p-town.dmm.com/machines/4893",
+   "checked": "2026-11-15"
+  },
   "shaman_king": {
    "release": "2025-02-03",
    "url": "https://p-town.dmm.com/machines/4719",
@@ -336,6 +341,7 @@
   "sao": "2026-11-10",
   "sengoku_otome4": "2026-11-13",
   "sf5": "2026-11-11",
+  "shake_bt": "2026-11-15",
   "shaman_king": "2026-11-12",
   "shinuchi_yoshimune": "2026-11-11",
   "super_blackjack": "2026-11-14",
