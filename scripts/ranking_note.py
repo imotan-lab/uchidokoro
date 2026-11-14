@@ -156,8 +156,35 @@ def read_basis(path: str = "") -> dict:
 
 
 def record_sha(rec) -> str:
+    """記録まるごとの指紋（★古い控えの照合にだけ使う★＝新しく書く控えは record_core_sha）"""
     return "sha256:" + hashlib.sha256(
         json.dumps(rec, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+CORE_PREFIX = "core-sha256:"
+
+
+def record_core_sha(rec) -> str:
+    """★一言の根拠として意味のある部分だけの指紋★＝値（value）と、出典ごとの URL・逐語（quote）
+    （2026-11-13・番兵が2日続けて🟠＝毎朝の確かめ直しで「確かめた日付」「同定の一文」「判断者・理由」だけが
+    書き換わった記録でも、記録まるごとの指紋が変わって「食い違い」と出ていた。昨日の dmm_5073 は
+    夕方のタスク自身が「値も引用も同じ」と判断した）。★値か出典の逐語が変われば今までどおり知らせる★"""
+    r = rec if isinstance(rec, dict) else {}
+    srcs = sorted((str(s.get("url") or ""), str(s.get("quote") or ""))
+                  for s in (r.get("sources") or []) if isinstance(s, dict))
+    # ★どの機種の記録か（official_url）も入れる★（Codexの指摘＝別の機種へ結び直されたら知らせる。普段の確かめ直しでは変わらない）
+    #   ★理由の文（why）は入れない★＝記録し直すたびに書き換わる自由文で、入れると誤報が戻る。結論が変われば value が変わる
+    core = {"value": r.get("value"), "sources": srcs, "official_url": str(r.get("official_url") or "")}
+    return CORE_PREFIX + hashlib.sha256(
+        json.dumps(core, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def cited_matches(rec, stored) -> bool:
+    """控えの指紋と、いまの記録が合うか（★古い控え＝記録まるごとの指紋は、今までどおり記録まるごとで比べる★）"""
+    stored = str(stored or "")
+    if stored.startswith(CORE_PREFIX):
+        return record_core_sha(rec) == stored
+    return record_sha(rec) == stored
 
 
 def _record_numbers(rec) -> set:
@@ -268,7 +295,7 @@ def apply(dec_path: str, dry_run: bool = False, notes_path: str = "", basis_path
     before = (notes["notes"].get(slug) or {}).get(ranking)
     if dec["decision"] == "WRITE":
         after = dec["text"]
-        cited = {str(k): record_sha(records[str(k)]) for k in dec["records"]}
+        cited = {str(k): record_core_sha(records[str(k)]) for k in dec["records"]}
     else:
         after = None
         cited = {}
@@ -362,7 +389,7 @@ def check_problems(notes: dict, basis: dict, machines: list, records_of) -> list
             for k, sha in sorted(cited.items()):
                 if k not in recs:
                     out.append(f"{key}: 名指しした記録 {k} が確定値から消えています")
-                elif record_sha(recs[k]) != sha:
+                elif not cited_matches(recs[k], sha):
                     out.append(f"{key}: 名指しした記録 {k} が書いたあとに変わっています（2AIで確かめ直す）")
             # ★★書いたときと同じ検査を、いまの記録でかけ直す★★（Codexの指摘）
             #   ＝指紋が合うだけでは、判断者・理由・記録の種類・文の数値が決まりどおりかは分からない
@@ -510,11 +537,28 @@ def selftest() -> int:
             t("一言が置き場に入る", n["notes"]["aaa"]["reset"] == ok_text)
             b = read_basis(bp)
             t("根拠に名指しした記録の指紋が入る",
-              b["entries"]["aaa::reset"]["records"] == {"reset": record_sha(rec_reset)})
+              b["entries"]["aaa::reset"]["records"] == {"reset": record_core_sha(rec_reset)})
             t("照合が合う", check_problems(n, b, ms, lambda s: recs) == [])
             recs2 = dict(recs, reset={"value": {"kind": "CEILING_SHORTENED", "games": "500"}})
             t("★名指しした記録が変わったら照合が知らせる★",
               any("変わっています" in x for x in check_problems(n, b, ms, lambda s: recs2)))
+            # ★★値と逐語が同じなら、確かめた日付・同定の一文・判断者・理由が書き換わっても知らせない★★（2026-11-13）
+            _same_core = dict(rec_reset, verified_at="2026-11-14", why="同定の一文を差し替えて記録し直した",
+                              agreed_by=["claude", "codex"], identity_override={"proof": "別の一文"})
+            t("★★値と逐語が同じなら、日付・同定・判断者・理由が変わっても照合は合う★★"
+              "（番兵が2日続けて誤って🟠を出していた）",
+              check_problems(n, b, ms, lambda s: dict(recs, reset=_same_core)) == [])
+            _q1 = dict(rec_reset, sources=[{"url": "https://x.test/a", "quote": "天井が600Gに短縮"}])
+            _q2 = dict(rec_reset, sources=[{"url": "https://x.test/a", "quote": "天井が600Gに短縮される"}])
+            _u1 = dict(rec_reset, official_url="https://p-town.dmm.com/machines/1")
+            t("★どの機種の記録か（official_url）が変われば知らせる★（Codexの指摘）",
+              not cited_matches(dict(_u1, official_url="https://p-town.dmm.com/machines/2"),
+                                record_core_sha(_u1)))
+            t("★出典の逐語が変われば知らせる★",
+              cited_matches(_q1, record_core_sha(_q1)) and not cited_matches(_q2, record_core_sha(_q1)))
+            t("★古い控え（記録まるごとの指紋）は、今までどおり記録まるごとで比べる★",
+              cited_matches(rec_reset, record_sha(rec_reset))
+              and not cited_matches(_same_core, record_sha(rec_reset)))
             t("★名指しした記録が消えたら照合が知らせる★",
               any("消えています" in x for x in check_problems(n, b, ms, lambda s: {})))
             n2 = json.loads(json.dumps(n))
