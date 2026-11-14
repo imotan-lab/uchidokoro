@@ -2950,9 +2950,15 @@
   "seo": {
    "title": "Lパチスロ 彼女、お借りします 天井・狙い目"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "かのかり",
+   "カノカリ",
+   "彼女お借りします",
+   "レンタル彼女",
+   "かのじょおかりします"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -3043,7 +3049,8 @@
     "target": 180
    }
   },
-  "targetProjection": "386efba623ff3b07"
+  "targetProjection": "386efba623ff3b07",
+  "series": ""
  },
  {
   "slug": "pw_10510",
