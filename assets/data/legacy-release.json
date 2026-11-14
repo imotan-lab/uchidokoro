@@ -136,6 +136,11 @@
    "url": "https://p-town.dmm.com/machines/4931",
    "checked": "2026-11-10"
   },
+  "kurea_bt": {
+   "release": "2025-09-08",
+   "url": "https://p-town.dmm.com/machines/4860",
+   "checked": "2026-11-15"
+  },
   "madomagi_forte": {
    "release": "2023-11-06",
    "url": "https://p-town.dmm.com/machines/4420",
@@ -325,6 +330,7 @@
   "kengan_ashura": "2026-11-14",
   "kizumonogatari": "2026-11-14",
   "koukaku": "2026-11-10",
+  "kurea_bt": "2026-11-15",
   "madomagi_forte": "2026-11-10",
   "midoridon_viva": "2026-11-14",
   "monkeyv": "2026-11-12",
