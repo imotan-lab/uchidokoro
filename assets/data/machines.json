@@ -2693,7 +2693,7 @@
   "slug": "dmm_5090",
   "name": "スマート沖スロ ハイハイシオサイRe",
   "seo": {
-   "title": "スマート沖スロ ハイハイシオサイRe スペック・基本情報"
+   "title": "スマート沖スロ ハイハイシオサイRe 天井・スペック"
   },
   "info": "",
   "strategy": "",
@@ -2703,15 +2703,15 @@
    "schema_version": "page-decision/v2",
    "indexable": true,
    "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
+   "ceiling_state": "PRESENT",
    "confirmed_topics": [
+    "ceiling",
     "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
     "cz",
-    "ceiling",
     "strategy",
     "reset"
    ],
@@ -2719,12 +2719,13 @@
    "claims": [
     "at:MAIN_AT",
     "bonus_prob",
+    "ceiling:GAME:通常時",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-09",
-   "input_digest": "sha256:d192120114633d640ed9075b89c55b402642e7b5d100360d36cbdaa6bff012d3"
+   "decided_at": "2026-11-16",
+   "input_digest": "sha256:b846b5df3eec4a57afe2110940227c1df18879b923f7fccacb52dd36fc1d795b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-16",
@@ -2740,6 +2741,18 @@
    "_observed_model_code_sources": [
     "p-town.dmm.com"
    ]
+  },
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "ceiling": 999
+   }
   }
  },
  {
