@@ -13076,9 +13076,16 @@
   "seo": {
    "title": "スマスロゼーガペインETR スペック・基本情報"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "ゼーガペイン",
+   "ゼーガ",
+   "ゼーガETR",
+   "ゼーガペインETR",
+   "スマスロゼーガ",
+   "ぜーがぺいん"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -13120,7 +13127,8 @@
    "_observed_model_code_sources": [
     "p-town.dmm.com"
    ]
-  }
+  },
+  "series": ""
  },
  {
   "slug": "dmm_5096",
