@@ -2968,11 +2968,15 @@
    "modes": [
     {
      "key": "normal",
-     "label": "通常"
+     "label": "ボーナス間"
     }
    ],
    "normal": {
-    "ceiling": 510
+    "ceiling": 510,
+    "caution": 360,
+    "good": 360,
+    "excellent": 360,
+    "target": 360
    }
   },
   "series": ""
