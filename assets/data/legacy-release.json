@@ -66,6 +66,11 @@
    "url": "https://p-town.dmm.com/machines/4855",
    "checked": "2026-11-11"
   },
+  "dmc5_st": {
+   "release": "2025-06-02",
+   "url": "https://p-town.dmm.com/machines/4814",
+   "checked": "2026-11-16"
+  },
   "dumbbell": {
    "release": "2024-12-16",
    "url": "https://p-town.dmm.com/machines/4669",
@@ -356,6 +361,7 @@
   "chibaryo2": "2026-11-10",
   "code_geass": "2026-11-13",
   "darlifra": "2026-11-11",
+  "dmc5_st": "2026-11-16",
   "dumbbell": "2026-11-11",
   "enen": "2026-11-14",
   "enen2": "2026-11-10",

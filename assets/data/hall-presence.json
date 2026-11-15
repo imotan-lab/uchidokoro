@@ -63,6 +63,11 @@
    "checked": "2026-11-13",
    "url": "https://p-town.dmm.com/machines/4855"
   },
+  "dmc5_st": {
+   "stores": 1038,
+   "checked": "2026-11-16",
+   "url": "https://p-town.dmm.com/machines/4814"
+  },
   "dmm_5073": {
    "stores": 2994,
    "checked": "2026-11-15",
@@ -427,6 +432,7 @@
   "burning_express": "2026-11-14",
   "chibaryo2": "2026-11-12",
   "darlifra": "2026-11-13",
+  "dmc5_st": "2026-11-16",
   "dmm_5073": "2026-11-15",
   "dmm_5095": "2026-11-15",
   "dmm_5113": "2026-11-15",
