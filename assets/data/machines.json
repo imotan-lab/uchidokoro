@@ -704,7 +704,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-11",
+   "decided_at": "2026-11-16",
    "input_digest": "sha256:856e7640453ab4c31055041e22d90e3cbee50b58b346d532d2ba42011ad9be50"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -731,7 +731,9 @@
      "label": "通常"
     }
    ],
-   "normal": {}
+   "normal": {
+    "ceiling": 999
+   }
   },
   "series": ""
  },
