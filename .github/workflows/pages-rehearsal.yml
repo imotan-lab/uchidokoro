@@ -161,6 +161,7 @@ jobs:
           python scripts/build_new_article.py --selftest
           python scripts/new_machine_watch.py --selftest
           python scripts/pending_machines.py --selftest
+          python scripts/pending_same.py --selftest
           python scripts/html_check.py
           python scripts/publish_new_machine.py --selftest
           python scripts/prepush_gate.py --selftest

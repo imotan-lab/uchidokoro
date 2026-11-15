@@ -161,6 +161,37 @@ def find_by_core(data: dict, name: str):
             if _ci.normalize_core(str(it.get("name") or "")) == core]
 
 
+def folded_ids(it: dict) -> set:
+    """★その行へ2AIがまとめた・移した古い番号とページ★（まとめた行の中に残っている分もたどる）"""
+    out, stack = set(), [it]
+    while stack:
+        x = stack.pop()
+        if not isinstance(x, dict):
+            continue
+        for ent in (x.get("merged_from") or []) + (x.get("moved_from") or []):
+            if not isinstance(ent, dict):
+                continue
+            for k in ("source_machine_id", "identity_url"):
+                v = str(ent.get(k) or "").rstrip("/")
+                if v:
+                    out.add(v)
+            stack.append(ent.get("row"))
+    return out
+
+
+def find_folded(data: dict, source_machine_id: str = "", url: str = "") -> dict | None:
+    """★古い番号（またはページ）が、2AIの判断でどの行へまとめられた・移されたか★（無ければ None）"""
+    want = {v for v in (str(source_machine_id or "").strip(), str(url or "").rstrip("/")) if v}
+    if not want:                        # 番号もページも無ければ探さない
+        return None
+    # ★外した機種の控え（gave_up）へ移った行の履歴も見る★（Codex review305＝まとめた先を GONE で外すと、
+    #   古い番号がカレンダーに残っているだけで新しい行として入れ直されていた）
+    for it in list((data.get("items") or {}).values()) + list((data.get("gave_up") or {}).values()):
+        if isinstance(it, dict) and want & folded_ids(it):
+            return it
+    return None
+
+
 def add(data: dict, name: str, url: str, maker: str, release: str,
         reason: str = "", extra: dict | None = None,
         source_machine_id: str = "", identity_source: str = "",
@@ -188,6 +219,15 @@ def add(data: dict, name: str, url: str, maker: str, release: str,
     if it is None and url:
         it = next((x for x in data["items"].values()
                    if str(x.get("identity_url") or "") == url), None)
+    if it is None:
+        # ★★2AIがほかの行へまとめた・移した古い番号は、新しい行として入れ直さない★★（2026-11-15・Codex review304）＝
+        #   古い番号がカレンダーに残っていると、毎晩また2行になって同じ問いが出続ける。
+        #   ★まとめた先の行は書き換えない★（古い番号の名前・日付を新しい番号の行へ混ぜない）＝
+        #   待ち行列に入らない写しを返す（呼ぶ側の note_calendar もその写しにだけ書く）。
+        folded = find_folded(data, source_machine_id, url)
+        if folded is not None:
+            return {"queue_id": folded["queue_id"], "name": name, "identity_url": url,
+                    "source_machine_id": str(source_machine_id or ""), "folded_into": folded["queue_id"]}
     if it:
         it["tries"] = int(it.get("tries", 0)) + 1
         it["last_try"] = _today()
@@ -431,11 +471,18 @@ def revive(data: dict, today: str = "") -> list:
             age = since
         if age is None or age > REVIVE_LIMIT_DAYS:
             continue
-        if qid in data["items"] or (it.get("source_machine_id")
-                                    and find_by_machine_id(data, str(it["source_machine_id"]))):
+        _same = data["items"].get(qid) or (it.get("source_machine_id")
+                                           and find_by_machine_id(data, str(it["source_machine_id"])))
+        if _same:
+            # ★捨てる前に、2AIがまとめた・移した古い番号の履歴を待ち行列の行へ引き継ぐ★（Codex review306＝
+            #   履歴ごと消えると、古い番号がまた新しい行として入れ直された）
+            for _k in ("merged_from", "moved_from"):
+                if it.get(_k):
+                    _same.setdefault(_k, []).extend(json.loads(json.dumps(it[_k], ensure_ascii=False)))
             data["gave_up"].pop(qid)
             continue
-        back = {k: v for k, v in data["gave_up"].pop(qid).items() if k not in ("gave_up_at", "gone_reason")}
+        back = {k: v for k, v in data["gave_up"].pop(qid).items()
+                if k not in ("gave_up_at", "gone_reason", "gone_by", "gone_why", "page_gone")}
         back["runs"] = 0
         # ★止まった回数も0から数え直す★（2026-11-10）＝朝の点検（check_stuck）は戻した機種も
         #   「同じ理由で続けて止まる」で知らせるので、外す前の回数が残ると戻した翌朝に必ず鳴る
@@ -445,10 +492,6 @@ def revive(data: dict, today: str = "") -> list:
         data["items"][qid] = back
         out.append(back)
     return out
-
-
-PAGE_GONE_NIGHTS = 3       # DMMの機種ページが続けて404だった晩の数（これに届いたら外す候補）
-PAGE_GONE_CALENDAR_DAYS = 2  # カレンダーでこの日数より最近に見ていれば外さない（add_machine_run.CALENDAR_FRESH_DAYS と同じ線）
 
 
 NIGHT_ROLLOVER_HOUR = 12   # task_guard.NIGHT_ROLLOVER_HOUR と同じ（★取り込まない＝材料の契約の依存を増やさない★）
@@ -470,7 +513,8 @@ def note_page_gone(it: dict, night: str = "") -> None:
     （2026-11-14）DMMが機種IDを振り直すと古い機種ページは404になり、新しいIDはカレンダーから
     別の控えとして入る（Lアサルトリリィ＝5118→5147）。古い控えは導入日が「未定」のままなので
     導入日から60日の打ち切りに届かず、毎晩5分ずつ試して失敗し続けた。
-    ★見るのは状態番号だけ★（機種名で「同じ機種か」を機械に決めさせない）。
+    ★これは観測だけ★＝外す・まとめるは2AIが決める（2026-11-15・same_machine_questions）。
+    続けて何晩無いかは、2AIへの問いに添える材料。
     ★数えるのは「続けて」404だった晩だけ★（Codexの指摘）＝前の404が前の晩でなければ1から数え直す
     （503など別の失敗の晩・タスクが動かなかった晩をはさんだら続いていない）。
     """
@@ -491,31 +535,159 @@ def clear_page_gone(it: dict) -> None:
     it.pop("page_gone", None)
 
 
-def page_gone_retire(it: dict, today: str = "", calendar_ok: bool = True) -> bool:
-    """★外してよいか★＝①今晩も404 ②PAGE_GONE_NIGHTS 晩以上続けて404 ③カレンダーで最近見ていない
-    ④★今晩カレンダーを正常に読めた★（calendar_ok・Codexの指摘＝読めなかった晩は「載っていない」と言えない）
+def page_gone_tonight(it: dict, night: str = "") -> bool:
+    """★今晩、DMMの機種ページが無かった（404）か★（2026-11-15）"""
+    return str((it.get("page_gone") or {}).get("last") or "") == (night or _night())[:10]
 
-    ③が無いと、DMMの一時的な不具合で、カレンダーにまだ載っている機種まで外れる。
-    カレンダーの日付・見た日が読めないものは「最近見ていない」とみなす（カレンダーに無い）。
+
+# ★★同じ機種かどうか・消えたかどうかは2AIが決める★★（2026-11-15・運営者）
+#   ＞ 変わる可変のものは基準にするのやめるのはどう？
+#   ＞ 単純に機種名でDMMで2AIなんだからわかるくない？
+#   DMMの機種IDは変わる（Lアサルトリリィ 5118→5147）。IDで見分けると、振り直された機種が
+#   別の行として入り、古い行は毎晩404で空回りした。直す前は「3晩続けて404なら外す」と
+#   機械が数えて決めていたが、それをやめて2AIに聞く。
+#   ★機械がするのは候補を挙げることだけ★＝名前の芯が同じ2行／今晩ページが無かった行。
+#   名前が同じでも別機種（L版と無印・パチンコ版）はあるので、★名前で機械が「同じ」と決めない★。
+#   決まるまでは2行のまま残す（取りこぼすより二重のほうが安全＝find_by_core と同じ）。
+#   答えを書くのは scripts/pending_same.py（判断者の組と理由が要る）。
+SAME_TOOL = "python scripts/pending_same.py --apply <決定ファイル>"
+
+
+def judged_different(a: dict, b: dict) -> bool:
+    """★2AIが「別の機種」と決めた組か★＝決めたときと同じページの組のときだけ効く
+    （どちらかのページが変われば、もう一度聞く）"""
+    rec = (a.get("not_same") or {}).get(str(b.get("queue_id") or ""))
+    return (isinstance(rec, dict)
+            and rec.get("self_url") == str(a.get("identity_url") or "")
+            and rec.get("other_url") == str(b.get("identity_url") or ""))
+
+
+def _row_text(it: dict, night: str) -> str:
+    gone = (f"（★今晩ページが無い＝404・続けて{(it.get('page_gone') or {}).get('nights', 1)}晩★）"
+            if page_gone_tonight(it, night) else "")
+    return (f"  {it.get('queue_id')}「{it.get('name') or '（名前なし）'}」 "
+            f"{it.get('identity_url') or '（機種ページ未定）'}{gone}"
+            f"／導入 {release_of(it) or '不明'}／メーカー {it.get('maker') or '不明'}"
+            f"／見つけた日 {it.get('first_seen') or '不明'}")
+
+
+def same_machine_questions(data: dict, night: str = "") -> list:
+    """★待ち行列の中で「同じ機種かもしれない行」と「ページが消えた行」を2AIへの問いにする★
+
+    返すのは {"kind", "ids", "text"} の並び。kind＝pending_same（名前の芯が同じ2行）／
+    pending_gone（今晩404で、組になる行が無い）。
     """
-    today = (today or _night())[:10]
-    if not calendar_ok:
-        return False
-    if it.get("state") != READY:
-        return False
-    g = it.get("page_gone") or {}
-    if g.get("last") != today or int(g.get("nights", 0) or 0) < PAGE_GONE_NIGHTS:
-        return False
-    seen = str(it.get("calendar_seen") or "")[:10]
-    try:
-        if seen and (date.fromisoformat(today) - date.fromisoformat(seen)).days <= PAGE_GONE_CALENDAR_DAYS:
-            return False
-    except ValueError:
-        pass
-    return True
+    import claim_identity as _ci
+    night = (night or _night())[:10]
+    rows = sorted((it for it in (data.get("items") or {}).values() if isinstance(it, dict)),
+                  key=lambda x: str(x.get("queue_id") or ""))
+    groups = {}
+    for it in rows:
+        core = _ci.normalize_core(str(it.get("name") or ""))
+        if len(core) >= 2:
+            groups.setdefault(core, []).append(it)
+    out, asked = [], set()
+    for core in sorted(groups):
+        g = groups[core]
+        for i in range(len(g)):
+            for j in range(i + 1, len(g)):
+                a, b = g[i], g[j]
+                if judged_different(a, b):     # ★両方の行に同じ記録を書くので片側で見る★
+                    continue
+                qa, qb = str(a.get("queue_id")), str(b.get("queue_id"))
+                asked |= {qa, qb}
+                out.append({"kind": "pending_same", "ids": [qa, qb], "text": (
+                    "待ち行列に、名前の芯が同じ行が2つあります。DMMの機種ページを開いて、同じ機種かを2AIで決めてください"
+                    "（DMMは機種の番号を振り直すことがある）。\n" + _row_text(a, night) + "\n" + _row_text(b, night)
+                    + "\n同じ機種なら1行にまとめる（★ページが在る方を keep に★）: " + SAME_TOOL
+                    + '\n  {"decision": "SAME", "keep": "<残す行>", "drop": "<まとめて消す行>", "by": ["claude", "codex"], "why": "<15字以上>"}'
+                    + "\n別の機種なら: " + SAME_TOOL
+                    + f'\n  {{"decision": "DIFFERENT", "ids": ["{qa}", "{qb}"], "by": ["claude", "codex"], "why": "<15字以上>"}}')})
+    for it in rows:
+        q = str(it.get("queue_id") or "")
+        if q in asked or not page_gone_tonight(it, night):
+            continue
+        out.append({"kind": "pending_gone", "ids": [q], "text": (
+            "DMMの機種ページが無くなっています（404）。DMMの導入カレンダーとDMMの検索で機種名から探し、"
+            "新しい番号のページがあるか・機種そのものが消えたかを2AIで決めてください。\n" + _row_text(it, night)
+            + "\n新しいページが見つかったら: " + SAME_TOOL
+            + f'\n  {{"decision": "MOVE", "id": "{q}", "url": "https://p-town.dmm.com/machines/<番号>", "by": ["claude", "codex"], "why": "<15字以上>"}}'
+            + "\n機種が消えた（どこにも無い）なら、待ち行列から外す（外した機種の控えに残り、30日ごとに試し直す）: " + SAME_TOOL
+            + f'\n  {{"decision": "GONE", "id": "{q}", "by": ["claude", "codex"], "why": "<15字以上>"}}')})
+    return out
 
 
-def retire_gone(data: dict, queue_id: str, today: str = "") -> dict | None:
+def merge_same(data: dict, keep: str, drop: str, by=None, why: str = "", today: str = "") -> dict:
+    """★2AIが同じ機種と決めた2行を1行にまとめる★（keep を残し、drop を消す）
+
+    drop にしかない手がかり（日まで分かった導入日・メーカー）は keep へ写す。見つけた日は早いほう。
+    ★drop の中身はまるごと merged_from[].row に残す★（あとで経緯を追えるように）。
+    カレンダーで見た日付（calendar_day）は写さない＝その番号のカレンダーの記録なので。
+    """
+    today = (today or _today())[:10]
+    items = data.get("items") or {}
+    k, d = items.get(str(keep or "")), items.get(str(drop or ""))
+    if not isinstance(k, dict) or not isinstance(d, dict) or str(keep) == str(drop):
+        raise PendingError(f"まとめる2行が待ち行列にありません: {keep!r} {drop!r}")
+    if not k.get("release_day") and d.get("release_day") and (
+            not k.get("release") or str(d["release_day"])[:7] == str(k.get("release"))[:7]):
+        k["release_day"] = d["release_day"]
+        if not k.get("release"):
+            k["release"] = str(d["release_day"])[:7]
+    if not str(k.get("maker") or "").strip() and str(d.get("maker") or "").strip():
+        k["maker"] = d["maker"]
+    if d.get("first_seen") and (not k.get("first_seen") or str(d["first_seen"]) < str(k["first_seen"])):
+        k["first_seen"] = d["first_seen"]
+    # ★消す行は中身まるごと row に残す★（Codex review304＝型式名・メーカーの食い違いの記録・
+    #   その行が持っていたまとめた・移した履歴まで消えていた）
+    k.setdefault("merged_from", []).append({
+        "queue_id": str(drop), "name": d.get("name", ""), "identity_url": d.get("identity_url", ""),
+        "source_machine_id": d.get("source_machine_id", ""), "merged_at": today,
+        "by": list(by or []), "why": str(why or ""), "row": json.loads(json.dumps(d, ensure_ascii=False))})
+    for other in items.values():               # ★消す行を名指しした「別の機種」の記録も片づける★
+        if isinstance(other, dict):
+            (other.get("not_same") or {}).pop(str(drop), None)
+    del items[str(drop)]
+    return k
+
+
+def mark_not_same(data: dict, a: str, b: str, by=None, why: str = "", today: str = "") -> None:
+    """★2AIが別の機種と決めた組を両方の行に残す★（同じページの組のあいだは、もう聞かない）"""
+    today = (today or _today())[:10]
+    items = data.get("items") or {}
+    ra, rb = items.get(str(a or "")), items.get(str(b or ""))
+    if not isinstance(ra, dict) or not isinstance(rb, dict) or str(a) == str(b):
+        raise PendingError(f"別の機種と決める2行が待ち行列にありません: {a!r} {b!r}")
+    for x, y in ((ra, rb), (rb, ra)):
+        x.setdefault("not_same", {})[str(y["queue_id"])] = {
+            "self_url": str(x.get("identity_url") or ""), "other_url": str(y.get("identity_url") or ""),
+            "at": today, "by": list(by or []), "why": str(why or "")}
+
+
+def move_page(data: dict, queue_id: str, url: str, machine_id: str, by=None, why: str = "",
+              today: str = "") -> dict:
+    """★2AIが見つけた新しい機種ページへ、その行を移す★（番号を振り直された機種）
+
+    ★古いページは moved_from に残す★。ページが無い印は外す（翌晩、新しいページで確かめ直す）。
+    """
+    today = (today or _today())[:10]
+    it = (data.get("items") or {}).get(str(queue_id or ""))
+    if not isinstance(it, dict):
+        raise PendingError(f"移す行が待ち行列にありません: {queue_id!r}")
+    # ★古い番号のカレンダーで見た日付は、履歴へ移して行から外す★（Codex review304＝新しい番号の機種ページが
+    #   「未定」のとき、古い番号で見た日付が新しい番号の日付として使われていた）。新しい番号のカレンダーで見直す
+    it.setdefault("moved_from", []).append({
+        "identity_url": it.get("identity_url", ""), "source_machine_id": it.get("source_machine_id", ""),
+        "calendar_day": it.pop("calendar_day", ""), "calendar_seen": it.pop("calendar_seen", ""),
+        "moved_at": today, "by": list(by or []), "why": str(why or "")})
+    it["identity_url"] = str(url)
+    it["source_machine_id"] = str(machine_id)
+    it["state"] = READY
+    clear_page_gone(it)
+    return it
+
+
+def retire_gone(data: dict, queue_id: str, today: str = "", by=None, why: str = "") -> dict | None:
     """★機種ページが消えた控えを、待ち行列から外して控え（gave_up）へ移す★（消さない）
 
     revive() が REVIVE_DAYS ごとに1回だけ戻して試し直す（ページが戻っていれば続けられる）。
@@ -525,7 +697,8 @@ def retire_gone(data: dict, queue_id: str, today: str = "") -> dict | None:
     it = data["items"].pop(str(queue_id or ""), None)
     if it is None:
         return None
-    data.setdefault("gave_up", {})[str(queue_id)] = dict(it, gave_up_at=today, gone_reason="DMM_PAGE_GONE")
+    data.setdefault("gave_up", {})[str(queue_id)] = dict(it, gave_up_at=today, gone_reason="DMM_PAGE_GONE",
+                                                         gone_by=list(by or []), gone_why=str(why or ""))
     return it
 
 
@@ -817,15 +990,13 @@ def selftest() -> int:
                                   "source_machine_id": "77", "gave_up_at": "2026-10-01", "state": READY}}
     t("　同じ機種が待ち行列にもう在れば、戻さずに控えから消す",
       revive(_dup, "2026-11-10") == [] and "q_0050" not in _dup["gave_up"] and len(_dup["items"]) == 1)
-    # ★★DMMの機種ページが続けて404で、カレンダーにも無い控えは外して控えへ移す★★（2026-11-14・Lアサルトリリィ 5118→5147）
+    # ★★DMMの機種ページが消えた行と、名前の芯が同じ行は、2AIへの問いにする★★（2026-11-15・Lアサルトリリィ 5118→5147）
     _pg = _empty()
     add(_pg, "振り直された機種", DMM + "88", "m", "2026-12", source_machine_id="88")
     _gi = _pg["items"]["q_0001"]
-    _gi["calendar_seen"] = "2026-11-12"
     for _dd in ("2026-11-14", "2026-11-14", "2026-11-15"):
         note_page_gone(_gi, _dd)
     t("　同じ日に何度404でも1晩と数える", _gi["page_gone"] == {"first": "2026-11-14", "last": "2026-11-15", "nights": 2})
-    t("　2晩ではまだ外さない", not page_gone_retire(_gi, "2026-11-15"))
     note_page_gone(_gi, "2026-11-16")
     note_page_gone(_gi, "2026-11-16")     # ★同じ晩の2回目（打ち切り候補の見直しと記事づくりの見直し）★
     t("　同じ晩に2回見直しても、続けて数えた晩は崩れない", _gi["page_gone"]["nights"] == 3)
@@ -833,32 +1004,108 @@ def selftest() -> int:
       _night(datetime(2026, 11, 17, 0, 10)) == "2026-11-16" and _night(datetime(2026, 11, 16, 23, 36)) == "2026-11-16"
       and _night(datetime(2026, 11, 17, 12, 0)) == "2026-11-17"
       and NIGHT_ROLLOVER_HOUR == __import__("task_guard").NIGHT_ROLLOVER_HOUR)
-    t("★★3晩続けて404・カレンダーで2日より長く見ていなければ外す★★", page_gone_retire(_gi, "2026-11-16"))
-    t("　今晩404を見ていなければ外さない（前の晩の404だけでは決めない）", not page_gone_retire(_gi, "2026-11-17"))
-    t("★★カレンダーで最近見ていれば、404が続いても外さない（DMMの一時的な不具合）★★",
-      not page_gone_retire(dict(_gi, calendar_seen="2026-11-15"), "2026-11-16"))
-    _ok_again = dict(_gi)
-    clear_page_gone(_ok_again)
-    note_page_gone(_ok_again, "2026-11-16")
-    t("　1晩でも読めたら数え直す", _ok_again["page_gone"]["nights"] == 1 and not page_gone_retire(_ok_again, "2026-11-16"))
-    t("　DMMで確かめていない控え（READY でない）は外さない",
-      not page_gone_retire(dict(_gi, state=AWAITING_DMM_ID), "2026-11-16"))
-    t("★★今晩カレンダーを正常に読めなかったら外さない（載っていないとは言えない）★★（Codexの指摘）",
-      not page_gone_retire(_gi, "2026-11-16", calendar_ok=False))
     _gap = {"state": READY}
     for _dd in ("2026-11-01", "2026-11-03", "2026-11-05"):
         note_page_gone(_gap, _dd)
-    t("★★間の空いた404（503の晩・動かなかった晩をはさむ）は続けてと数えない★★（Codexの指摘）",
-      _gap["page_gone"]["nights"] == 1 and _gap["page_gone"]["first"] == "2026-11-05"
-      and not page_gone_retire(_gap, "2026-11-05"))
-    _out = retire_gone(_pg, "q_0001", "2026-11-16")
-    t("★★外した控えは消さず、外した機種の控えへ移す（理由つき）★★",
+    t("　間の空いた404は続けてと数えない（2AIへ添える晩の数）",
+      _gap["page_gone"]["nights"] == 1 and _gap["page_gone"]["first"] == "2026-11-05")
+    t("　今晩404だったかは、今晩の印だけで見る",
+      page_gone_tonight(_gi, "2026-11-16") and not page_gone_tonight(_gi, "2026-11-17"))
+    _qs = same_machine_questions(_pg, "2026-11-16")
+    t("★★今晩ページが無く、組になる行も無ければ「消えたか・新しいページがあるか」を2AIに聞く★★",
+      [q["kind"] for q in _qs] == ["pending_gone"] and _qs[0]["ids"] == ["q_0001"]
+      and '"decision": "MOVE"' in _qs[0]["text"] and '"decision": "GONE"' in _qs[0]["text"]
+      and "pending_same.py --apply" in _qs[0]["text"] and "続けて3晩" in _qs[0]["text"])
+    t("　今晩404を見ていなければ聞かない（機械が勝手に外すこともしない）",
+      same_machine_questions(_pg, "2026-11-17") == [] and "q_0001" in _pg["items"])
+    _sm = _empty()
+    add(_sm, "L アサルトリリィ", DMM + "5118", "dmm:スパイキー", "2026-12", source_machine_id="5118")
+    add(_sm, "Lアサルトリリィ", DMM + "5147", "dmm:スパイキー", "2026-12", source_machine_id="5147")
+    add(_sm, "別の機種", DMM + "9", "m", "2026-12", source_machine_id="9")
+    _sm["items"]["q_0001"]["release_day"] = "2026-12-07"
+    _sm["items"]["q_0001"]["first_seen"] = "2026-09-24"
+    note_page_gone(_sm["items"]["q_0001"], "2026-11-16")
+    _qs2 = same_machine_questions(_sm, "2026-11-16")
+    t("★★名前の芯が同じ2行は「同じ機種か」を2AIに聞く（番号が違っても）★★",
+      [q["kind"] for q in _qs2] == ["pending_same"] and _qs2[0]["ids"] == ["q_0001", "q_0002"]
+      and '"decision": "SAME"' in _qs2[0]["text"] and '"decision": "DIFFERENT"' in _qs2[0]["text"]
+      and "今晩ページが無い" in _qs2[0]["text"])
+    t("★★名前が同じだけで機械は1行にまとめない（決まるまで2行のまま）★★",
+      len(_sm["items"]) == 3)
+    _sm["items"]["q_0001"].update(dmm_model_code="古い型式", dmm_maker_conflict=["別の表示名"],
+                                  moved_from=[{"identity_url": DMM + "5000", "source_machine_id": "5000"}])
+    _mk = merge_same(_sm, "q_0002", "q_0001", ["claude", "codex"], "同じ機種で番号が振り直された", "2026-11-16")
+    _row = ((_mk.get("merged_from") or [{}])[0]).get("row") or {}
+    t("★★消した行の中身はまるごと残す（型式名・食い違いの記録・前の履歴）★★（Codex review304）",
+      _row.get("dmm_model_code") == "古い型式" and _row.get("dmm_maker_conflict") == ["別の表示名"]
+      and (_row.get("moved_from") or [{}])[0].get("identity_url") == DMM + "5000")
+    t("　その行が前にまとめた・移した古い番号も、まとめた先から見つかる",
+      find_folded(_sm, "5000") is _mk and find_folded(_sm, "", DMM + "5118/") is _mk
+      and find_folded(_sm, "5147") is None)
+    t("★★2AIが同じと決めたら1行にまとめ、消す行の手がかり（日まで分かった導入日・見つけた日）を写す★★",
+      "q_0001" not in _sm["items"] and _mk.get("release_day") == "2026-12-07" and _mk.get("first_seen") == "2026-09-24"
+      and (_mk.get("merged_from") or [{}])[0].get("identity_url") == DMM + "5118"
+      and (_mk.get("merged_from") or [{}])[0].get("by") == ["claude", "codex"]
+      and _mk["identity_url"] == DMM + "5147")
+    t("　まとめたら、もう問いは出ない", same_machine_questions(_sm, "2026-11-16") == [])
+    _back = add(_sm, "L アサルトリリィ", DMM + "5118", "", "2026-12", source_machine_id="5118")
+    note_calendar(_back, "2026-12-07")
+    t("★★まとめて消した古い番号がカレンダーに残っていても、新しい行として入れ直さない★★（Codex review304）",
+      len(_sm["items"]) == 2 and _back.get("folded_into") == "q_0002"
+      and same_machine_questions(_sm, "2026-11-16") == [])
+    t("　まとめた先の行は、古い番号の名前・カレンダーの日付で書き換えない",
+      _mk.get("identity_url") == DMM + "5147" and _mk.get("name") == "Lアサルトリリィ" and "calendar_day" not in _mk)
+    _dfx = _empty()
+    add(_dfx, "L似た機種", DMM + "11", "m", "2026-12", source_machine_id="11")
+    add(_dfx, "似た機種", DMM + "12", "m", "2026-12", source_machine_id="12")
+    mark_not_same(_dfx, "q_0001", "q_0002", ["claude", "codex"], "L版と無印で別の機種", "2026-11-16")
+    t("★★2AIが別の機種と決めた組は、同じページのあいだはもう聞かない★★",
+      same_machine_questions(_dfx, "2026-11-16") == [])
+    _dfx2 = json.loads(json.dumps(_dfx))
+    _dfx["items"]["q_0002"]["identity_url"] = DMM + "13"
+    _dfx2["items"]["q_0001"]["identity_url"] = DMM + "14"
+    t("★★どちらかのページが変われば、もう一度聞く（相手の行・自分の行のどちらでも）★★",
+      [q["kind"] for q in same_machine_questions(_dfx, "2026-11-16")] == ["pending_same"]
+      and [q["kind"] for q in same_machine_questions(_dfx2, "2026-11-16")] == ["pending_same"])
+    _mv = _empty()
+    add(_mv, "移る機種", DMM + "21", "m", "2026-12", source_machine_id="21")
+    note_page_gone(_mv["items"]["q_0001"], "2026-11-16")
+    note_calendar(_mv["items"]["q_0001"], "2026-12-07")
+    move_page(_mv, "q_0001", DMM + "22", "22", ["claude", "codex"], "新しい番号のページを見つけた", "2026-11-16")
+    _mvi = _mv["items"]["q_0001"]
+    t("★★移したら、古い番号のカレンダーで見た日付は履歴へ移して行から外す★★（Codex review304）",
+      "calendar_day" not in _mvi and "calendar_seen" not in _mvi
+      and _mvi["moved_from"][0].get("calendar_day") == "2026-12-07")
+    _mvb = add(_mv, "移る機種", DMM + "21", "", "2026-12", source_machine_id="21")
+    t("★★移した古い番号がカレンダーに残っていても、新しい行として入れ直さない★★（Codex review304）",
+      len(_mv["items"]) == 1 and _mvb.get("folded_into") == "q_0001")
+    t("★★2AIが見つけた新しいページへ移す（古いページは残す・404の印は外す）★★",
+      _mvi["identity_url"] == DMM + "22" and _mvi["source_machine_id"] == "22"
+      and _mvi["moved_from"][0]["identity_url"] == DMM + "21" and "page_gone" not in _mvi)
+    note_page_gone(_mv["items"]["q_0001"], "2026-11-17")
+    retire_gone(_mv, "q_0001", "2026-11-17", ["claude", "codex"], "新しい番号のページも無くなった")
+    _mvc = add(_mv, "移る機種", DMM + "21", "", "2026-12", source_machine_id="21")
+    t("★★移した先を消えた機種として外したあとも、古い番号を新しい行として入れ直さない★★（Codex review305）",
+      _mv["items"] == {} and _mvc.get("folded_into") == "q_0001" and "q_0001" in _mv["gave_up"])
+    add(_mv, "移る機種", DMM + "22", "", "2026-12", source_machine_id="22")
+    revive(_mv, "2026-12-17")
+    _mvd = add(_mv, "移る機種", DMM + "21", "", "2026-12", source_machine_id="21")
+    t("★★試し直しで控えの行を捨てるときも、古い番号の履歴は待ち行列の行へ引き継ぐ★★（Codex review306）",
+      "q_0001" not in _mv["gave_up"] and len(_mv["items"]) == 1 and _mvd.get("folded_into") == "q_0002")
+    t("　まとめる・移す行が無ければ止める",
+      _raises(lambda: merge_same(_sm, "q_0002", "q_0099"))
+      and _raises(lambda: merge_same(_sm, "q_0002", "q_0002"))
+      and _raises(lambda: mark_not_same(_dfx, "q_0001", "q_0099"))
+      and _raises(lambda: move_page(_mv, "q_0099", DMM + "1", "1")))
+    _out = retire_gone(_pg, "q_0001", "2026-11-16", ["claude", "codex"], "どこにも無い機種と2AIで決めた")
+    t("★★2AIが消えたと決めた行は消さず、外した機種の控えへ移す（理由・判断者つき）★★",
       _out is not None and "q_0001" not in _pg["items"]
       and ((_pg.get("gave_up") or {}).get("q_0001") or {}).get("gone_reason") == "DMM_PAGE_GONE"
+      and ((_pg.get("gave_up") or {}).get("q_0001") or {}).get("gone_by") == ["claude", "codex"]
       and ((_pg.get("gave_up") or {}).get("q_0001") or {}).get("gave_up_at") == "2026-11-16")
     _rb = revive(_pg, "2026-12-16")
-    t("　30日たったら今までどおり1回だけ試し直す（理由の印は外す）",
-      len(_rb) == 1 and "gone_reason" not in (_pg["items"].get("q_0001") or {"gone_reason": 1}))
+    t("　30日たったら今までどおり1回だけ試し直す（理由の印と古い404の印は外す）",
+      len(_rb) == 1 and not ({"gone_reason", "gone_by", "page_gone"} & set(_pg["items"].get("q_0001") or {"gone_reason": 1})))
     _pgu = _empty()
     _pgu["gave_up"] = {"q_0070": {"queue_id": "q_0070", "name": "導入日が未定で消えた機種", "release": "",
                                   "release_tbd": True, "state": READY, "gave_up_at": "2026-11-16",
