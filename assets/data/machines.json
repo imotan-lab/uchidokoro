@@ -2790,7 +2790,7 @@
     "payout_range"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-11",
+   "decided_at": "2026-11-16",
    "input_digest": "sha256:1a4d868fef8b1c1f4892f284650d171c4471e155f8f62772267e93c8f8249e5b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -2807,6 +2807,18 @@
    "_model_code_sources": [
     "vote:dmm-ptown"
    ]
+  },
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "ceiling": 999
+   }
   }
  },
  {
