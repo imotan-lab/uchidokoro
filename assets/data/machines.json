@@ -728,11 +728,37 @@
    "modes": [
     {
      "key": "normal",
-     "label": "通常"
+     "label": "AT間"
+    },
+    {
+     "key": "cz",
+     "label": "CZ間"
+    },
+    {
+     "key": "reset",
+     "label": "リセット後"
     }
    ],
    "normal": {
-    "ceiling": 999
+    "ceiling": 999,
+    "caution": 720,
+    "good": 720,
+    "excellent": 720,
+    "target": 720
+   },
+   "cz": {
+    "caution": 390,
+    "good": 390,
+    "excellent": 390,
+    "ceiling": 500,
+    "target": 390
+   },
+   "reset": {
+    "caution": 120,
+    "good": 120,
+    "excellent": 120,
+    "ceiling": 500,
+    "target": 120
    }
   },
   "series": ""
