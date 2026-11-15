@@ -11949,6 +11949,28 @@ MUTATIONS = [
         "after": "        return _di.found_urls(_di.find(name))\n",
         "run": ["scripts/mode_ask.py"],
     },
+    # ─── 2026-11-15 設定示唆の札（節の直下の rows）を2AIの決定で直せる ───
+    {
+        "why": "★設定示唆の札を直す場所を外す（札の誤りを道具で直せず、38記事で残り続ける）★",
+        "file": "scripts/decide_now.py",
+        "before": "    if where == \"settei\":\n        # ★★設定示唆の札★★",
+        "after": "    if where == \"settei_x\":\n        # ★★設定示唆の札★★",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★札へ書き戻す先を間違える（探した札と別のキーへ書く）★",
+        "file": "scripts/decide_now.py",
+        "before": "        _row[i2] = _put(_row[i2])",
+        "after": "        _row[\"trigger\" if i2 == \"hint\" else \"hint\"] = _put(_row[i2])",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★消す節の中の札を同じ決定で直しても通す（直した札が節ごと消えるのに「直した」と報告する）★",
+        "file": "scripts/decide_now.py",
+        "before": "        if k in (\"settei\", \"settei_in\") and si[0] in _dsec:\n",
+        "after": "        if False:\n",
+        "run": ["scripts/decide_now.py"],
+    },
 ]
 
 

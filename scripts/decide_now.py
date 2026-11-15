@@ -488,7 +488,10 @@ def gather(slug: str) -> dict:
 #   消すと「どちらが正解か」を選んだことになりやすい。
 OUTSIDE_KINDS = ("fact", "summary", "lead",
                  # ★要素の一部だけを直す種類★（2026-08-30・台帳#512）
-                 "fact_in", "summary_in", "lead_in")
+                 "fact_in", "summary_in", "lead_in",
+                 # ★★設定示唆の札（節の直下の rows＝trigger/hint）★★（2026-11-15）
+                 #   ★where に settei と言ったときだけ★当てる（言わない決定の動きは変えない）
+                 "settei", "settei_in")
 
 
 _REMOVED_OVERRIDE = ""
@@ -661,6 +664,13 @@ def _elems(d: dict, where: str) -> list:
                         if isinstance(box.get(k), str)]
     if w in ("", "lead") and isinstance(d.get("lead"), str):
         out.append(d["lead"])
+    if w == "settei":
+        # ★札は where に settei と言ったときだけ★（言わない決定の動きを変えない・Codexの指摘）
+        for sec in (d.get("sections") or []):
+            if isinstance(sec, dict) and sec.get("type") == "settei":
+                for r in (sec.get("rows") or []):
+                    if isinstance(r, dict):
+                        out += [r[k] for k in ("trigger", "hint") if isinstance(r.get(k), str)]
     return out
 
 
@@ -715,7 +725,7 @@ def check_range(d: dict, a: dict) -> tuple:
     return e[s:t], ne[s2:t2], None
 
 
-def _where_hits(d: dict, before) -> list:
+def _where_hits(d: dict, before, settei: bool = False) -> list:
     """その文字が記事のどこに何か所あるかを数える（2026-08-27・指摘4）。"""
     # ★★「何か所あるか」を数える★★（2026-08-27・Codexの2回目の指摘2）
     #   ★直す前は「本文・表…という種類」を数えていた★ので、
@@ -730,6 +740,10 @@ def _where_hits(d: dict, before) -> list:
                 if isinstance(t, dict) and t.get("note") == before]
         got += ["表の小見出し" for t in (sec.get("tables") or [])
                 if isinstance(t, dict) and t.get("label") == before]
+        if settei and sec.get("type") == "settei":
+            # ★札は where に settei と言ったときだけ数える★（言わない決定の動きを変えない・Codexの指摘）
+            got += ["設定示唆の札" for r in (sec.get("rows") or []) if isinstance(r, dict)
+                    for k in ("trigger", "hint") if r.get(k) == before]
     for row in (d.get("factTable") or []):
         if isinstance(row, (list, tuple)):
             got += ["基本情報表" for c in row if c == before]
@@ -1003,7 +1017,26 @@ def _outside_plan(d: dict, a: dict, where: str = "") -> tuple | None:
     if a.get("op") != "replace":
         return None
     before = a.get("before")
-    if where and where not in ("fact", "summary", "lead"):
+    if where and where not in ("fact", "summary", "lead", "settei"):
+        return None
+    if where == "settei":
+        # ★★設定示唆の札★★（2026-11-15）＝type=settei の節の rows の trigger / hint だけ
+        #   ★丸ごと一致を先に・部分は1回だけ★（ほかの場所と同じ決まり）
+        for exact in (True, False):
+            for si, sec in enumerate(d.get("sections") or []):
+                if not (isinstance(sec, dict) and sec.get("type") == "settei"):
+                    continue
+                for ri, row in enumerate(sec.get("rows") or []):
+                    if not isinstance(row, dict):
+                        continue
+                    for key in ("trigger", "hint"):
+                        v = row.get(key)
+                        if not isinstance(v, str):
+                            continue
+                        if exact and v == before:
+                            return ("settei", (si, ri), key, a)
+                        if not exact and before and v.count(before) == 1:
+                            return ("settei_in", (si, ri), key, a)
         return None
     # ★★丸ごと一致を先に見る★★（部分一致より優先＝いままでの動きを変えない）
     #   ★_in が付く種類は「その要素の一部だけを直す」★（2026-08-30・台帳#512）
@@ -1060,6 +1093,10 @@ def _write_outside(d: dict, kind: str, i1, i2, after: str,
         d["summaryBoxes"][i1][i2] = _put(d["summaryBoxes"][i1][i2])
     elif kind in ("lead", "lead_in"):
         d["lead"] = _put(d["lead"])
+    elif kind in ("settei", "settei_in"):
+        _si, _ri = i1
+        _row = d["sections"][_si]["rows"][_ri]
+        _row[i2] = _put(_row[i2])
 
 
 def _load_decision(path: str) -> dict:
@@ -1475,6 +1512,10 @@ def whole_conflicts(plan: list) -> str:
     for k, si, bi, a in plan:
         if k == "drop_section":
             continue
+        # ★札は節の中にある★＝消す節の札を同じ決定で直させない（Codexの指摘＝直した札が節ごと消えた）
+        if k in ("settei", "settei_in") and si[0] in _dsec:
+            return ("消す節の中の札を、同じ決定で直そうとしています"
+                    f"（{str(a.get('before') or '')[:24]!r}）／★消すか直すかどちらかにしてください★")
         if k not in OUTSIDE_KINDS and si in _dsec:
             return ("消す節の中を、同じ決定でほかにも直そうとしています"
                     f"（{str(a.get('text') or a.get('before') or '')[:24]!r}）／★消すか直すかどちらかにしてください★")
@@ -2051,11 +2092,11 @@ def apply_decision(path: str, apply_it: bool = False, *,
         elif a["op"] == "replace" and body_target(where):
             pass
         elif where and where not in ("body", "table_note", "table_label",
-                                     "fact", "summary", "lead"):
+                                     "fact", "summary", "lead", "settei"):
             result["problems"].append(f"直す場所の指定が不明です: {where!r}")
             return result
         if a.get("op") == "replace":
-            spots = _where_hits(d, a.get("before"))
+            spots = _where_hits(d, a.get("before"), settei=(where == "settei"))
             if where and (cell_target(where) or body_target(where)):
                 # ★セル・本文の段落は1か所を名指ししている★＝場所は確定しているので、
                 #   ここで数えない（同じ文字が他所にあっても、直すのはそのセル）
@@ -2064,7 +2105,7 @@ def apply_decision(path: str, apply_it: bool = False, *,
                 # ★場所を言っていても、その場所に2つあるなら決められない★
                 _kind = {"body": "本文", "table_note": "表の注記", "table_label": "表の小見出し",
                          "fact": "基本情報表", "summary": "要約ボックス",
-                         "lead": "リード文"}[where]
+                         "lead": "リード文", "settei": "設定示唆の札"}[where]
                 spots = [s for s in spots if s == _kind]
             if len(spots) > 1:
                 result["problems"].append(
@@ -3273,6 +3314,83 @@ def _selftest_body() -> int:
         t("★★表の小見出し（table_label）を2AIの決定で直せる★★（代役の指摘＝「解析待ち」の小見出しが残った）",
           not _glb["problems"]
           and _now_lb["sections"][0]["tables"][0]["label"] == "確認できた設定示唆の一覧です。")
+
+        # ★★設定示唆の札（節の直下の rows＝trigger/hint）も2AIの決定で直せる★★（2026-11-15・朝タスク）
+        #   ★直す前は直す場所が無く★、38記事の札の誤り（REG中ボイスの示唆の取り違え・偶奇の逆）を直せなかった
+        SR = {"slug": "sr", "sections": [
+            {"title": "設定示唆まとめ", "type": "settei", "rows": [
+                {"trigger": "REG中ボイス：Unbelievable〜Amazing", "hint": "高設定示唆"},
+                {"trigger": "トロフィー：銅", "hint": "設定2以上濃厚"}]}]}
+        with io.open(os.path.join(td, "sr.json"), "w", encoding="utf-8", newline="\n") as f:
+            json.dump(SR, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+        _rsr = os.path.join(td, "dsr.json")
+        io.open(_rsr, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": SCHEMA, "slug": "sr", "source_sha256": _sha_of("sr"),
+             "decided_by": ["Claude", "codex"],
+             "actions": [{"op": "replace", "before": "REG中ボイス：Unbelievable〜Amazing",
+                          "after": "REG中ボイス：Amazing", "where": "settei",
+                          "why": "Unbelievable は高設定示唆（強）でAmazingだけが設定5以上",
+                          "meaning_why": "2AIで出典を読み、札の対象をAmazingだけに絞ると判断しました"},
+                         {"op": "replace", "before": "高設定示唆", "after": "高設定示唆（強）", "where": "settei",
+                          "why": "出典は高設定示唆の強",
+                          "meaning_why": "2AIで出典を読み、示唆の強さが強だと判断しました"}]},
+            ensure_ascii=False))
+        _gsr = apply_decision(_rsr, apply_it=True, guard=False)
+        _now_sr = json.loads(io.open(os.path.join(td, "sr.json"), encoding="utf-8").read())
+        t("★★設定示唆の札（rows の trigger / hint）を2AIの決定で直せる★★（2026-11-15）",
+          not _gsr["problems"]
+          and _now_sr["sections"][0]["rows"][0] == {"trigger": "REG中ボイス：Amazing", "hint": "高設定示唆（強）"}
+          and _now_sr["sections"][0]["rows"][1] == {"trigger": "トロフィー：銅", "hint": "設定2以上濃厚"})
+        _rsr2 = os.path.join(td, "dsr2.json")
+        io.open(_rsr2, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": SCHEMA, "slug": "sr", "source_sha256": _sha_of("sr"),
+             "decided_by": ["Claude", "codex"],
+             "actions": [{"op": "replace", "before": "トロフィー：銅", "after": "トロフィー：金",
+                          "why": "場所を言わない",
+                          "meaning_why": "2AIで出典を読み、札の色の取り違えだと判断しました"}]},
+            ensure_ascii=False))
+        _gsr2 = apply_decision(_rsr2)
+        t("　札は where に settei と言ったときだけ直す（言わなければ今までどおり断る）",
+          bool(_gsr2["problems"]))
+        # ★Codexの指摘で足した試験（2026-11-15）★
+        SR3 = {"slug": "sr3", "sections": [
+            {"title": "ヤメ時の判断", "body": ["トロフィーを確認します。", "ほかの行です。"]},
+            {"title": "設定示唆まとめ", "type": "settei", "rows": [
+                {"trigger": "トロフィーを確認します。", "hint": "設定2以上濃厚"},
+                {"trigger": "終了画面：青", "hint": "デフォルト"}]}]}
+        with io.open(os.path.join(td, "sr3.json"), "w", encoding="utf-8", newline="\n") as f:
+            json.dump(SR3, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def _dsr3(name, actions, removed=None):
+            _p = os.path.join(td, name)
+            _dd = {"schema_version": SCHEMA, "slug": "sr3", "source_sha256": _sha_of("sr3"),
+                   "decided_by": ["Claude", "codex"], "actions": actions}
+            if removed:
+                _dd["numbers_removed"] = removed
+            io.open(_p, "w", encoding="utf-8").write(json.dumps(_dd, ensure_ascii=False))
+            return apply_decision(_p)
+        _g3 = _dsr3("d3a.json", [{"op": "replace", "before": "トロフィーを確認します。",
+                                  "after": "トロフィーを見ます。", "why": "言い換え",
+                                  "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}])
+        t("　（回帰）本文と札に同じ文字があっても、where を言わない本文の直しは今までどおり通る",
+          not _g3["problems"])
+        _g4 = _dsr3("d3b.json", [{"op": "drop_section", "text": "設定示唆まとめ", "why": "消す",
+                                  "meaning_why": "2AIで読み比べ、この節は丸ごと外すと判断しました"},
+                                 {"op": "replace", "where": "settei", "before": "デフォルト", "after": "通常",
+                                  "why": "言い換え", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}],
+                     removed=[{"n": "2以", "why": "節ごと外す"}])
+        t("　消す節の札を同じ決定で直させない（直した札が節ごと消えるのに直したと言わない）",
+          "消す節の中の札" in " ".join(map(str, _g4["problems"])))
+        _g5 = _dsr3("d3c.json", [{"op": "replace", "where": "settei", "before": "設定2以上濃厚",
+                                  "after": "設定4以上濃厚", "why": "数を変える",
+                                  "meaning_why": "2AIで読み比べ、示唆の設定が違うと判断しました"}])
+        t("　札でも、出どころの無い数値は足せない", bool(_g5["problems"]))
+        _g6 = _dsr3("d3d.json", [{"op": "replace", "where": "settei", "before": "青",
+                                  "after": "白", "why": "色の取り違え",
+                                  "meaning_why": "2AIで出典を読み、画面の色の取り違えだと判断しました"}])
+        t("　札の一部だけ（settei_in）も直せる", not _g6["problems"])
 
         # ★★同じ場所に2つあっても数える★★（2026-08-27・Codexの2回目の指摘2）
         #   ★直す前は「本文・表…という種類」を数えていた★ので、
