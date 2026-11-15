@@ -78,20 +78,14 @@
   "targetProjection": "deb3b0bf03305c8f"
  },
  {
-  "slug": "dmm_5104",
-  "name": "L聖闘士星矢 黄金十二宮",
+  "slug": "pw_10503",
+  "name": "スマスロ リコリス・リコイル",
   "seo": {
-   "title": "L聖闘士星矢 黄金十二宮 天井・狙い目"
+   "title": "スマスロ リコリス・リコイル 天井・狙い目"
   },
-  "info": "スマスロAT",
+  "info": "",
   "strategy": "",
-  "aliases": [
-   "聖闘士星矢",
-   "星矢",
-   "星矢黄金十二宮",
-   "黄金十二宮",
-   "せいんとせいや"
-  ],
+  "aliases": [],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -100,64 +94,66 @@
    "ceiling_state": "PRESENT",
    "confirmed_topics": [
     "ceiling",
-    "gameplay",
+    "cz",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "cz",
+    "gameplay",
     "strategy",
     "reset"
    ],
    "reason_codes": [],
    "claims": [
-    "at:MAIN_AT",
-    "at:UPPER_AT",
     "at_prob",
     "ceiling:GAME:AT間",
     "ceiling:GAME:CZ間",
+    "cz:オポジットバトル",
+    "cz:ファーストリコリス",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
    "decided_at": "2026-11-11",
-   "input_digest": "sha256:5faf239356cc200cf4bf70747bb0438405823f9a5ae7903eac197ec719180adf"
+   "input_digest": "sha256:9da2a483149e4f9803fd62ae50c57f3a7b799bfed00ee07fc3c08b8aaf52577b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-11-02",
+  "release_date": "2026-09-07",
   "identity": {
-   "manufacturer_id": "sanslay",
-   "official_product_url": "https://p-town.dmm.com/machines/5104",
-   "announced_name": "L聖闘士星矢 黄金十二宮",
-   "identity_tier": "CATALOG_BOUND",
+   "manufacturer_id": "sammy",
+   "official_product_url": "https://p-town.dmm.com/machines/5033",
+   "announced_name": "スマスロ リコリス・リコイル",
+   "identity_tier": "CATALOG_CODE_MATCHED",
    "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5104 型式=L聖闘士星矢黄金十二宮TG メーカー=サンスリー 導入=2026-11-02 確認日=2026-10-20",
-   "market_release_date": "2026-11-02",
-   "observed_model_code": "L聖闘士星矢黄金十二宮TG",
-   "_observed_model_code_sources": [
-    "p-town.dmm.com"
-   ]
+   "identity_evidence_ref": "dmm:5033 型式=L スマスロ リコリス・リコイル KX メーカー=サミー 導入=2026-09-07 確認日=2026-08-16",
+   "market_release_date": "2026-09-07",
+   "_model_code_sources": [
+    "p-town.dmm.com",
+    "p-world.co.jp"
+   ],
+   "_legacy_evidence_ref": "pworld:10503 型式=L スマスロ リコリス・リコイル KX 検定=6S0400 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10503",
+   "regulatory_model_code": "L スマスロ リコリス・リコイル KX"
   },
   "checker": {
-   "coinRate": 31.3,
+   "coinRate": 31.8,
    "unit": "G",
    "modes": [
     {
      "key": "normal",
-     "label": "AT間"
+     "label": "通常"
     }
    ],
    "normal": {
-    "caution": 860,
-    "good": 860,
-    "excellent": 860,
-    "target": 860,
-    "ceiling": 1200
+    "caution": 300,
+    "good": 300,
+    "excellent": 400,
+    "target": 300,
+    "ceiling": 850
    }
   },
-  "targetProjection": "a91974b73f2ffe5c",
-  "series": ""
+  "targetProjection": "a39769cb5ba2151d"
  },
  {
   "slug": "dmm_5073",
@@ -249,17 +245,19 @@
   "series": "ソードアート・オンライン"
  },
  {
-  "slug": "dmm_5079",
-  "name": "スマスロ ラグナドール",
+  "slug": "dmm_5104",
+  "name": "L聖闘士星矢 黄金十二宮",
   "seo": {
-   "title": "スマスロ ラグナドール 天井・スペック"
+   "title": "L聖闘士星矢 黄金十二宮 天井・狙い目"
   },
   "info": "スマスロAT",
   "strategy": "",
   "aliases": [
-   "ラグナドール",
-   "らぐなどーる",
-   "ラグナ"
+   "聖闘士星矢",
+   "星矢",
+   "星矢黄金十二宮",
+   "黄金十二宮",
+   "せいんとせいや"
   ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
@@ -269,213 +267,64 @@
    "ceiling_state": "PRESENT",
    "confirmed_topics": [
     "ceiling",
-    "cz",
     "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
+    "cz",
     "strategy",
     "reset"
    ],
    "reason_codes": [],
    "claims": [
     "at:MAIN_AT",
+    "at:UPPER_AT",
     "at_prob",
     "ceiling:GAME:AT間",
     "ceiling:GAME:CZ間",
-    "cz:ラグナドールバトル",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
    "decided_at": "2026-11-11",
-   "input_digest": "sha256:856e7640453ab4c31055041e22d90e3cbee50b58b346d532d2ba42011ad9be50"
+   "input_digest": "sha256:5faf239356cc200cf4bf70747bb0438405823f9a5ae7903eac197ec719180adf"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
   "identity": {
-   "manufacturer_id": "universal",
-   "official_product_url": "https://p-town.dmm.com/machines/5079",
-   "announced_name": "スマスロ ラグナドール",
+   "manufacturer_id": "sanslay",
+   "official_product_url": "https://p-town.dmm.com/machines/5104",
+   "announced_name": "L聖闘士星矢 黄金十二宮",
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5079 型式=未掲載 メーカー=ミズホ 導入=2026-11 確認日=2026-09-03",
+   "identity_evidence_ref": "dmm:5104 型式=L聖闘士星矢黄金十二宮TG メーカー=サンスリー 導入=2026-11-02 確認日=2026-10-20",
    "market_release_date": "2026-11-02",
-   "observed_model_code": "LラグナドールZI",
+   "observed_model_code": "L聖闘士星矢黄金十二宮TG",
    "_observed_model_code_sources": [
     "p-town.dmm.com"
    ]
   },
   "checker": {
-   "coinRate": 31.0,
+   "coinRate": 31.3,
    "unit": "G",
    "modes": [
     {
      "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {}
-  },
-  "series": ""
- },
- {
-  "slug": "dmm_5120",
-  "name": "スロット Vivy -Fluorite Eye’s Song-",
-  "seo": {
-   "title": "スロット Vivy -Fluorite Eye’s Song- 天井・狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "",
-  "aliases": [
-   "Vivy",
-   "ヴィヴィ",
-   "ゔぃゔぃ",
-   "ビビ"
-  ],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [
-    "ceiling",
-    "cz",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at_prob",
-    "ceiling:GAME:AT間",
-    "cz:アクセスチャンスex",
-    "games_per_50",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-11-11",
-   "input_digest": "sha256:6722ee8e16f18eeb224b308500dc43f7ef7b78f5f9330009c1d5e4448acd428a"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-11-02",
-  "identity": {
-   "manufacturer_id": "daitogiken",
-   "official_product_url": "https://p-town.dmm.com/machines/5120",
-   "announced_name": "スロット Vivy -Fluorite Eye’s Song-",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5120 型式=L/Vivy/A5 メーカー=大都技研 導入=2026-11-02 確認日=2026-10-15",
-   "market_release_date": "2026-11-02",
-   "observed_model_code": "L/Vivy/A5",
-   "_observed_model_code_sources": [
-    "p-town.dmm.com"
-   ]
-  },
-  "checker": {
-   "coinRate": 31.0,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
+     "label": "AT間"
     }
    ],
    "normal": {
-    "ceiling": 800,
-    "caution": 450,
-    "good": 550,
-    "target": 550
+    "caution": 860,
+    "good": 860,
+    "excellent": 860,
+    "target": 860,
+    "ceiling": 1200
    }
   },
-  "targetProjection": "d9017d3adaea3f1b",
+  "targetProjection": "a91974b73f2ffe5c",
   "series": ""
- },
- {
-  "slug": "pw_10503",
-  "name": "スマスロ リコリス・リコイル",
-  "seo": {
-   "title": "スマスロ リコリス・リコイル 天井・狙い目"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [
-    "ceiling",
-    "cz",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at_prob",
-    "ceiling:GAME:AT間",
-    "ceiling:GAME:CZ間",
-    "cz:オポジットバトル",
-    "cz:ファーストリコリス",
-    "games_per_50",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-11-11",
-   "input_digest": "sha256:9da2a483149e4f9803fd62ae50c57f3a7b799bfed00ee07fc3c08b8aaf52577b"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-09-07",
-  "identity": {
-   "manufacturer_id": "sammy",
-   "official_product_url": "https://p-town.dmm.com/machines/5033",
-   "announced_name": "スマスロ リコリス・リコイル",
-   "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5033 型式=L スマスロ リコリス・リコイル KX メーカー=サミー 導入=2026-09-07 確認日=2026-08-16",
-   "market_release_date": "2026-09-07",
-   "_model_code_sources": [
-    "p-town.dmm.com",
-    "p-world.co.jp"
-   ],
-   "_legacy_evidence_ref": "pworld:10503 型式=L スマスロ リコリス・リコイル KX 検定=6S0400 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10503",
-   "regulatory_model_code": "L スマスロ リコリス・リコイル KX"
-  },
-  "checker": {
-   "coinRate": 31.8,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "caution": 300,
-    "good": 300,
-    "excellent": 400,
-    "target": 300,
-    "ceiling": 850
-   }
-  },
-  "targetProjection": "a39769cb5ba2151d"
  },
  {
   "slug": "tokyo_ghoul",
@@ -736,18 +585,18 @@
   }
  },
  {
-  "slug": "dmm_5121",
-  "name": "L牙狼 闇を照らす者",
+  "slug": "dmm_5120",
+  "name": "スロット Vivy -Fluorite Eye’s Song-",
   "seo": {
-   "title": "L牙狼 闇を照らす者 天井・狙い目"
+   "title": "スロット Vivy -Fluorite Eye’s Song- 天井・狙い目"
   },
   "info": "スマスロAT",
   "strategy": "",
   "aliases": [
-   "牙狼",
-   "ガロ",
-   "がろ",
-   "スマスロ牙狼"
+   "Vivy",
+   "ヴィヴィ",
+   "ゔぃゔぃ",
+   "ビビ"
   ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
@@ -768,33 +617,34 @@
    ],
    "reason_codes": [],
    "claims": [
-    "ceiling:GAME:通常時",
-    "cz:牙狼mode",
+    "at_prob",
+    "ceiling:GAME:AT間",
+    "cz:アクセスチャンスex",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
    "decided_at": "2026-11-11",
-   "input_digest": "sha256:dcf2495482b81c81f2abb067d53c97a79a05537ed0fe6e533e4a7d27a9ed5551"
+   "input_digest": "sha256:6722ee8e16f18eeb224b308500dc43f7ef7b78f5f9330009c1d5e4448acd428a"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
   "identity": {
-   "manufacturer_id": "dmm:SANSEI LAB",
-   "official_product_url": "https://p-town.dmm.com/machines/5121",
-   "announced_name": "L牙狼 闇を照らす者",
+   "manufacturer_id": "daitogiken",
+   "official_product_url": "https://p-town.dmm.com/machines/5120",
+   "announced_name": "スロット Vivy -Fluorite Eye’s Song-",
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5121 型式=L牙狼闇を照らす者CJ メーカー=サンセイR&D 導入=2026-11-02 確認日=2026-10-11",
+   "identity_evidence_ref": "dmm:5120 型式=L/Vivy/A5 メーカー=大都技研 導入=2026-11-02 確認日=2026-10-15",
    "market_release_date": "2026-11-02",
-   "observed_model_code": "L牙狼闇を照らす者CJ",
+   "observed_model_code": "L/Vivy/A5",
    "_observed_model_code_sources": [
     "p-town.dmm.com"
    ]
   },
   "checker": {
-   "coinRate": 32.9,
+   "coinRate": 31.0,
    "unit": "G",
    "modes": [
     {
@@ -803,12 +653,86 @@
     }
    ],
    "normal": {
-    "ceiling": 999,
-    "good": 660,
-    "target": 660
+    "ceiling": 800,
+    "caution": 450,
+    "good": 550,
+    "target": 550
    }
   },
-  "targetProjection": "1c082c0cdc071eef",
+  "targetProjection": "d9017d3adaea3f1b",
+  "series": ""
+ },
+ {
+  "slug": "dmm_5079",
+  "name": "スマスロ ラグナドール",
+  "seo": {
+   "title": "スマスロ ラグナドール 天井・スペック"
+  },
+  "info": "スマスロAT",
+  "strategy": "",
+  "aliases": [
+   "ラグナドール",
+   "らぐなどーる",
+   "ラグナ"
+  ],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "ceiling",
+    "cz",
+    "gameplay",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "at_prob",
+    "ceiling:GAME:AT間",
+    "ceiling:GAME:CZ間",
+    "cz:ラグナドールバトル",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-11-11",
+   "input_digest": "sha256:856e7640453ab4c31055041e22d90e3cbee50b58b346d532d2ba42011ad9be50"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-11-02",
+  "identity": {
+   "manufacturer_id": "universal",
+   "official_product_url": "https://p-town.dmm.com/machines/5079",
+   "announced_name": "スマスロ ラグナドール",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5079 型式=未掲載 メーカー=ミズホ 導入=2026-11 確認日=2026-09-03",
+   "market_release_date": "2026-11-02",
+   "observed_model_code": "LラグナドールZI",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  },
+  "checker": {
+   "coinRate": 31.0,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {}
+  },
   "series": ""
  },
  {
@@ -1371,18 +1295,18 @@
   }
  },
  {
-  "slug": "dmm_5113",
-  "name": "L魔法少女にあこがれて",
+  "slug": "dmm_5121",
+  "name": "L牙狼 闇を照らす者",
   "seo": {
-   "title": "L魔法少女にあこがれて 天井・狙い目"
+   "title": "L牙狼 闇を照らす者 天井・狙い目"
   },
   "info": "スマスロAT",
   "strategy": "",
   "aliases": [
-   "まほあこ",
-   "まほうしょうじょにあこがれて",
-   "魔法少女にあこがれて",
-   "スマスロまほあこ"
+   "牙狼",
+   "ガロ",
+   "がろ",
+   "スマスロ牙狼"
   ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
@@ -1393,72 +1317,57 @@
    "confirmed_topics": [
     "ceiling",
     "cz",
-    "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
+    "gameplay",
     "strategy",
     "reset"
    ],
    "reason_codes": [],
    "claims": [
-    "at:MAIN_AT",
-    "at:UPPER_AT",
-    "at_prob",
-    "ceiling:GAME:AT間",
-    "cz:まほあこチャレンジ",
+    "ceiling:GAME:通常時",
+    "cz:牙狼mode",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
    "decided_at": "2026-11-11",
-   "input_digest": "sha256:08769fbb2292f237b9b19f5175ad2c3da8c746995f61d0373ea74c01e347c795"
+   "input_digest": "sha256:dcf2495482b81c81f2abb067d53c97a79a05537ed0fe6e533e4a7d27a9ed5551"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10-19",
+  "release_date": "2026-11-02",
   "identity": {
-   "manufacturer_id": "newgin",
-   "official_product_url": "https://p-town.dmm.com/machines/5113",
-   "announced_name": "L魔法少女にあこがれて",
+   "manufacturer_id": "dmm:SANSEI LAB",
+   "official_product_url": "https://p-town.dmm.com/machines/5121",
+   "announced_name": "L牙狼 闇を照らす者",
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5113 型式=L魔法少女にあこがれてNP メーカー=ニューギン 導入=2026-10 確認日=2026-09-24",
-   "market_release_date": "2026-10-19",
-   "observed_model_code": "L魔法少女にあこがれてNP",
+   "identity_evidence_ref": "dmm:5121 型式=L牙狼闇を照らす者CJ メーカー=サンセイR&D 導入=2026-11-02 確認日=2026-10-11",
+   "market_release_date": "2026-11-02",
+   "observed_model_code": "L牙狼闇を照らす者CJ",
    "_observed_model_code_sources": [
     "p-town.dmm.com"
    ]
   },
   "checker": {
-   "coinRate": 31.4,
+   "coinRate": 32.9,
    "unit": "G",
    "modes": [
     {
      "key": "normal",
      "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "設定変更後"
     }
    ],
    "normal": {
     "ceiling": 999,
-    "caution": 400,
-    "good": 450,
-    "excellent": 600,
-    "target": 450
-   },
-   "reset": {
-    "caution": 200,
-    "good": 250,
-    "excellent": 400,
-    "target": 250
+    "good": 660,
+    "target": 660
    }
   },
-  "targetProjection": "b77bbafa7eaa787d",
+  "targetProjection": "1c082c0cdc071eef",
   "series": ""
  },
  {
@@ -1649,6 +1558,97 @@
     }
    ]
   }
+ },
+ {
+  "slug": "dmm_5113",
+  "name": "L魔法少女にあこがれて",
+  "seo": {
+   "title": "L魔法少女にあこがれて 天井・狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "",
+  "aliases": [
+   "まほあこ",
+   "まほうしょうじょにあこがれて",
+   "魔法少女にあこがれて",
+   "スマスロまほあこ"
+  ],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "ceiling",
+    "cz",
+    "gameplay",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "at:UPPER_AT",
+    "at_prob",
+    "ceiling:GAME:AT間",
+    "cz:まほあこチャレンジ",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-11-11",
+   "input_digest": "sha256:08769fbb2292f237b9b19f5175ad2c3da8c746995f61d0373ea74c01e347c795"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-19",
+  "identity": {
+   "manufacturer_id": "newgin",
+   "official_product_url": "https://p-town.dmm.com/machines/5113",
+   "announced_name": "L魔法少女にあこがれて",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5113 型式=L魔法少女にあこがれてNP メーカー=ニューギン 導入=2026-10 確認日=2026-09-24",
+   "market_release_date": "2026-10-19",
+   "observed_model_code": "L魔法少女にあこがれてNP",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  },
+  "checker": {
+   "coinRate": 31.4,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "設定変更後"
+    }
+   ],
+   "normal": {
+    "ceiling": 999,
+    "caution": 400,
+    "good": 450,
+    "excellent": 600,
+    "target": 450
+   },
+   "reset": {
+    "caution": 200,
+    "good": 250,
+    "excellent": 400,
+    "target": 250
+   }
+  },
+  "targetProjection": "b77bbafa7eaa787d",
+  "series": ""
  },
  {
   "slug": "monkeyv",
@@ -2660,6 +2660,59 @@
   },
   "series": "革命機ヴァルヴレイヴ",
   "release_date": "2025-11-04"
+ },
+ {
+  "slug": "dmm_5090",
+  "name": "スマート沖スロ ハイハイシオサイRe",
+  "seo": {
+   "title": "スマート沖スロ ハイハイシオサイRe スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "gameplay",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "cz",
+    "ceiling",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "bonus_prob",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-11-09",
+   "input_digest": "sha256:d192120114633d640ed9075b89c55b402642e7b5d100360d36cbdaa6bff012d3"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-11-16",
+  "identity": {
+   "manufacturer_id": "pioneer",
+   "official_product_url": "https://p-town.dmm.com/machines/5090",
+   "announced_name": "スマート沖スロ ハイハイシオサイRe",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5090 型式=未掲載 メーカー=パイオニア 導入=2026-11 確認日=2026-08-28",
+   "market_release_date": "2026-11-16",
+   "observed_model_code": "LハイハイシオサイReTC",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  }
  },
  {
   "slug": "dmm_5111",
@@ -4867,6 +4920,128 @@
   }
  },
  {
+  "slug": "goblin",
+  "name": "スマスロ ゴブリンスレイヤーII",
+  "seo": {
+   "title": "スマスロ ゴブリンスレイヤーII 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常690G〜 / リセット230G〜",
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 1500,
+    "good": 680,
+    "caution": 500,
+    "byRate": {
+     "eq56": {
+      "excellent": 1200,
+      "good": 690,
+      "caution": 540,
+      "note": "5.6枚持ちメダルなら690G〜から狙い目に入ります。"
+     },
+     "rate55": {
+      "excellent": 1280,
+      "good": 740,
+      "caution": 580,
+      "note": "6.0枚では740G〜が目安です。"
+     },
+     "rate50": {
+      "excellent": 1350,
+      "good": 800,
+      "caution": 640,
+      "note": "6.5枚では800G〜から見ます。"
+     },
+     "rate45": {
+      "excellent": 1400,
+      "good": 900,
+      "caution": 720,
+      "note": "7.0枚では900G〜が狙い目ラインです。"
+     }
+    },
+    "note": "天井は600G/1000G/1500Gから抽選（高設定ほど短い天井が選ばれやすい）。680G〜が狙い目ライン。"
+   },
+   "reset": {
+    "excellent": 350,
+    "good": 230,
+    "caution": 100,
+    "byRate": {
+     "eq56": {
+      "excellent": 350,
+      "good": 230,
+      "caution": 100,
+      "note": "5.6枚持ちメダルならリセット後230G〜から狙い目に入ります。"
+     },
+     "rate55": {
+      "excellent": 380,
+      "good": 260,
+      "caution": 120,
+      "note": "6.0枚ではリセット後260G〜が目安です。"
+     },
+     "rate50": {
+      "excellent": 420,
+      "good": 300,
+      "caution": 150,
+      "note": "6.5枚ではリセット後300G〜から見ます。"
+     },
+     "rate45": {
+      "excellent": 460,
+      "good": 350,
+      "caution": 180,
+      "note": "7.0枚ではリセット後350G〜が狙い目ラインです。"
+     }
+    },
+    "note": "設定変更後は天井が最大1000Gに短縮（600G/1000Gから抽選）。"
+   }
+  },
+  "limit": 1500,
+  "aliases": [
+   "ゴブリンスレイヤー",
+   "ゴブスレ",
+   "ごぶすれ"
+  ],
+  "original": {
+   "title": "ゴブリンスレイヤー",
+   "kind": "ライトノベル",
+   "search": "ゴブリンスレイヤー 小説"
+  },
+  "strategyByRate": {
+   "eq56": "通常690G〜 / リセット230G〜",
+   "rate55": "通常740G〜 / リセット260G〜",
+   "rate50": "通常800G〜 / リセット300G〜",
+   "rate45": "通常900G〜 / リセット350G〜"
+  }
+ },
+ {
   "slug": "hihou",
   "name": "スマスロ秘宝伝",
   "seo": {
@@ -5554,6 +5729,38 @@
   }
  },
  {
+  "slug": "shake_bt",
+  "name": "SHAKE BONUS TRIGGER",
+  "seo": {
+   "title": "SHAKE BONUS TRIGGER（シェイクBT）スペックまとめ"
+  },
+  "info": "スマスロBT",
+  "strategy": "設定狙い専用（天井なし）",
+  "aliases": [
+   "シェイク",
+   "シェイクBT",
+   "SHAKE",
+   "シェイクボーナストリガー"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い専用の機種です。ボーナス確率・トロフィー・REG中ボイスで設定推測。"
+   }
+  },
+  "release_date": "2025-10-20",
+  "series": ""
+ },
+ {
   "slug": "zenigata5",
   "name": "L主役は銭形5",
   "seo": {
@@ -5606,6 +5813,39 @@
   "release_date": "2025-10-06",
   "tenjo_games": 1250,
   "tenjo_display": "1250G+α（通常A）"
+ },
+ {
+  "slug": "kurea_bt",
+  "name": "LBクレアの秘宝伝 ボーナストリガーver.",
+  "seo": {
+   "title": "LBクレアの秘宝伝 ボーナストリガーver. スペックまとめ"
+  },
+  "info": "スマスロBT",
+  "strategy": "設定狙い専用（天井なし）",
+  "aliases": [
+   "クレア秘宝伝BT",
+   "クレアBT",
+   "クレアの秘宝伝BT",
+   "クレア",
+   "秘宝伝BT"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い専用の機種です。BB終了スタンプ・RB中カード色・トロフィーで設定推測。"
+   }
+  },
+  "release_date": "2025-09-08",
+  "series": ""
  },
  {
   "slug": "azurlane",
@@ -5976,6 +6216,45 @@
    "rate50": "AT間650G〜 / ボーナス間1050G〜 / リセット後240G〜",
    "rate45": "AT間700G〜 / ボーナス間1070G〜 / リセット後280G〜"
   }
+ },
+ {
+  "slug": "eva_yakusoku",
+  "name": "LBパチスロ ヱヴァンゲリヲン ～約束の扉～",
+  "seo": {
+   "title": "LBパチスロ ヱヴァンゲリヲン ～約束の扉～ 狙い目・設定判別"
+  },
+  "info": "スマスロBT",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "エヴァ約束の扉",
+   "エヴァBT",
+   "エヴァンゲリヲン約束の扉",
+   "ヱヴァ",
+   "eva"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "この機種は天井非搭載のボーナストリガー（BT）機です。設定狙い主体の機種です。"
+   }
+  },
+  "limit": null,
+  "original": {
+   "title": "新世紀エヴァンゲリオン",
+   "kind": "アニメ",
+   "search": "新世紀エヴァンゲリオン Blu-ray"
+  },
+  "release_date": "2025-07-07",
+  "series": ""
  },
  {
   "slug": "iza_bancho",
@@ -7201,6 +7480,748 @@
   "limit": 999
  },
  {
+  "slug": "mhrise",
+  "name": "スマスロ モンスターハンターライズ",
+  "seo": {
+   "title": "スマスロ モンスターハンターライズ 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常670G〜",
+  "aliases": [
+   "モンハンライズ",
+   "もんはんらいず",
+   "MHRise",
+   "モンハン",
+   "モンスターハンターライズ",
+   "もんはん",
+   "MHR"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "excellent": 850,
+    "good": 660,
+    "caution": 500,
+    "byRate": {
+     "eq56": {
+      "excellent": 850,
+      "good": 670,
+      "caution": 520,
+      "note": "5.6枚交換なら670Gから狙い目。天井999G+前兆で赤7以上確定。"
+     },
+     "rate55": {
+      "excellent": 850,
+      "good": 690,
+      "caution": 540,
+      "note": "6.0枚交換なら690Gから。"
+     },
+     "rate50": {
+      "excellent": 900,
+      "good": 720,
+      "caution": 560,
+      "note": "6.5枚交換なら720Gから。"
+     },
+     "rate45": {
+      "excellent": 900,
+      "good": 740,
+      "caution": 580,
+      "note": "7.0枚交換なら740Gから。"
+     }
+    },
+    "note": "天井999G+前兆で赤7ボーナス以上確定。"
+   },
+   "suru": {
+    "excellent": 6,
+    "good": 5,
+    "caution": 4,
+    "suruMax": 6,
+    "note": "クエスト6スルー後の7回目で赤7ボーナス以上確定。5スルーから狙い目。",
+    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+   }
+  },
+  "limit": 999,
+  "original": {
+   "title": "モンスターハンターライズ",
+   "kind": "ゲーム",
+   "search": "モンスターハンターライズ"
+  },
+  "strategyByRate": {
+   "eq56": "通常670G〜",
+   "rate55": "通常690G〜",
+   "rate50": "通常720G〜",
+   "rate45": "通常740G〜"
+  },
+  "series": "モンスターハンター"
+ },
+ {
+  "slug": "bandori",
+  "name": "Lバンドリ！",
+  "seo": {
+   "title": "Lバンドリ！ 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価 通常550G〜 / スルー 1スルー450G〜／4スルー80G〜 / リセット後130G〜",
+  "strategyByRate": {
+   "equal": "通常550G〜 / スルー 1スルー450G〜／4スルー80G〜 / リセット後130G〜",
+   "eq56": "通常560G〜 / スルー 1スルー450G〜／4スルー80G〜 / リセット後130G〜",
+   "rate55": "通常570G〜 / スルー 1スルー450G〜／4スルー80G〜 / リセット後130G〜",
+   "rate50": "通常620G〜 / スルー 1スルー450G〜／4スルー80G〜 / リセット後130G〜",
+   "rate45": "通常690G〜 / スルー 1スルー450G〜／4スルー80G〜 / リセット後130G〜"
+  },
+  "aliases": [
+   "バンドリ",
+   "ばんどり",
+   "BanGDream",
+   "バンドリーム",
+   "BANDORI"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "suru",
+     "label": "スルー",
+     "hasSuru": true
+    },
+    {
+     "key": "reset",
+     "label": "リセット後"
+    }
+   ],
+   "hasSuru": true,
+   "suruMax": 4,
+   "defaultRate": "equal",
+   "exchangeRates": [
+    {
+     "label": "等価",
+     "key": "equal"
+    },
+    {
+     "label": "5.6枚",
+     "key": "eq56"
+    },
+    {
+     "label": "6.0枚",
+     "key": "rate55"
+    },
+    {
+     "label": "6.5枚",
+     "key": "rate50"
+    },
+    {
+     "label": "7.0枚",
+     "key": "rate45"
+    }
+   ],
+   "normal": {
+    "excellent": 700,
+    "good": 550,
+    "caution": 400,
+    "note": "AT後・ボーナス後からカウント。1周期＝250スター（平均約62G・ハマリで平均より深くなることがあります）。",
+    "byRate": {
+     "eq56": {
+      "excellent": 700,
+      "good": 560,
+      "caution": 410
+     },
+     "rate55": {
+      "excellent": 720,
+      "good": 570,
+      "caution": 420
+     },
+     "rate50": {
+      "excellent": 790,
+      "good": 620,
+      "caution": 470
+     },
+     "rate45": {
+      "excellent": 880,
+      "good": 690,
+      "caution": 540
+     }
+    }
+   },
+   "suru": {
+    "suru": [
+     {
+      "count": 1,
+      "excellent": 600,
+      "good": 450,
+      "caution": 300
+     },
+     {
+      "count": 2,
+      "excellent": 450,
+      "good": 320,
+      "caution": 200
+     },
+     {
+      "count": 3,
+      "excellent": 300,
+      "good": 200,
+      "caution": 100
+     },
+     {
+      "count": 4,
+      "excellent": 150,
+      "good": 80,
+      "caution": 0
+     }
+    ],
+    "note": "ST単発の連続回数。",
+    "suruMax": 4
+   },
+   "reset": {
+    "excellent": 200,
+    "good": 130,
+    "caution": 60,
+    "note": "設定変更後は天井が7周期に短縮されます。リセット後の狙い目は130G〜です。",
+    "byRate": {
+     "eq56": {
+      "excellent": 200,
+      "good": 130,
+      "caution": 60
+     },
+     "rate55": {
+      "excellent": 200,
+      "good": 130,
+      "caution": 60
+     },
+     "rate50": {
+      "excellent": 200,
+      "good": 130,
+      "caution": 60
+     },
+     "rate45": {
+      "excellent": 200,
+      "good": 130,
+      "caution": 60
+     }
+    }
+   },
+   "baseRateKey": "equal"
+  },
+  "limit": 900,
+  "tenjo_display": "最大10周期",
+  "tenjo_games": null,
+  "original": {
+   "title": "BanG Dream!",
+   "kind": "アニメ",
+   "search": "バンドリ Blu-ray"
+  }
+ },
+ {
+  "slug": "kaguya",
+  "name": "パチスロ かぐや様は告らせたい",
+  "seo": {
+   "title": "パチスロ かぐや様は告らせたい 狙い目"
+  },
+  "info": "スマスロ疑似ボーナス",
+  "strategy": "5.6枚 BIG後600G〜 / REG後400G〜 / スルー天井 0スルー600G〜／6スルー0G〜 / リセット150G〜",
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "BIG後"
+    },
+    {
+     "key": "reg",
+     "label": "REG後"
+    },
+    {
+     "key": "suru",
+     "label": "スルー天井",
+     "hasSuru": true
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 1100,
+    "good": 620,
+    "caution": 520,
+    "note": "BIG後の天井1100G+α。620G〜が狙い目。液晶右下のG数カウンタで確認。",
+    "byRate": {
+     "eq56": {
+      "caution": 450,
+      "excellent": 950,
+      "target": 600,
+      "good": 600,
+      "note": "5.6枚交換ならBIG後600Gから狙い目です。"
+     },
+     "rate55": {
+      "caution": 500,
+      "excellent": 1000,
+      "target": 650,
+      "good": 650,
+      "note": "6.0枚交換ではBIG後650Gが基準です。"
+     },
+     "rate50": {
+      "caution": 560,
+      "excellent": 1100,
+      "target": 720,
+      "good": 720,
+      "note": "6.5枚交換ではBIG後720Gから見てください。"
+     },
+     "rate45": {
+      "caution": 650,
+      "excellent": 1200,
+      "target": 800,
+      "good": 800,
+      "note": "7.0枚交換ではBIG後800Gまで待つ方が安全です。"
+     }
+    }
+   },
+   "reg": {
+    "excellent": 800,
+    "good": 450,
+    "caution": 350,
+    "note": "REG後は天井900G+αに短縮。",
+    "byRate": {
+     "eq56": {
+      "caution": 300,
+      "excellent": 700,
+      "target": 400,
+      "good": 400,
+      "note": "5.6枚交換ならREG後400G前後から候補です。"
+     },
+     "rate55": {
+      "caution": 350,
+      "excellent": 800,
+      "target": 450,
+      "good": 450,
+      "note": "6.0枚交換ではREG後450Gが基準です。"
+     },
+     "rate50": {
+      "caution": 400,
+      "excellent": 900,
+      "target": 520,
+      "good": 520,
+      "note": "6.5枚交換ではREG後520Gからを目安にします。"
+     },
+     "rate45": {
+      "caution": 450,
+      "excellent": 1000,
+      "target": 600,
+      "good": 600,
+      "note": "7.0枚交換ではREG後600G前後まで待つ方が安全です。"
+     }
+    }
+   },
+   "suru": {
+    "suruMax": 7,
+    "suru": [
+     {
+      "count": 0,
+      "excellent": 1000,
+      "good": 620,
+      "caution": 500,
+      "note": "0スルー。BIG後と同じ620G〜が目安です。REG後の浅いラインと混ぜず、BIG後台として見てください。",
+      "byRate": {
+       "eq56": {
+        "caution": 450,
+        "excellent": 950,
+        "target": 600,
+        "good": 600,
+        "note": "5.6枚交換の0スルーはBIG後と同じ600G基準です。"
+       },
+       "rate55": {
+        "caution": 500,
+        "excellent": 1000,
+        "target": 650,
+        "good": 650,
+        "note": "6.0枚交換の0スルーはBIG後650Gが基準です。"
+       },
+       "rate50": {
+        "caution": 560,
+        "excellent": 1100,
+        "target": 720,
+        "good": 720,
+        "note": "6.5枚交換の0スルーは720Gから見てください。"
+       },
+       "rate45": {
+        "caution": 650,
+        "excellent": 1200,
+        "target": 800,
+        "good": 800,
+        "note": "7.0枚交換の0スルーは800Gまで待つ方が安全です。"
+       }
+      }
+     },
+     {
+      "count": 1,
+      "excellent": 900,
+      "good": 600,
+      "caution": 450,
+      "note": "1スルー。",
+      "byRate": {
+       "eq56": {
+        "caution": 400,
+        "excellent": 850,
+        "target": 550,
+        "good": 550,
+        "note": "5.6枚交換の1スルーは550Gから候補です。"
+       },
+       "rate55": {
+        "caution": 450,
+        "excellent": 900,
+        "target": 600,
+        "good": 600,
+        "note": "6.0枚交換の1スルーは600G基準です。"
+       },
+       "rate50": {
+        "caution": 510,
+        "excellent": 1000,
+        "target": 670,
+        "good": 670,
+        "note": "6.5枚交換の1スルーは670G前後からを目安にしてください。"
+       },
+       "rate45": {
+        "caution": 600,
+        "excellent": 1100,
+        "target": 750,
+        "good": 750,
+        "note": "7.0枚交換の1スルーは750G近辺まで待つ方が安全です。"
+       }
+      }
+     },
+     {
+      "count": 2,
+      "excellent": 800,
+      "good": 550,
+      "caution": 400,
+      "note": "2スルー。",
+      "byRate": {
+       "eq56": {
+        "caution": 350,
+        "excellent": 750,
+        "target": 500,
+        "good": 500,
+        "note": "5.6枚交換の2スルーは500Gから見られます。"
+       },
+       "rate55": {
+        "caution": 400,
+        "excellent": 800,
+        "target": 550,
+        "good": 550,
+        "note": "6.0枚交換の2スルーは550Gが基準です。"
+       },
+       "rate50": {
+        "caution": 460,
+        "excellent": 900,
+        "target": 620,
+        "good": 620,
+        "note": "6.5枚交換の2スルーは620G前後からを目安にしてください。"
+       },
+       "rate45": {
+        "caution": 550,
+        "excellent": 1000,
+        "target": 700,
+        "good": 700,
+        "note": "7.0枚交換の2スルーは700G近辺まで待つ方が安全です。"
+       }
+      }
+     },
+     {
+      "count": 3,
+      "excellent": 700,
+      "good": 500,
+      "caution": 350,
+      "note": "3スルー。",
+      "byRate": {
+       "eq56": {
+        "caution": 300,
+        "excellent": 650,
+        "target": 450,
+        "good": 450,
+        "note": "5.6枚交換の3スルーは450Gから候補です。"
+       },
+       "rate55": {
+        "caution": 350,
+        "excellent": 700,
+        "target": 500,
+        "good": 500,
+        "note": "6.0枚交換の3スルーは500G基準です。"
+       },
+       "rate50": {
+        "caution": 410,
+        "excellent": 800,
+        "target": 570,
+        "good": 570,
+        "note": "6.5枚交換の3スルーは570G前後からを目安にしてください。"
+       },
+       "rate45": {
+        "caution": 500,
+        "excellent": 900,
+        "target": 650,
+        "good": 650,
+        "note": "7.0枚交換の3スルーは650G近辺まで待つ方が安全です。"
+       }
+      }
+     },
+     {
+      "count": 4,
+      "excellent": 600,
+      "good": 400,
+      "caution": 250,
+      "note": "4スルー。",
+      "byRate": {
+       "eq56": {
+        "caution": 200,
+        "excellent": 550,
+        "target": 350,
+        "good": 350,
+        "note": "5.6枚交換の4スルーは350Gから見られます。"
+       },
+       "rate55": {
+        "caution": 250,
+        "excellent": 600,
+        "target": 400,
+        "good": 400,
+        "note": "6.0枚交換の4スルーは400G基準です。"
+       },
+       "rate50": {
+        "caution": 310,
+        "excellent": 700,
+        "target": 470,
+        "good": 470,
+        "note": "6.5枚交換の4スルーは470G前後からを目安にしてください。"
+       },
+       "rate45": {
+        "caution": 400,
+        "excellent": 800,
+        "target": 550,
+        "good": 550,
+        "note": "7.0枚交換の4スルーは550G近辺まで待つ方が安全です。"
+       }
+      }
+     },
+     {
+      "count": 5,
+      "excellent": 400,
+      "good": 200,
+      "caution": 100,
+      "note": "5スルー。200G〜で積極的に狙えます。履歴から5回分見えている台を優先するとブレにくいです。",
+      "byRate": {
+       "eq56": {
+        "caution": 50,
+        "excellent": 300,
+        "target": 150,
+        "good": 150,
+        "note": "5.6枚交換の5スルーは150Gから積極的に見られます。"
+       },
+       "rate55": {
+        "caution": 100,
+        "excellent": 400,
+        "target": 200,
+        "good": 200,
+        "note": "6.0枚交換の5スルーは200G基準です。"
+       },
+       "rate50": {
+        "caution": 170,
+        "excellent": 500,
+        "target": 270,
+        "good": 270,
+        "note": "6.5枚交換の5スルーは270G前後からを目安にしてください。"
+       },
+       "rate45": {
+        "caution": 250,
+        "excellent": 600,
+        "target": 350,
+        "good": 350,
+        "note": "7.0枚交換の5スルーは350G近辺からが実戦ラインです。"
+       }
+      }
+     },
+     {
+      "count": 6,
+      "excellent": 200,
+      "good": 50,
+      "caution": 0,
+      "note": "6スルー。かなり浅いG数から狙えます。BIG後かREG後かより、回数が見えていることを優先してください。",
+      "byRate": {
+       "eq56": {
+        "caution": 0,
+        "excellent": 200,
+        "target": 0,
+        "good": 0,
+        "note": "5.6枚交換の6スルーは0Gから候補です。"
+       },
+       "rate55": {
+        "caution": 0,
+        "excellent": 200,
+        "target": 50,
+        "good": 50,
+        "note": "6.0枚交換の6スルーは50G前後から見られます。"
+       },
+       "rate50": {
+        "caution": 40,
+        "excellent": 300,
+        "target": 120,
+        "good": 120,
+        "note": "6.5枚交換の6スルーは120G前後からを目安にしてください。"
+       },
+       "rate45": {
+        "caution": 100,
+        "excellent": 400,
+        "target": 200,
+        "good": 200,
+        "note": "7.0枚交換の6スルーは200G前後からが実戦ラインです。"
+       }
+      }
+     },
+     {
+      "count": 7,
+      "excellent": 50,
+      "good": 0,
+      "caution": 0,
+      "note": "7スルー。次回CZでBIG以上確定です。交換率不問の最優先候補として見て問題ありません。",
+      "byRate": {
+       "eq56": {
+        "caution": 0,
+        "excellent": 50,
+        "target": 0,
+        "good": 0,
+        "note": "7スルーは交換率不問で0Gから着席OKです。"
+       },
+       "rate55": {
+        "caution": 0,
+        "excellent": 50,
+        "target": 0,
+        "good": 0,
+        "note": "7スルーは交換率不問で0Gから着席OKです。"
+       },
+       "rate50": {
+        "caution": 0,
+        "excellent": 50,
+        "target": 0,
+        "good": 0,
+        "note": "7スルーは交換率不問で0Gから着席OKです。"
+       },
+       "rate45": {
+        "caution": 0,
+        "excellent": 50,
+        "target": 0,
+        "good": 0,
+        "note": "7スルーは交換率不問で0Gから着席OKです。"
+       }
+      }
+     }
+    ]
+   },
+   "reset": {
+    "excellent": 500,
+    "good": 200,
+    "caution": 100,
+    "note": "設定変更後は天井800G+αに短縮。リセット判別が難しい点に注意。",
+    "byRate": {
+     "eq56": {
+      "caution": 80,
+      "excellent": 400,
+      "target": 150,
+      "good": 150,
+      "note": "5.6枚交換ならリセット150Gから候補です。"
+     },
+     "rate55": {
+      "caution": 100,
+      "excellent": 500,
+      "target": 200,
+      "good": 200,
+      "note": "6.0枚交換ではリセット200Gが基準です。"
+     },
+     "rate50": {
+      "caution": 140,
+      "excellent": 600,
+      "target": 260,
+      "good": 260,
+      "note": "6.5枚交換はリセット260G前後を目安にしてください。"
+     },
+     "rate45": {
+      "caution": 180,
+      "excellent": 700,
+      "target": 320,
+      "good": 320,
+      "note": "7.0枚交換ではリセット320Gからが実戦ラインです。"
+     }
+    }
+   },
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "limit": 1100,
+   "hasSuru": true,
+   "suruMax": 7
+  },
+  "limit": 1100,
+  "tenjo_display": "BIG後1100G+α／REG後900G+α",
+  "tenjo_games": 1100,
+  "strategyByRate": {
+   "eq56": "BIG後600G〜 / REG後400G〜 / スルー天井 0スルー600G〜／6スルー0G〜 / リセット150G〜",
+   "rate55": "BIG後650G〜 / REG後450G〜 / スルー天井 0スルー650G〜／7スルー0G〜 / リセット200G〜",
+   "rate50": "BIG後720G〜 / REG後520G〜 / スルー天井 0スルー720G〜／7スルー0G〜 / リセット260G〜",
+   "rate45": "BIG後800G〜 / REG後600G〜 / スルー天井 0スルー800G〜／7スルー0G〜 / リセット320G〜"
+  },
+  "aliases": [
+   "かぐや様",
+   "かぐや",
+   "カグヤ",
+   "告らせたい"
+  ],
+  "original": {
+   "title": "かぐや様は告らせたい",
+   "kind": "漫画",
+   "search": "かぐや様は告らせたい 漫画"
+  }
+ },
+ {
   "slug": "onepunchman",
   "name": "Lワンパンマン",
   "seo": {
@@ -7404,6 +8425,130 @@
    "title": "ゾンビランドサガ",
    "kind": "アニメ",
    "search": "ゾンビランドサガ Blu-ray"
+  }
+ },
+ {
+  "slug": "godeater",
+  "name": "スマスロ ゴッドイーター リザレクション",
+  "seo": {
+   "title": "スマスロ ゴッドイーター リザレクション 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常550G〜 / リセット150G〜",
+  "strategyByRate": {
+   "eq56": "通常550G〜 / リセット150G〜",
+   "rate55": "通常590G〜 / リセット180G〜",
+   "rate50": "通常650G〜 / リセット220G〜",
+   "rate45": "通常700G〜 / リセット250G〜"
+  },
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 1000,
+    "good": 520,
+    "caution": 450,
+    "byRate": {
+     "eq56": {
+      "excellent": 1000,
+      "good": 550,
+      "caution": 400,
+      "note": "5.6枚交換なら通常550Gから狙い目、400Gから候補です。"
+     },
+     "rate55": {
+      "excellent": 1000,
+      "good": 590,
+      "caution": 450,
+      "note": "6.0枚交換は通常590G基準です。"
+     },
+     "rate50": {
+      "excellent": 1000,
+      "good": 650,
+      "caution": 500,
+      "note": "6.5枚交換は通常650Gからが本線です。浅い通常台に広げず、液晶G数と履歴を見て深い台を優先した方が収まりやすいです。"
+     },
+     "rate45": {
+      "excellent": 1000,
+      "good": 700,
+      "caution": 550,
+      "note": "7.0枚交換は通常700G基準です。リセットの浅い台とは切り分けて、深い通常台だけに絞る方が安全です。"
+     }
+    },
+    "note": "天井1000G+α。液晶右下のG数で確認。"
+   },
+   "reset": {
+    "excellent": 300,
+    "good": 180,
+    "caution": 100,
+    "byRate": {
+     "eq56": {
+      "excellent": 260,
+      "good": 150,
+      "caution": 80,
+      "note": "5.6枚交換のリセット台は150Gから候補です。朝一の根拠が弱い台は180G近辺まで待つとズレにくいです。"
+     },
+     "rate55": {
+      "excellent": 300,
+      "good": 180,
+      "caution": 100,
+      "note": "6.0枚交換はリセット180G基準です。通常のラインとは別で管理してください。"
+     },
+     "rate50": {
+      "excellent": 340,
+      "good": 220,
+      "caution": 130,
+      "note": "6.5枚交換ではリセット220Gからが本線です。朝一の根拠が弱い日は通常基準に寄せる方が安全です。"
+     },
+     "rate45": {
+      "excellent": 380,
+      "good": 250,
+      "caution": 150,
+      "note": "7.0枚交換のリセット台は250G基準です。浅い朝一台に広げず、店の強い日や根拠のある台に絞ってください。"
+     }
+    },
+    "note": "設定変更後は天井600G+αに短縮。"
+   },
+   "limit": 1000
+  },
+  "limit": 1000,
+  "aliases": [
+   "ゴッドイーター",
+   "ゴドイタ",
+   "GE",
+   "ゴッイー"
+  ],
+  "original": {
+   "title": "GOD EATER",
+   "kind": "ゲーム",
+   "search": "ゴッドイーター ゲーム"
   }
  },
  {
@@ -8562,6 +9707,139 @@
   }
  },
  {
+  "slug": "tensura",
+  "name": "スマスロ転生したらスライムだった件",
+  "seo": {
+   "title": "スマスロ転生したらスライムだった件 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常400G〜 / リセット0G〜",
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 600,
+    "good": 450,
+    "caution": 300,
+    "note": "天井はAT間で転スラポイント1200pt到達、または1000G消化のいずれか早い方です。転生モードの継続状況も確認項目です。",
+    "byRate": {
+     "eq56": {
+      "caution": 250,
+      "excellent": 550,
+      "target": 400,
+      "good": 400,
+      "note": "5.6枚交換の通常時の狙い目は400G〜です。リセット後とは基準が異なります。"
+     },
+     "rate55": {
+      "caution": 300,
+      "excellent": 600,
+      "target": 450,
+      "good": 450,
+      "note": "6.0枚交換の通常時の狙い目は450G〜です。リセット後とは基準が異なります。"
+     },
+     "rate50": {
+      "caution": 380,
+      "excellent": 680,
+      "target": 520,
+      "good": 520,
+      "note": "6.5枚交換の通常時の狙い目は520G〜です。リセット後とは基準が異なります。"
+     },
+     "rate45": {
+      "caution": 450,
+      "excellent": 760,
+      "target": 600,
+      "good": 600,
+      "note": "7.0枚交換の通常時の狙い目は600G〜です。リセット後とは基準が異なります。"
+     }
+    }
+   },
+   "reset": {
+    "excellent": 200,
+    "good": 0,
+    "caution": 0,
+    "note": "朝一リセット時は、転生状態が引き継がれる可能性があります。",
+    "byRate": {
+     "eq56": {
+      "caution": 0,
+      "excellent": 120,
+      "target": 0,
+      "good": 0,
+      "note": "5.6枚交換のリセット後の狙い目は0G〜です。"
+     },
+     "rate55": {
+      "caution": 0,
+      "excellent": 200,
+      "target": 0,
+      "good": 0,
+      "note": "6.0枚交換のリセット後の狙い目は0G〜です。"
+     },
+     "rate50": {
+      "caution": 0,
+      "excellent": 260,
+      "target": 50,
+      "good": 50,
+      "note": "6.5枚交換のリセット後の狙い目は50G〜です。"
+     },
+     "rate45": {
+      "caution": 30,
+      "excellent": 320,
+      "target": 100,
+      "good": 100,
+      "note": "7.0枚交換のリセット後の狙い目は100G〜です。"
+     }
+    }
+   },
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ]
+  },
+  "limit": 1200,
+  "tenjo_display": "1200pt到達または1000G消化の早い方",
+  "tenjo_games": 1000,
+  "strategyByRate": {
+   "eq56": "通常400G〜 / リセット0G〜",
+   "rate55": "通常450G〜 / リセット0G〜",
+   "rate50": "通常520G〜 / リセット50G〜",
+   "rate45": "通常600G〜 / リセット100G〜"
+  },
+  "aliases": [
+   "転スラ",
+   "てんすら",
+   "テンスラ",
+   "スライム"
+  ],
+  "original": {
+   "title": "転生したらスライムだった件",
+   "kind": "ライトノベル",
+   "search": "転生したらスライムだった件 小説"
+  }
+ },
+ {
   "slug": "sengoku_otome4",
   "name": "L戦国乙女4 戦乱に閃く炯眼の軍師",
   "seo": {
@@ -9011,6 +10289,143 @@
    "title": "ソードアート・オンライン",
    "kind": "ライトノベル",
    "search": "ソードアートオンライン 小説"
+  }
+ },
+ {
+  "slug": "hokuto",
+  "name": "スマスロ北斗の拳",
+  "seo": {
+   "title": "スマスロ北斗の拳 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常570G〜 / リセット100G〜",
+  "strategyByRate": {
+   "eq56": "通常570G〜 / リセット100G〜",
+   "rate55": "通常600G〜 / リセット150G〜",
+   "rate50": "通常650G〜 / リセット200G〜",
+   "rate45": "通常720G〜 / リセット250G〜"
+  },
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "normal": {
+    "excellent": 700,
+    "good": 570,
+    "caution": 450,
+    "target": 570,
+    "byRate": {
+     "eq56": {
+      "excellent": 680,
+      "good": 570,
+      "caution": 450,
+      "target": 570,
+      "note": "5.6枚なら570G〜。深い通常台優先。"
+     },
+     "rate55": {
+      "excellent": 710,
+      "good": 600,
+      "caution": 480,
+      "target": 600,
+      "note": "6.0枚交換は600G基準で見る形です。通常は深め優先で、浅い台は前兆や即やめ状況が弱いときだけ候補に残してください。"
+     },
+     "rate50": {
+      "excellent": 780,
+      "good": 650,
+      "caution": 530,
+      "target": 650,
+      "note": "6.5枚交換は650Gからが本線です。持ちメダルがない場面ではさらに慎重に見て、深い通常台を優先した方が使いやすいです。"
+     },
+     "rate45": {
+      "excellent": 850,
+      "good": 720,
+      "caution": 590,
+      "target": 720,
+      "note": "7.0枚交換は720Gからを基本線にしてください。浅い台に広げず、やめどきが明確な深い通常台だけに絞るのが安全です。"
+     }
+    },
+    "note": "通常時は深めの天井なので、600G台後半から優先度アップで見る形です。"
+   },
+   "reset": {
+    "excellent": 170,
+    "good": 100,
+    "caution": 90,
+    "target": 100,
+    "byRate": {
+     "eq56": {
+      "excellent": 170,
+      "good": 100,
+      "caution": 90,
+      "target": 100,
+      "note": "5.6枚交換のリセット台は100Gから候補です。リセット根拠が弱いときは150G前後まで様子を見る方が安全です。"
+     },
+     "rate55": {
+      "excellent": 220,
+      "good": 150,
+      "caution": 120,
+      "target": 150,
+      "note": "6.0枚交換のリセット台は150G基準です。朝一の挙動と店の傾向が弱いなら、少し深めに寄せてください。"
+     },
+     "rate50": {
+      "excellent": 270,
+      "good": 200,
+      "caution": 170,
+      "target": 200,
+      "note": "6.5枚交換では200Gからが本線です。リセット確信がない台は通常と混ぜて見ず、朝一台として別管理した方がぶれません。"
+     },
+     "rate45": {
+      "excellent": 320,
+      "good": 250,
+      "caution": 220,
+      "target": 250,
+      "note": "7.0枚交換のリセット台は250G基準です。根拠が弱い朝一台に広げず、店の強い日だけ触るくらいが安全です。"
+     }
+    },
+    "note": "リセット時は800G+α天井短縮を反映し、通常より浅め基準で判定します。"
+   },
+   "ok": "狙い目OK",
+   "ng": "まだ早い",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ]
+  },
+  "aliases": [
+   "北斗",
+   "ほくと",
+   "hokuto",
+   "スマスロ北斗",
+   "スマスロ北斗の拳",
+   "北斗の拳"
+  ],
+  "limit": 1268,
+  "original": {
+   "title": "北斗の拳",
+   "kind": "漫画",
+   "search": "北斗の拳 漫画"
   }
  },
  {
@@ -9590,105 +11005,6 @@
    "kind": "ゲーム",
    "search": "マギアレコード"
   }
- },
- {
-  "slug": "mhrise",
-  "name": "スマスロ モンスターハンターライズ",
-  "seo": {
-   "title": "スマスロ モンスターハンターライズ 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常670G〜",
-  "aliases": [
-   "モンハンライズ",
-   "もんはんらいず",
-   "MHRise",
-   "モンハン",
-   "モンスターハンターライズ",
-   "もんはん",
-   "MHR"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "excellent": 850,
-    "good": 660,
-    "caution": 500,
-    "byRate": {
-     "eq56": {
-      "excellent": 850,
-      "good": 670,
-      "caution": 520,
-      "note": "5.6枚交換なら670Gから狙い目。天井999G+前兆で赤7以上確定。"
-     },
-     "rate55": {
-      "excellent": 850,
-      "good": 690,
-      "caution": 540,
-      "note": "6.0枚交換なら690Gから。"
-     },
-     "rate50": {
-      "excellent": 900,
-      "good": 720,
-      "caution": 560,
-      "note": "6.5枚交換なら720Gから。"
-     },
-     "rate45": {
-      "excellent": 900,
-      "good": 740,
-      "caution": 580,
-      "note": "7.0枚交換なら740Gから。"
-     }
-    },
-    "note": "天井999G+前兆で赤7ボーナス以上確定。"
-   },
-   "suru": {
-    "excellent": 6,
-    "good": 5,
-    "caution": 4,
-    "suruMax": 6,
-    "note": "クエスト6スルー後の7回目で赤7ボーナス以上確定。5スルーから狙い目。",
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   }
-  },
-  "limit": 999,
-  "original": {
-   "title": "モンスターハンターライズ",
-   "kind": "ゲーム",
-   "search": "モンスターハンターライズ"
-  },
-  "strategyByRate": {
-   "eq56": "通常670G〜",
-   "rate55": "通常690G〜",
-   "rate50": "通常720G〜",
-   "rate45": "通常740G〜"
-  },
-  "series": "モンスターハンター"
  },
  {
   "slug": "hokuto_tensei2",
@@ -10364,488 +11680,6 @@
   }
  },
  {
-  "slug": "kaguya",
-  "name": "パチスロ かぐや様は告らせたい",
-  "seo": {
-   "title": "パチスロ かぐや様は告らせたい 狙い目"
-  },
-  "info": "スマスロ疑似ボーナス",
-  "strategy": "5.6枚 BIG後600G〜 / REG後400G〜 / スルー天井 0スルー600G〜／6スルー0G〜 / リセット150G〜",
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "BIG後"
-    },
-    {
-     "key": "reg",
-     "label": "REG後"
-    },
-    {
-     "key": "suru",
-     "label": "スルー天井",
-     "hasSuru": true
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 1100,
-    "good": 620,
-    "caution": 520,
-    "note": "BIG後の天井1100G+α。620G〜が狙い目。液晶右下のG数カウンタで確認。",
-    "byRate": {
-     "eq56": {
-      "caution": 450,
-      "excellent": 950,
-      "target": 600,
-      "good": 600,
-      "note": "5.6枚交換ならBIG後600Gから狙い目です。"
-     },
-     "rate55": {
-      "caution": 500,
-      "excellent": 1000,
-      "target": 650,
-      "good": 650,
-      "note": "6.0枚交換ではBIG後650Gが基準です。"
-     },
-     "rate50": {
-      "caution": 560,
-      "excellent": 1100,
-      "target": 720,
-      "good": 720,
-      "note": "6.5枚交換ではBIG後720Gから見てください。"
-     },
-     "rate45": {
-      "caution": 650,
-      "excellent": 1200,
-      "target": 800,
-      "good": 800,
-      "note": "7.0枚交換ではBIG後800Gまで待つ方が安全です。"
-     }
-    }
-   },
-   "reg": {
-    "excellent": 800,
-    "good": 450,
-    "caution": 350,
-    "note": "REG後は天井900G+αに短縮。",
-    "byRate": {
-     "eq56": {
-      "caution": 300,
-      "excellent": 700,
-      "target": 400,
-      "good": 400,
-      "note": "5.6枚交換ならREG後400G前後から候補です。"
-     },
-     "rate55": {
-      "caution": 350,
-      "excellent": 800,
-      "target": 450,
-      "good": 450,
-      "note": "6.0枚交換ではREG後450Gが基準です。"
-     },
-     "rate50": {
-      "caution": 400,
-      "excellent": 900,
-      "target": 520,
-      "good": 520,
-      "note": "6.5枚交換ではREG後520Gからを目安にします。"
-     },
-     "rate45": {
-      "caution": 450,
-      "excellent": 1000,
-      "target": 600,
-      "good": 600,
-      "note": "7.0枚交換ではREG後600G前後まで待つ方が安全です。"
-     }
-    }
-   },
-   "suru": {
-    "suruMax": 7,
-    "suru": [
-     {
-      "count": 0,
-      "excellent": 1000,
-      "good": 620,
-      "caution": 500,
-      "note": "0スルー。BIG後と同じ620G〜が目安です。REG後の浅いラインと混ぜず、BIG後台として見てください。",
-      "byRate": {
-       "eq56": {
-        "caution": 450,
-        "excellent": 950,
-        "target": 600,
-        "good": 600,
-        "note": "5.6枚交換の0スルーはBIG後と同じ600G基準です。"
-       },
-       "rate55": {
-        "caution": 500,
-        "excellent": 1000,
-        "target": 650,
-        "good": 650,
-        "note": "6.0枚交換の0スルーはBIG後650Gが基準です。"
-       },
-       "rate50": {
-        "caution": 560,
-        "excellent": 1100,
-        "target": 720,
-        "good": 720,
-        "note": "6.5枚交換の0スルーは720Gから見てください。"
-       },
-       "rate45": {
-        "caution": 650,
-        "excellent": 1200,
-        "target": 800,
-        "good": 800,
-        "note": "7.0枚交換の0スルーは800Gまで待つ方が安全です。"
-       }
-      }
-     },
-     {
-      "count": 1,
-      "excellent": 900,
-      "good": 600,
-      "caution": 450,
-      "note": "1スルー。",
-      "byRate": {
-       "eq56": {
-        "caution": 400,
-        "excellent": 850,
-        "target": 550,
-        "good": 550,
-        "note": "5.6枚交換の1スルーは550Gから候補です。"
-       },
-       "rate55": {
-        "caution": 450,
-        "excellent": 900,
-        "target": 600,
-        "good": 600,
-        "note": "6.0枚交換の1スルーは600G基準です。"
-       },
-       "rate50": {
-        "caution": 510,
-        "excellent": 1000,
-        "target": 670,
-        "good": 670,
-        "note": "6.5枚交換の1スルーは670G前後からを目安にしてください。"
-       },
-       "rate45": {
-        "caution": 600,
-        "excellent": 1100,
-        "target": 750,
-        "good": 750,
-        "note": "7.0枚交換の1スルーは750G近辺まで待つ方が安全です。"
-       }
-      }
-     },
-     {
-      "count": 2,
-      "excellent": 800,
-      "good": 550,
-      "caution": 400,
-      "note": "2スルー。",
-      "byRate": {
-       "eq56": {
-        "caution": 350,
-        "excellent": 750,
-        "target": 500,
-        "good": 500,
-        "note": "5.6枚交換の2スルーは500Gから見られます。"
-       },
-       "rate55": {
-        "caution": 400,
-        "excellent": 800,
-        "target": 550,
-        "good": 550,
-        "note": "6.0枚交換の2スルーは550Gが基準です。"
-       },
-       "rate50": {
-        "caution": 460,
-        "excellent": 900,
-        "target": 620,
-        "good": 620,
-        "note": "6.5枚交換の2スルーは620G前後からを目安にしてください。"
-       },
-       "rate45": {
-        "caution": 550,
-        "excellent": 1000,
-        "target": 700,
-        "good": 700,
-        "note": "7.0枚交換の2スルーは700G近辺まで待つ方が安全です。"
-       }
-      }
-     },
-     {
-      "count": 3,
-      "excellent": 700,
-      "good": 500,
-      "caution": 350,
-      "note": "3スルー。",
-      "byRate": {
-       "eq56": {
-        "caution": 300,
-        "excellent": 650,
-        "target": 450,
-        "good": 450,
-        "note": "5.6枚交換の3スルーは450Gから候補です。"
-       },
-       "rate55": {
-        "caution": 350,
-        "excellent": 700,
-        "target": 500,
-        "good": 500,
-        "note": "6.0枚交換の3スルーは500G基準です。"
-       },
-       "rate50": {
-        "caution": 410,
-        "excellent": 800,
-        "target": 570,
-        "good": 570,
-        "note": "6.5枚交換の3スルーは570G前後からを目安にしてください。"
-       },
-       "rate45": {
-        "caution": 500,
-        "excellent": 900,
-        "target": 650,
-        "good": 650,
-        "note": "7.0枚交換の3スルーは650G近辺まで待つ方が安全です。"
-       }
-      }
-     },
-     {
-      "count": 4,
-      "excellent": 600,
-      "good": 400,
-      "caution": 250,
-      "note": "4スルー。",
-      "byRate": {
-       "eq56": {
-        "caution": 200,
-        "excellent": 550,
-        "target": 350,
-        "good": 350,
-        "note": "5.6枚交換の4スルーは350Gから見られます。"
-       },
-       "rate55": {
-        "caution": 250,
-        "excellent": 600,
-        "target": 400,
-        "good": 400,
-        "note": "6.0枚交換の4スルーは400G基準です。"
-       },
-       "rate50": {
-        "caution": 310,
-        "excellent": 700,
-        "target": 470,
-        "good": 470,
-        "note": "6.5枚交換の4スルーは470G前後からを目安にしてください。"
-       },
-       "rate45": {
-        "caution": 400,
-        "excellent": 800,
-        "target": 550,
-        "good": 550,
-        "note": "7.0枚交換の4スルーは550G近辺まで待つ方が安全です。"
-       }
-      }
-     },
-     {
-      "count": 5,
-      "excellent": 400,
-      "good": 200,
-      "caution": 100,
-      "note": "5スルー。200G〜で積極的に狙えます。履歴から5回分見えている台を優先するとブレにくいです。",
-      "byRate": {
-       "eq56": {
-        "caution": 50,
-        "excellent": 300,
-        "target": 150,
-        "good": 150,
-        "note": "5.6枚交換の5スルーは150Gから積極的に見られます。"
-       },
-       "rate55": {
-        "caution": 100,
-        "excellent": 400,
-        "target": 200,
-        "good": 200,
-        "note": "6.0枚交換の5スルーは200G基準です。"
-       },
-       "rate50": {
-        "caution": 170,
-        "excellent": 500,
-        "target": 270,
-        "good": 270,
-        "note": "6.5枚交換の5スルーは270G前後からを目安にしてください。"
-       },
-       "rate45": {
-        "caution": 250,
-        "excellent": 600,
-        "target": 350,
-        "good": 350,
-        "note": "7.0枚交換の5スルーは350G近辺からが実戦ラインです。"
-       }
-      }
-     },
-     {
-      "count": 6,
-      "excellent": 200,
-      "good": 50,
-      "caution": 0,
-      "note": "6スルー。かなり浅いG数から狙えます。BIG後かREG後かより、回数が見えていることを優先してください。",
-      "byRate": {
-       "eq56": {
-        "caution": 0,
-        "excellent": 200,
-        "target": 0,
-        "good": 0,
-        "note": "5.6枚交換の6スルーは0Gから候補です。"
-       },
-       "rate55": {
-        "caution": 0,
-        "excellent": 200,
-        "target": 50,
-        "good": 50,
-        "note": "6.0枚交換の6スルーは50G前後から見られます。"
-       },
-       "rate50": {
-        "caution": 40,
-        "excellent": 300,
-        "target": 120,
-        "good": 120,
-        "note": "6.5枚交換の6スルーは120G前後からを目安にしてください。"
-       },
-       "rate45": {
-        "caution": 100,
-        "excellent": 400,
-        "target": 200,
-        "good": 200,
-        "note": "7.0枚交換の6スルーは200G前後からが実戦ラインです。"
-       }
-      }
-     },
-     {
-      "count": 7,
-      "excellent": 50,
-      "good": 0,
-      "caution": 0,
-      "note": "7スルー。次回CZでBIG以上確定です。交換率不問の最優先候補として見て問題ありません。",
-      "byRate": {
-       "eq56": {
-        "caution": 0,
-        "excellent": 50,
-        "target": 0,
-        "good": 0,
-        "note": "7スルーは交換率不問で0Gから着席OKです。"
-       },
-       "rate55": {
-        "caution": 0,
-        "excellent": 50,
-        "target": 0,
-        "good": 0,
-        "note": "7スルーは交換率不問で0Gから着席OKです。"
-       },
-       "rate50": {
-        "caution": 0,
-        "excellent": 50,
-        "target": 0,
-        "good": 0,
-        "note": "7スルーは交換率不問で0Gから着席OKです。"
-       },
-       "rate45": {
-        "caution": 0,
-        "excellent": 50,
-        "target": 0,
-        "good": 0,
-        "note": "7スルーは交換率不問で0Gから着席OKです。"
-       }
-      }
-     }
-    ]
-   },
-   "reset": {
-    "excellent": 500,
-    "good": 200,
-    "caution": 100,
-    "note": "設定変更後は天井800G+αに短縮。リセット判別が難しい点に注意。",
-    "byRate": {
-     "eq56": {
-      "caution": 80,
-      "excellent": 400,
-      "target": 150,
-      "good": 150,
-      "note": "5.6枚交換ならリセット150Gから候補です。"
-     },
-     "rate55": {
-      "caution": 100,
-      "excellent": 500,
-      "target": 200,
-      "good": 200,
-      "note": "6.0枚交換ではリセット200Gが基準です。"
-     },
-     "rate50": {
-      "caution": 140,
-      "excellent": 600,
-      "target": 260,
-      "good": 260,
-      "note": "6.5枚交換はリセット260G前後を目安にしてください。"
-     },
-     "rate45": {
-      "caution": 180,
-      "excellent": 700,
-      "target": 320,
-      "good": 320,
-      "note": "7.0枚交換ではリセット320Gからが実戦ラインです。"
-     }
-    }
-   },
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "limit": 1100,
-   "hasSuru": true,
-   "suruMax": 7
-  },
-  "limit": 1100,
-  "tenjo_display": "BIG後1100G+α／REG後900G+α",
-  "tenjo_games": 1100,
-  "strategyByRate": {
-   "eq56": "BIG後600G〜 / REG後400G〜 / スルー天井 0スルー600G〜／6スルー0G〜 / リセット150G〜",
-   "rate55": "BIG後650G〜 / REG後450G〜 / スルー天井 0スルー650G〜／7スルー0G〜 / リセット200G〜",
-   "rate50": "BIG後720G〜 / REG後520G〜 / スルー天井 0スルー720G〜／7スルー0G〜 / リセット260G〜",
-   "rate45": "BIG後800G〜 / REG後600G〜 / スルー天井 0スルー800G〜／7スルー0G〜 / リセット320G〜"
-  },
-  "aliases": [
-   "かぐや様",
-   "かぐや",
-   "カグヤ",
-   "告らせたい"
-  ],
-  "original": {
-   "title": "かぐや様は告らせたい",
-   "kind": "漫画",
-   "search": "かぐや様は告らせたい 漫画"
-  }
- },
- {
   "slug": "bakemonogatari",
   "name": "Lスマスロ化物語KH",
   "seo": {
@@ -11122,130 +11956,6 @@
    "title": "東京卍リベンジャーズ",
    "kind": "漫画",
    "search": "東京リベンジャーズ 漫画"
-  }
- },
- {
-  "slug": "godeater",
-  "name": "スマスロ ゴッドイーター リザレクション",
-  "seo": {
-   "title": "スマスロ ゴッドイーター リザレクション 狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常550G〜 / リセット150G〜",
-  "strategyByRate": {
-   "eq56": "通常550G〜 / リセット150G〜",
-   "rate55": "通常590G〜 / リセット180G〜",
-   "rate50": "通常650G〜 / リセット220G〜",
-   "rate45": "通常700G〜 / リセット250G〜"
-  },
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 1000,
-    "good": 520,
-    "caution": 450,
-    "byRate": {
-     "eq56": {
-      "excellent": 1000,
-      "good": 550,
-      "caution": 400,
-      "note": "5.6枚交換なら通常550Gから狙い目、400Gから候補です。"
-     },
-     "rate55": {
-      "excellent": 1000,
-      "good": 590,
-      "caution": 450,
-      "note": "6.0枚交換は通常590G基準です。"
-     },
-     "rate50": {
-      "excellent": 1000,
-      "good": 650,
-      "caution": 500,
-      "note": "6.5枚交換は通常650Gからが本線です。浅い通常台に広げず、液晶G数と履歴を見て深い台を優先した方が収まりやすいです。"
-     },
-     "rate45": {
-      "excellent": 1000,
-      "good": 700,
-      "caution": 550,
-      "note": "7.0枚交換は通常700G基準です。リセットの浅い台とは切り分けて、深い通常台だけに絞る方が安全です。"
-     }
-    },
-    "note": "天井1000G+α。液晶右下のG数で確認。"
-   },
-   "reset": {
-    "excellent": 300,
-    "good": 180,
-    "caution": 100,
-    "byRate": {
-     "eq56": {
-      "excellent": 260,
-      "good": 150,
-      "caution": 80,
-      "note": "5.6枚交換のリセット台は150Gから候補です。朝一の根拠が弱い台は180G近辺まで待つとズレにくいです。"
-     },
-     "rate55": {
-      "excellent": 300,
-      "good": 180,
-      "caution": 100,
-      "note": "6.0枚交換はリセット180G基準です。通常のラインとは別で管理してください。"
-     },
-     "rate50": {
-      "excellent": 340,
-      "good": 220,
-      "caution": 130,
-      "note": "6.5枚交換ではリセット220Gからが本線です。朝一の根拠が弱い日は通常基準に寄せる方が安全です。"
-     },
-     "rate45": {
-      "excellent": 380,
-      "good": 250,
-      "caution": 150,
-      "note": "7.0枚交換のリセット台は250G基準です。浅い朝一台に広げず、店の強い日や根拠のある台に絞ってください。"
-     }
-    },
-    "note": "設定変更後は天井600G+αに短縮。"
-   },
-   "limit": 1000
-  },
-  "limit": 1000,
-  "aliases": [
-   "ゴッドイーター",
-   "ゴドイタ",
-   "GE",
-   "ゴッイー"
-  ],
-  "original": {
-   "title": "GOD EATER",
-   "kind": "ゲーム",
-   "search": "ゴッドイーター ゲーム"
   }
  },
  {
@@ -11556,265 +12266,6 @@
   }
  },
  {
-  "slug": "hokuto",
-  "name": "スマスロ北斗の拳",
-  "seo": {
-   "title": "スマスロ北斗の拳 狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常570G〜 / リセット100G〜",
-  "strategyByRate": {
-   "eq56": "通常570G〜 / リセット100G〜",
-   "rate55": "通常600G〜 / リセット150G〜",
-   "rate50": "通常650G〜 / リセット200G〜",
-   "rate45": "通常720G〜 / リセット250G〜"
-  },
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "normal": {
-    "excellent": 700,
-    "good": 570,
-    "caution": 450,
-    "target": 570,
-    "byRate": {
-     "eq56": {
-      "excellent": 680,
-      "good": 570,
-      "caution": 450,
-      "target": 570,
-      "note": "5.6枚なら570G〜。深い通常台優先。"
-     },
-     "rate55": {
-      "excellent": 710,
-      "good": 600,
-      "caution": 480,
-      "target": 600,
-      "note": "6.0枚交換は600G基準で見る形です。通常は深め優先で、浅い台は前兆や即やめ状況が弱いときだけ候補に残してください。"
-     },
-     "rate50": {
-      "excellent": 780,
-      "good": 650,
-      "caution": 530,
-      "target": 650,
-      "note": "6.5枚交換は650Gからが本線です。持ちメダルがない場面ではさらに慎重に見て、深い通常台を優先した方が使いやすいです。"
-     },
-     "rate45": {
-      "excellent": 850,
-      "good": 720,
-      "caution": 590,
-      "target": 720,
-      "note": "7.0枚交換は720Gからを基本線にしてください。浅い台に広げず、やめどきが明確な深い通常台だけに絞るのが安全です。"
-     }
-    },
-    "note": "通常時は深めの天井なので、600G台後半から優先度アップで見る形です。"
-   },
-   "reset": {
-    "excellent": 170,
-    "good": 100,
-    "caution": 90,
-    "target": 100,
-    "byRate": {
-     "eq56": {
-      "excellent": 170,
-      "good": 100,
-      "caution": 90,
-      "target": 100,
-      "note": "5.6枚交換のリセット台は100Gから候補です。リセット根拠が弱いときは150G前後まで様子を見る方が安全です。"
-     },
-     "rate55": {
-      "excellent": 220,
-      "good": 150,
-      "caution": 120,
-      "target": 150,
-      "note": "6.0枚交換のリセット台は150G基準です。朝一の挙動と店の傾向が弱いなら、少し深めに寄せてください。"
-     },
-     "rate50": {
-      "excellent": 270,
-      "good": 200,
-      "caution": 170,
-      "target": 200,
-      "note": "6.5枚交換では200Gからが本線です。リセット確信がない台は通常と混ぜて見ず、朝一台として別管理した方がぶれません。"
-     },
-     "rate45": {
-      "excellent": 320,
-      "good": 250,
-      "caution": 220,
-      "target": 250,
-      "note": "7.0枚交換のリセット台は250G基準です。根拠が弱い朝一台に広げず、店の強い日だけ触るくらいが安全です。"
-     }
-    },
-    "note": "リセット時は800G+α天井短縮を反映し、通常より浅め基準で判定します。"
-   },
-   "ok": "狙い目OK",
-   "ng": "まだ早い",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ]
-  },
-  "aliases": [
-   "北斗",
-   "ほくと",
-   "hokuto",
-   "スマスロ北斗",
-   "スマスロ北斗の拳",
-   "北斗の拳"
-  ],
-  "limit": 1268,
-  "original": {
-   "title": "北斗の拳",
-   "kind": "漫画",
-   "search": "北斗の拳 漫画"
-  }
- },
- {
-  "slug": "goblin",
-  "name": "スマスロ ゴブリンスレイヤーII",
-  "seo": {
-   "title": "スマスロ ゴブリンスレイヤーII 狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常690G〜 / リセット230G〜",
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 1500,
-    "good": 680,
-    "caution": 500,
-    "byRate": {
-     "eq56": {
-      "excellent": 1200,
-      "good": 690,
-      "caution": 540,
-      "note": "5.6枚持ちメダルなら690G〜から狙い目に入ります。"
-     },
-     "rate55": {
-      "excellent": 1280,
-      "good": 740,
-      "caution": 580,
-      "note": "6.0枚では740G〜が目安です。"
-     },
-     "rate50": {
-      "excellent": 1350,
-      "good": 800,
-      "caution": 640,
-      "note": "6.5枚では800G〜から見ます。"
-     },
-     "rate45": {
-      "excellent": 1400,
-      "good": 900,
-      "caution": 720,
-      "note": "7.0枚では900G〜が狙い目ラインです。"
-     }
-    },
-    "note": "天井は600G/1000G/1500Gから抽選（高設定ほど短い天井が選ばれやすい）。680G〜が狙い目ライン。"
-   },
-   "reset": {
-    "excellent": 350,
-    "good": 230,
-    "caution": 100,
-    "byRate": {
-     "eq56": {
-      "excellent": 350,
-      "good": 230,
-      "caution": 100,
-      "note": "5.6枚持ちメダルならリセット後230G〜から狙い目に入ります。"
-     },
-     "rate55": {
-      "excellent": 380,
-      "good": 260,
-      "caution": 120,
-      "note": "6.0枚ではリセット後260G〜が目安です。"
-     },
-     "rate50": {
-      "excellent": 420,
-      "good": 300,
-      "caution": 150,
-      "note": "6.5枚ではリセット後300G〜から見ます。"
-     },
-     "rate45": {
-      "excellent": 460,
-      "good": 350,
-      "caution": 180,
-      "note": "7.0枚ではリセット後350G〜が狙い目ラインです。"
-     }
-    },
-    "note": "設定変更後は天井が最大1000Gに短縮（600G/1000Gから抽選）。"
-   }
-  },
-  "limit": 1500,
-  "aliases": [
-   "ゴブリンスレイヤー",
-   "ゴブスレ",
-   "ごぶすれ"
-  ],
-  "original": {
-   "title": "ゴブリンスレイヤー",
-   "kind": "ライトノベル",
-   "search": "ゴブリンスレイヤー 小説"
-  },
-  "strategyByRate": {
-   "eq56": "通常690G〜 / リセット230G〜",
-   "rate55": "通常740G〜 / リセット260G〜",
-   "rate50": "通常800G〜 / リセット300G〜",
-   "rate45": "通常900G〜 / リセット350G〜"
-  }
- },
- {
   "slug": "funky_juggler2",
   "name": "ファンキージャグラー2",
   "seo": {
@@ -11912,300 +12363,6 @@
   "series": "ジャグラー"
  },
  {
-  "slug": "tensura",
-  "name": "スマスロ転生したらスライムだった件",
-  "seo": {
-   "title": "スマスロ転生したらスライムだった件 狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常400G〜 / リセット0G〜",
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 600,
-    "good": 450,
-    "caution": 300,
-    "note": "天井はAT間で転スラポイント1200pt到達、または1000G消化のいずれか早い方です。転生モードの継続状況も確認項目です。",
-    "byRate": {
-     "eq56": {
-      "caution": 250,
-      "excellent": 550,
-      "target": 400,
-      "good": 400,
-      "note": "5.6枚交換の通常時の狙い目は400G〜です。リセット後とは基準が異なります。"
-     },
-     "rate55": {
-      "caution": 300,
-      "excellent": 600,
-      "target": 450,
-      "good": 450,
-      "note": "6.0枚交換の通常時の狙い目は450G〜です。リセット後とは基準が異なります。"
-     },
-     "rate50": {
-      "caution": 380,
-      "excellent": 680,
-      "target": 520,
-      "good": 520,
-      "note": "6.5枚交換の通常時の狙い目は520G〜です。リセット後とは基準が異なります。"
-     },
-     "rate45": {
-      "caution": 450,
-      "excellent": 760,
-      "target": 600,
-      "good": 600,
-      "note": "7.0枚交換の通常時の狙い目は600G〜です。リセット後とは基準が異なります。"
-     }
-    }
-   },
-   "reset": {
-    "excellent": 200,
-    "good": 0,
-    "caution": 0,
-    "note": "朝一リセット時は、転生状態が引き継がれる可能性があります。",
-    "byRate": {
-     "eq56": {
-      "caution": 0,
-      "excellent": 120,
-      "target": 0,
-      "good": 0,
-      "note": "5.6枚交換のリセット後の狙い目は0G〜です。"
-     },
-     "rate55": {
-      "caution": 0,
-      "excellent": 200,
-      "target": 0,
-      "good": 0,
-      "note": "6.0枚交換のリセット後の狙い目は0G〜です。"
-     },
-     "rate50": {
-      "caution": 0,
-      "excellent": 260,
-      "target": 50,
-      "good": 50,
-      "note": "6.5枚交換のリセット後の狙い目は50G〜です。"
-     },
-     "rate45": {
-      "caution": 30,
-      "excellent": 320,
-      "target": 100,
-      "good": 100,
-      "note": "7.0枚交換のリセット後の狙い目は100G〜です。"
-     }
-    }
-   },
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ]
-  },
-  "limit": 1200,
-  "tenjo_display": "1200pt到達または1000G消化の早い方",
-  "tenjo_games": 1000,
-  "strategyByRate": {
-   "eq56": "通常400G〜 / リセット0G〜",
-   "rate55": "通常450G〜 / リセット0G〜",
-   "rate50": "通常520G〜 / リセット50G〜",
-   "rate45": "通常600G〜 / リセット100G〜"
-  },
-  "aliases": [
-   "転スラ",
-   "てんすら",
-   "テンスラ",
-   "スライム"
-  ],
-  "original": {
-   "title": "転生したらスライムだった件",
-   "kind": "ライトノベル",
-   "search": "転生したらスライムだった件 小説"
-  }
- },
- {
-  "slug": "bandori",
-  "name": "Lバンドリ！",
-  "seo": {
-   "title": "Lバンドリ！ 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価 通常550G〜 / スルー 1スルー450G〜／4スルー80G〜 / リセット後130G〜",
-  "strategyByRate": {
-   "equal": "通常550G〜 / スルー 1スルー450G〜／4スルー80G〜 / リセット後130G〜",
-   "eq56": "通常560G〜 / スルー 1スルー450G〜／4スルー80G〜 / リセット後130G〜",
-   "rate55": "通常570G〜 / スルー 1スルー450G〜／4スルー80G〜 / リセット後130G〜",
-   "rate50": "通常620G〜 / スルー 1スルー450G〜／4スルー80G〜 / リセット後130G〜",
-   "rate45": "通常690G〜 / スルー 1スルー450G〜／4スルー80G〜 / リセット後130G〜"
-  },
-  "aliases": [
-   "バンドリ",
-   "ばんどり",
-   "BanGDream",
-   "バンドリーム",
-   "BANDORI"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "suru",
-     "label": "スルー",
-     "hasSuru": true
-    },
-    {
-     "key": "reset",
-     "label": "リセット後"
-    }
-   ],
-   "hasSuru": true,
-   "suruMax": 4,
-   "defaultRate": "equal",
-   "exchangeRates": [
-    {
-     "label": "等価",
-     "key": "equal"
-    },
-    {
-     "label": "5.6枚",
-     "key": "eq56"
-    },
-    {
-     "label": "6.0枚",
-     "key": "rate55"
-    },
-    {
-     "label": "6.5枚",
-     "key": "rate50"
-    },
-    {
-     "label": "7.0枚",
-     "key": "rate45"
-    }
-   ],
-   "normal": {
-    "excellent": 700,
-    "good": 550,
-    "caution": 400,
-    "note": "AT後・ボーナス後からカウント。1周期＝250スター（平均約62G・ハマリで平均より深くなることがあります）。",
-    "byRate": {
-     "eq56": {
-      "excellent": 700,
-      "good": 560,
-      "caution": 410
-     },
-     "rate55": {
-      "excellent": 720,
-      "good": 570,
-      "caution": 420
-     },
-     "rate50": {
-      "excellent": 790,
-      "good": 620,
-      "caution": 470
-     },
-     "rate45": {
-      "excellent": 880,
-      "good": 690,
-      "caution": 540
-     }
-    }
-   },
-   "suru": {
-    "suru": [
-     {
-      "count": 1,
-      "excellent": 600,
-      "good": 450,
-      "caution": 300
-     },
-     {
-      "count": 2,
-      "excellent": 450,
-      "good": 320,
-      "caution": 200
-     },
-     {
-      "count": 3,
-      "excellent": 300,
-      "good": 200,
-      "caution": 100
-     },
-     {
-      "count": 4,
-      "excellent": 150,
-      "good": 80,
-      "caution": 0
-     }
-    ],
-    "note": "ST単発の連続回数。",
-    "suruMax": 4
-   },
-   "reset": {
-    "excellent": 200,
-    "good": 130,
-    "caution": 60,
-    "note": "設定変更後は天井が7周期に短縮されます。リセット後の狙い目は130G〜です。",
-    "byRate": {
-     "eq56": {
-      "excellent": 200,
-      "good": 130,
-      "caution": 60
-     },
-     "rate55": {
-      "excellent": 200,
-      "good": 130,
-      "caution": 60
-     },
-     "rate50": {
-      "excellent": 200,
-      "good": 130,
-      "caution": 60
-     },
-     "rate45": {
-      "excellent": 200,
-      "good": 130,
-      "caution": 60
-     }
-    }
-   },
-   "baseRateKey": "equal"
-  },
-  "limit": 900,
-  "tenjo_display": "最大10周期",
-  "tenjo_games": null,
-  "original": {
-   "title": "BanG Dream!",
-   "kind": "アニメ",
-   "search": "バンドリ Blu-ray"
-  }
- },
- {
   "slug": "mushoku",
   "name": "L無職転生 〜異世界行ったら本気だす〜",
   "seo": {
@@ -12267,110 +12424,6 @@
   },
   "tenjo_display": "最大1400pt／AT間1300G",
   "tenjo_games": 1300
- },
- {
-  "slug": "shake_bt",
-  "name": "SHAKE BONUS TRIGGER",
-  "seo": {
-   "title": "SHAKE BONUS TRIGGER（シェイクBT）スペックまとめ"
-  },
-  "info": "スマスロBT",
-  "strategy": "設定狙い専用（天井なし）",
-  "aliases": [
-   "シェイク",
-   "シェイクBT",
-   "SHAKE",
-   "シェイクボーナストリガー"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い専用の機種です。ボーナス確率・トロフィー・REG中ボイスで設定推測。"
-   }
-  },
-  "release_date": "2025-10-20",
-  "series": ""
- },
- {
-  "slug": "kurea_bt",
-  "name": "LBクレアの秘宝伝 ボーナストリガーver.",
-  "seo": {
-   "title": "LBクレアの秘宝伝 ボーナストリガーver. スペックまとめ"
-  },
-  "info": "スマスロBT",
-  "strategy": "設定狙い専用（天井なし）",
-  "aliases": [
-   "クレア秘宝伝BT",
-   "クレアBT",
-   "クレアの秘宝伝BT",
-   "クレア",
-   "秘宝伝BT"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い専用の機種です。BB終了スタンプ・RB中カード色・トロフィーで設定推測。"
-   }
-  },
-  "release_date": "2025-09-08",
-  "series": ""
- },
- {
-  "slug": "eva_yakusoku",
-  "name": "LBパチスロ ヱヴァンゲリヲン ～約束の扉～",
-  "seo": {
-   "title": "LBパチスロ ヱヴァンゲリヲン ～約束の扉～ 狙い目・設定判別"
-  },
-  "info": "スマスロBT",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "エヴァ約束の扉",
-   "エヴァBT",
-   "エヴァンゲリヲン約束の扉",
-   "ヱヴァ",
-   "eva"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "この機種は天井非搭載のボーナストリガー（BT）機です。設定狙い主体の機種です。"
-   }
-  },
-  "limit": null,
-  "original": {
-   "title": "新世紀エヴァンゲリオン",
-   "kind": "アニメ",
-   "search": "新世紀エヴァンゲリオン Blu-ray"
-  },
-  "release_date": "2025-07-07",
-  "series": ""
  },
  {
   "slug": "dmc5_st",
@@ -12957,59 +13010,6 @@
   "limit": null,
   "tenjo_display": "通常モード999G+α",
   "tenjo_games": 999
- },
- {
-  "slug": "dmm_5090",
-  "name": "スマート沖スロ ハイハイシオサイRe",
-  "seo": {
-   "title": "スマート沖スロ ハイハイシオサイRe スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [
-    "gameplay",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "cz",
-    "ceiling",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at:MAIN_AT",
-    "bonus_prob",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-11-09",
-   "input_digest": "sha256:d192120114633d640ed9075b89c55b402642e7b5d100360d36cbdaa6bff012d3"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-11-16",
-  "identity": {
-   "manufacturer_id": "pioneer",
-   "official_product_url": "https://p-town.dmm.com/machines/5090",
-   "announced_name": "スマート沖スロ ハイハイシオサイRe",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5090 型式=未掲載 メーカー=パイオニア 導入=2026-11 確認日=2026-08-28",
-   "market_release_date": "2026-11-16",
-   "observed_model_code": "LハイハイシオサイReTC",
-   "_observed_model_code_sources": [
-    "p-town.dmm.com"
-   ]
-  }
  },
  {
   "slug": "dmm_5101",
