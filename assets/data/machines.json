@@ -4460,6 +4460,54 @@
   "series": "機動戦士ガンダム"
  },
  {
+  "slug": "milliongod_kiseki",
+  "name": "スマスロ ミリオンゴッド-神々の軌跡-",
+  "seo": {
+   "title": "スマスロ ミリオンゴッド-神々の軌跡- 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 通常670G〜 / リセット380G〜",
+  "aliases": [
+   "ミリオンゴッド",
+   "神々の軌跡",
+   "みりおんごっど",
+   "ゴッド",
+   "god",
+   "milliongod"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 1480,
+    "good": 670,
+    "caution": 670,
+    "note": "GG間天井1480G。"
+   },
+   "reset": {
+    "excellent": 1480,
+    "good": 380,
+    "caution": 380,
+    "note": "設定変更後は510G / 1000G / 1480G から抽選（15.2% / 20.3% / 64.5%）。"
+   }
+  },
+  "limit": 1480,
+  "original": {
+   "title": "ミリオンゴッド",
+   "kind": "シリーズ",
+   "search": "ミリオンゴッド"
+  }
+ },
+ {
   "slug": "yorumungando",
   "name": "スマスロヨルムンガンド",
   "seo": {
@@ -5109,6 +5157,297 @@
   }
  },
  {
+  "slug": "tekken6",
+  "name": "スマスロ鉄拳6",
+  "seo": {
+   "title": "スマスロ鉄拳6 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常450G〜 / スルー天井 0スルー450G〜／3スルー0G〜 / リセット120G〜",
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "suru",
+     "label": "スルー天井",
+     "hasSuru": true
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 650,
+    "good": 450,
+    "caution": 300,
+    "note": "鉄拳ポイント最大900pt＋α（平均約747G）。等価450G〜が狙い目。液晶右下のptを確認。",
+    "byRate": {
+     "eq56": {
+      "caution": 300,
+      "excellent": 650,
+      "target": 450,
+      "good": 450,
+      "note": "5.6枚交換なら450Gからを基準に見てください。"
+     },
+     "rate55": {
+      "caution": 300,
+      "excellent": 650,
+      "target": 450,
+      "good": 450,
+      "note": "6.0枚交換でも450G基準です。"
+     },
+     "rate50": {
+      "caution": 380,
+      "excellent": 750,
+      "target": 550,
+      "good": 550,
+      "note": "6.5枚交換では550G前後からが実戦ラインです。"
+     },
+     "rate45": {
+      "caution": 450,
+      "excellent": 850,
+      "target": 650,
+      "good": 650,
+      "note": "7.0枚交換では650Gからを目安にしてください。"
+     }
+    }
+   },
+   "suru": {
+    "suruMax": 3,
+    "suru": [
+     {
+      "count": 0,
+      "excellent": 650,
+      "good": 450,
+      "caution": 300,
+      "note": "0スルー。通常と同じ450G〜が目安です。液晶右下のptと現在のスルー回数をセットで確認してください。",
+      "byRate": {
+       "eq56": {
+        "caution": 300,
+        "excellent": 650,
+        "target": 450,
+        "good": 450,
+        "note": "5.6枚交換の0スルーは通常と同じ450G基準です。"
+       },
+       "rate55": {
+        "caution": 300,
+        "excellent": 650,
+        "target": 450,
+        "good": 450,
+        "note": "6.0枚交換の0スルーも通常と同じ450G基準です。1スルー350Gや2スルー0G候補とは混ぜない方が使いやすいです。"
+       },
+       "rate50": {
+        "caution": 380,
+        "excellent": 750,
+        "target": 550,
+        "good": 550,
+        "note": "6.5枚交換の0スルーは550G前後からを目安にしてください。"
+       },
+       "rate45": {
+        "caution": 450,
+        "excellent": 850,
+        "target": 650,
+        "good": 650,
+        "note": "7.0枚交換の0スルーは650Gからが実戦ラインです。"
+       }
+      }
+     },
+     {
+      "count": 1,
+      "excellent": 500,
+      "good": 350,
+      "caution": 200,
+      "note": "1スルー。ボーダー下げて350G〜でも候補。",
+      "byRate": {
+       "eq56": {
+        "caution": 200,
+        "excellent": 500,
+        "target": 350,
+        "good": 350,
+        "note": "5.6枚交換の1スルーは350Gから候補です。通常450G基準よりひと回り浅く見られます。"
+       },
+       "rate55": {
+        "caution": 200,
+        "excellent": 500,
+        "target": 350,
+        "good": 350,
+        "note": "6.0枚交換の1スルーも350G前後から見られます。"
+       },
+       "rate50": {
+        "caution": 300,
+        "excellent": 650,
+        "target": 450,
+        "good": 450,
+        "note": "6.5枚交換の1スルーは450Gからを基準にしてください。通常550G基準と混ぜず、1スルー台として見てください。"
+       },
+       "rate45": {
+        "caution": 400,
+        "excellent": 750,
+        "target": 550,
+        "good": 550,
+        "note": "7.0枚交換の1スルーは550Gまで待つ方が安全です。"
+       }
+      }
+     },
+     {
+      "count": 2,
+      "excellent": 300,
+      "good": 100,
+      "caution": 0,
+      "note": "2スルー。設定変更後・デビルロード終了後・デビルラッシュ終了後は、2スルーで次回ボーナスがAT濃厚です。",
+      "byRate": {
+       "eq56": {
+        "caution": 50,
+        "excellent": 300,
+        "target": 100,
+        "good": 100,
+        "note": "5.6枚の2スルーは100G前後から候補です。"
+       },
+       "rate55": {
+        "caution": 60,
+        "excellent": 300,
+        "target": 110,
+        "good": 110,
+        "note": "6.0枚交換の2スルーは110G前後からが目安です。"
+       },
+       "rate50": {
+        "caution": 50,
+        "excellent": 380,
+        "target": 80,
+        "good": 80,
+        "note": "6.5枚交換の2スルーは80G前後からが目安です。"
+       },
+       "rate45": {
+        "caution": 120,
+        "excellent": 450,
+        "target": 150,
+        "good": 150,
+        "note": "7.0枚交換の2スルーは150G前後からを基準にしてください。"
+       }
+      }
+     },
+     {
+      "count": 3,
+      "excellent": 50,
+      "good": 0,
+      "caution": 0,
+      "note": "3スルー。次回ボーナスがAT濃厚（赤7）。0G〜で着席OK。",
+      "byRate": {
+       "eq56": {
+        "caution": 0,
+        "excellent": 50,
+        "target": 0,
+        "good": 0,
+        "note": "3スルーは交換率不問で0Gから着席OKです。"
+       },
+       "rate55": {
+        "caution": 0,
+        "excellent": 50,
+        "target": 0,
+        "good": 0,
+        "note": "3スルーは交換率不問で0Gから着席OKです。"
+       },
+       "rate50": {
+        "caution": 0,
+        "excellent": 50,
+        "target": 0,
+        "good": 0,
+        "note": "3スルーは交換率不問で0Gから着席OKです。"
+       },
+       "rate45": {
+        "caution": 0,
+        "excellent": 50,
+        "target": 0,
+        "good": 0,
+        "note": "3スルーは交換率不問で0Gから着席OKです。"
+       }
+      }
+     }
+    ]
+   },
+   "reset": {
+    "excellent": 350,
+    "good": 200,
+    "caution": 100,
+    "note": "設定変更後はポイント天井500pt+α（約416G）に短縮。スルー天井も2スルーに短縮。",
+    "byRate": {
+     "eq56": {
+      "caution": 50,
+      "excellent": 250,
+      "target": 120,
+      "good": 120,
+      "note": "5.6枚交換ならリセット120G前後から候補です。"
+     },
+     "rate55": {
+      "caution": 100,
+      "excellent": 350,
+      "target": 200,
+      "good": 200,
+      "note": "6.0枚交換ではリセット200Gが基準です。BIG後 REG後 スルー狙いとは切り分けて、朝一台として別で見る方が安全です。"
+     },
+     "rate50": {
+      "caution": 150,
+      "excellent": 450,
+      "target": 280,
+      "good": 280,
+      "note": "6.5枚交換はリセット280G前後を目安にしてください。"
+     },
+     "rate45": {
+      "caution": 200,
+      "excellent": 450,
+      "target": 350,
+      "good": 350,
+      "note": "7.0枚交換ではリセット350Gからが実戦ラインです。"
+     }
+    }
+   },
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ]
+  },
+  "limit": 1500,
+  "tenjo_display": "鉄拳ポイント最大900pt+α（実G数約747G）",
+  "tenjo_games": null,
+  "strategyByRate": {
+   "eq56": "通常450G〜 / スルー天井 0スルー450G〜／3スルー0G〜 / リセット120G〜",
+   "rate55": "通常450G〜 / スルー天井 0スルー450G〜／3スルー0G〜 / リセット200G〜",
+   "rate50": "通常550G〜 / スルー天井 0スルー550G〜／3スルー0G〜 / リセット280G〜",
+   "rate45": "通常650G〜 / スルー天井 0スルー650G〜／3スルー0G〜 / リセット350G〜"
+  },
+  "aliases": [
+   "鉄拳",
+   "てっけん",
+   "テッケン",
+   "鉄拳6"
+  ],
+  "original": {
+   "title": "鉄拳",
+   "kind": "ゲーム",
+   "search": "鉄拳 ゲーム"
+  }
+ },
+ {
   "slug": "hihou",
   "name": "スマスロ秘宝伝",
   "seo": {
@@ -5571,6 +5910,129 @@
   "series": ""
  },
  {
+  "slug": "bakemonogatari",
+  "name": "Lスマスロ化物語KH",
+  "seo": {
+   "title": "化物語 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常640G〜 / リセット250G〜",
+  "strategyByRate": {
+   "eq56": "通常640G〜 / リセット250G〜",
+   "rate55": "通常650G〜 / リセット350G〜",
+   "rate50": "通常680G〜 / リセット380G〜",
+   "rate45": "通常700G〜 / リセット400G〜"
+  },
+  "aliases": [
+   "化物語",
+   "バケモノガタリ",
+   "物語"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 1000,
+    "good": 640,
+    "caution": 500,
+    "byRate": {
+     "eq56": {
+      "excellent": 900,
+      "good": 640,
+      "caution": 500,
+      "note": "5.6枚交換なら640Gから狙い目。天井1000G+倍倍チャンス濃厚。"
+     },
+     "rate55": {
+      "excellent": 900,
+      "good": 650,
+      "caution": 510,
+      "note": "6.0枚交換なら650Gから。"
+     },
+     "rate50": {
+      "excellent": 900,
+      "good": 680,
+      "caution": 540,
+      "note": "6.5枚交換なら680Gから。"
+     },
+     "rate45": {
+      "excellent": 900,
+      "good": 700,
+      "caution": 560,
+      "note": "7.0枚交換なら700Gから。"
+     }
+    },
+    "note": "G数天井1000G。AT倖時間+倍倍チャンス濃厚。"
+   },
+   "reset": {
+    "excellent": 500,
+    "good": 250,
+    "caution": 150,
+    "byRate": {
+     "eq56": {
+      "excellent": 500,
+      "good": 250,
+      "caution": 150,
+      "note": "リセット時は天井600G+αに短縮。250Gから狙い目。"
+     },
+     "rate55": {
+      "excellent": 500,
+      "good": 350,
+      "caution": 200,
+      "note": "リセット時は600G+α。"
+     },
+     "rate50": {
+      "excellent": 500,
+      "good": 380,
+      "caution": 230,
+      "note": "リセット時は600G+α。"
+     },
+     "rate45": {
+      "excellent": 500,
+      "good": 400,
+      "caution": 250,
+      "note": "リセット時は600G+α。"
+     }
+    },
+    "note": "リセット時は天井600G+αに短縮。"
+   },
+   "limit": 1000
+  },
+  "limit": 1000,
+  "original": {
+   "title": "化物語",
+   "kind": "小説",
+   "search": "化物語 西尾維新"
+  }
+ },
+ {
   "slug": "burning_express",
   "name": "スマスロバーニングエクスプレス",
   "seo": {
@@ -5796,6 +6258,51 @@
   }
  },
  {
+  "slug": "zettai_shougeki4",
+  "name": "L 絶対衝激Ⅳ",
+  "seo": {
+   "title": "L 絶対衝激Ⅳ 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 通常600G〜 / リセット250G〜",
+  "aliases": [
+   "絶対衝激",
+   "絶対衝激4",
+   "ぜったいしょうげき",
+   "ぜったいしょうげき4",
+   "zettai",
+   "idol"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 720,
+    "good": 600,
+    "caution": 520,
+    "note": "天井最大9周期（1周期平均約80G・約720G相当）。"
+   },
+   "reset": {
+    "excellent": 400,
+    "good": 250,
+    "caution": 150,
+    "note": "設定変更後は最大5周期（約400G相当）に短縮。250G〜が狙い目。"
+   }
+  },
+  "limit": 720,
+  "tenjo_display": "最大9周期（約720G相当）",
+  "tenjo_games": null
+ },
+ {
   "slug": "shake_bt",
   "name": "SHAKE BONUS TRIGGER",
   "seo": {
@@ -5880,6 +6387,47 @@
   "release_date": "2025-10-06",
   "tenjo_games": 1250,
   "tenjo_display": "1250G+α（通常A）"
+ },
+ {
+  "slug": "babel",
+  "name": "スマスロ バベル",
+  "seo": {
+   "title": "スマスロ バベル 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 通常900G〜 / リセット500G〜",
+  "aliases": [
+   "バベル",
+   "ばべる",
+   "babel",
+   "BABEL"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 1280,
+    "good": 900,
+    "caution": 730,
+    "note": "天井1280G+α（ボーナス間）。"
+   },
+   "reset": {
+    "excellent": 900,
+    "good": 500,
+    "caution": 360,
+    "note": "設定変更後は900G+αに短縮。500G〜が狙い目。"
+   }
+  },
+  "limit": 1280
  },
  {
   "slug": "kurea_bt",
@@ -6440,6 +6988,142 @@
    }
   },
   "limit": 999
+ },
+ {
+  "slug": "dmc5_st",
+  "name": "スマスロ デビル メイ クライ5 スタイリッシュトライブ",
+  "seo": {
+   "title": "スマスロ デビルメイクライ5 スタイリッシュトライブ 狙い目・設定判別まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常時750G〜 / リセット後500G〜",
+  "strategyByRate": {
+   "eq56": "通常時750G〜 / リセット後500G〜",
+   "rate55": "通常時760G〜 / リセット後510G〜",
+   "rate50": "通常時780G〜 / リセット後535G〜",
+   "rate45": "通常時810G〜 / リセット後565G〜"
+  },
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常時"
+    },
+    {
+     "key": "reset",
+     "label": "リセット後"
+    }
+   ],
+   "normal": {
+    "excellent": 850,
+    "good": 750,
+    "caution": 680,
+    "byRate": {
+     "eq56": {
+      "excellent": 850,
+      "good": 750,
+      "caution": 690,
+      "note": "5.6枚交換は750Gが狙い目の目安です。天井は1000G+αです。"
+     },
+     "rate55": {
+      "excellent": 860,
+      "good": 760,
+      "caution": 700,
+      "note": "6.0枚交換は760Gが狙い目の目安です。"
+     },
+     "rate50": {
+      "excellent": 880,
+      "good": 780,
+      "caution": 730,
+      "note": "6.5枚交換は780Gが狙い目の目安です。"
+     },
+     "rate45": {
+      "excellent": 900,
+      "good": 810,
+      "caution": 760,
+      "note": "7.0枚交換は810Gが狙い目の目安です。"
+     }
+    },
+    "note": "天井1000G+α（液晶表示のST間ゲーム数）。",
+    "ceiling": 1000,
+    "target": 750
+   },
+   "reset": {
+    "excellent": 560,
+    "good": 500,
+    "caution": 450,
+    "byRate": {
+     "eq56": {
+      "excellent": 560,
+      "good": 500,
+      "caution": 460,
+      "note": "5.6枚交換のリセット後は500Gが狙い目の目安です。天井は800G+αです。"
+     },
+     "rate55": {
+      "excellent": 570,
+      "good": 510,
+      "caution": 470,
+      "note": "6.0枚交換のリセット後は510Gが狙い目の目安です。"
+     },
+     "rate50": {
+      "excellent": 590,
+      "good": 535,
+      "caution": 495,
+      "note": "6.5枚交換のリセット後は535Gが狙い目の目安です。"
+     },
+     "rate45": {
+      "excellent": 620,
+      "good": 565,
+      "caution": 525,
+      "note": "7.0枚交換のリセット後は565Gが狙い目の目安です。"
+     }
+    },
+    "note": "設定変更後・ST単発後・上位ST後は天井800G+αに短縮。",
+    "ceiling": 800,
+    "target": 500
+   },
+   "ok": "狙い目OK",
+   "ng": "まだ早い",
+   "coinRate": 33.7
+  },
+  "aliases": [
+   "デビルメイクライ5",
+   "dmc5",
+   "デビルメイクライ",
+   "デビルメイクライ5スタイリッシュトライブ",
+   "dmc",
+   "スタイリッシュトライブ"
+  ],
+  "limit": 1050,
+  "tenjo_display": "通常時1000G+α（液晶表示）",
+  "tenjo_games": 1000,
+  "original": {
+   "title": "デビル メイ クライ5",
+   "kind": "ゲーム",
+   "search": "デビルメイクライ5"
+  },
+  "release_date": "2025-06-02",
+  "series": ""
  },
  {
   "slug": "youjitsu",
@@ -7335,6 +8019,134 @@
   "limit": 999
  },
  {
+  "slug": "nanatsuma",
+  "name": "スマスロ 七つの魔剣が支配する",
+  "seo": {
+   "title": "スマスロ 七つの魔剣が支配する 狙い目・天井・設定判別まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 ST間650G〜 / リセット後250G〜",
+  "strategyByRate": {
+   "eq56": "ST間650G〜 / リセット後250G〜",
+   "rate55": "ST間660G〜 / リセット後260G〜",
+   "rate50": "ST間690G〜 / リセット後300G〜",
+   "rate45": "ST間730G〜 / リセット後340G〜"
+  },
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "ST間"
+    },
+    {
+     "key": "reset",
+     "label": "リセット後"
+    }
+   ],
+   "normal": {
+    "excellent": 750,
+    "good": 650,
+    "caution": 530,
+    "byRate": {
+     "eq56": {
+      "excellent": 750,
+      "good": 650,
+      "caution": 540,
+      "note": "天井1000G+α。650G以上が本命。"
+     },
+     "rate55": {
+      "excellent": 760,
+      "good": 660,
+      "caution": 555,
+      "note": "6.0枚交換は660G基準。"
+     },
+     "rate50": {
+      "excellent": 790,
+      "good": 690,
+      "caution": 600,
+      "note": "6.5枚交換は690G基準。"
+     },
+     "rate45": {
+      "excellent": 830,
+      "good": 730,
+      "caution": 650,
+      "note": "7.0枚交換は730G以上が本命。浅い台は原則見送りです。"
+     }
+    },
+    "note": "天井1000G+α。等価530G〜でプラス。ST間G数は液晶表示で確認。この判定はゲーム数天井の目安です。別にキンバリーBONUSスルー天井があります。"
+   },
+   "reset": {
+    "excellent": 450,
+    "good": 250,
+    "caution": 140,
+    "byRate": {
+     "eq56": {
+      "excellent": 450,
+      "good": 250,
+      "caution": 140,
+      "note": "設定変更後は天井650G+αに短縮。250G以上が本命。"
+     },
+     "rate55": {
+      "excellent": 460,
+      "good": 260,
+      "caution": 155,
+      "note": "6.0枚のリセット後は260G基準。"
+     },
+     "rate50": {
+      "excellent": 490,
+      "good": 300,
+      "caution": 200,
+      "note": "6.5枚のリセット後は300G基準。"
+     },
+     "rate45": {
+      "excellent": 530,
+      "good": 340,
+      "caution": 250,
+      "note": "7.0枚のリセット後は340G基準。"
+     }
+    },
+    "note": "設定変更後は天井650G+αに短縮。等価140G〜でプラス。"
+   },
+   "ok": "狙い目OK",
+   "ng": "まだ早い"
+  },
+  "aliases": [
+   "七つの魔剣",
+   "ななつま",
+   "nanatsuma",
+   "七魔剣",
+   "七つの魔剣が支配する"
+  ],
+  "limit": 1050,
+  "tenjo_display": "ST間1000G+α",
+  "tenjo_games": 1000,
+  "original": {
+   "title": "七つの魔剣が支配する",
+   "kind": "ライトノベル",
+   "search": "七つの魔剣が支配する 小説"
+  }
+ },
+ {
   "slug": "dumbbell",
   "name": "Lパチスロ ダンベル何キロ持てる?",
   "seo": {
@@ -7545,6 +8357,54 @@
    }
   },
   "limit": 999
+ },
+ {
+  "slug": "lupin_daikokaisha",
+  "name": "スマスロルパン三世 大航海者の秘宝",
+  "seo": {
+   "title": "スマスロルパン三世 大航海者の秘宝 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 通常720G〜 / リセット350G〜",
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 850,
+    "good": 720,
+    "caution": 660,
+    "note": "AT間天井1000G+α。"
+   },
+   "reset": {
+    "excellent": 500,
+    "good": 350,
+    "caution": 280,
+    "note": "設定変更後は天井700G+αに短縮。350G〜が狙い目。"
+   }
+  },
+  "limit": 1000,
+  "aliases": [
+   "ルパン三世",
+   "ルパン",
+   "るぱん",
+   "大航海者",
+   "ルパン大航海者",
+   "lupin"
+  ],
+  "original": {
+   "title": "ルパン三世",
+   "kind": "漫画",
+   "search": "ルパン三世 漫画"
+  }
  },
  {
   "slug": "mhrise",
@@ -10901,54 +11761,6 @@
   }
  },
  {
-  "slug": "milliongod_kiseki",
-  "name": "スマスロ ミリオンゴッド-神々の軌跡-",
-  "seo": {
-   "title": "スマスロ ミリオンゴッド-神々の軌跡- 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "チェッカー基準 通常670G〜 / リセット380G〜",
-  "aliases": [
-   "ミリオンゴッド",
-   "神々の軌跡",
-   "みりおんごっど",
-   "ゴッド",
-   "god",
-   "milliongod"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 1480,
-    "good": 670,
-    "caution": 670,
-    "note": "GG間天井1480G。"
-   },
-   "reset": {
-    "excellent": 1480,
-    "good": 380,
-    "caution": 380,
-    "note": "設定変更後は510G / 1000G / 1480G から抽選（15.2% / 20.3% / 64.5%）。"
-   }
-  },
-  "limit": 1480,
-  "original": {
-   "title": "ミリオンゴッド",
-   "kind": "シリーズ",
-   "search": "ミリオンゴッド"
-  }
- },
- {
   "slug": "magireco",
   "name": "Lスマスロマギアレコード",
   "seo": {
@@ -11454,420 +12266,6 @@
    }
   },
   "limit": null
- },
- {
-  "slug": "tekken6",
-  "name": "スマスロ鉄拳6",
-  "seo": {
-   "title": "スマスロ鉄拳6 狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常450G〜 / スルー天井 0スルー450G〜／3スルー0G〜 / リセット120G〜",
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "suru",
-     "label": "スルー天井",
-     "hasSuru": true
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 650,
-    "good": 450,
-    "caution": 300,
-    "note": "鉄拳ポイント最大900pt＋α（平均約747G）。等価450G〜が狙い目。液晶右下のptを確認。",
-    "byRate": {
-     "eq56": {
-      "caution": 300,
-      "excellent": 650,
-      "target": 450,
-      "good": 450,
-      "note": "5.6枚交換なら450Gからを基準に見てください。"
-     },
-     "rate55": {
-      "caution": 300,
-      "excellent": 650,
-      "target": 450,
-      "good": 450,
-      "note": "6.0枚交換でも450G基準です。"
-     },
-     "rate50": {
-      "caution": 380,
-      "excellent": 750,
-      "target": 550,
-      "good": 550,
-      "note": "6.5枚交換では550G前後からが実戦ラインです。"
-     },
-     "rate45": {
-      "caution": 450,
-      "excellent": 850,
-      "target": 650,
-      "good": 650,
-      "note": "7.0枚交換では650Gからを目安にしてください。"
-     }
-    }
-   },
-   "suru": {
-    "suruMax": 3,
-    "suru": [
-     {
-      "count": 0,
-      "excellent": 650,
-      "good": 450,
-      "caution": 300,
-      "note": "0スルー。通常と同じ450G〜が目安です。液晶右下のptと現在のスルー回数をセットで確認してください。",
-      "byRate": {
-       "eq56": {
-        "caution": 300,
-        "excellent": 650,
-        "target": 450,
-        "good": 450,
-        "note": "5.6枚交換の0スルーは通常と同じ450G基準です。"
-       },
-       "rate55": {
-        "caution": 300,
-        "excellent": 650,
-        "target": 450,
-        "good": 450,
-        "note": "6.0枚交換の0スルーも通常と同じ450G基準です。1スルー350Gや2スルー0G候補とは混ぜない方が使いやすいです。"
-       },
-       "rate50": {
-        "caution": 380,
-        "excellent": 750,
-        "target": 550,
-        "good": 550,
-        "note": "6.5枚交換の0スルーは550G前後からを目安にしてください。"
-       },
-       "rate45": {
-        "caution": 450,
-        "excellent": 850,
-        "target": 650,
-        "good": 650,
-        "note": "7.0枚交換の0スルーは650Gからが実戦ラインです。"
-       }
-      }
-     },
-     {
-      "count": 1,
-      "excellent": 500,
-      "good": 350,
-      "caution": 200,
-      "note": "1スルー。ボーダー下げて350G〜でも候補。",
-      "byRate": {
-       "eq56": {
-        "caution": 200,
-        "excellent": 500,
-        "target": 350,
-        "good": 350,
-        "note": "5.6枚交換の1スルーは350Gから候補です。通常450G基準よりひと回り浅く見られます。"
-       },
-       "rate55": {
-        "caution": 200,
-        "excellent": 500,
-        "target": 350,
-        "good": 350,
-        "note": "6.0枚交換の1スルーも350G前後から見られます。"
-       },
-       "rate50": {
-        "caution": 300,
-        "excellent": 650,
-        "target": 450,
-        "good": 450,
-        "note": "6.5枚交換の1スルーは450Gからを基準にしてください。通常550G基準と混ぜず、1スルー台として見てください。"
-       },
-       "rate45": {
-        "caution": 400,
-        "excellent": 750,
-        "target": 550,
-        "good": 550,
-        "note": "7.0枚交換の1スルーは550Gまで待つ方が安全です。"
-       }
-      }
-     },
-     {
-      "count": 2,
-      "excellent": 300,
-      "good": 100,
-      "caution": 0,
-      "note": "2スルー。設定変更後・デビルロード終了後・デビルラッシュ終了後は、2スルーで次回ボーナスがAT濃厚です。",
-      "byRate": {
-       "eq56": {
-        "caution": 50,
-        "excellent": 300,
-        "target": 100,
-        "good": 100,
-        "note": "5.6枚の2スルーは100G前後から候補です。"
-       },
-       "rate55": {
-        "caution": 60,
-        "excellent": 300,
-        "target": 110,
-        "good": 110,
-        "note": "6.0枚交換の2スルーは110G前後からが目安です。"
-       },
-       "rate50": {
-        "caution": 50,
-        "excellent": 380,
-        "target": 80,
-        "good": 80,
-        "note": "6.5枚交換の2スルーは80G前後からが目安です。"
-       },
-       "rate45": {
-        "caution": 120,
-        "excellent": 450,
-        "target": 150,
-        "good": 150,
-        "note": "7.0枚交換の2スルーは150G前後からを基準にしてください。"
-       }
-      }
-     },
-     {
-      "count": 3,
-      "excellent": 50,
-      "good": 0,
-      "caution": 0,
-      "note": "3スルー。次回ボーナスがAT濃厚（赤7）。0G〜で着席OK。",
-      "byRate": {
-       "eq56": {
-        "caution": 0,
-        "excellent": 50,
-        "target": 0,
-        "good": 0,
-        "note": "3スルーは交換率不問で0Gから着席OKです。"
-       },
-       "rate55": {
-        "caution": 0,
-        "excellent": 50,
-        "target": 0,
-        "good": 0,
-        "note": "3スルーは交換率不問で0Gから着席OKです。"
-       },
-       "rate50": {
-        "caution": 0,
-        "excellent": 50,
-        "target": 0,
-        "good": 0,
-        "note": "3スルーは交換率不問で0Gから着席OKです。"
-       },
-       "rate45": {
-        "caution": 0,
-        "excellent": 50,
-        "target": 0,
-        "good": 0,
-        "note": "3スルーは交換率不問で0Gから着席OKです。"
-       }
-      }
-     }
-    ]
-   },
-   "reset": {
-    "excellent": 350,
-    "good": 200,
-    "caution": 100,
-    "note": "設定変更後はポイント天井500pt+α（約416G）に短縮。スルー天井も2スルーに短縮。",
-    "byRate": {
-     "eq56": {
-      "caution": 50,
-      "excellent": 250,
-      "target": 120,
-      "good": 120,
-      "note": "5.6枚交換ならリセット120G前後から候補です。"
-     },
-     "rate55": {
-      "caution": 100,
-      "excellent": 350,
-      "target": 200,
-      "good": 200,
-      "note": "6.0枚交換ではリセット200Gが基準です。BIG後 REG後 スルー狙いとは切り分けて、朝一台として別で見る方が安全です。"
-     },
-     "rate50": {
-      "caution": 150,
-      "excellent": 450,
-      "target": 280,
-      "good": 280,
-      "note": "6.5枚交換はリセット280G前後を目安にしてください。"
-     },
-     "rate45": {
-      "caution": 200,
-      "excellent": 450,
-      "target": 350,
-      "good": 350,
-      "note": "7.0枚交換ではリセット350Gからが実戦ラインです。"
-     }
-    }
-   },
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ]
-  },
-  "limit": 1500,
-  "tenjo_display": "鉄拳ポイント最大900pt+α（実G数約747G）",
-  "tenjo_games": null,
-  "strategyByRate": {
-   "eq56": "通常450G〜 / スルー天井 0スルー450G〜／3スルー0G〜 / リセット120G〜",
-   "rate55": "通常450G〜 / スルー天井 0スルー450G〜／3スルー0G〜 / リセット200G〜",
-   "rate50": "通常550G〜 / スルー天井 0スルー550G〜／3スルー0G〜 / リセット280G〜",
-   "rate45": "通常650G〜 / スルー天井 0スルー650G〜／3スルー0G〜 / リセット350G〜"
-  },
-  "aliases": [
-   "鉄拳",
-   "てっけん",
-   "テッケン",
-   "鉄拳6"
-  ],
-  "original": {
-   "title": "鉄拳",
-   "kind": "ゲーム",
-   "search": "鉄拳 ゲーム"
-  }
- },
- {
-  "slug": "bakemonogatari",
-  "name": "Lスマスロ化物語KH",
-  "seo": {
-   "title": "化物語 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常640G〜 / リセット250G〜",
-  "strategyByRate": {
-   "eq56": "通常640G〜 / リセット250G〜",
-   "rate55": "通常650G〜 / リセット350G〜",
-   "rate50": "通常680G〜 / リセット380G〜",
-   "rate45": "通常700G〜 / リセット400G〜"
-  },
-  "aliases": [
-   "化物語",
-   "バケモノガタリ",
-   "物語"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 1000,
-    "good": 640,
-    "caution": 500,
-    "byRate": {
-     "eq56": {
-      "excellent": 900,
-      "good": 640,
-      "caution": 500,
-      "note": "5.6枚交換なら640Gから狙い目。天井1000G+倍倍チャンス濃厚。"
-     },
-     "rate55": {
-      "excellent": 900,
-      "good": 650,
-      "caution": 510,
-      "note": "6.0枚交換なら650Gから。"
-     },
-     "rate50": {
-      "excellent": 900,
-      "good": 680,
-      "caution": 540,
-      "note": "6.5枚交換なら680Gから。"
-     },
-     "rate45": {
-      "excellent": 900,
-      "good": 700,
-      "caution": 560,
-      "note": "7.0枚交換なら700Gから。"
-     }
-    },
-    "note": "G数天井1000G。AT倖時間+倍倍チャンス濃厚。"
-   },
-   "reset": {
-    "excellent": 500,
-    "good": 250,
-    "caution": 150,
-    "byRate": {
-     "eq56": {
-      "excellent": 500,
-      "good": 250,
-      "caution": 150,
-      "note": "リセット時は天井600G+αに短縮。250Gから狙い目。"
-     },
-     "rate55": {
-      "excellent": 500,
-      "good": 350,
-      "caution": 200,
-      "note": "リセット時は600G+α。"
-     },
-     "rate50": {
-      "excellent": 500,
-      "good": 380,
-      "caution": 230,
-      "note": "リセット時は600G+α。"
-     },
-     "rate45": {
-      "excellent": 500,
-      "good": 400,
-      "caution": 250,
-      "note": "リセット時は600G+α。"
-     }
-    },
-    "note": "リセット時は天井600G+αに短縮。"
-   },
-   "limit": 1000
-  },
-  "limit": 1000,
-  "original": {
-   "title": "化物語",
-   "kind": "小説",
-   "search": "化物語 西尾維新"
-  }
  },
  {
   "slug": "revengers",
@@ -12493,270 +12891,6 @@
   "tenjo_games": 1300
  },
  {
-  "slug": "dmc5_st",
-  "name": "スマスロ デビル メイ クライ5 スタイリッシュトライブ",
-  "seo": {
-   "title": "スマスロ デビルメイクライ5 スタイリッシュトライブ 狙い目・設定判別まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常時750G〜 / リセット後500G〜",
-  "strategyByRate": {
-   "eq56": "通常時750G〜 / リセット後500G〜",
-   "rate55": "通常時760G〜 / リセット後510G〜",
-   "rate50": "通常時780G〜 / リセット後535G〜",
-   "rate45": "通常時810G〜 / リセット後565G〜"
-  },
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常時"
-    },
-    {
-     "key": "reset",
-     "label": "リセット後"
-    }
-   ],
-   "normal": {
-    "excellent": 850,
-    "good": 750,
-    "caution": 680,
-    "byRate": {
-     "eq56": {
-      "excellent": 850,
-      "good": 750,
-      "caution": 690,
-      "note": "5.6枚交換は750Gが狙い目の目安です。天井は1000G+αです。"
-     },
-     "rate55": {
-      "excellent": 860,
-      "good": 760,
-      "caution": 700,
-      "note": "6.0枚交換は760Gが狙い目の目安です。"
-     },
-     "rate50": {
-      "excellent": 880,
-      "good": 780,
-      "caution": 730,
-      "note": "6.5枚交換は780Gが狙い目の目安です。"
-     },
-     "rate45": {
-      "excellent": 900,
-      "good": 810,
-      "caution": 760,
-      "note": "7.0枚交換は810Gが狙い目の目安です。"
-     }
-    },
-    "note": "天井1000G+α（液晶表示のST間ゲーム数）。",
-    "ceiling": 1000,
-    "target": 750
-   },
-   "reset": {
-    "excellent": 560,
-    "good": 500,
-    "caution": 450,
-    "byRate": {
-     "eq56": {
-      "excellent": 560,
-      "good": 500,
-      "caution": 460,
-      "note": "5.6枚交換のリセット後は500Gが狙い目の目安です。天井は800G+αです。"
-     },
-     "rate55": {
-      "excellent": 570,
-      "good": 510,
-      "caution": 470,
-      "note": "6.0枚交換のリセット後は510Gが狙い目の目安です。"
-     },
-     "rate50": {
-      "excellent": 590,
-      "good": 535,
-      "caution": 495,
-      "note": "6.5枚交換のリセット後は535Gが狙い目の目安です。"
-     },
-     "rate45": {
-      "excellent": 620,
-      "good": 565,
-      "caution": 525,
-      "note": "7.0枚交換のリセット後は565Gが狙い目の目安です。"
-     }
-    },
-    "note": "設定変更後・ST単発後・上位ST後は天井800G+αに短縮。",
-    "ceiling": 800,
-    "target": 500
-   },
-   "ok": "狙い目OK",
-   "ng": "まだ早い",
-   "coinRate": 33.7
-  },
-  "aliases": [
-   "デビルメイクライ5",
-   "dmc5",
-   "デビルメイクライ",
-   "デビルメイクライ5スタイリッシュトライブ",
-   "dmc",
-   "スタイリッシュトライブ"
-  ],
-  "limit": 1050,
-  "tenjo_display": "通常時1000G+α（液晶表示）",
-  "tenjo_games": 1000,
-  "original": {
-   "title": "デビル メイ クライ5",
-   "kind": "ゲーム",
-   "search": "デビルメイクライ5"
-  },
-  "release_date": "2025-06-02",
-  "series": ""
- },
- {
-  "slug": "nanatsuma",
-  "name": "スマスロ 七つの魔剣が支配する",
-  "seo": {
-   "title": "スマスロ 七つの魔剣が支配する 狙い目・天井・設定判別まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 ST間650G〜 / リセット後250G〜",
-  "strategyByRate": {
-   "eq56": "ST間650G〜 / リセット後250G〜",
-   "rate55": "ST間660G〜 / リセット後260G〜",
-   "rate50": "ST間690G〜 / リセット後300G〜",
-   "rate45": "ST間730G〜 / リセット後340G〜"
-  },
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "ST間"
-    },
-    {
-     "key": "reset",
-     "label": "リセット後"
-    }
-   ],
-   "normal": {
-    "excellent": 750,
-    "good": 650,
-    "caution": 530,
-    "byRate": {
-     "eq56": {
-      "excellent": 750,
-      "good": 650,
-      "caution": 540,
-      "note": "天井1000G+α。650G以上が本命。"
-     },
-     "rate55": {
-      "excellent": 760,
-      "good": 660,
-      "caution": 555,
-      "note": "6.0枚交換は660G基準。"
-     },
-     "rate50": {
-      "excellent": 790,
-      "good": 690,
-      "caution": 600,
-      "note": "6.5枚交換は690G基準。"
-     },
-     "rate45": {
-      "excellent": 830,
-      "good": 730,
-      "caution": 650,
-      "note": "7.0枚交換は730G以上が本命。浅い台は原則見送りです。"
-     }
-    },
-    "note": "天井1000G+α。等価530G〜でプラス。ST間G数は液晶表示で確認。この判定はゲーム数天井の目安です。別にキンバリーBONUSスルー天井があります。"
-   },
-   "reset": {
-    "excellent": 450,
-    "good": 250,
-    "caution": 140,
-    "byRate": {
-     "eq56": {
-      "excellent": 450,
-      "good": 250,
-      "caution": 140,
-      "note": "設定変更後は天井650G+αに短縮。250G以上が本命。"
-     },
-     "rate55": {
-      "excellent": 460,
-      "good": 260,
-      "caution": 155,
-      "note": "6.0枚のリセット後は260G基準。"
-     },
-     "rate50": {
-      "excellent": 490,
-      "good": 300,
-      "caution": 200,
-      "note": "6.5枚のリセット後は300G基準。"
-     },
-     "rate45": {
-      "excellent": 530,
-      "good": 340,
-      "caution": 250,
-      "note": "7.0枚のリセット後は340G基準。"
-     }
-    },
-    "note": "設定変更後は天井650G+αに短縮。等価140G〜でプラス。"
-   },
-   "ok": "狙い目OK",
-   "ng": "まだ早い"
-  },
-  "aliases": [
-   "七つの魔剣",
-   "ななつま",
-   "nanatsuma",
-   "七魔剣",
-   "七つの魔剣が支配する"
-  ],
-  "limit": 1050,
-  "tenjo_display": "ST間1000G+α",
-  "tenjo_games": 1000,
-  "original": {
-   "title": "七つの魔剣が支配する",
-   "kind": "ライトノベル",
-   "search": "七つの魔剣が支配する 小説"
-  }
- },
- {
   "slug": "valvrave",
   "name": "パチスロ 革命機ヴァルヴレイヴ",
   "seo": {
@@ -12915,140 +13049,6 @@
    "rate50": "AT&ボーナス間930G〜 / CZ間（液晶）510G〜",
    "rate45": "AT&ボーナス間1000G〜 / CZ間（液晶）570G〜"
   }
- },
- {
-  "slug": "lupin_daikokaisha",
-  "name": "スマスロルパン三世 大航海者の秘宝",
-  "seo": {
-   "title": "スマスロルパン三世 大航海者の秘宝 狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "チェッカー基準 通常720G〜 / リセット350G〜",
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 850,
-    "good": 720,
-    "caution": 660,
-    "note": "AT間天井1000G+α。"
-   },
-   "reset": {
-    "excellent": 500,
-    "good": 350,
-    "caution": 280,
-    "note": "設定変更後は天井700G+αに短縮。350G〜が狙い目。"
-   }
-  },
-  "limit": 1000,
-  "aliases": [
-   "ルパン三世",
-   "ルパン",
-   "るぱん",
-   "大航海者",
-   "ルパン大航海者",
-   "lupin"
-  ],
-  "original": {
-   "title": "ルパン三世",
-   "kind": "漫画",
-   "search": "ルパン三世 漫画"
-  }
- },
- {
-  "slug": "zettai_shougeki4",
-  "name": "L 絶対衝激Ⅳ",
-  "seo": {
-   "title": "L 絶対衝激Ⅳ 狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "チェッカー基準 通常600G〜 / リセット250G〜",
-  "aliases": [
-   "絶対衝激",
-   "絶対衝激4",
-   "ぜったいしょうげき",
-   "ぜったいしょうげき4",
-   "zettai",
-   "idol"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 720,
-    "good": 600,
-    "caution": 520,
-    "note": "天井最大9周期（1周期平均約80G・約720G相当）。"
-   },
-   "reset": {
-    "excellent": 400,
-    "good": 250,
-    "caution": 150,
-    "note": "設定変更後は最大5周期（約400G相当）に短縮。250G〜が狙い目。"
-   }
-  },
-  "limit": 720,
-  "tenjo_display": "最大9周期（約720G相当）",
-  "tenjo_games": null
- },
- {
-  "slug": "babel",
-  "name": "スマスロ バベル",
-  "seo": {
-   "title": "スマスロ バベル 狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "チェッカー基準 通常900G〜 / リセット500G〜",
-  "aliases": [
-   "バベル",
-   "ばべる",
-   "babel",
-   "BABEL"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 1280,
-    "good": 900,
-    "caution": 730,
-    "note": "天井1280G+α（ボーナス間）。"
-   },
-   "reset": {
-    "excellent": 900,
-    "good": 500,
-    "caution": 360,
-    "note": "設定変更後は900G+αに短縮。500G〜が狙い目。"
-   }
-  },
-  "limit": 1280
  },
  {
   "slug": "dark_haibi",
