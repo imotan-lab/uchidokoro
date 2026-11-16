@@ -267,12 +267,12 @@
    "ceiling_state": "PRESENT",
    "confirmed_topics": [
     "ceiling",
+    "cz",
     "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "cz",
     "strategy",
     "reset"
    ],
@@ -283,13 +283,15 @@
     "at_prob",
     "ceiling:GAME:AT間",
     "ceiling:GAME:CZ間",
+    "cz:whoareyou",
+    "cz:影ノ襲来",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-11",
-   "input_digest": "sha256:5faf239356cc200cf4bf70747bb0438405823f9a5ae7903eac197ec719180adf"
+   "decided_at": "2026-11-16",
+   "input_digest": "sha256:bcaa79248314e050dbb69eba1121495f0bf0e91e934111794d391383344402a2"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
@@ -316,15 +318,15 @@
     }
    ],
    "normal": {
+    "ceiling": 1200,
     "caution": 860,
     "good": 860,
     "excellent": 860,
-    "target": 860,
-    "ceiling": 1200
+    "target": 860
    }
   },
-  "targetProjection": "a91974b73f2ffe5c",
-  "series": ""
+  "series": "",
+  "targetProjection": "a91974b73f2ffe5c"
  },
  {
   "slug": "tokyo_ghoul",
