@@ -393,7 +393,9 @@
       "good": 500,
       "note": "7.0枚交換ではCZ間500Gが基準です。"
      }
-    }
+    },
+    "ceiling": 600,
+    "target": 250
    },
    "at": {
     "suru": [
@@ -509,7 +511,8 @@
       }
      }
     ],
-    "suruMax": 2
+    "suruMax": 2,
+    "ceiling": 1200
    },
    "reset": {
     "excellent": 150,
@@ -565,7 +568,8 @@
      "key": "rate45",
      "label": "7.0枚"
     }
-   ]
+   ],
+   "coinRate": 31
   },
   "aliases": [
    "東京喰種",
