@@ -115,7 +115,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-11",
+   "decided_at": "2026-11-16",
    "input_digest": "sha256:9da2a483149e4f9803fd62ae50c57f3a7b799bfed00ee07fc3c08b8aaf52577b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -146,11 +146,11 @@
     }
    ],
    "normal": {
+    "ceiling": 850,
     "caution": 300,
     "good": 300,
     "excellent": 400,
-    "target": 300,
-    "ceiling": 850
+    "target": 300
    }
   },
   "targetProjection": "a39769cb5ba2151d"
