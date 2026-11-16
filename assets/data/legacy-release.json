@@ -16,6 +16,16 @@
    "url": "https://p-town.dmm.com/machines/4847",
    "checked": "2026-11-10"
   },
+  "babel": {
+   "release": "2025-10-06",
+   "url": "https://p-town.dmm.com/machines/4853",
+   "checked": "2026-11-16"
+  },
+  "bakemonogatari": {
+   "release": "2025-12-08",
+   "url": "https://p-town.dmm.com/machines/4898",
+   "checked": "2026-11-16"
+  },
   "baki": {
    "release": "2022-11-21",
    "url": "https://p-town.dmm.com/machines/4242",
@@ -176,6 +186,11 @@
    "url": "https://p-town.dmm.com/machines/4860",
    "checked": "2026-11-15"
   },
+  "lupin_daikokaisha": {
+   "release": "2024-12-02",
+   "url": "https://p-town.dmm.com/machines/4689",
+   "checked": "2026-11-16"
+  },
   "madomagi_forte": {
    "release": "2023-11-06",
    "url": "https://p-town.dmm.com/machines/4420",
@@ -191,6 +206,11 @@
    "url": "https://p-town.dmm.com/machines/4763",
    "checked": "2026-11-14"
   },
+  "milliongod_kiseki": {
+   "release": "2026-04-20",
+   "url": "https://p-town.dmm.com/machines/4961",
+   "checked": "2026-11-16"
+  },
   "monkeyv": {
    "release": "2023-12-04",
    "url": "https://p-town.dmm.com/machines/4450",
@@ -200,6 +220,11 @@
    "release": "2024-07-22",
    "url": "https://p-town.dmm.com/machines/4588",
    "checked": "2026-11-11"
+  },
+  "nanatsuma": {
+   "release": "2025-01-20",
+   "url": "https://p-town.dmm.com/machines/4709",
+   "checked": "2026-11-16"
   },
   "neoplanet": {
    "release": "2025-11-17",
@@ -286,6 +311,11 @@
    "url": "https://p-town.dmm.com/machines/5000",
    "checked": "2026-11-10"
   },
+  "tekken6": {
+   "release": "2026-01-05",
+   "url": "https://p-town.dmm.com/machines/4913",
+   "checked": "2026-11-16"
+  },
   "tenken": {
    "release": "2025-08-04",
    "url": "https://p-town.dmm.com/machines/4843",
@@ -341,6 +371,11 @@
    "url": "https://p-town.dmm.com/machines/4877",
    "checked": "2026-11-13"
   },
+  "zettai_shougeki4": {
+   "release": "2025-11-04",
+   "url": "https://p-town.dmm.com/machines/4903",
+   "checked": "2026-11-16"
+  },
   "zombieland_saga": {
    "release": "2024-07-22",
    "url": "https://p-town.dmm.com/machines/4603",
@@ -351,6 +386,8 @@
   "akudama": "2026-11-13",
   "animal_dotch": "2026-11-10",
   "azurlane": "2026-11-10",
+  "babel": "2026-11-16",
+  "bakemonogatari": "2026-11-16",
   "baki": "2026-11-11",
   "banchou4": "2026-11-11",
   "bandori": "2026-11-15",
@@ -383,11 +420,14 @@
   "kizumonogatari": "2026-11-14",
   "koukaku": "2026-11-10",
   "kurea_bt": "2026-11-15",
+  "lupin_daikokaisha": "2026-11-16",
   "madomagi_forte": "2026-11-10",
   "mhrise": "2026-11-15",
   "midoridon_viva": "2026-11-14",
+  "milliongod_kiseki": "2026-11-16",
   "monkeyv": "2026-11-12",
   "mr_juggler": "2026-11-11",
+  "nanatsuma": "2026-11-16",
   "neoplanet": "2026-11-11",
   "okidoki_black": "2026-11-14",
   "okidoki_encore": "2026-11-13",
@@ -405,6 +445,7 @@
   "shinuchi_yoshimune": "2026-11-11",
   "super_blackjack": "2026-11-14",
   "takt_opus": "2026-11-10",
+  "tekken6": "2026-11-16",
   "tenken": "2026-11-13",
   "tensura": "2026-11-15",
   "tokyo_ghoul": "2026-11-16",
@@ -416,6 +457,7 @@
   "yoshimune": "2026-11-14",
   "youjitsu": "2026-11-14",
   "zenigata5": "2026-11-13",
+  "zettai_shougeki4": "2026-11-16",
   "zombieland_saga": "2026-11-12"
  },
  "applied": {
