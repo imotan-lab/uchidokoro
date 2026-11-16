@@ -83,9 +83,14 @@
   "seo": {
    "title": "スマスロ リコリス・リコイル 天井・狙い目"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "リコリコ",
+   "スマスロリコリコ",
+   "リコリス・リコイル",
+   "りこりこ"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -153,7 +158,8 @@
     "target": 300
    }
   },
-  "targetProjection": "a39769cb5ba2151d"
+  "targetProjection": "a39769cb5ba2151d",
+  "series": ""
  },
  {
   "slug": "dmm_5073",
