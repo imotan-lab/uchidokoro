@@ -3548,6 +3548,9 @@
     "burning_express": {
       "checked": "2026-11-14"
     },
+    "dmm_5073": {
+      "checked": "2026-11-17"
+    },
     "dumbbell": {
       "checked": "2026-11-11"
     },
@@ -3673,6 +3676,10 @@
       "result": "HAS"
     }
   },
-  "no_diff": {},
+  "no_diff": {
+    "dmm_5073": {
+      "reason": "小役による設定差なし"
+    }
+  },
   "schema_version": 1
 }
