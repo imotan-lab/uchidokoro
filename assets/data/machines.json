@@ -2933,7 +2933,7 @@
   "slug": "dmm_5086",
   "name": "L 転生王女と天才令嬢の魔法革命",
   "seo": {
-   "title": "L 転生王女と天才令嬢の魔法革命 天井・スペック"
+   "title": "L 転生王女と天才令嬢の魔法革命 天井・狙い目"
   },
   "info": "スマスロAT",
   "strategy": "",
@@ -2972,7 +2972,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-13",
+   "decided_at": "2026-11-17",
    "input_digest": "sha256:dab1aa78d16ec57f7e1e428655c16a05d4404bddbf66124a8633c2796bb3cd7e"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -3006,7 +3006,8 @@
     "target": 360
    }
   },
-  "series": ""
+  "series": "",
+  "targetProjection": "d9d9151696935cf2"
  },
  {
   "slug": "pw_10513",
