@@ -287,6 +287,7 @@
     "at:MAIN_AT",
     "at:UPPER_AT",
     "at_prob",
+    "ceiling:CYCLE:",
     "ceiling:GAME:AT間",
     "ceiling:GAME:CZ間",
     "cz:whoareyou",
@@ -296,8 +297,8 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-16",
-   "input_digest": "sha256:bcaa79248314e050dbb69eba1121495f0bf0e91e934111794d391383344402a2"
+   "decided_at": "2026-11-17",
+   "input_digest": "sha256:269f0352e1d7d1c33011477e86f602dafb642f9f070e46d1c3c0ec0c7029c9ec"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
