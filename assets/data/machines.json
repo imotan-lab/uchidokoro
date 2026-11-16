@@ -13269,9 +13269,13 @@
   "seo": {
    "title": "L押忍！番長番付 スペック・基本情報"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "番長番付",
+   "おすばんちょうばんづけ",
+   "ばんちょうばんづけ"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -13312,7 +13316,8 @@
     "p-town.dmm.com"
    ],
    "observed_model_code": "L/押忍番長番付/PA7"
-  }
+  },
+  "series": "番長"
  },
  {
   "slug": "dmm_5100",
