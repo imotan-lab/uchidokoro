@@ -120,7 +120,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-16",
+   "decided_at": "2026-11-17",
    "input_digest": "sha256:9da2a483149e4f9803fd62ae50c57f3a7b799bfed00ee07fc3c08b8aaf52577b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -158,8 +158,8 @@
     "target": 300
    }
   },
-  "targetProjection": "a39769cb5ba2151d",
-  "series": ""
+  "series": "",
+  "targetProjection": "a39769cb5ba2151d"
  },
  {
   "slug": "dmm_5073",
