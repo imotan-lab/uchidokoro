@@ -103,7 +103,7 @@ def mode_conf(c, key):
     return None
 
 
-def mode_line(c, conf):
+def mode_line(c, conf, rate=None):
     """★その欄で読者が見る狙い目の線★（2026-10-25）
 
     ★記事の狙い目と同じ数字を出す★＝`target_display.effective_good` を
@@ -115,7 +115,7 @@ def mode_line(c, conf):
     """
     if not isinstance(conf, dict) or _td.is_off(conf):
         return None
-    g = _td.effective_good(conf, _td.default_rate(c))
+    g = _td.effective_good(conf, _td.default_rate(c) if rate is None else rate)
     # ★「狙い目なし」の番兵（設定狙いの99999）は数値として出さない★（2026-10-25・Codex review247）
     if g is None or g >= _td.NO_TARGET:
         return None
@@ -151,6 +151,29 @@ def base_pick(m):
 
 def base_line(m):
     return base_pick(m)[1]
+
+
+# ★期待値ランキングの行は5.6枚交換の線★（2026-11-16・運営者「ややこしいからこの表記消していいよ」）
+#   並び順（外の期待値）は全部5.6枚交換なので、交換率を選べる機種は5.6枚の線を出す
+#   （直す前はバンドリだけ既定の「等価」の線が出ていた）。交換率を選べない機種はチェッカーの1本の線。
+EV_RATE = "eq56"
+
+
+def ev_lines(m):
+    """★期待値ランキングに出す（リセット前の線, リセット後の線）★。どちらかが読めなければ (None, None)"""
+    c = m.get("checker") or {}
+    if not isinstance(c, dict):
+        return None, None
+    keys = [str(r.get("key")) for r in (c.get("exchangeRates") or []) if isinstance(r, dict)]
+    rk = EV_RATE if EV_RATE in keys else None
+    bk = base_pick(m)[0]
+    if bk is None:
+        return None, None
+    n = mode_line(c, mode_conf(c, bk), rk)
+    r = mode_line(c, mode_conf(c, "reset"), rk)
+    if n is None or r is None:
+        return None, None
+    return n, r
 
 
 def mode_label(c, key, fallback):
@@ -523,6 +546,7 @@ def load_rows(source: "Path | None" = None):
                 #   表だけでは交換条件の違う数字を並べていると分からなかった。
                 ratelabel=(_td.rate_label(c, _td.default_rate(c)) or _td.NORATE_PREFIX),
                 rline=mode_line(c, mode_conf(c, "reset")),
+                ev_lines=ev_lines(m),
                 zero_rates=reset_zero_rates(c),
             )
         )
@@ -1024,11 +1048,12 @@ def _build_pages(rows: list, prose_all: dict, notes: "dict | None" = None,
     EV = ev_rows(C, ev_order)
     ev_list = render_rank_list(
         EV,
-        lambda r: f'{esc(r["ratelabel"])} ／ {esc(r["nlabel"])} <strong>{r["nline"]}G〜</strong> → {esc(r["rlabel"])} <strong>{r["rline"]}G〜</strong>',
+        lambda r: (f'リセット前 <strong>{r["ev_lines"][0]}G〜</strong> → リセット後 <strong>{r["ev_lines"][1]}G〜</strong>'
+                   if r.get("ev_lines") and r["ev_lines"][0] is not None else ""),
     ) if EV else ""
     ev_note = (
         "狙い目は、ここから打つとお得になる当サイトの目安です。"
-        "交換率を選べる機種は、最初に表示される交換率の狙い目です。"
+        "交換率を選べる機種は、5.6枚交換の狙い目です。"
         # ★載せる上限と外した機種を書く★（2026-11-10・Codex review_ev_page＝確かめた全機種を比べていると読める）
         f"掲載は上位<span class=\"list-count\">{RESET_SHOWN}</span>機種までです。"
         + (CUT_NOTE if c_cut else "")
@@ -1615,6 +1640,14 @@ def selftest() -> int:
         t("★朝一リセットのページ（狙える幅の大きい順）は並び順に左右されない★",
           _e0["guide-reset-ranking.html"] == _e1["guide-reset-ranking.html"])
         t("★期待値ランキングに金額（円）を出さない★", "円" not in _ev_html)
+        t("★期待値ランキングの行は「リセット前→リセット後」だけ（交換率の呼び名を出さない）★",
+          "リセット前 <strong>" in _ev_html and "チェッカー基準" not in _ev_html and " ／ " not in _ev_html)
+        _bd = {"checker": {"exchangeRates": [{"key": "equal", "label": "等価"}, {"key": "eq56", "label": "5.6枚"}],
+                           "normal": {"good": 500, "byRate": {"eq56": {"good": 560}}},
+                           "reset": {"good": 100, "byRate": {"eq56": {"good": 150}}}}}
+        t("★期待値ランキングは既定が等価の機種でも5.6枚の線を出す★", ev_lines(_bd) == (560, 150))
+        _bd2 = {"checker": {"normal": {"good": 600}, "reset": {"good": 200}}}
+        t("★交換率を選べない機種はチェッカーの1本の線★", ev_lines(_bd2) == (600, 200))
         t("★期待値ランキングは載せる上限を書く★（確かめた全機種を比べていると読ませない）",
           f'掲載は上位<span class="list-count">{RESET_SHOWN}</span>機種まで' in _e1[_EVP])
         t("★期待値ランキングの一覧も公開データ由来として扱い、2回出たら止める★",

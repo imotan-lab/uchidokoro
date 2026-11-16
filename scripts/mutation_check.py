@@ -1943,8 +1943,16 @@ MUTATIONS = [
         "why": "★ランキングが様子見の入口（caution）を狙い目として出す"
                "（カバネリ430G・記事はST間590G）★",
         "file": "scripts/build_hub_pages.py",
-        "before": "    g = _td.effective_good(conf, _td.default_rate(c))",
+        "before": "    g = _td.effective_good(conf, _td.default_rate(c) if rate is None else rate)",
         "after": '    g = conf.get("caution")',
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    # ─── 2026-11-16・期待値ランキングの行は5.6枚交換の線にそろえる ─────────────
+    {
+        "why": "★期待値ランキングが既定の交換率（バンドリは等価）の線を出し、5.6枚にそろわない★",
+        "file": "scripts/build_hub_pages.py",
+        "before": "    rk = EV_RATE if EV_RATE in keys else None",
+        "after": "    rk = None",
         "run": ["scripts/build_hub_pages.py"],
     },
     # ─── 2026-11-06・朝一リセットの「リセット後すぐ狙い目に入る機種」 ─────────────
