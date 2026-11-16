@@ -13325,9 +13325,15 @@
   "seo": {
    "title": "スマスロ バジリスク～甲賀忍法帖～Ⅳ スペック・基本情報"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "バジリスク4",
+   "バジリスクⅣ",
+   "バジ4",
+   "甲賀忍法帖4",
+   "ばじりすく4"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -13369,7 +13375,8 @@
    "_observed_model_code_sources": [
     "p-town.dmm.com"
    ]
-  }
+  },
+  "series": "バジリスク"
  },
  {
   "slug": "dmm_5131",
