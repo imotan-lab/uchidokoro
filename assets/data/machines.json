@@ -13452,9 +13452,15 @@
   "seo": {
    "title": "スマスロモンキーターンRED スペック・基本情報"
   },
-  "info": "",
+  "info": "スマスロAT",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "モンキーターンRED",
+   "モンキーターンレッド",
+   "もんきーたーんれっど",
+   "モンキーRED",
+   "モンキーレッド"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -13494,6 +13500,7 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5136 型式=未掲載 メーカー=セブンリーグ 導入=2027-01 確認日=2026-10-22",
    "market_release_date": "2027-01-12"
-  }
+  },
+  "series": "モンキーターン"
  }
 ]
