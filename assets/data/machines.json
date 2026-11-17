@@ -710,6 +710,7 @@
    "reason_codes": [],
    "claims": [
     "at:MAIN_AT",
+    "at:UPPER_AT",
     "at_prob",
     "ceiling:GAME:AT間",
     "ceiling:GAME:CZ間",
@@ -719,8 +720,8 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-17",
-   "input_digest": "sha256:856e7640453ab4c31055041e22d90e3cbee50b58b346d532d2ba42011ad9be50"
+   "decided_at": "2026-11-18",
+   "input_digest": "sha256:85577b354a48939e630f2ed51e2a126ee8fc56285514e4eb07689713dc8e901b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
