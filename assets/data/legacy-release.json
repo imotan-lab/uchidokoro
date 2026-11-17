@@ -121,6 +121,11 @@
    "url": "https://p-town.dmm.com/machines/4752",
    "checked": "2026-11-14"
   },
+  "gogo_juggler3": {
+   "release": "2023-07-03",
+   "url": "https://p-town.dmm.com/machines/4375",
+   "checked": "2026-11-17"
+  },
   "goji_eva": {
    "release": "2024-02-05",
    "url": "https://p-town.dmm.com/machines/4501",
@@ -150,6 +155,16 @@
    "release": "2023-04-03",
    "url": "https://p-town.dmm.com/machines/4301",
    "checked": "2026-11-15"
+  },
+  "hokuto_tensei2": {
+   "release": "2026-01-05",
+   "url": "https://p-town.dmm.com/machines/4909",
+   "checked": "2026-11-17"
+  },
+  "isekai_quattro_bt": {
+   "release": "2026-04-06",
+   "url": "https://p-town.dmm.com/machines/4965",
+   "checked": "2026-11-17"
   },
   "iza_bancho": {
    "release": "2025-06-02",
@@ -186,6 +201,11 @@
    "url": "https://p-town.dmm.com/machines/4860",
    "checked": "2026-11-15"
   },
+  "kyokousuiri": {
+   "release": "2026-04-06",
+   "url": "https://p-town.dmm.com/machines/4973",
+   "checked": "2026-11-17"
+  },
   "lupin_daikokaisha": {
    "release": "2024-12-02",
    "url": "https://p-town.dmm.com/machines/4689",
@@ -195,6 +215,11 @@
    "release": "2023-11-06",
    "url": "https://p-town.dmm.com/machines/4420",
    "checked": "2026-11-10"
+  },
+  "magireco": {
+   "release": "2025-04-07",
+   "url": "https://p-town.dmm.com/machines/4745",
+   "checked": "2026-11-17"
   },
   "mhrise": {
    "release": "2024-11-18",
@@ -220,6 +245,11 @@
    "release": "2024-07-22",
    "url": "https://p-town.dmm.com/machines/4588",
    "checked": "2026-11-11"
+  },
+  "my_juggler_v": {
+   "release": "2021-12-06",
+   "url": "https://p-town.dmm.com/machines/4029",
+   "checked": "2026-11-17"
   },
   "nanatsuma": {
    "release": "2025-01-20",
@@ -255,6 +285,11 @@
    "release": "2024-08-05",
    "url": "https://p-town.dmm.com/machines/4623",
    "checked": "2026-11-10"
+  },
+  "onimusha3": {
+   "release": "2025-10-06",
+   "url": "https://p-town.dmm.com/machines/4880",
+   "checked": "2026-11-17"
   },
   "prismnana": {
    "release": "2025-12-08",
@@ -325,6 +360,11 @@
    "release": "2023-10-02",
    "url": "https://p-town.dmm.com/machines/4405",
    "checked": "2026-11-15"
+  },
+  "thunder_v": {
+   "release": "2026-03-02",
+   "url": "https://p-town.dmm.com/machines/4943",
+   "checked": "2026-11-17"
   },
   "tokyo_ghoul": {
    "release": "2025-02-03",
@@ -407,12 +447,15 @@
   "goblin": "2026-11-15",
   "godeater": "2026-11-15",
   "godzilla": "2026-11-14",
+  "gogo_juggler3": "2026-11-17",
   "goji_eva": "2026-11-14",
   "gundam_seed": "2026-11-14",
   "gundam_uc2": "2026-11-13",
   "hanma_baki": "2026-11-11",
   "hihou": "2026-11-12",
   "hokuto": "2026-11-15",
+  "hokuto_tensei2": "2026-11-17",
+  "isekai_quattro_bt": "2026-11-17",
   "iza_bancho": "2026-11-14",
   "kabaneri": "2026-11-12",
   "kaguya": "2026-11-15",
@@ -420,13 +463,16 @@
   "kizumonogatari": "2026-11-14",
   "koukaku": "2026-11-10",
   "kurea_bt": "2026-11-15",
+  "kyokousuiri": "2026-11-17",
   "lupin_daikokaisha": "2026-11-16",
   "madomagi_forte": "2026-11-10",
+  "magireco": "2026-11-17",
   "mhrise": "2026-11-15",
   "midoridon_viva": "2026-11-14",
   "milliongod_kiseki": "2026-11-16",
   "monkeyv": "2026-11-12",
   "mr_juggler": "2026-11-11",
+  "my_juggler_v": "2026-11-17",
   "nanatsuma": "2026-11-16",
   "neoplanet": "2026-11-11",
   "okidoki_black": "2026-11-14",
@@ -434,6 +480,7 @@
   "okidoki_gold": "2026-11-14",
   "okidoki_gorgeous": "2026-11-10",
   "onepunchman": "2026-11-10",
+  "onimusha3": "2026-11-17",
   "prismnana": "2026-11-13",
   "railgun2": "2026-11-14",
   "revue_starlight": "2026-11-11",
@@ -448,6 +495,7 @@
   "tekken6": "2026-11-16",
   "tenken": "2026-11-13",
   "tensura": "2026-11-15",
+  "thunder_v": "2026-11-17",
   "tokyo_ghoul": "2026-11-16",
   "tolove_darkness": "2026-11-14",
   "triple_crown_7": "2026-11-13",
