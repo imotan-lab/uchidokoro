@@ -1366,16 +1366,17 @@
    "confirmed_topics": [
     "ceiling",
     "cz",
+    "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "gameplay",
     "strategy",
     "reset"
    ],
    "reason_codes": [],
    "claims": [
+    "at:MAIN_AT",
     "ceiling:GAME:通常時",
     "cz:牙狼mode",
     "games_per_50",
@@ -1383,8 +1384,8 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-11",
-   "input_digest": "sha256:dcf2495482b81c81f2abb067d53c97a79a05537ed0fe6e533e4a7d27a9ed5551"
+   "decided_at": "2026-11-18",
+   "input_digest": "sha256:07294ae1b9fe175b3932b10dcbe52a032cb93b4865fa3147903f26d4f2c93a5b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
@@ -1416,8 +1417,8 @@
     "target": 660
    }
   },
-  "targetProjection": "1c082c0cdc071eef",
-  "series": ""
+  "series": "",
+  "targetProjection": "1c082c0cdc071eef"
  },
  {
   "slug": "enen2",
