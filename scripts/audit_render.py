@@ -1008,6 +1008,38 @@ def selftest_dom() -> int:
             t("★★ふつうの表の形が、人が書いた基準と一致する★★"
               "（実ページと描き直しが同じ誤りを持っても、これは気づく）",
               _why == [])
+            # ★★モード・ゾーンは表にせず並べる★★（2026-11-17・運営者）＝人が書いた基準を1件。
+            #   空のセルは行ごと出さない／同じ断り書きが続けば最後の1回だけ
+            _mz_sec = {"title": "モード・ゾーン", "type": "table",
+                       "tables": [{"headers": ["モード", "見分け方", "期待"],
+                                   "rows": [["通常A", "ロゴなし", ""]],
+                                   "note": "確認できたものだけ"},
+                                  {"headers": ["ゾーン", "見分け方"],
+                                   "rows": [["1周期目", "AT後"]],
+                                   "note": "確認できたものだけ"}]}
+
+            def _p(cls, kids):
+                return {"tag": "p", "cls": cls, "at": {}, "kids": kids}
+
+            def _mz(cap, name, lines):
+                return {"tag": "div", "cls": "mz-list", "at": {}, "kids": [
+                    _p("mz-cap", [cap]),
+                    {"tag": "div", "cls": "mz-item", "at": {}, "kids": [
+                        _p("mz-name", [name])] + [
+                        _p("mz-line", [{"tag": "span", "cls": "mz-key", "at": {},
+                                        "kids": [k]}, v]) for k, v in lines]}]}
+            _want_mz = {
+                "tag": "div", "cls": "article-item", "at": {}, "kids": [
+                    {"tag": "h3", "cls": "article-title", "at": {},
+                     "kids": ["モード・ゾーン"]},
+                    _mz("モード", "通常A", [("見分け方", "ロゴなし")]),
+                    _mz("ゾーン", "1周期目", [("見分け方", "AT後")]),
+                    _p("settei-note", ["確認できたものだけ"])]}
+            _got_mz = pg.evaluate(
+                EXPECT_JS, [_bmp.render_section(_mz_sec)])[0]
+            t("★★モード・ゾーンの並べ方が、人が書いた基準と一致する★★"
+              "（空のセルは出さない・同じ断り書きは最後の1回だけ）",
+              tree_problems("モード", _got_mz, _want_mz) == [])
             for _x in _why[:3]:
                 print("    " + _x)
             t("　基準を1文字変えれば止める（この試験が効いている証拠）",

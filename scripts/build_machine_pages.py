@@ -254,6 +254,47 @@ def section_attrs(section: dict) -> str:
     return out
 
 
+def _mode_title() -> str:
+    from build_new_article import MODE_TITLE
+    return MODE_TITLE
+
+
+def render_mode_list(section: dict, body: list) -> str:
+    """★★モード・ゾーンは表にせず「名前の下に説明が並ぶ形」で出す★★（2026-11-17・運営者
+    「見た目おかしくない？」「無理に表にする必要ないと思う」）＝3列の表はスマホで1セルが
+    4〜5文字ごとに折り返していた。★データ（headers / rows / note）は表のまま★で、描き方だけ変える。
+    1列目＝名前、2列目以降＝見出しを札にして1行ずつ。同じ断り書きが続くときは最後の1回だけ出す。
+    ★machine.html の JS（renderModeList）と同じ作り★（食い違うと R15 が落ちる）。"""
+    tables = section.get("tables") or []
+    h = f'<h3 class="article-title">{esc(section.get("title", ""))}</h3>'
+    for i, tbl in enumerate(tables):
+        if tbl.get("label"):
+            h += f'<p class="settei-sub-label">{esc(tbl["label"])}</p>'
+        heads = tbl.get("headers", []) or []
+        h += '<div class="mz-list">'
+        if heads and str(heads[0]).strip():
+            h += f'<p class="mz-cap">{esc(heads[0])}</p>'
+        for row in tbl.get("rows", []):
+            cells = row if isinstance(row, list) else [row]
+            if not cells:
+                continue
+            h += f'<div class="mz-item"><p class="mz-name">{md(cells[0])}</p>'
+            for j, c in enumerate(cells[1:], 1):
+                if not str(c).strip():
+                    continue
+                key = heads[j] if j < len(heads) else ""
+                k = f'<span class="mz-key">{esc(key)}</span>' if str(key).strip() else ""
+                h += f'<p class="mz-line">{k}{md(c)}</p>'
+            h += "</div>"
+        h += "</div>"
+        note = tbl.get("note")
+        nxt = tables[i + 1].get("note") if i + 1 < len(tables) else None
+        if note and note != nxt:
+            h += f'<p class="settei-note">{esc(note)}</p>'
+    h += "".join(f'<p class="article-body">{md(t)}</p>' for t in body)
+    return h
+
+
 def render_section(section: dict) -> str:
     """1セクションを machine.html の JS と同じ構造の静的HTMLに。"""
     title = section.get("title", "")
@@ -268,6 +309,9 @@ def render_section(section: dict) -> str:
         inner = (f'<h3 class="article-title">{esc(title)}</h3>'
                  f'<div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p>{paras}</div>')
         return f'<div class="article-item"{section_attrs(section)}>{inner}</div>'
+
+    if stype == "table" and title == _mode_title():
+        return f'<div class="article-item"{section_attrs(section)}>{render_mode_list(section, body)}</div>'
 
     if stype == "table":
         # ★★ふつうの表★★（2026-08-31・運営者の要望③の土台）

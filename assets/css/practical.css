@@ -409,6 +409,17 @@ button, input, select { font: inherit; }
 .article-body { color: var(--soft); font-size: var(--fs-body); line-height: 1.85; margin: 0 0 10px; }
 .article-body:last-child { margin-bottom: 0; }
 
+/* MODE / ZONE LIST（モード・ゾーンは表にせず、名前の下に説明を並べる・2026-11-17） */
+.mz-list { margin: 0 0 4px; }
+.mz-cap { color: var(--muted); font-size: var(--fs-min); letter-spacing: .1em; font-weight: 700; margin: 14px 0 2px; }
+.mz-list:first-of-type .mz-cap { margin-top: 2px; }
+.mz-item { padding: 10px 0; border-top: 1px solid var(--line); }
+.mz-item:last-child { border-bottom: 1px solid var(--line); }
+.mz-name { color: var(--text); font-size: var(--fs-body); font-weight: 800; margin: 0 0 4px; }
+.mz-line { color: var(--soft); font-size: var(--fs-body); line-height: 1.7; margin: 0; }
+.mz-line + .mz-line { margin-top: 4px; }
+.mz-key { color: var(--muted); font-size: var(--fs-label); font-weight: 700; margin-right: 8px; }
+
 /* SETTEI TABLE */
 .settei-sub-label { color: var(--muted); font-size: var(--fs-min); letter-spacing: .1em; font-weight: 700; margin: 16px 0 8px; }
 .article-item .settei-sub-label:first-of-type { margin-top: 4px; }
