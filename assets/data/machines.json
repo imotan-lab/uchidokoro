@@ -640,7 +640,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-11",
+   "decided_at": "2026-11-17",
    "input_digest": "sha256:6722ee8e16f18eeb224b308500dc43f7ef7b78f5f9330009c1d5e4448acd428a"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -659,7 +659,7 @@
    ]
   },
   "checker": {
-   "coinRate": 31.0,
+   "coinRate": 31,
    "unit": "G",
    "modes": [
     {
@@ -674,8 +674,8 @@
     "target": 550
    }
   },
-  "targetProjection": "d9017d3adaea3f1b",
-  "series": ""
+  "series": "",
+  "targetProjection": "d9017d3adaea3f1b"
  },
  {
   "slug": "dmm_5079",
