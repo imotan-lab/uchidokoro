@@ -4623,6 +4623,102 @@
   "release_date": "2026-04-06"
  },
  {
+  "slug": "kyokousuiri",
+  "name": "L虚構推理",
+  "seo": {
+   "title": "L虚構推理 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "チェッカー基準 通常600G〜 / リセット500G〜",
+  "aliases": [
+   "虚構推理",
+   "きょこうすいり",
+   "きょこす",
+   "虚構"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 1000,
+    "good": 600,
+    "caution": 500,
+    "note": "天井虚構真偽間最大1000G。600G~から狙い目。恩恵はボーナス+雪女ストック1個以上。"
+   },
+   "reset": {
+    "excellent": 700,
+    "good": 500,
+    "caution": 300,
+    "note": "設定変更後は天井が最大700G（または300G）に短縮。"
+   }
+  },
+  "limit": 1000,
+  "original": {
+   "title": "虚構推理",
+   "kind": "漫画",
+   "search": "虚構推理 漫画"
+  }
+ },
+ {
+  "slug": "isekai_quattro_bt",
+  "name": "A-SLOT+ 異世界かるてっとBT",
+  "seo": {
+   "title": "A-SLOT+ 異世界かるてっとBT スペックまとめ"
+  },
+  "info": "スマスロBT",
+  "strategy": "設定狙い主体・天井なし（BT合算約1/99）",
+  "aliases": [
+   "異世界かるてっと",
+   "いせかい",
+   "いせかる",
+   "かるてっと",
+   "異世界カルテット"
+  ],
+  "original": {
+   "title": "異世界かるてっと",
+   "kind": "アニメ",
+   "search": "異世界かるてっと Blu-ray"
+  }
+ },
+ {
+  "slug": "thunder_v",
+  "name": "スマスロ サンダーV",
+  "seo": {
+   "title": "サンダーV 設定判別・狙い目まとめ"
+  },
+  "info": "スマスロノーマル",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "サンダー",
+   "サンダーV"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "ノーマルタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBB・RB・ベルをカウントしてください。"
+   }
+  },
+  "limit": null
+ },
+ {
   "slug": "koukaku",
   "name": "スマスロ 攻殻機動隊",
   "seo": {
@@ -5452,6 +5548,105 @@
    "title": "鉄拳",
    "kind": "ゲーム",
    "search": "鉄拳 ゲーム"
+  }
+ },
+ {
+  "slug": "hokuto_tensei2",
+  "name": "スマスロ 北斗の拳 転生の章2",
+  "seo": {
+   "title": "スマスロ 北斗の拳 転生の章2 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 あべし間780あべし〜 / リセット625あべし〜",
+  "checker": {
+   "unit": "あべし",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "あべし間"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 1050,
+    "good": 780,
+    "caution": 700,
+    "byRate": {
+     "eq56": {
+      "excellent": 1050,
+      "good": 780,
+      "caution": 640,
+      "note": "5.6枚は780あべし〜が狙い目、640あべし台から候補です。"
+     },
+     "rate55": {
+      "excellent": 1100,
+      "good": 840,
+      "caution": 700,
+      "note": "6.0枚交換は840あべし基準です。700あべし台は候補止まりにしてください。"
+     },
+     "rate50": {
+      "excellent": 1150,
+      "good": 950,
+      "caution": 750,
+      "note": "6.5枚交換は950あべし基準です。750あべし以深に絞るのが安全です。"
+     },
+     "rate45": {
+      "excellent": 1200,
+      "good": 1000,
+      "caution": 800,
+      "note": "7.0枚交換は1000あべし基準です。800あべし超えの深め台だけに絞ってください。"
+     }
+    },
+    "note": "あべし間天井1536で恩恵AT直撃。780あべし〜が狙い目ライン（等価）。"
+   },
+   "reset": {
+    "excellent": 1280,
+    "good": 625,
+    "caution": 400,
+    "note": "設定変更後は天井1280あべしに短縮。625あべし〜が狙い目（交換率別の細かい基準は当サイトで確認できていないため出していません）。"
+   },
+   "limit": 1536
+  },
+  "limit": 1536,
+  "aliases": [
+   "北斗転生",
+   "転生の章",
+   "てんせい",
+   "北斗転生2",
+   "転生2"
+  ],
+  "original": {
+   "title": "北斗の拳",
+   "kind": "漫画",
+   "search": "北斗の拳 漫画"
+  },
+  "strategyByRate": {
+   "eq56": "あべし間780あべし〜 / リセット625あべし〜",
+   "rate55": "あべし間840あべし〜 / リセット625あべし〜",
+   "rate50": "あべし間950あべし〜 / リセット625あべし〜",
+   "rate45": "あべし間1000あべし〜 / リセット625あべし〜"
   }
  },
  {
@@ -6435,6 +6630,161 @@
    }
   },
   "limit": 1280
+ },
+ {
+  "slug": "onimusha3",
+  "name": "L新鬼武者3",
+  "seo": {
+   "title": "新鬼武者3 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常550G〜 / リセット400G〜",
+  "strategyByRate": {
+   "eq56": "通常550G〜 / リセット400G〜",
+   "rate55": "通常560G〜 / リセット400G〜",
+   "rate50": "通常600G〜 / リセット400G〜",
+   "rate45": "通常630G〜 / リセット420G〜"
+  },
+  "aliases": [
+   "鬼武者",
+   "オニムシャ",
+   "新鬼武者"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 900,
+    "good": 550,
+    "caution": 400,
+    "byRate": {
+     "eq56": {
+      "excellent": 900,
+      "good": 550,
+      "caution": 400,
+      "note": "5.6枚交換なら550Gから狙い目。G数天井1000G+α。"
+     },
+     "rate55": {
+      "excellent": 900,
+      "good": 560,
+      "caution": 410,
+      "note": "6.0枚交換なら560Gから。"
+     },
+     "rate50": {
+      "excellent": 900,
+      "good": 600,
+      "caution": 450,
+      "note": "6.5枚交換なら600Gから。"
+     },
+     "rate45": {
+      "excellent": 900,
+      "good": 630,
+      "caution": 480,
+      "note": "7.0枚交換なら630Gから。"
+     }
+    },
+    "note": "G数天井1000G+α。周期天井は最大6周期。"
+   },
+   "reset": {
+    "excellent": 500,
+    "good": 400,
+    "caution": 200,
+    "byRate": {
+     "eq56": {
+      "excellent": 500,
+      "good": 400,
+      "caution": 200,
+      "note": "リセット時は周期天井が最大4周期に短縮。"
+     },
+     "rate55": {
+      "excellent": 500,
+      "good": 400,
+      "caution": 210,
+      "note": "リセット時は最大4周期に短縮。"
+     },
+     "rate50": {
+      "excellent": 500,
+      "good": 400,
+      "caution": 250,
+      "note": "リセット時は最大4周期に短縮。"
+     },
+     "rate45": {
+      "excellent": 500,
+      "good": 420,
+      "caution": 280,
+      "note": "リセット時は最大4周期に短縮。"
+     }
+    },
+    "note": "リセット時は周期天井が最大4周期に短縮。"
+   },
+   "cycle": {
+    "excellent": 6,
+    "good": 5,
+    "caution": 4,
+    "byRate": {
+     "eq56": {
+      "excellent": 6,
+      "good": 5,
+      "caution": 4,
+      "note": "周期天井は最大6周期。5周期目から狙い目。"
+     },
+     "rate55": {
+      "excellent": 6,
+      "good": 5,
+      "caution": 4,
+      "note": "5周期目から狙い目。"
+     },
+     "rate50": {
+      "excellent": 6,
+      "good": 5,
+      "caution": 4,
+      "note": "5周期目から狙い目。"
+     },
+     "rate45": {
+      "excellent": 6,
+      "good": 5,
+      "caution": 4,
+      "note": "5周期目から狙い目。"
+     }
+    },
+    "note": "周期天井は最大6周期。上位AT後は1周期天国濃厚。",
+    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+   }
+  },
+  "limit": 1000,
+  "original": {
+   "title": "鬼武者",
+   "kind": "ゲーム",
+   "search": "鬼武者 ゲーム"
+  }
  },
  {
   "slug": "kurea_bt",
@@ -7518,6 +7868,131 @@
   "tenjo_games": null,
   "release_date": "2025-04-07",
   "series": "ゴジラ"
+ },
+ {
+  "slug": "magireco",
+  "name": "Lスマスロマギアレコード",
+  "seo": {
+   "title": "マギアレコード 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常360G〜 / リセット150G〜",
+  "strategyByRate": {
+   "eq56": "通常360G〜 / リセット150G〜",
+   "rate55": "通常370G〜 / リセット200G〜",
+   "rate50": "通常400G〜 / リセット230G〜",
+   "rate45": "通常450G〜 / リセット260G〜"
+  },
+  "aliases": [
+   "マギレコ",
+   "マギアレコード",
+   "まどマギ外伝"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 580,
+    "good": 360,
+    "caution": 280,
+    "byRate": {
+     "eq56": {
+      "excellent": 580,
+      "good": 360,
+      "caution": 280,
+      "note": "5.6枚交換なら360G(540pt)から狙い目。天井950pt+α(約633G)。"
+     },
+     "rate55": {
+      "excellent": 580,
+      "good": 370,
+      "caution": 290,
+      "note": "6.0枚交換なら370Gから。"
+     },
+     "rate50": {
+      "excellent": 600,
+      "good": 400,
+      "caution": 320,
+      "note": "6.5枚交換なら400Gから。"
+     },
+     "rate45": {
+      "excellent": 600,
+      "good": 450,
+      "caution": 360,
+      "note": "7.0枚交換なら450Gから。"
+     }
+    },
+    "note": "pt管理天井950pt+α（約633G相当）。"
+   },
+   "reset": {
+    "excellent": 400,
+    "good": 150,
+    "caution": 80,
+    "byRate": {
+     "eq56": {
+      "excellent": 400,
+      "good": 150,
+      "caution": 80,
+      "note": "リセット時は天井600〜699pt+αに短縮。150Gから狙い目。"
+     },
+     "rate55": {
+      "excellent": 400,
+      "good": 200,
+      "caution": 100,
+      "note": "リセット時は600pt台に短縮。"
+     },
+     "rate50": {
+      "excellent": 400,
+      "good": 230,
+      "caution": 120,
+      "note": "リセット時は600pt台に短縮。"
+     },
+     "rate45": {
+      "excellent": 400,
+      "good": 260,
+      "caution": 150,
+      "note": "リセット時は600pt台に短縮。"
+     }
+    },
+    "note": "リセット時は天井600〜699pt+αに短縮。"
+   },
+   "limit": 700
+  },
+  "limit": 633,
+  "tenjo_display": "950pt+α（約633G相当）",
+  "tenjo_games": null,
+  "original": {
+   "title": "マギアレコード",
+   "kind": "ゲーム",
+   "search": "マギアレコード"
+  }
  },
  {
   "slug": "revue_starlight",
@@ -11768,276 +12243,6 @@
   }
  },
  {
-  "slug": "magireco",
-  "name": "Lスマスロマギアレコード",
-  "seo": {
-   "title": "マギアレコード 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常360G〜 / リセット150G〜",
-  "strategyByRate": {
-   "eq56": "通常360G〜 / リセット150G〜",
-   "rate55": "通常370G〜 / リセット200G〜",
-   "rate50": "通常400G〜 / リセット230G〜",
-   "rate45": "通常450G〜 / リセット260G〜"
-  },
-  "aliases": [
-   "マギレコ",
-   "マギアレコード",
-   "まどマギ外伝"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 580,
-    "good": 360,
-    "caution": 280,
-    "byRate": {
-     "eq56": {
-      "excellent": 580,
-      "good": 360,
-      "caution": 280,
-      "note": "5.6枚交換なら360G(540pt)から狙い目。天井950pt+α(約633G)。"
-     },
-     "rate55": {
-      "excellent": 580,
-      "good": 370,
-      "caution": 290,
-      "note": "6.0枚交換なら370Gから。"
-     },
-     "rate50": {
-      "excellent": 600,
-      "good": 400,
-      "caution": 320,
-      "note": "6.5枚交換なら400Gから。"
-     },
-     "rate45": {
-      "excellent": 600,
-      "good": 450,
-      "caution": 360,
-      "note": "7.0枚交換なら450Gから。"
-     }
-    },
-    "note": "pt管理天井950pt+α（約633G相当）。"
-   },
-   "reset": {
-    "excellent": 400,
-    "good": 150,
-    "caution": 80,
-    "byRate": {
-     "eq56": {
-      "excellent": 400,
-      "good": 150,
-      "caution": 80,
-      "note": "リセット時は天井600〜699pt+αに短縮。150Gから狙い目。"
-     },
-     "rate55": {
-      "excellent": 400,
-      "good": 200,
-      "caution": 100,
-      "note": "リセット時は600pt台に短縮。"
-     },
-     "rate50": {
-      "excellent": 400,
-      "good": 230,
-      "caution": 120,
-      "note": "リセット時は600pt台に短縮。"
-     },
-     "rate45": {
-      "excellent": 400,
-      "good": 260,
-      "caution": 150,
-      "note": "リセット時は600pt台に短縮。"
-     }
-    },
-    "note": "リセット時は天井600〜699pt+αに短縮。"
-   },
-   "limit": 700
-  },
-  "limit": 633,
-  "tenjo_display": "950pt+α（約633G相当）",
-  "tenjo_games": null,
-  "original": {
-   "title": "マギアレコード",
-   "kind": "ゲーム",
-   "search": "マギアレコード"
-  }
- },
- {
-  "slug": "hokuto_tensei2",
-  "name": "スマスロ 北斗の拳 転生の章2",
-  "seo": {
-   "title": "スマスロ 北斗の拳 転生の章2 狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 あべし間780あべし〜 / リセット625あべし〜",
-  "checker": {
-   "unit": "あべし",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "あべし間"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 1050,
-    "good": 780,
-    "caution": 700,
-    "byRate": {
-     "eq56": {
-      "excellent": 1050,
-      "good": 780,
-      "caution": 640,
-      "note": "5.6枚は780あべし〜が狙い目、640あべし台から候補です。"
-     },
-     "rate55": {
-      "excellent": 1100,
-      "good": 840,
-      "caution": 700,
-      "note": "6.0枚交換は840あべし基準です。700あべし台は候補止まりにしてください。"
-     },
-     "rate50": {
-      "excellent": 1150,
-      "good": 950,
-      "caution": 750,
-      "note": "6.5枚交換は950あべし基準です。750あべし以深に絞るのが安全です。"
-     },
-     "rate45": {
-      "excellent": 1200,
-      "good": 1000,
-      "caution": 800,
-      "note": "7.0枚交換は1000あべし基準です。800あべし超えの深め台だけに絞ってください。"
-     }
-    },
-    "note": "あべし間天井1536で恩恵AT直撃。780あべし〜が狙い目ライン（等価）。"
-   },
-   "reset": {
-    "excellent": 1280,
-    "good": 625,
-    "caution": 400,
-    "note": "設定変更後は天井1280あべしに短縮。625あべし〜が狙い目（交換率別の細かい基準は当サイトで確認できていないため出していません）。"
-   },
-   "limit": 1536
-  },
-  "limit": 1536,
-  "aliases": [
-   "北斗転生",
-   "転生の章",
-   "てんせい",
-   "北斗転生2",
-   "転生2"
-  ],
-  "original": {
-   "title": "北斗の拳",
-   "kind": "漫画",
-   "search": "北斗の拳 漫画"
-  },
-  "strategyByRate": {
-   "eq56": "あべし間780あべし〜 / リセット625あべし〜",
-   "rate55": "あべし間840あべし〜 / リセット625あべし〜",
-   "rate50": "あべし間950あべし〜 / リセット625あべし〜",
-   "rate45": "あべし間1000あべし〜 / リセット625あべし〜"
-  }
- },
- {
-  "slug": "kyokousuiri",
-  "name": "L虚構推理",
-  "seo": {
-   "title": "L虚構推理 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "チェッカー基準 通常600G〜 / リセット500G〜",
-  "aliases": [
-   "虚構推理",
-   "きょこうすいり",
-   "きょこす",
-   "虚構"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 1000,
-    "good": 600,
-    "caution": 500,
-    "note": "天井虚構真偽間最大1000G。600G~から狙い目。恩恵はボーナス+雪女ストック1個以上。"
-   },
-   "reset": {
-    "excellent": 700,
-    "good": 500,
-    "caution": 300,
-    "note": "設定変更後は天井が最大700G（または300G）に短縮。"
-   }
-  },
-  "limit": 1000,
-  "original": {
-   "title": "虚構推理",
-   "kind": "漫画",
-   "search": "虚構推理 漫画"
-  }
- },
- {
   "slug": "my_juggler_v",
   "name": "マイジャグラーV",
   "seo": {
@@ -12068,27 +12273,6 @@
   "series": "ジャグラー"
  },
  {
-  "slug": "isekai_quattro_bt",
-  "name": "A-SLOT+ 異世界かるてっとBT",
-  "seo": {
-   "title": "A-SLOT+ 異世界かるてっとBT スペックまとめ"
-  },
-  "info": "スマスロBT",
-  "strategy": "設定狙い主体・天井なし（BT合算約1/99）",
-  "aliases": [
-   "異世界かるてっと",
-   "いせかい",
-   "いせかる",
-   "かるてっと",
-   "異世界カルテット"
-  ],
-  "original": {
-   "title": "異世界かるてっと",
-   "kind": "アニメ",
-   "search": "異世界かるてっと Blu-ray"
-  }
- },
- {
   "slug": "new_king_hanahana_v",
   "name": "SBニューキングハナハナV-30",
   "seo": {
@@ -12117,35 +12301,6 @@
     "good": 99999,
     "caution": 99999,
     "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・サイドランプで設定推測。"
-   }
-  },
-  "limit": null
- },
- {
-  "slug": "thunder_v",
-  "name": "スマスロ サンダーV",
-  "seo": {
-   "title": "サンダーV 設定判別・狙い目まとめ"
-  },
-  "info": "スマスロノーマル",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "サンダー",
-   "サンダーV"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "ノーマルタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBB・RB・ベルをカウントしてください。"
    }
   },
   "limit": null
@@ -12428,161 +12583,6 @@
    "title": "東京卍リベンジャーズ",
    "kind": "漫画",
    "search": "東京リベンジャーズ 漫画"
-  }
- },
- {
-  "slug": "onimusha3",
-  "name": "L新鬼武者3",
-  "seo": {
-   "title": "新鬼武者3 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常550G〜 / リセット400G〜",
-  "strategyByRate": {
-   "eq56": "通常550G〜 / リセット400G〜",
-   "rate55": "通常560G〜 / リセット400G〜",
-   "rate50": "通常600G〜 / リセット400G〜",
-   "rate45": "通常630G〜 / リセット420G〜"
-  },
-  "aliases": [
-   "鬼武者",
-   "オニムシャ",
-   "新鬼武者"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 900,
-    "good": 550,
-    "caution": 400,
-    "byRate": {
-     "eq56": {
-      "excellent": 900,
-      "good": 550,
-      "caution": 400,
-      "note": "5.6枚交換なら550Gから狙い目。G数天井1000G+α。"
-     },
-     "rate55": {
-      "excellent": 900,
-      "good": 560,
-      "caution": 410,
-      "note": "6.0枚交換なら560Gから。"
-     },
-     "rate50": {
-      "excellent": 900,
-      "good": 600,
-      "caution": 450,
-      "note": "6.5枚交換なら600Gから。"
-     },
-     "rate45": {
-      "excellent": 900,
-      "good": 630,
-      "caution": 480,
-      "note": "7.0枚交換なら630Gから。"
-     }
-    },
-    "note": "G数天井1000G+α。周期天井は最大6周期。"
-   },
-   "reset": {
-    "excellent": 500,
-    "good": 400,
-    "caution": 200,
-    "byRate": {
-     "eq56": {
-      "excellent": 500,
-      "good": 400,
-      "caution": 200,
-      "note": "リセット時は周期天井が最大4周期に短縮。"
-     },
-     "rate55": {
-      "excellent": 500,
-      "good": 400,
-      "caution": 210,
-      "note": "リセット時は最大4周期に短縮。"
-     },
-     "rate50": {
-      "excellent": 500,
-      "good": 400,
-      "caution": 250,
-      "note": "リセット時は最大4周期に短縮。"
-     },
-     "rate45": {
-      "excellent": 500,
-      "good": 420,
-      "caution": 280,
-      "note": "リセット時は最大4周期に短縮。"
-     }
-    },
-    "note": "リセット時は周期天井が最大4周期に短縮。"
-   },
-   "cycle": {
-    "excellent": 6,
-    "good": 5,
-    "caution": 4,
-    "byRate": {
-     "eq56": {
-      "excellent": 6,
-      "good": 5,
-      "caution": 4,
-      "note": "周期天井は最大6周期。5周期目から狙い目。"
-     },
-     "rate55": {
-      "excellent": 6,
-      "good": 5,
-      "caution": 4,
-      "note": "5周期目から狙い目。"
-     },
-     "rate50": {
-      "excellent": 6,
-      "good": 5,
-      "caution": 4,
-      "note": "5周期目から狙い目。"
-     },
-     "rate45": {
-      "excellent": 6,
-      "good": 5,
-      "caution": 4,
-      "note": "5周期目から狙い目。"
-     }
-    },
-    "note": "周期天井は最大6周期。上位AT後は1周期天国濃厚。",
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   }
-  },
-  "limit": 1000,
-  "original": {
-   "title": "鬼武者",
-   "kind": "ゲーム",
-   "search": "鬼武者 ゲーム"
   }
  },
  {
