@@ -38,7 +38,9 @@ jobs:
     if: >-
       github.ref == 'refs/heads/main' &&
       vars.PAGES_DEPLOY_MODE == 'mirror'
-    runs-on: ubuntu-latest
+    # ★OSの版を名指しする（事前CI pages-rehearsal と同じ）★（2026-11-17）
+    #   ubuntu-latest は GitHub が 26.04 へ切り替え、Python 3.13.5 が用意されておらず配信が全部落ちた
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -93,7 +95,9 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    # ★OSの版を名指しする（事前CI pages-rehearsal と同じ）★（2026-11-17）
+    #   ubuntu-latest は GitHub が 26.04 へ切り替え、Python 3.13.5 が用意されておらず配信が全部落ちた
+    runs-on: ubuntu-24.04
     # ★書き込みの権限はこのジョブだけ★
     permissions:
       pages: write
