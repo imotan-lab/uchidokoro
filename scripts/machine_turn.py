@@ -269,9 +269,24 @@ def popular_without_turn(today: str, done_this_week: list, week: str, path: str 
     out = []
     for s9 in done_this_week or []:
         tr = d["turns"].get(s9)
-        if not tr or tr["started"] < week:
+        if not tr or not _turn_covers_week(tr, week):
             out.append(s9)
     return out
+
+
+def _turn_covers_week(tr: dict, week: str) -> bool:
+    """★その点検表が、その週の点検として数えられるか★
+
+    ★★週をまたいだ担当も数える★★（2026-11-18＝dmc5_st は日曜に始めて締切で翌朝へ回し、月曜に全項目を
+    そろえたのに、始めた日が前の週なので「点検表を始めていない」と2日続けて🟡が出た）。
+    ＝その週に始めた／その週の REVIEW_TURN_DAYS 日前までに始め、その週に1項目でも記録した。
+    ★ずっと前に始めた点検表は、その週に1項目記録しただけでは数えない★（reviewed_without_turn と同じ線）。
+    """
+    if tr["started"] >= week:
+        return True
+    lo = (_dt.date.fromisoformat(week) - _dt.timedelta(days=REVIEW_TURN_DAYS)).isoformat()
+    return tr["started"] >= lo and any(str(v.get("at") or "") >= week
+                                       for v in (tr.get("items") or {}).values())
 
 
 def reviewed_without_turn(last_reviewed: dict, path: str = None) -> list:
@@ -505,6 +520,15 @@ def selftest() -> int:
       popular_without_turn("2026-11-18", ["zzz_l", "zzz_x"], "2026-11-16", p) == ["zzz_x"]
       and popular_without_turn("2026-11-24", ["zzz_l"], "2026-11-23", p) == ["zzz_l"])
     t("　点検表ができる前の週の印は見ない", popular_without_turn("2026-11-10", ["zzz_x"], "2026-11-10", p) == [])
+    _p5 = p + ".wk.json"
+    with io.open(_p5, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"turns": {
+            "zzz_carry": {"started": "2026-11-15", "items": {"mode": {"at": "2026-11-16", "result": "OK", "note": ""}}},
+            "zzz_prev": {"started": "2026-11-15", "items": {"mode": {"at": "2026-11-15", "result": "OK", "note": ""}}},
+            "zzz_old": {"started": "2026-11-01", "items": {"mode": {"at": "2026-11-16", "result": "OK", "note": ""}}}}}))
+    t("★★前の週の終わりに始め、その週に記録した点検表は、その週の点検に数える★★（2026-11-18＝dmc5_st で誤報）",
+      popular_without_turn("2026-11-18", ["zzz_carry", "zzz_prev", "zzz_old"], "2026-11-16", _p5)
+      == ["zzz_prev", "zzz_old"])
     t("★★点検済みにしたのに、その日に点検表を始めていない機種を挙げる★★（Codexの指摘＝その他の機種は印だけ付けられた）",
       reviewed_without_turn({"zzz_l": "2026-11-17", "zzz_y": "2026-11-12", "zzz_old": "2026-11-01"}, p)
       == ["zzz_y"])

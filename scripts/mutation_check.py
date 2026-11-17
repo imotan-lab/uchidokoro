@@ -11029,7 +11029,7 @@ MUTATIONS = [
     {
         "why": "★担当機種：人気を見終わった印と点検表を突き合わせない★",
         "file": "scripts/machine_turn.py",
-        "before": "        if not tr or tr[\"started\"] < week:\n",
+        "before": "        if not tr or not _turn_covers_week(tr, week):\n",
         "after": "        if False:\n",
         "run": ["scripts/machine_turn.py"],
     },
@@ -12098,6 +12098,20 @@ MUTATIONS = [
         "before": "        if k in (\"settei\", \"settei_in\") and si[0] in _dsec:\n",
         "after": "        if False:\n",
         "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★担当機種：前の週の終わりに始めて今週仕上げた人気機種の点検表を「始めていない」と数える（dmc5_st で🟡の誤報）★",
+        "file": "scripts/machine_turn.py",
+        "before": "    return tr[\"started\"] >= lo and any(str(v.get(\"at\") or \"\") >= week\n",
+        "after": "    return False and any(str(v.get(\"at\") or \"\") >= week\n",
+        "run": ["scripts/machine_turn.py"],
+    },
+    {
+        "why": "★担当機種：ずっと前に始めた点検表でも、今週1項目記録しただけで今週の点検に数える★",
+        "file": "scripts/machine_turn.py",
+        "before": "    return tr[\"started\"] >= lo and any(str(v.get(\"at\") or \"\") >= week\n",
+        "after": "    return any(str(v.get(\"at\") or \"\") >= week\n",
+        "run": ["scripts/machine_turn.py"],
     },
 ]
 
