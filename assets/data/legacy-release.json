@@ -174,7 +174,7 @@
   "kabaneri": {
    "release": "2026-03-02",
    "url": "https://p-town.dmm.com/machines/4930",
-   "checked": "2026-11-12"
+   "checked": "2026-11-18"
   },
   "kaguya": {
    "release": "2024-09-02",
@@ -311,10 +311,20 @@
    "url": "https://p-town.dmm.com/machines/4352",
    "checked": "2026-11-10"
   },
+  "sao2": {
+   "release": "2026-06-08",
+   "url": "https://p-town.dmm.com/machines/5025",
+   "checked": "2026-11-18"
+  },
   "sengoku_otome4": {
    "release": "2023-09-04",
    "url": "https://p-town.dmm.com/machines/4395",
    "checked": "2026-11-13"
+  },
+  "sengoku_otome5": {
+   "release": "2026-06-08",
+   "url": "https://p-town.dmm.com/machines/5009",
+   "checked": "2026-11-18"
   },
   "sf5": {
    "release": "2024-06-03",
@@ -457,7 +467,7 @@
   "hokuto_tensei2": "2026-11-17",
   "isekai_quattro_bt": "2026-11-17",
   "iza_bancho": "2026-11-14",
-  "kabaneri": "2026-11-12",
+  "kabaneri": "2026-11-18",
   "kaguya": "2026-11-15",
   "kengan_ashura": "2026-11-14",
   "kizumonogatari": "2026-11-14",
@@ -485,7 +495,9 @@
   "railgun2": "2026-11-14",
   "revue_starlight": "2026-11-11",
   "sao": "2026-11-10",
+  "sao2": "2026-11-18",
   "sengoku_otome4": "2026-11-13",
+  "sengoku_otome5": "2026-11-18",
   "sf5": "2026-11-11",
   "shake_bt": "2026-11-15",
   "shaman_king": "2026-11-15",
