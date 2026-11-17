@@ -4,8 +4,8 @@
  "line_why": "打てる機種をランキングで紹介するため、DMMぱちタウンに載っている全国の設置店舗が100店より少ない機種を載せない。全国的に設置が少ないことを見る編集上の基準（2026-11-09・運営者の決定を受けて Claude と Codex が決めた線。全国の営業所は2025年末で6,464店）",
  "machines": {
   "akudama": {
-   "stores": 902,
-   "checked": "2026-11-13",
+   "stores": 901,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/4956"
   },
   "animal_dotch": {
@@ -29,13 +29,13 @@
    "url": "https://p-town.dmm.com/machines/4898"
   },
   "baki": {
-   "stores": 14,
-   "checked": "2026-11-13",
+   "stores": 16,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/4242"
   },
   "banchou4": {
-   "stores": 1121,
-   "checked": "2026-11-13",
+   "stores": 1124,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/4553"
   },
   "bandori": {
@@ -64,8 +64,8 @@
    "url": "https://p-town.dmm.com/machines/4974"
   },
   "bofuri": {
-   "stores": 2233,
-   "checked": "2026-11-13",
+   "stores": 2225,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/4566"
   },
   "burning_express": {
@@ -74,13 +74,13 @@
    "url": "https://p-town.dmm.com/machines/4896"
   },
   "chibaryo2": {
-   "stores": 979,
-   "checked": "2026-11-12",
+   "stores": 981,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/4530"
   },
   "darlifra": {
-   "stores": 751,
-   "checked": "2026-11-13",
+   "stores": 743,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/4855"
   },
   "dmc5_st": {
@@ -92,6 +92,16 @@
    "stores": 3001,
    "checked": "2026-11-16",
    "url": "https://p-town.dmm.com/machines/5073"
+  },
+  "dmm_5079": {
+   "stores": 3519,
+   "checked": "2026-11-17",
+   "url": "https://p-town.dmm.com/machines/5079"
+  },
+  "dmm_5086": {
+   "stores": 939,
+   "checked": "2026-11-17",
+   "url": "https://p-town.dmm.com/machines/5086"
   },
   "dmm_5095": {
    "stores": 4197,
@@ -114,8 +124,8 @@
    "url": "https://p-town.dmm.com/machines/5120"
   },
   "dmm_5121": {
-   "stores": 1876,
-   "checked": "2026-11-12",
+   "stores": 1894,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/5121"
   },
   "dumbbell": {
@@ -164,8 +174,8 @@
    "url": "https://p-town.dmm.com/machines/4788"
   },
   "gundam_uc2": {
-   "stores": 1023,
-   "checked": "2026-11-13",
+   "stores": 991,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/5002"
   },
   "hanma_baki": {
@@ -213,6 +223,11 @@
    "checked": "2026-11-16",
    "url": "https://p-town.dmm.com/machines/4931"
   },
+  "kyokousuiri": {
+   "stores": 1320,
+   "checked": "2026-11-17",
+   "url": "https://p-town.dmm.com/machines/4973"
+  },
   "lupin_daikokaisha": {
    "stores": 675,
    "checked": "2026-11-16",
@@ -222,6 +237,11 @@
    "stores": 13,
    "checked": "2026-11-16",
    "url": "https://p-town.dmm.com/machines/4420"
+  },
+  "magireco": {
+   "stores": 4408,
+   "checked": "2026-11-17",
+   "url": "https://p-town.dmm.com/machines/4745"
   },
   "mhrise": {
    "stores": 3997,
@@ -264,8 +284,8 @@
    "url": "https://p-town.dmm.com/machines/4582"
   },
   "okidoki_encore": {
-   "stores": 2414,
-   "checked": "2026-11-13",
+   "stores": 2408,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/4906"
   },
   "okidoki_gold": {
@@ -283,9 +303,14 @@
    "checked": "2026-11-15",
    "url": "https://p-town.dmm.com/machines/4623"
   },
+  "onimusha3": {
+   "stores": 4079,
+   "checked": "2026-11-17",
+   "url": "https://p-town.dmm.com/machines/4880"
+  },
   "prismnana": {
-   "stores": 629,
-   "checked": "2026-11-13",
+   "stores": 630,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/4904"
   },
   "prskkm": {
@@ -304,8 +329,8 @@
    "url": "https://p-town.dmm.com/machines/5061"
   },
   "pw_10523": {
-   "stores": 1314,
-   "checked": "2026-11-13",
+   "stores": 1290,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/5059"
   },
   "pw_10543": {
@@ -324,8 +349,8 @@
    "url": "https://p-town.dmm.com/machines/4706"
   },
   "rotis": {
-   "stores": 918,
-   "checked": "2026-11-13",
+   "stores": 911,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/5029"
   },
   "sao": {
@@ -344,8 +369,8 @@
    "url": "https://p-town.dmm.com/machines/5010"
   },
   "sengoku_otome4": {
-   "stores": 3526,
-   "checked": "2026-11-13",
+   "stores": 3512,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/4395"
   },
   "sengoku_otome5": {
@@ -394,8 +419,8 @@
    "url": "https://p-town.dmm.com/machines/4405"
   },
   "toaru_index2": {
-   "stores": 3482,
-   "checked": "2026-11-13",
+   "stores": 3504,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/5053"
   },
   "tokyo_ghoul": {
@@ -414,8 +439,8 @@
    "url": "https://p-town.dmm.com/machines/5048"
   },
   "umineko2": {
-   "stores": 997,
-   "checked": "2026-11-13",
+   "stores": 995,
+   "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/4925"
   },
   "valvrave2": {
@@ -465,29 +490,31 @@
   }
  },
  "tries": {
-  "akudama": "2026-11-13",
+  "akudama": "2026-11-17",
   "animal_dotch": "2026-11-13",
   "azurlane": "2026-11-15",
   "babel": "2026-11-16",
   "bakemonogatari": "2026-11-16",
-  "baki": "2026-11-13",
-  "banchou4": "2026-11-13",
+  "baki": "2026-11-17",
+  "banchou4": "2026-11-17",
   "bandori": "2026-11-15",
   "basilisk_tenzen": "2026-11-15",
   "bigdream_pusher": "2026-11-16",
   "biohazard": "2026-11-14",
   "biohazard_re3": "2026-11-16",
-  "bofuri": "2026-11-13",
+  "bofuri": "2026-11-17",
   "burning_express": "2026-11-14",
-  "chibaryo2": "2026-11-12",
-  "darlifra": "2026-11-13",
+  "chibaryo2": "2026-11-17",
+  "darlifra": "2026-11-17",
   "dmc5_st": "2026-11-16",
   "dmm_5073": "2026-11-16",
+  "dmm_5079": "2026-11-17",
+  "dmm_5086": "2026-11-17",
   "dmm_5095": "2026-11-15",
   "dmm_5113": "2026-11-15",
   "dmm_5119": "2026-11-16",
   "dmm_5120": "2026-11-16",
-  "dmm_5121": "2026-11-12",
+  "dmm_5121": "2026-11-17",
   "dumbbell": "2026-11-14",
   "enen": "2026-11-14",
   "enen2": "2026-11-14",
@@ -497,7 +524,7 @@
   "godeater": "2026-11-15",
   "goji_eva": "2026-11-14",
   "gundam_seed": "2026-11-14",
-  "gundam_uc2": "2026-11-13",
+  "gundam_uc2": "2026-11-17",
   "hanma_baki": "2026-11-14",
   "hihou": "2026-11-16",
   "hokuto": "2026-11-15",
@@ -507,8 +534,10 @@
   "kengan_ashura": "2026-11-14",
   "kizumonogatari": "2026-11-14",
   "koukaku": "2026-11-16",
+  "kyokousuiri": "2026-11-17",
   "lupin_daikokaisha": "2026-11-16",
   "madomagi_forte": "2026-11-16",
+  "magireco": "2026-11-17",
   "mhrise": "2026-11-15",
   "midoridon_viva": "2026-11-14",
   "milliongod_kiseki": "2026-11-16",
@@ -517,23 +546,24 @@
   "nangoku_special": "2026-11-14",
   "neoplanet": "2026-11-14",
   "okidoki_black": "2026-11-14",
-  "okidoki_encore": "2026-11-13",
+  "okidoki_encore": "2026-11-17",
   "okidoki_gold": "2026-11-14",
   "okidoki_gorgeous": "2026-11-16",
   "onepunchman": "2026-11-15",
-  "prismnana": "2026-11-13",
+  "onimusha3": "2026-11-17",
+  "prismnana": "2026-11-17",
   "prskkm": "2026-11-13",
   "pw_10503": "2026-11-16",
   "pw_10521": "2026-11-16",
-  "pw_10523": "2026-11-13",
+  "pw_10523": "2026-11-17",
   "pw_10543": "2026-11-13",
   "railgun2": "2026-11-14",
   "revue_starlight": "2026-11-15",
-  "rotis": "2026-11-13",
+  "rotis": "2026-11-17",
   "sao": "2026-11-15",
   "sao2": "2026-11-16",
   "sengoku_collection6": "2026-11-15",
-  "sengoku_otome4": "2026-11-13",
+  "sengoku_otome4": "2026-11-17",
   "sengoku_otome5": "2026-11-14",
   "shaman_king": "2026-11-15",
   "ssb1": "2026-11-15",
@@ -543,11 +573,11 @@
   "tekken6": "2026-11-16",
   "tenken": "2026-11-13",
   "tensura": "2026-11-15",
-  "toaru_index2": "2026-11-13",
+  "toaru_index2": "2026-11-17",
   "tokyo_ghoul": "2026-11-16",
   "tolove_darkness": "2026-11-14",
   "ultraman_final": "2026-11-14",
-  "umineko2": "2026-11-13",
+  "umineko2": "2026-11-17",
   "valvrave2": "2026-11-15",
   "world_dai_star": "2026-11-15",
   "yabachiba": "2026-11-15",
