@@ -11339,7 +11339,8 @@
     "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
    }
   },
-  "limit": 799
+  "limit": 799,
+  "series": "戦国乙女"
  },
  {
   "slug": "kizumonogatari",
