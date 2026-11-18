@@ -1515,12 +1515,13 @@
     "ceiling:POINT:思春期ポイント",
     "ceiling:THROUGH:CZ",
     "cz:エピソードチャンス",
+    "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
    "decided_at": "2026-11-19",
-   "input_digest": "sha256:1ece240def29200d46fbe50e2c21a448aeae45cca185b9357c5286d52c735d90"
+   "input_digest": "sha256:b2d91d628e98c8405b08ad5dd2bccb966b852861e038241618d4ab918ae5250e"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -1540,6 +1541,7 @@
    "regulatory_model_code": "L青春ブタ野郎L1"
   },
   "checker": {
+   "coinRate": 31.5,
    "unit": "G",
    "modes": [
     {
