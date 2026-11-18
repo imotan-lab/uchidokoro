@@ -101,6 +101,11 @@
    "url": "https://p-town.dmm.com/machines/4830",
    "checked": "2026-11-15"
   },
+  "funky_juggler2": {
+   "release": "2021-10-04",
+   "url": "https://p-town.dmm.com/machines/3961",
+   "checked": "2026-11-18"
+  },
   "gineiden_dnt": {
    "release": "2025-12-08",
    "url": "https://p-town.dmm.com/machines/4895",
@@ -141,10 +146,20 @@
    "url": "https://p-town.dmm.com/machines/5002",
    "checked": "2026-11-13"
   },
+  "hanabi": {
+   "release": "2026-02-02",
+   "url": "https://p-town.dmm.com/machines/4928",
+   "checked": "2026-11-18"
+  },
   "hanma_baki": {
    "release": "2026-02-02",
    "url": "https://p-town.dmm.com/machines/4941",
    "checked": "2026-11-11"
+  },
+  "happy_juggler_v3": {
+   "release": "2022-10-24",
+   "url": "https://p-town.dmm.com/machines/4230",
+   "checked": "2026-11-18"
   },
   "hihou": {
    "release": "2025-12-22",
@@ -180,6 +195,11 @@
    "release": "2024-09-02",
    "url": "https://p-town.dmm.com/machines/4618",
    "checked": "2026-11-15"
+  },
+  "karakuri": {
+   "release": "2023-07-03",
+   "url": "https://p-town.dmm.com/machines/4360",
+   "checked": "2026-11-18"
   },
   "kengan_ashura": {
    "release": "2023-11-20",
@@ -255,6 +275,11 @@
    "release": "2025-01-20",
    "url": "https://p-town.dmm.com/machines/4709",
    "checked": "2026-11-16"
+  },
+  "neo_aim_juggler": {
+   "release": "2025-09-01",
+   "url": "https://p-town.dmm.com/machines/4801",
+   "checked": "2026-11-18"
   },
   "neoplanet": {
    "release": "2025-11-17",
@@ -453,6 +478,7 @@
   "enen": "2026-11-14",
   "enen2": "2026-11-10",
   "eva_yakusoku": "2026-11-15",
+  "funky_juggler2": "2026-11-18",
   "gineiden_dnt": "2026-11-14",
   "goblin": "2026-11-15",
   "godeater": "2026-11-15",
@@ -461,7 +487,9 @@
   "goji_eva": "2026-11-14",
   "gundam_seed": "2026-11-14",
   "gundam_uc2": "2026-11-13",
+  "hanabi": "2026-11-18",
   "hanma_baki": "2026-11-11",
+  "happy_juggler_v3": "2026-11-18",
   "hihou": "2026-11-12",
   "hokuto": "2026-11-15",
   "hokuto_tensei2": "2026-11-17",
@@ -469,6 +497,7 @@
   "iza_bancho": "2026-11-14",
   "kabaneri": "2026-11-18",
   "kaguya": "2026-11-15",
+  "karakuri": "2026-11-18",
   "kengan_ashura": "2026-11-14",
   "kizumonogatari": "2026-11-14",
   "koukaku": "2026-11-10",
@@ -484,6 +513,7 @@
   "mr_juggler": "2026-11-11",
   "my_juggler_v": "2026-11-17",
   "nanatsuma": "2026-11-16",
+  "neo_aim_juggler": "2026-11-18",
   "neoplanet": "2026-11-11",
   "okidoki_black": "2026-11-14",
   "okidoki_encore": "2026-11-13",
