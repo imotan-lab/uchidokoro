@@ -94,7 +94,7 @@
   "enen2": {
    "release": "2026-02-02",
    "url": "https://p-town.dmm.com/machines/4926",
-   "checked": "2026-11-10"
+   "checked": "2026-11-19"
   },
   "eva_yakusoku": {
    "release": "2025-07-07",
@@ -476,7 +476,7 @@
   "dmc5_st": "2026-11-16",
   "dumbbell": "2026-11-11",
   "enen": "2026-11-14",
-  "enen2": "2026-11-10",
+  "enen2": "2026-11-19",
   "eva_yakusoku": "2026-11-15",
   "funky_juggler2": "2026-11-18",
   "gineiden_dnt": "2026-11-14",
@@ -556,6 +556,7 @@
   "dmc5_st": "2025-06-02",
   "dumbbell": "2024-12-16",
   "enen": "2024-05-07",
+  "enen2": "2026-02-02",
   "eva_yakusoku": "2025-07-07",
   "gineiden_dnt": "2025-12-08",
   "godzilla": "2025-04-07",
