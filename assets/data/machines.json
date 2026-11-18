@@ -1596,7 +1596,8 @@
     "caution": 700,
     "good": 700,
     "excellent": 700,
-    "target": 700
+    "target": 700,
+    "ceiling": 1200
    },
    "reset": {
     "caution": 350,
