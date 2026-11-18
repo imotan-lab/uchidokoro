@@ -3608,7 +3608,11 @@
       "checked": "2026-11-11"
     }
   },
-  "hand_checked": {},
+  "hand_checked": {
+    "monkeyv": {
+      "checked": "2026-11-19"
+    }
+  },
   "ko_checked": {
     "code_geass": {
       "checked": "2026-11-13",
