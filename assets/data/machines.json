@@ -5267,6 +5267,36 @@
   }
  },
  {
+  "slug": "hanabi",
+  "name": "Lハナビ",
+  "seo": {
+   "title": "スマスロハナビ 設定判別・スペックまとめ"
+  },
+  "info": "スマスロノーマル",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "ハナビ",
+   "HANABI",
+   "花火"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "ノーマルタイプのため天井非搭載。設定狙い主体の機種です。高設定が見込める環境での使用を推奨。"
+   }
+  },
+  "limit": null
+ },
+ {
   "slug": "tekken6",
   "name": "スマスロ鉄拳6",
   "seo": {
@@ -6825,6 +6855,36 @@
   },
   "release_date": "2025-09-08",
   "series": ""
+ },
+ {
+  "slug": "neo_aim_juggler",
+  "name": "ネオアイムジャグラーEX",
+  "seo": {
+   "title": "ネオアイムジャグラーEX 設定判別"
+  },
+  "info": "Aタイプ",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "アイム",
+   "ネオアイム"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+   }
+  },
+  "limit": null,
+  "series": "ジャグラー"
  },
  {
   "slug": "azurlane",
@@ -11504,6 +11564,127 @@
   "series": "ジャグラー"
  },
  {
+  "slug": "karakuri",
+  "name": "LからくりサーカスG",
+  "seo": {
+   "title": "からくりサーカス 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常590G〜",
+  "strategyByRate": {
+   "eq56": "通常590G〜",
+   "rate55": "通常600G〜",
+   "rate50": "通常650G〜",
+   "rate45": "通常730G〜"
+  },
+  "aliases": [
+   "からくり",
+   "カラクリ",
+   "からくりサーカス"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "excellent": 1100,
+    "good": 590,
+    "caution": 400,
+    "byRate": {
+     "eq56": {
+      "excellent": 1100,
+      "good": 590,
+      "caution": 400,
+      "note": "5.6枚交換ならCZ間590Gから狙い目。液晶1200G+αでCZ以上に当選。"
+     },
+     "rate55": {
+      "excellent": 1100,
+      "good": 600,
+      "caution": 420,
+      "note": "6.0枚交換ならCZ間600Gから。"
+     },
+     "rate50": {
+      "excellent": 1200,
+      "good": 650,
+      "caution": 450,
+      "note": "6.5枚交換ならCZ間650Gから。"
+     },
+     "rate45": {
+      "excellent": 1200,
+      "good": 730,
+      "caution": 500,
+      "note": "7.0枚交換ならCZ間730Gから。"
+     }
+    },
+    "note": "CZ間天井は液晶1200G+α。液晶1400G超えでAT当選濃厚。"
+   },
+   "through": {
+    "excellent": 4,
+    "good": 3,
+    "caution": 2,
+    "byRate": {
+     "eq56": {
+      "excellent": 4,
+      "good": 3,
+      "caution": 2,
+      "note": "CZ4スルー（5回目）でAT直撃。3スルーから狙い目。"
+     },
+     "rate55": {
+      "excellent": 4,
+      "good": 3,
+      "caution": 2,
+      "note": "3スルーから狙い目。"
+     },
+     "rate50": {
+      "excellent": 4,
+      "good": 3,
+      "caution": 2,
+      "note": "3スルーから狙い目。"
+     },
+     "rate45": {
+      "excellent": 4,
+      "good": 3,
+      "caution": 2,
+      "note": "3スルーから狙い目。"
+     }
+    },
+    "note": "CZ4スルー（5回目）でAT直撃。",
+    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+   }
+  },
+  "limit": 1400,
+  "tenjo_display": "液晶CZ間1200G+α",
+  "tenjo_games": 1200,
+  "original": {
+   "title": "からくりサーカス",
+   "kind": "漫画",
+   "search": "からくりサーカス 漫画"
+  }
+ },
+ {
   "slug": "sao",
   "name": "スロット ソードアート・オンライン",
   "seo": {
@@ -12252,6 +12433,36 @@
   }
  },
  {
+  "slug": "happy_juggler_v3",
+  "name": "ハッピージャグラーV III",
+  "seo": {
+   "title": "ハッピージャグラーV III 設定判別"
+  },
+  "info": "Aタイプ",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "ハッピー",
+   "ハピジャグ"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+   }
+  },
+  "limit": null,
+  "series": "ジャグラー"
+ },
+ {
   "slug": "my_juggler_v",
   "name": "マイジャグラーV",
   "seo": {
@@ -12276,6 +12487,36 @@
     "good": 99999,
     "caution": 99999,
     "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+   }
+  },
+  "limit": null,
+  "series": "ジャグラー"
+ },
+ {
+  "slug": "funky_juggler2",
+  "name": "ファンキージャグラー2",
+  "seo": {
+   "title": "ファンキージャグラー2 設定判別"
+  },
+  "info": "Aタイプ",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "ファンキー",
+   "ファンジャグ"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでは、BIG・REG・ぶどうをカウントします。"
    }
   },
   "limit": null,
@@ -12313,36 +12554,6 @@
    }
   },
   "limit": null
- },
- {
-  "slug": "neo_aim_juggler",
-  "name": "ネオアイムジャグラーEX",
-  "seo": {
-   "title": "ネオアイムジャグラーEX 設定判別"
-  },
-  "info": "Aタイプ",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "アイム",
-   "ネオアイム"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
-   }
-  },
-  "limit": null,
-  "series": "ジャグラー"
  },
  {
   "slug": "king_hanahana",
@@ -12404,36 +12615,6 @@
     "good": 99999,
     "caution": 99999,
     "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・REG中サイドランプ・フェザーランプで設定推測。"
-   }
-  },
-  "limit": null
- },
- {
-  "slug": "hanabi",
-  "name": "Lハナビ",
-  "seo": {
-   "title": "スマスロハナビ 設定判別・スペックまとめ"
-  },
-  "info": "スマスロノーマル",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "ハナビ",
-   "HANABI",
-   "花火"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "ノーマルタイプのため天井非搭載。設定狙い主体の機種です。高設定が見込める環境での使用を推奨。"
    }
   },
   "limit": null
@@ -12626,157 +12807,6 @@
   ]
  },
  {
-  "slug": "karakuri",
-  "name": "LからくりサーカスG",
-  "seo": {
-   "title": "からくりサーカス 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常590G〜",
-  "strategyByRate": {
-   "eq56": "通常590G〜",
-   "rate55": "通常600G〜",
-   "rate50": "通常650G〜",
-   "rate45": "通常730G〜"
-  },
-  "aliases": [
-   "からくり",
-   "カラクリ",
-   "からくりサーカス"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "excellent": 1100,
-    "good": 590,
-    "caution": 400,
-    "byRate": {
-     "eq56": {
-      "excellent": 1100,
-      "good": 590,
-      "caution": 400,
-      "note": "5.6枚交換ならCZ間590Gから狙い目。液晶1200G+αでCZ以上に当選。"
-     },
-     "rate55": {
-      "excellent": 1100,
-      "good": 600,
-      "caution": 420,
-      "note": "6.0枚交換ならCZ間600Gから。"
-     },
-     "rate50": {
-      "excellent": 1200,
-      "good": 650,
-      "caution": 450,
-      "note": "6.5枚交換ならCZ間650Gから。"
-     },
-     "rate45": {
-      "excellent": 1200,
-      "good": 730,
-      "caution": 500,
-      "note": "7.0枚交換ならCZ間730Gから。"
-     }
-    },
-    "note": "CZ間天井は液晶1200G+α。液晶1400G超えでAT当選濃厚。"
-   },
-   "through": {
-    "excellent": 4,
-    "good": 3,
-    "caution": 2,
-    "byRate": {
-     "eq56": {
-      "excellent": 4,
-      "good": 3,
-      "caution": 2,
-      "note": "CZ4スルー（5回目）でAT直撃。3スルーから狙い目。"
-     },
-     "rate55": {
-      "excellent": 4,
-      "good": 3,
-      "caution": 2,
-      "note": "3スルーから狙い目。"
-     },
-     "rate50": {
-      "excellent": 4,
-      "good": 3,
-      "caution": 2,
-      "note": "3スルーから狙い目。"
-     },
-     "rate45": {
-      "excellent": 4,
-      "good": 3,
-      "caution": 2,
-      "note": "3スルーから狙い目。"
-     }
-    },
-    "note": "CZ4スルー（5回目）でAT直撃。",
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   }
-  },
-  "limit": 1400,
-  "tenjo_display": "液晶CZ間1200G+α",
-  "tenjo_games": 1200,
-  "original": {
-   "title": "からくりサーカス",
-   "kind": "漫画",
-   "search": "からくりサーカス 漫画"
-  }
- },
- {
-  "slug": "funky_juggler2",
-  "name": "ファンキージャグラー2",
-  "seo": {
-   "title": "ファンキージャグラー2 設定判別"
-  },
-  "info": "Aタイプ",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "ファンキー",
-   "ファンジャグ"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでは、BIG・REG・ぶどうをカウントします。"
-   }
-  },
-  "limit": null,
-  "series": "ジャグラー"
- },
- {
   "slug": "fujiko_bt",
   "name": "LB不二子BT",
   "seo": {
@@ -12812,36 +12842,6 @@
    "kind": "漫画",
    "search": "ルパン三世 不二子"
   }
- },
- {
-  "slug": "happy_juggler_v3",
-  "name": "ハッピージャグラーV III",
-  "seo": {
-   "title": "ハッピージャグラーV III 設定判別"
-  },
-  "info": "Aタイプ",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "ハッピー",
-   "ハピジャグ"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
-   }
-  },
-  "limit": null,
-  "series": "ジャグラー"
  },
  {
   "slug": "mushoku",
