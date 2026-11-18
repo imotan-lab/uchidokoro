@@ -1519,7 +1519,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-11",
+   "decided_at": "2026-11-19",
    "input_digest": "sha256:1ece240def29200d46fbe50e2c21a448aeae45cca185b9357c5286d52c735d90"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -1548,15 +1548,15 @@
     }
    ],
    "normal": {
+    "ceiling": 899,
     "caution": 450,
     "good": 550,
     "excellent": 700,
-    "ceiling": 899,
     "target": 550
    }
   },
-  "targetProjection": "d95631c7d986f4f9",
-  "series": ""
+  "series": "",
+  "targetProjection": "d95631c7d986f4f9"
  },
  {
   "slug": "toaru_index2",
