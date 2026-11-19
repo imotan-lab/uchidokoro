@@ -20,7 +20,7 @@
   "contact.html": "35aa6620d5a86ffe5800ea15691941e36d9984e1e27ec9002037eb410060795e",
   "favicon.ico": "f11291f4464eebccdc0242598acffe2aba30fa52ffcf9949482324a096efcdb9",
   "googleafe441235e57f84f.html": "56acd7472d367db67d5d9ec2aae04db0a1d67718b381cd82d77cf4009522bc34",
-  "guide-haena.html": "f7269bd36fe71e4aec0bdbc93b6fa0525d1ee30edcb0b01c26f8cae485cc5fb9",
+  "guide-haena.html": "8c9fc899fd454ab81cf16d3930667043ec196bdaa3425303d490a48ab5be4d38",
   "guide-pochipochi.html": "33bdd4ac8ef93864b62cb1bcdfde8348e49714ec7d12c97656c059daae2596d4",
   "guide-rate.html": "f84f8cda5823873e8a726b389afaad021eee2ac91bd628f958af7d2a46885a9d",
   "guide-reset.html": "d5965964cdcd0145ca68c9ec8b995ddf83257db0da31945330a32f1d626acf50",
@@ -70,7 +70,7 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "4a40e30d6fc0093895ff9c36d8bc8c1069b7b9b3f8ef96c36c318c3e4bfaff79",
-  "service-worker.js": "fcd6af2f092d0e441f00047f0f5d629aac15e9512a157ccd38236d67f4d19e07",
+  "service-worker.js": "77ad46428cb91d46762c30610c28c618801817b268ccc66b3390356320112e48",
   "setting.html": "c4f1322fbdb052dc960115e4baa6bf4131140204fa553db8fb8c367e7da8b803",
   "terms.html": "cfb07f039c9a57ad5c451118e31abfb7031fd9a4c98d4c0f88f76fd016711a65"
  }
