@@ -13576,27 +13576,28 @@
    "machine_profile": "AT_CZ",
    "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
+    "setting",
     "spec"
    ],
    "pending_topics": [
     "gameplay",
     "cz",
     "ceiling",
-    "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
-    "CLAIMS_LT_3",
     "CATEGORIES_LT_2",
     "NO_UNIQUE_GAMEPLAY"
    ],
    "claims": [
-    "payout_range"
+    "at_prob",
+    "payout_range",
+    "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-12",
-   "input_digest": "sha256:b57c69a79a963e0d796881fe7f4f06f23049ac94aeb77e09defbad93dcd76930"
+   "decided_at": "2026-11-20",
+   "input_digest": "sha256:a452075fd5cd7a3d1aa00a10de27a6ddeb71b45f2b348c6450442f04cc4605ca"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2027-01-12",
