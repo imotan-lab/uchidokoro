@@ -7081,12 +7081,12 @@
    "title": "東京リベンジャーズ 狙い目・天井・期待値まとめ"
   },
   "info": "スマスロAT",
-  "strategy": "5.6枚 通常450G〜 / リセット240G〜",
+  "strategy": "5.6枚 通常600G〜 / リセット350G〜",
   "strategyByRate": {
-   "eq56": "通常450G〜 / リセット240G〜",
-   "rate55": "通常460G〜 / リセット250G〜",
-   "rate50": "通常500G〜 / リセット300G〜",
-   "rate45": "通常540G〜 / リセット350G〜"
+   "eq56": "通常600G〜 / リセット350G〜",
+   "rate55": "通常650G〜 / リセット450G〜",
+   "rate50": "通常750G〜 / リセット500G〜",
+   "rate45": "通常800G〜 / リセット550G〜"
   },
   "aliases": [
    "リベンジャーズ",
@@ -7125,68 +7125,72 @@
     }
    ],
    "normal": {
-    "excellent": 1190,
-    "good": 450,
-    "caution": 350,
+    "excellent": 700,
+    "good": 600,
+    "caution": 500,
     "byRate": {
      "eq56": {
-      "excellent": 1000,
-      "good": 450,
-      "caution": 350,
-      "note": "5.6枚交換ならAT間450Gから狙い目。天井1190G+α。"
+      "excellent": 700,
+      "good": 600,
+      "caution": 500,
+      "note": "5.6枚交換ならAT間600Gから狙い目。天井1190G+α。"
      },
      "rate55": {
-      "excellent": 1000,
-      "good": 460,
-      "caution": 360,
-      "note": "6.0枚交換なら460Gから。"
+      "excellent": 800,
+      "good": 650,
+      "caution": 600,
+      "note": "6.0枚交換なら650Gから。"
      },
      "rate50": {
-      "excellent": 1000,
-      "good": 500,
-      "caution": 400,
-      "note": "6.5枚交換なら500Gから。"
+      "excellent": 850,
+      "good": 750,
+      "caution": 650,
+      "note": "6.5枚交換なら750Gから。"
      },
      "rate45": {
-      "excellent": 1000,
-      "good": 540,
-      "caution": 430,
-      "note": "7.0枚交換なら540Gから。"
+      "excellent": 900,
+      "good": 800,
+      "caution": 700,
+      "note": "7.0枚交換なら800Gから。"
      }
     },
-    "note": "AT間天井1190G+α。"
+    "note": "AT間天井1190G+α。",
+    "ceiling": 1190,
+    "target": 600
    },
    "reset": {
-    "excellent": 500,
-    "good": 240,
-    "caution": 150,
+    "excellent": 450,
+    "good": 350,
+    "caution": 300,
     "byRate": {
      "eq56": {
-      "excellent": 500,
-      "good": 240,
-      "caution": 150,
-      "note": "リセット時はAT間天井900G+αに短縮。240Gから狙い目。"
+      "excellent": 450,
+      "good": 350,
+      "caution": 300,
+      "note": "リセット時はAT間天井900G+αに短縮。350Gから狙い目。"
      },
      "rate55": {
-      "excellent": 500,
-      "good": 250,
-      "caution": 160,
+      "excellent": 550,
+      "good": 450,
+      "caution": 350,
       "note": "リセット時は900G+α。"
      },
      "rate50": {
       "excellent": 600,
-      "good": 300,
-      "caution": 200,
+      "good": 500,
+      "caution": 400,
       "note": "リセット時は900G+α。"
      },
      "rate45": {
-      "excellent": 600,
-      "good": 350,
-      "caution": 250,
+      "excellent": 650,
+      "good": 550,
+      "caution": 450,
       "note": "リセット時は900G+α。"
      }
     },
-    "note": "リセット時はAT間天井900G+αに短縮。"
+    "note": "リセット時はAT間天井900G+αに短縮。",
+    "ceiling": 900,
+    "target": 350
    },
    "through": {
     "excellent": 4,
