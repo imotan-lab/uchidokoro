@@ -4038,6 +4038,41 @@
   "limit": 900
  },
  {
+  "slug": "dark_haibi",
+  "name": "スマート沖スロ ダークハイビ",
+  "seo": {
+   "title": "スマート沖スロ ダークハイビ 設定狙い・スペックまとめ"
+  },
+  "info": "スマスロ 沖スロAタイプ",
+  "strategy": "設定狙い主体 / リセ後チャンスモード250G狙い",
+  "aliases": [
+   "ダークハイビ",
+   "ダークハイビスカス",
+   "だーくはいび",
+   "ダークハイビモード",
+   "沖スロダークハイビ",
+   "dark haibi"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "本機は沖スロのモード管理型で、滞在モードが見えにくくゲーム数を単純に数える天井狙いは効きにくい機種です。当サイトでは設定狙い・リセット狙い（リセ後チャンスモード250G）を主軸に案内しています。"
+   }
+  },
+  "limit": null,
+  "tenjo_display": "通常モード999G+α",
+  "tenjo_games": 999
+ },
+ {
   "slug": "birdie_wing",
   "name": "スマスロ BIRDIE WING -Golf Girls' Story-",
   "release_date": "2026-06-08",
@@ -5701,6 +5736,39 @@
   }
  },
  {
+  "slug": "new_king_hanahana_v",
+  "name": "SBニューキングハナハナV-30",
+  "seo": {
+   "title": "ニューキングハナハナV 狙い目・設定差まとめ"
+  },
+  "info": "A+BT（設定1/2/3/4/V）",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "ニューキングハナハナ",
+   "キンハナ",
+   "キンハナV",
+   "ハナハナV",
+   "きんはな",
+   "にゅーきんぐ"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・サイドランプで設定推測。"
+   }
+  },
+  "limit": null
+ },
+ {
   "slug": "hihou",
   "name": "スマスロ秘宝伝",
   "seo": {
@@ -5972,6 +6040,68 @@
    }
   },
   "limit": 800
+ },
+ {
+  "slug": "fujiko_bt",
+  "name": "LB不二子BT",
+  "seo": {
+   "title": "L不二子BT 狙い目・設定差まとめ"
+  },
+  "info": "スマスロ A+BT（設定1/2/4/5/6）",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "不二子",
+   "ふじこ",
+   "不二子BT",
+   "ルパン不二子",
+   "LB不二子"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。プラム確率・チェリー確率・ボーナス合算が設定推測の材料になります。"
+   }
+  },
+  "limit": null,
+  "original": {
+   "title": "ルパン三世（峰不二子）",
+   "kind": "漫画",
+   "search": "ルパン三世 不二子"
+  }
+ },
+ {
+  "slug": "mushoku",
+  "name": "L無職転生 〜異世界行ったら本気だす〜",
+  "seo": {
+   "title": "L無職転生 狙い目・天井・攻略まとめ"
+  },
+  "info": "スマスロAT（ステチェン管理）",
+  "strategy": "AT間残りステチェン10回以下 / ボーナス間残り6回以下（等価）",
+  "aliases": [
+   "無職転生",
+   "むしょくてんせい",
+   "ルーデウス",
+   "異世界本気",
+   "無職"
+  ],
+  "checker": null,
+  "limit": null,
+  "tenjo_display": "ボーナス間ステチェン19回／AT間ステチェン40回",
+  "tenjo_games": null,
+  "original": {
+   "title": "無職転生",
+   "kind": "ライトノベル",
+   "search": "無職転生 小説"
+  }
  },
  {
   "slug": "prismnana",
@@ -6870,6 +7000,162 @@
   },
   "release_date": "2025-09-08",
   "series": ""
+ },
+ {
+  "slug": "revengers",
+  "name": "L東京リベンジャーズ",
+  "seo": {
+   "title": "東京リベンジャーズ 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常450G〜 / リセット240G〜",
+  "strategyByRate": {
+   "eq56": "通常450G〜 / リセット240G〜",
+   "rate55": "通常460G〜 / リセット250G〜",
+   "rate50": "通常500G〜 / リセット300G〜",
+   "rate45": "通常540G〜 / リセット350G〜"
+  },
+  "aliases": [
+   "リベンジャーズ",
+   "トーリベ",
+   "東リベ"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 1190,
+    "good": 450,
+    "caution": 350,
+    "byRate": {
+     "eq56": {
+      "excellent": 1000,
+      "good": 450,
+      "caution": 350,
+      "note": "5.6枚交換ならAT間450Gから狙い目。天井1190G+α。"
+     },
+     "rate55": {
+      "excellent": 1000,
+      "good": 460,
+      "caution": 360,
+      "note": "6.0枚交換なら460Gから。"
+     },
+     "rate50": {
+      "excellent": 1000,
+      "good": 500,
+      "caution": 400,
+      "note": "6.5枚交換なら500Gから。"
+     },
+     "rate45": {
+      "excellent": 1000,
+      "good": 540,
+      "caution": 430,
+      "note": "7.0枚交換なら540Gから。"
+     }
+    },
+    "note": "AT間天井1190G+α。"
+   },
+   "reset": {
+    "excellent": 500,
+    "good": 240,
+    "caution": 150,
+    "byRate": {
+     "eq56": {
+      "excellent": 500,
+      "good": 240,
+      "caution": 150,
+      "note": "リセット時はAT間天井900G+αに短縮。240Gから狙い目。"
+     },
+     "rate55": {
+      "excellent": 500,
+      "good": 250,
+      "caution": 160,
+      "note": "リセット時は900G+α。"
+     },
+     "rate50": {
+      "excellent": 600,
+      "good": 300,
+      "caution": 200,
+      "note": "リセット時は900G+α。"
+     },
+     "rate45": {
+      "excellent": 600,
+      "good": 350,
+      "caution": 250,
+      "note": "リセット時は900G+α。"
+     }
+    },
+    "note": "リセット時はAT間天井900G+αに短縮。"
+   },
+   "through": {
+    "excellent": 4,
+    "good": 3,
+    "caution": 2,
+    "byRate": {
+     "eq56": {
+      "excellent": 4,
+      "good": 3,
+      "caution": 2,
+      "note": "東卍チャンス4スルー（5回目）でAT当選。3スルーから狙い目。"
+     },
+     "rate55": {
+      "excellent": 4,
+      "good": 3,
+      "caution": 2,
+      "note": "3スルーから狙い目。"
+     },
+     "rate50": {
+      "excellent": 4,
+      "good": 3,
+      "caution": 2,
+      "note": "3スルーから狙い目。"
+     },
+     "rate45": {
+      "excellent": 4,
+      "good": 3,
+      "caution": 2,
+      "note": "3スルーから狙い目。"
+     }
+    },
+    "note": "東卍チャンス4スルー（5回目）でAT当選確定。",
+    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+   },
+   "limit": 1190
+  },
+  "limit": 1190,
+  "original": {
+   "title": "東京卍リベンジャーズ",
+   "kind": "漫画",
+   "search": "東京リベンジャーズ 漫画"
+  }
  },
  {
   "slug": "neo_aim_juggler",
@@ -8711,6 +8997,37 @@
   }
  },
  {
+  "slug": "discup_ur",
+  "name": "A-SLOT+ ディスクアップ ULTRAREMIX",
+  "seo": {
+   "title": "A-SLOT+ ディスクアップ ULTRAREMIX 狙い目"
+  },
+  "info": "スマスロA+RT",
+  "strategy": "設定狙い主体・天井なし",
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨。"
+   }
+  },
+  "limit": null,
+  "aliases": [
+   "ディスクアップ",
+   "ディスク",
+   "でぃすくあっぷ",
+   "ULTRAREMIX"
+  ]
+ },
+ {
   "slug": "dumbbell",
   "name": "Lパチスロ ダンベル何キロ持てる?",
   "seo": {
@@ -9229,6 +9546,44 @@
    "kind": "アニメ",
    "search": "バンドリ Blu-ray"
   }
+ },
+ {
+  "slug": "rezero2",
+  "name": "スロット Re:ゼロから始める異世界生活 season2",
+  "seo": {
+   "title": "スロット Re:ゼロから始める異世界生活 season2 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "下位AT後260G〜 / 単発後210G〜",
+  "aliases": [
+   "リゼロ",
+   "リゼロ2",
+   "Re:ゼロ",
+   "りぜろ"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "excellent": 1000,
+    "good": 260,
+    "caution": 210,
+    "note": "★この判定は「下位AT後」を前提にしています★（単発後は210G〜が狙い目なので、判定が△でも狙える場合があります）。状況を選んで判定する仕組みは準備中です。ポイント天井は平均930G相当。"
+   },
+   "limit": 1350
+  },
+  "original": {
+   "title": "Re:ゼロから始める異世界生活",
+   "kind": "ライトノベル",
+   "search": "Re:ゼロから始める異世界生活 小説"
+  },
+  "tenjo_display": "最大1400pt／AT間1300G",
+  "tenjo_games": 1300
  },
  {
   "slug": "kaguya",
@@ -11030,6 +11385,38 @@
   "tenjo_display": "BC間333G+α"
  },
  {
+  "slug": "dragon_hanahana_senko",
+  "name": "ドラゴンハナハナ～閃光～-30",
+  "seo": {
+   "title": "ドラゴンハナハナ閃光 狙い目・設定差まとめ"
+  },
+  "info": "Aタイプ（設定1〜6）",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "ドラハナ",
+   "ドラゴンハナハナ",
+   "閃光",
+   "どらはな",
+   "ドラハナ閃光"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・REG中サイドランプ・フェザーランプで設定推測。"
+   }
+  },
+  "limit": null
+ },
+ {
   "slug": "kengan_ashura",
   "name": "パチスロ ケンガンアシュラ",
   "seo": {
@@ -12043,6 +12430,38 @@
   }
  },
  {
+  "slug": "king_hanahana",
+  "name": "キングハナハナ-30",
+  "seo": {
+   "title": "キングハナハナ 狙い目・設定差まとめ"
+  },
+  "info": "Aタイプ（設定1〜6）",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "Sキングハナハナ-30",
+   "キングハナハナ",
+   "キンハナ",
+   "きんぐはなはな",
+   "キンハナ30"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・REG中サイドランプ・フェザーランプで設定推測。"
+   }
+  },
+  "limit": null
+ },
+ {
   "slug": "okidoki_gold",
   "name": "沖ドキ！GOLD",
   "seo": {
@@ -12448,480 +12867,6 @@
   }
  },
  {
-  "slug": "happy_juggler_v3",
-  "name": "ハッピージャグラーV III",
-  "seo": {
-   "title": "ハッピージャグラーV III 設定判別"
-  },
-  "info": "Aタイプ",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "ハッピー",
-   "ハピジャグ"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
-   }
-  },
-  "limit": null,
-  "series": "ジャグラー"
- },
- {
-  "slug": "my_juggler_v",
-  "name": "マイジャグラーV",
-  "seo": {
-   "title": "マイジャグラーV 設定判別"
-  },
-  "info": "Aタイプ",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "マイジャグ",
-   "マイジャグ5"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
-   }
-  },
-  "limit": null,
-  "series": "ジャグラー"
- },
- {
-  "slug": "funky_juggler2",
-  "name": "ファンキージャグラー2",
-  "seo": {
-   "title": "ファンキージャグラー2 設定判別"
-  },
-  "info": "Aタイプ",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "ファンキー",
-   "ファンジャグ"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでは、BIG・REG・ぶどうをカウントします。"
-   }
-  },
-  "limit": null,
-  "series": "ジャグラー"
- },
- {
-  "slug": "new_king_hanahana_v",
-  "name": "SBニューキングハナハナV-30",
-  "seo": {
-   "title": "ニューキングハナハナV 狙い目・設定差まとめ"
-  },
-  "info": "A+BT（設定1/2/3/4/V）",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "ニューキングハナハナ",
-   "キンハナ",
-   "キンハナV",
-   "ハナハナV",
-   "きんはな",
-   "にゅーきんぐ"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・サイドランプで設定推測。"
-   }
-  },
-  "limit": null
- },
- {
-  "slug": "king_hanahana",
-  "name": "キングハナハナ-30",
-  "seo": {
-   "title": "キングハナハナ 狙い目・設定差まとめ"
-  },
-  "info": "Aタイプ（設定1〜6）",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "Sキングハナハナ-30",
-   "キングハナハナ",
-   "キンハナ",
-   "きんぐはなはな",
-   "キンハナ30"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・REG中サイドランプ・フェザーランプで設定推測。"
-   }
-  },
-  "limit": null
- },
- {
-  "slug": "dragon_hanahana_senko",
-  "name": "ドラゴンハナハナ～閃光～-30",
-  "seo": {
-   "title": "ドラゴンハナハナ閃光 狙い目・設定差まとめ"
-  },
-  "info": "Aタイプ（設定1〜6）",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "ドラハナ",
-   "ドラゴンハナハナ",
-   "閃光",
-   "どらはな",
-   "ドラハナ閃光"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・REG中サイドランプ・フェザーランプで設定推測。"
-   }
-  },
-  "limit": null
- },
- {
-  "slug": "revengers",
-  "name": "L東京リベンジャーズ",
-  "seo": {
-   "title": "東京リベンジャーズ 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常450G〜 / リセット240G〜",
-  "strategyByRate": {
-   "eq56": "通常450G〜 / リセット240G〜",
-   "rate55": "通常460G〜 / リセット250G〜",
-   "rate50": "通常500G〜 / リセット300G〜",
-   "rate45": "通常540G〜 / リセット350G〜"
-  },
-  "aliases": [
-   "リベンジャーズ",
-   "トーリベ",
-   "東リベ"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 1190,
-    "good": 450,
-    "caution": 350,
-    "byRate": {
-     "eq56": {
-      "excellent": 1000,
-      "good": 450,
-      "caution": 350,
-      "note": "5.6枚交換ならAT間450Gから狙い目。天井1190G+α。"
-     },
-     "rate55": {
-      "excellent": 1000,
-      "good": 460,
-      "caution": 360,
-      "note": "6.0枚交換なら460Gから。"
-     },
-     "rate50": {
-      "excellent": 1000,
-      "good": 500,
-      "caution": 400,
-      "note": "6.5枚交換なら500Gから。"
-     },
-     "rate45": {
-      "excellent": 1000,
-      "good": 540,
-      "caution": 430,
-      "note": "7.0枚交換なら540Gから。"
-     }
-    },
-    "note": "AT間天井1190G+α。"
-   },
-   "reset": {
-    "excellent": 500,
-    "good": 240,
-    "caution": 150,
-    "byRate": {
-     "eq56": {
-      "excellent": 500,
-      "good": 240,
-      "caution": 150,
-      "note": "リセット時はAT間天井900G+αに短縮。240Gから狙い目。"
-     },
-     "rate55": {
-      "excellent": 500,
-      "good": 250,
-      "caution": 160,
-      "note": "リセット時は900G+α。"
-     },
-     "rate50": {
-      "excellent": 600,
-      "good": 300,
-      "caution": 200,
-      "note": "リセット時は900G+α。"
-     },
-     "rate45": {
-      "excellent": 600,
-      "good": 350,
-      "caution": 250,
-      "note": "リセット時は900G+α。"
-     }
-    },
-    "note": "リセット時はAT間天井900G+αに短縮。"
-   },
-   "through": {
-    "excellent": 4,
-    "good": 3,
-    "caution": 2,
-    "byRate": {
-     "eq56": {
-      "excellent": 4,
-      "good": 3,
-      "caution": 2,
-      "note": "東卍チャンス4スルー（5回目）でAT当選。3スルーから狙い目。"
-     },
-     "rate55": {
-      "excellent": 4,
-      "good": 3,
-      "caution": 2,
-      "note": "3スルーから狙い目。"
-     },
-     "rate50": {
-      "excellent": 4,
-      "good": 3,
-      "caution": 2,
-      "note": "3スルーから狙い目。"
-     },
-     "rate45": {
-      "excellent": 4,
-      "good": 3,
-      "caution": 2,
-      "note": "3スルーから狙い目。"
-     }
-    },
-    "note": "東卍チャンス4スルー（5回目）でAT当選確定。",
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   },
-   "limit": 1190
-  },
-  "limit": 1190,
-  "original": {
-   "title": "東京卍リベンジャーズ",
-   "kind": "漫画",
-   "search": "東京リベンジャーズ 漫画"
-  }
- },
- {
-  "slug": "discup_ur",
-  "name": "A-SLOT+ ディスクアップ ULTRAREMIX",
-  "seo": {
-   "title": "A-SLOT+ ディスクアップ ULTRAREMIX 狙い目"
-  },
-  "info": "スマスロA+RT",
-  "strategy": "設定狙い主体・天井なし",
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨。"
-   }
-  },
-  "limit": null,
-  "aliases": [
-   "ディスクアップ",
-   "ディスク",
-   "でぃすくあっぷ",
-   "ULTRAREMIX"
-  ]
- },
- {
-  "slug": "fujiko_bt",
-  "name": "LB不二子BT",
-  "seo": {
-   "title": "L不二子BT 狙い目・設定差まとめ"
-  },
-  "info": "スマスロ A+BT（設定1/2/4/5/6）",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "不二子",
-   "ふじこ",
-   "不二子BT",
-   "ルパン不二子",
-   "LB不二子"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。プラム確率・チェリー確率・ボーナス合算が設定推測の材料になります。"
-   }
-  },
-  "limit": null,
-  "original": {
-   "title": "ルパン三世（峰不二子）",
-   "kind": "漫画",
-   "search": "ルパン三世 不二子"
-  }
- },
- {
-  "slug": "mushoku",
-  "name": "L無職転生 〜異世界行ったら本気だす〜",
-  "seo": {
-   "title": "L無職転生 狙い目・天井・攻略まとめ"
-  },
-  "info": "スマスロAT（ステチェン管理）",
-  "strategy": "AT間残りステチェン10回以下 / ボーナス間残り6回以下（等価）",
-  "aliases": [
-   "無職転生",
-   "むしょくてんせい",
-   "ルーデウス",
-   "異世界本気",
-   "無職"
-  ],
-  "checker": null,
-  "limit": null,
-  "tenjo_display": "ボーナス間ステチェン19回／AT間ステチェン40回",
-  "tenjo_games": null,
-  "original": {
-   "title": "無職転生",
-   "kind": "ライトノベル",
-   "search": "無職転生 小説"
-  }
- },
- {
-  "slug": "rezero2",
-  "name": "スロット Re:ゼロから始める異世界生活 season2",
-  "seo": {
-   "title": "スロット Re:ゼロから始める異世界生活 season2 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "下位AT後260G〜 / 単発後210G〜",
-  "aliases": [
-   "リゼロ",
-   "リゼロ2",
-   "Re:ゼロ",
-   "りぜろ"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "excellent": 1000,
-    "good": 260,
-    "caution": 210,
-    "note": "★この判定は「下位AT後」を前提にしています★（単発後は210G〜が狙い目なので、判定が△でも狙える場合があります）。状況を選んで判定する仕組みは準備中です。ポイント天井は平均930G相当。"
-   },
-   "limit": 1350
-  },
-  "original": {
-   "title": "Re:ゼロから始める異世界生活",
-   "kind": "ライトノベル",
-   "search": "Re:ゼロから始める異世界生活 小説"
-  },
-  "tenjo_display": "最大1400pt／AT間1300G",
-  "tenjo_games": 1300
- },
- {
   "slug": "valvrave",
   "name": "パチスロ 革命機ヴァルヴレイヴ",
   "seo": {
@@ -13082,20 +13027,16 @@
   }
  },
  {
-  "slug": "dark_haibi",
-  "name": "スマート沖スロ ダークハイビ",
+  "slug": "happy_juggler_v3",
+  "name": "ハッピージャグラーV III",
   "seo": {
-   "title": "スマート沖スロ ダークハイビ 設定狙い・スペックまとめ"
+   "title": "ハッピージャグラーV III 設定判別"
   },
-  "info": "スマスロ 沖スロAタイプ",
-  "strategy": "設定狙い主体 / リセ後チャンスモード250G狙い",
+  "info": "Aタイプ",
+  "strategy": "設定狙い主体・天井なし",
   "aliases": [
-   "ダークハイビ",
-   "ダークハイビスカス",
-   "だーくはいび",
-   "ダークハイビモード",
-   "沖スロダークハイビ",
-   "dark haibi"
+   "ハッピー",
+   "ハピジャグ"
   ],
   "checker": {
    "unit": "G",
@@ -13109,12 +13050,71 @@
     "excellent": 99999,
     "good": 99999,
     "caution": 99999,
-    "note": "本機は沖スロのモード管理型で、滞在モードが見えにくくゲーム数を単純に数える天井狙いは効きにくい機種です。当サイトでは設定狙い・リセット狙い（リセ後チャンスモード250G）を主軸に案内しています。"
+    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
    }
   },
   "limit": null,
-  "tenjo_display": "通常モード999G+α",
-  "tenjo_games": 999
+  "series": "ジャグラー"
+ },
+ {
+  "slug": "my_juggler_v",
+  "name": "マイジャグラーV",
+  "seo": {
+   "title": "マイジャグラーV 設定判別"
+  },
+  "info": "Aタイプ",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "マイジャグ",
+   "マイジャグ5"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+   }
+  },
+  "limit": null,
+  "series": "ジャグラー"
+ },
+ {
+  "slug": "funky_juggler2",
+  "name": "ファンキージャグラー2",
+  "seo": {
+   "title": "ファンキージャグラー2 設定判別"
+  },
+  "info": "Aタイプ",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "ファンキー",
+   "ファンジャグ"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでは、BIG・REG・ぶどうをカウントします。"
+   }
+  },
+  "limit": null,
+  "series": "ジャグラー"
  },
  {
   "slug": "dmm_5101",
