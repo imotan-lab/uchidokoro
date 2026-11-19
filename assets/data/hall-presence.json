@@ -78,6 +78,11 @@
    "checked": "2026-11-17",
    "url": "https://p-town.dmm.com/machines/4530"
   },
+  "dark_haibi": {
+   "stores": 305,
+   "checked": "2026-11-20",
+   "url": "https://p-town.dmm.com/machines/5016"
+  },
   "darlifra": {
    "stores": 743,
    "checked": "2026-11-17",
@@ -510,6 +515,7 @@
   "bofuri": "2026-11-17",
   "burning_express": "2026-11-19",
   "chibaryo2": "2026-11-17",
+  "dark_haibi": "2026-11-20",
   "darlifra": "2026-11-17",
   "dmc5_st": "2026-11-16",
   "dmm_5073": "2026-11-16",
