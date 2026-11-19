@@ -71,10 +71,20 @@
    "url": "https://p-town.dmm.com/machines/4477",
    "checked": "2026-11-13"
   },
+  "dark_haibi": {
+   "release": "2026-06-22",
+   "url": "https://p-town.dmm.com/machines/5016",
+   "checked": "2026-11-19"
+  },
   "darlifra": {
    "release": "2025-08-04",
    "url": "https://p-town.dmm.com/machines/4855",
    "checked": "2026-11-11"
+  },
+  "discup_ur": {
+   "release": "2025-01-20",
+   "url": "https://p-town.dmm.com/machines/4702",
+   "checked": "2026-11-19"
   },
   "dmc5_st": {
    "release": "2025-06-02",
@@ -105,6 +115,11 @@
    "release": "2025-07-07",
    "url": "https://p-town.dmm.com/machines/4830",
    "checked": "2026-11-15"
+  },
+  "fujiko_bt": {
+   "release": "2025-12-22",
+   "url": "https://p-town.dmm.com/machines/4921",
+   "checked": "2026-11-19"
   },
   "funky_juggler2": {
    "release": "2021-10-04",
@@ -346,10 +361,20 @@
    "url": "https://p-town.dmm.com/machines/4892",
    "checked": "2026-11-14"
   },
+  "revengers": {
+   "release": "2025-09-08",
+   "url": "https://p-town.dmm.com/machines/4849",
+   "checked": "2026-11-19"
+  },
   "revue_starlight": {
    "release": "2025-03-03",
    "url": "https://p-town.dmm.com/machines/4706",
    "checked": "2026-11-11"
+  },
+  "rezero2": {
+   "release": "2024-10-21",
+   "url": "https://p-town.dmm.com/machines/4658",
+   "checked": "2026-11-19"
   },
   "sao": {
    "release": "2023-05-15",
@@ -441,6 +466,11 @@
    "url": "https://p-town.dmm.com/machines/4925",
    "checked": "2026-11-10"
   },
+  "valvrave": {
+   "release": "2022-11-21",
+   "url": "https://p-town.dmm.com/machines/4244",
+   "checked": "2026-11-19"
+  },
   "valvrave2": {
    "release": "2025-11-04",
    "url": "https://p-town.dmm.com/machines/4885",
@@ -492,13 +522,16 @@
   "burning_express": "2026-11-14",
   "chibaryo2": "2026-11-10",
   "code_geass": "2026-11-13",
+  "dark_haibi": "2026-11-19",
   "darlifra": "2026-11-11",
+  "discup_ur": "2026-11-19",
   "dmc5_st": "2026-11-16",
   "dragon_hanahana_senko": "2026-11-19",
   "dumbbell": "2026-11-11",
   "enen": "2026-11-14",
   "enen2": "2026-11-19",
   "eva_yakusoku": "2026-11-15",
+  "fujiko_bt": "2026-11-19",
   "funky_juggler2": "2026-11-18",
   "gineiden_dnt": "2026-11-14",
   "goblin": "2026-11-15",
@@ -547,7 +580,9 @@
   "onimusha3": "2026-11-17",
   "prismnana": "2026-11-13",
   "railgun2": "2026-11-14",
+  "revengers": "2026-11-19",
   "revue_starlight": "2026-11-11",
+  "rezero2": "2026-11-19",
   "sao": "2026-11-10",
   "sao2": "2026-11-18",
   "sengoku_otome4": "2026-11-13",
@@ -566,6 +601,7 @@
   "tolove_darkness": "2026-11-14",
   "triple_crown_7": "2026-11-13",
   "umineko2": "2026-11-10",
+  "valvrave": "2026-11-19",
   "valvrave2": "2026-11-11",
   "yorumungando": "2026-11-13",
   "yoshimune": "2026-11-14",

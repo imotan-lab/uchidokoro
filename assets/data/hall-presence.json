@@ -189,8 +189,8 @@
    "url": "https://p-town.dmm.com/machines/4929"
   },
   "hokuto": {
-   "stores": 4909,
-   "checked": "2026-11-15",
+   "stores": 4906,
+   "checked": "2026-11-19",
    "url": "https://p-town.dmm.com/machines/4301"
   },
   "iza_bancho": {
@@ -244,8 +244,8 @@
    "url": "https://p-town.dmm.com/machines/4745"
   },
   "mhrise": {
-   "stores": 3997,
-   "checked": "2026-11-15",
+   "stores": 3987,
+   "checked": "2026-11-19",
    "url": "https://p-town.dmm.com/machines/4676"
   },
   "midoridon_viva": {
@@ -343,6 +343,11 @@
    "checked": "2026-11-19",
    "url": "https://p-town.dmm.com/machines/4892"
   },
+  "revengers": {
+   "stores": 3049,
+   "checked": "2026-11-19",
+   "url": "https://p-town.dmm.com/machines/4849"
+  },
   "revue_starlight": {
    "stores": 1865,
    "checked": "2026-11-19",
@@ -364,8 +369,8 @@
    "url": "https://p-town.dmm.com/machines/5025"
   },
   "sengoku_collection6": {
-   "stores": 3733,
-   "checked": "2026-11-15",
+   "stores": 3751,
+   "checked": "2026-11-19",
    "url": "https://p-town.dmm.com/machines/5010"
   },
   "sengoku_otome4": {
@@ -455,7 +460,7 @@
   },
   "yabachiba": {
    "stores": 783,
-   "checked": "2026-11-15",
+   "checked": "2026-11-19",
    "url": "https://p-town.dmm.com/machines/5047"
   },
   "yorumungando": {
@@ -527,7 +532,7 @@
   "gundam_uc2": "2026-11-17",
   "hanma_baki": "2026-11-18",
   "hihou": "2026-11-16",
-  "hokuto": "2026-11-15",
+  "hokuto": "2026-11-19",
   "iza_bancho": "2026-11-18",
   "kabaneri": "2026-11-18",
   "kaguya": "2026-11-15",
@@ -538,7 +543,7 @@
   "lupin_daikokaisha": "2026-11-16",
   "madomagi_forte": "2026-11-16",
   "magireco": "2026-11-17",
-  "mhrise": "2026-11-15",
+  "mhrise": "2026-11-19",
   "midoridon_viva": "2026-11-19",
   "milliongod_kiseki": "2026-11-16",
   "monkeyv": "2026-11-16",
@@ -558,11 +563,12 @@
   "pw_10523": "2026-11-17",
   "pw_10543": "2026-11-18",
   "railgun2": "2026-11-19",
+  "revengers": "2026-11-19",
   "revue_starlight": "2026-11-19",
   "rotis": "2026-11-17",
   "sao": "2026-11-19",
   "sao2": "2026-11-18",
-  "sengoku_collection6": "2026-11-15",
+  "sengoku_collection6": "2026-11-19",
   "sengoku_otome4": "2026-11-17",
   "sengoku_otome5": "2026-11-18",
   "shaman_king": "2026-11-19",
@@ -580,7 +586,7 @@
   "umineko2": "2026-11-17",
   "valvrave2": "2026-11-19",
   "world_dai_star": "2026-11-19",
-  "yabachiba": "2026-11-15",
+  "yabachiba": "2026-11-19",
   "yorumungando": "2026-11-18",
   "yoshimune": "2026-11-19",
   "youjitsu": "2026-11-18",
