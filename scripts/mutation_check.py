@@ -11692,6 +11692,27 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★関連機種：検索に載せない機種（noindex）へもリンクする★",
+        "file": "scripts/build_machine_pages.py",
+        "before": "            return _pd.machine_class(m) in (\"LEGACY_COMPLETE\", \"AUTO_INDEXABLE\")\n",
+        "after": "            return True\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★関連機種：比べる前に箱を伏せない（新台が1件増えるたびに全ページが古い扱い＝夜の公開が止まる）★",
+        "file": "scripts/build_machine_pages.py",
+        "before": "    return _RELATED_SPAN.sub(RELATED_BEGIN + RELATED_END, text)\n",
+        "after": "    return text\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★関連機種：ページの一致検査が箱を伏せずに比べる★",
+        "file": "scripts/build_machine_pages.py",
+        "before": "        if not out.is_file() or mask_related(out.read_text(encoding=\"utf-8\")) != mask_related(h):\n",
+        "after": "        if not out.is_file() or out.read_text(encoding=\"utf-8\") != h:\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★未定の新台：機種ページが「未定」のとき、渡されたカレンダーの日付を使わない★",
         "file": "scripts/dmm_machine.py",
         "before": "                cal = _CALENDAR_DAYS.get(said or str(want_id), \"\")\n",

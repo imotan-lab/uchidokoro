@@ -146,10 +146,10 @@
       <a id="settingToolLink" class="btn-show-all btn-show-all--center is-disabled" aria-disabled="true" title="小役による設定差なし">小役カウンター ポチポチくん（小役による設定差なし）</a>
     </div>
 
-    <div class="article-block is-hidden" id="relatedBlock">
+    <!-- RELATED-BEGIN --><div class="article-block" id="relatedBlock">
       <h2 class="block-label">▶ 関連機種</h2>
-      <div id="relatedList" class="related-list"></div>
-    </div>
+      <div id="relatedList" class="related-list"><a class="related-item" href="/machines/sengoku_otome4/">L戦国乙女4 戦乱に閃く炯眼の軍師</a><a class="related-item" href="/machines/madomagi_forte/">スマスロ劇場版 魔法少女まどか☆マギカ フォルテ</a><a class="related-item" href="/machines/kizumonogatari/">パチスロ傷物語 -始マリノ刻-</a><a class="related-item" href="/machines/kengan_ashura/">パチスロ ケンガンアシュラ</a><a class="related-item" href="/machines/gogo_juggler3/">ゴーゴージャグラー3</a><a class="related-item" href="/machines/basilisk_tenzen/">スマスロバジリスク～甲賀忍法帖～絆2 天膳 BLACK EDITION</a><a class="related-item" href="/machines/karakuri/">LからくりサーカスG</a><a class="related-item" href="/machines/goji_eva/">スマスロ ゴジラvsエヴァンゲリオン</a></div>
+    </div><!-- RELATED-END -->
 
     <div class="article-block" id="affiliateBlock">
       <p class="affiliate-pr-label">PR（広告・アフィリエイトリンクを含みます）</p>
@@ -1247,6 +1247,8 @@ function resolveMachineSlug() {
     const relatedBlock = document.getElementById("relatedBlock");
     const relatedList = document.getElementById("relatedList");
     if (!relatedBlock || !relatedList || !Array.isArray(machines)) return;
+    // ★機種ページは関連機種のリンクを最初からHTMLに持っている★（build_machine_pages.fill_related）＝描き直さない
+    if (relatedList.querySelector(".related-item")) return;
 
     // シリーズ系の判定キーワード（原作を持たないパチスロ固有シリーズ中心。誤マッチ防止で限定）
     const SERIES = [

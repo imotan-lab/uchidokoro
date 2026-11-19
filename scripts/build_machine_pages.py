@@ -482,13 +482,125 @@ def prepare_template(template: str) -> str:
     return re.sub(r'<meta name="robots"[^>]*>(<!--.*?-->)?\n?', "", template)
 
 
+RELATED_BEGIN = "<!-- RELATED-BEGIN -->"
+RELATED_END = "<!-- RELATED-END -->"
+RELATED_MAX = 8
+_RELATED_TMPL = re.compile(
+    r'<div class="article-block is-hidden" id="relatedBlock">\s*'
+    r'<h2 class="block-label">▶ 関連機種</h2>\s*'
+    r'<div id="relatedList" class="related-list"></div>\s*</div>')
+_RELATED_SPAN = re.compile(re.escape(RELATED_BEGIN) + r".*?" + re.escape(RELATED_END), re.S)
+# ★シリーズの言葉★＝machine.html の renderRelated と同じ（原作を持たないパチスロ固有のシリーズ）
+_RELATED_SERIES = (("okidoki", ("沖ドキ",)), ("juggler", ("ジャグラー",)), ("hanahana", ("ハナハナ",)),
+                   ("banchou", ("番長",)), ("yoshimune", ("吉宗",)), ("sengoku", ("戦国乙女",)),
+                   ("god", ("ミリオンゴッド", "神々")))
+
+
+def _rel_orig(m):
+    o = m.get("original") if isinstance(m.get("original"), dict) else {}
+    return o.get("search") or o.get("title") or None
+
+
+def _rel_series_id(m):
+    seo = m.get("seo") if isinstance(m.get("seo"), dict) else {}
+    hay = str(m.get("name") or "") + " " + str(seo.get("title") or "")
+    for sid, kws in _RELATED_SERIES:
+        if any(k in hay for k in kws):
+            return sid
+    return None
+
+
+def _rel_series_name(m):
+    s = m.get("series")
+    return s if isinstance(s, str) and s else None
+
+
+def related_slugs(machine: dict, rows: list) -> list:
+    """★記事ページに書く「関連機種」の並び★（2026-11-19）
+
+    ①同じ原作・同じシリーズ（machine.html の renderRelated と同じ決まり）を一覧の順で
+    ②足りなければ、一覧（machines.json）の並びで前後に近い機種で埋める（後ろ→前の順に交互）。
+    ★リンク先は検索に載せる機種だけ★（noindex の機種・区分が読めない機種は外す）。最大 RELATED_MAX 本。
+    なぜ＝記事どうしの静的リンクが0本で、Googleが記事を「つながっていない＝重要でない」と見て
+    149機種のうち54機種しか登録していなかった（2026-11-19の Search Console）。
+    """
+    slug = machine.get("slug")
+
+    def ok(m):
+        try:
+            return _pd.machine_class(m) in ("LEGACY_COMPLETE", "AUTO_INDEXABLE")
+        except Exception:                                 # noqa: BLE001
+            return False
+
+    order = [m for m in rows if isinstance(m, dict) and m.get("slug")]
+    cand = [m for m in order if m.get("slug") != slug and ok(m)]
+    co, cs, cn = _rel_orig(machine), _rel_series_id(machine), _rel_series_name(machine)
+    out = [m for m in cand
+           if (co and _rel_orig(m) == co) or (cs and _rel_series_id(m) == cs)
+           or (cn and _rel_series_name(m) == cn)][:RELATED_MAX]
+    picked = {m["slug"] for m in out}
+    pos = next((i for i, m in enumerate(order) if m.get("slug") == slug), len(order))
+    usable = {m["slug"] for m in cand}
+    for d in range(1, len(order) + 1):
+        if len(out) >= RELATED_MAX:
+            break
+        for j in (pos + d, pos - d):
+            if 0 <= j < len(order) and len(out) < RELATED_MAX:
+                m = order[j]
+                if m["slug"] in usable and m["slug"] not in picked:
+                    out.append(m)
+                    picked.add(m["slug"])
+    return [(m["slug"], str(m.get("name") or m["slug"])) for m in out]
+
+
+def _load_rows_for_related():
+    try:
+        rows = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    rows = rows.get("machines") if isinstance(rows, dict) else rows
+    return rows if isinstance(rows, list) else []
+
+
+def fill_related(html_out: str, machine: dict, rows=None) -> str:
+    """ひな型の空の関連機種の箱を、リンクを書いた箱（目印つき）に置き換える。
+
+    ★目印のあいだは、保存済みのページと比べるときに比べない★（`mask_related`）＝
+    中身がほかの機種の行（一覧）で決まるので、夜に新台が1件増えるたびに
+    ほかの全ページが「古い」扱いになり、関所が夜の公開を止めてしまうため。
+    中身はそのページを作り直すたびに新しくなる。
+    """
+    if rows is None:
+        rows = _load_rows_for_related()
+    found = _RELATED_TMPL.findall(html_out)
+    if len(found) != 1:
+        raise TemplateError(f"関連機種の箱が {len(found)} 箇所です（1箇所であるべき）")
+    links = related_slugs(machine, rows)
+    if links:
+        items = "".join(f'<a class="related-item" href="/machines/{s}/">{esc(n)}</a>' for s, n in links)
+        block = ('<div class="article-block" id="relatedBlock">\n'
+                 '      <h2 class="block-label">▶ 関連機種</h2>\n'
+                 f'      <div id="relatedList" class="related-list">{items}</div>\n    </div>')
+    else:
+        block = found[0]
+    return _RELATED_TMPL.sub(lambda _m: RELATED_BEGIN + block + RELATED_END, html_out, count=1)
+
+
+def mask_related(text: str) -> str:
+    """★保存済みのページと作り直した姿を比べる前に、関連機種の箱を伏せる★（fill_related を参照）"""
+    return _RELATED_SPAN.sub(RELATED_BEGIN + RELATED_END, text)
+
+
 def render_page(template: str, machine: dict, detail: dict | None,
-                pochipochi_reasons: dict, pochipochi_public: bool = True) -> str:
+                pochipochi_reasons: dict, pochipochi_public: bool = True,
+                rows: list | None = None) -> str:
     """1機種ぶんのHTMLを作る。★入力（machine / detail）だけで出力が決まる★
 
     （2026-07-30・Codex 14巡目 (a)-1）
       成果物の検査は「この関数に公開データを入れ直した結果と1バイトも違わないか」で行う。
       そのため、この関数は外部の状態を読まない（引数だけで決まる）必要がある。
+    ★例外は関連機種の箱だけ★（2026-11-19）＝一覧（rows・省略時は machines.json）で決まる。
+      保存済みのページと比べる所は `mask_related` で伏せてから比べる。
     """
     slug = machine["slug"]
     html_out = template
@@ -566,8 +678,11 @@ def render_page(template: str, machine: dict, detail: dict | None,
     html_out = insert_disclaimer(html_out, machine)
 
     # JSON-LD（Article + BreadcrumbList）を静的に焼き込み
-    html_out = replace_once(html_out, 
+    html_out = replace_once(html_out,
         "</head>", build_jsonld(machine, canonical_url, title, desc) + "\n</head>")
+
+    # ★関連機種のリンクを最初からHTMLに書く★（2026-11-19・Googleに登録されない対策）
+    html_out = fill_related(html_out, machine, rows)
 
     # noindex の付与は区分で決める（2026-08-04・Codex71〜72回目）:
     #   LEGACY_PREVIEW / AUTO_PENDING = noindex,follow ／
@@ -1153,7 +1268,8 @@ def stale_pages(base=None) -> tuple:
         except Exception as e:                           # noqa: BLE001
             broken.append(f"{s9}（{type(e).__name__}）")
             continue
-        if not out.is_file() or out.read_text(encoding="utf-8") != h:
+        # ★関連機種の箱は伏せて比べる★（一覧で決まる・夜の新台公開を止めないため＝fill_related）
+        if not out.is_file() or mask_related(out.read_text(encoding="utf-8")) != mask_related(h):
             stale.append(str(s9))
     return stale, broken
 

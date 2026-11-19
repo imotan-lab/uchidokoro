@@ -84,7 +84,8 @@ def run(slugs: list, expects: list, pochipochi_public: bool,
             print("★ページがありません: %s★" % path)
             return 1
         cur = path.read_text(encoding="utf-8")
-        diff = changed_lines(cur, out)
+        # ★関連機種の箱は一覧で決まるので、想定外の差に数えない★（build_machine_pages.fill_related）
+        diff = changed_lines(_b.mask_related(cur), _b.mask_related(out))
         unexpected = [d for d in diff
                       if not any(e and e in d for e in expects)]
         print("■ %-20s 変わる行 %d / 想定外 %d" % (slug, len(diff), len(unexpected)))

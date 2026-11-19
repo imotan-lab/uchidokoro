@@ -146,10 +146,10 @@
       <a id="settingToolLink" href="setting.html" class="btn-show-all btn-show-all--center">小役カウンター ポチポチくん →</a>
     </div>
 
-    <div class="article-block is-hidden" id="relatedBlock">
+    <!-- RELATED-BEGIN --><div class="article-block" id="relatedBlock">
       <h2 class="block-label">▶ 関連機種</h2>
-      <div id="relatedList" class="related-list"></div>
-    </div>
+      <div id="relatedList" class="related-list"><a class="related-item" href="/machines/dmm_5073/">L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン</a><a class="related-item" href="/machines/dmm_5119/">Ｌパチスロ ゴジラ対エヴァンゲリオン ２</a><a class="related-item" href="/machines/dmm_5104/">L聖闘士星矢 黄金十二宮</a><a class="related-item" href="/machines/tokyo_ghoul/">L 東京喰種</a><a class="related-item" href="/machines/dmm_5120/">スロット Vivy -Fluorite Eye’s Song-</a><a class="related-item" href="/machines/dmm_5079/">スマスロ ラグナドール</a><a class="related-item" href="/machines/dmm_5095/">スマスロ モンスターハンターライズ：サンブレイク</a><a class="related-item" href="/machines/pw_10521/">スマスロ 獣王</a></div>
+    </div><!-- RELATED-END -->
 
     <div class="article-block" id="affiliateBlock">
       <p class="affiliate-pr-label">PR（広告・アフィリエイトリンクを含みます）</p>
@@ -1247,6 +1247,8 @@ function resolveMachineSlug() {
     const relatedBlock = document.getElementById("relatedBlock");
     const relatedList = document.getElementById("relatedList");
     if (!relatedBlock || !relatedList || !Array.isArray(machines)) return;
+    // ★機種ページは関連機種のリンクを最初からHTMLに持っている★（build_machine_pages.fill_related）＝描き直さない
+    if (relatedList.querySelector(".related-item")) return;
 
     // シリーズ系の判定キーワード（原作を持たないパチスロ固有シリーズ中心。誤マッチ防止で限定）
     const SERIES = [

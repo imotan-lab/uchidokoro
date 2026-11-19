@@ -146,10 +146,10 @@
       <a id="settingToolLink" href="setting.html" class="btn-show-all btn-show-all--center">小役カウンター ポチポチくん →</a>
     </div>
 
-    <div class="article-block is-hidden" id="relatedBlock">
+    <!-- RELATED-BEGIN --><div class="article-block" id="relatedBlock">
       <h2 class="block-label">▶ 関連機種</h2>
-      <div id="relatedList" class="related-list"></div>
-    </div>
+      <div id="relatedList" class="related-list"><a class="related-item" href="/machines/yajikita_mairu/">スマスロ やじきた道中記参る！</a><a class="related-item" href="/machines/pw_10501/">パチスロ見える子ちゃん</a><a class="related-item" href="/machines/world_dai_star/">スマスロ ワールドダイスター</a><a class="related-item" href="/machines/pw_10523/">モグモグ風林火山 大海戦の巻</a><a class="related-item" href="/machines/jashinchan/">L邪神ちゃんドロップキック</a><a class="related-item" href="/machines/pw_10510/">スマスロ タコスロ</a><a class="related-item" href="/machines/sf6/">スマスロ ストリートファイター6</a><a class="related-item" href="/machines/pw_10543/">Lパチスロ 彼女、お借りします</a></div>
+    </div><!-- RELATED-END -->
 
     <div class="article-block" id="affiliateBlock">
       <p class="affiliate-pr-label">PR（広告・アフィリエイトリンクを含みます）</p>
@@ -1247,6 +1247,8 @@ function resolveMachineSlug() {
     const relatedBlock = document.getElementById("relatedBlock");
     const relatedList = document.getElementById("relatedList");
     if (!relatedBlock || !relatedList || !Array.isArray(machines)) return;
+    // ★機種ページは関連機種のリンクを最初からHTMLに持っている★（build_machine_pages.fill_related）＝描き直さない
+    if (relatedList.querySelector(".related-item")) return;
 
     // シリーズ系の判定キーワード（原作を持たないパチスロ固有シリーズ中心。誤マッチ防止で限定）
     const SERIES = [

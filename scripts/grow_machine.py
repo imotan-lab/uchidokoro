@@ -2157,10 +2157,32 @@ def _carry_meta_tests(t) -> None:
     t("★★昔の機種の題名：設定狙いだけなら「設定判別」・チェッカーが無ければ「スペック」・狙い目があれば今までどおり★★",
       _la == ["設定判別・スペック", "天井・設定判別", "天井・スペック", "設定判別・スペック",
               "天井・狙い目・やめどき", "天井・設定判別"])
+    # ★関連機種のリンクは最初からHTMLに書く★（2026-11-19・Googleに登録されない対策）
+    _mc3 = _bmpx._pd.machine_class
+    try:
+        _bmpx._pd.machine_class = lambda m: "AUTO_PENDING" if m.get("slug") == "r_pend" else "LEGACY_COMPLETE"
+        _rr = [{"slug": "r_a", "name": "A"}, {"slug": "r_b", "name": "B ジャグラー"},
+               {"slug": "r_pend", "name": "P ジャグラー"}, {"slug": "r_c", "name": "C"},
+               {"slug": "r_d", "name": "D"}, {"slug": "r_e", "name": "E ジャグラー"}]
+        _rel = [s for s, _n in _bmpx.related_slugs({"slug": "r_b", "name": "B ジャグラー"}, _rr)]
+        _tm = ('<x><div class="article-block is-hidden" id="relatedBlock">\n      <h2 class="block-label">▶ 関連機種</h2>\n'
+               '      <div id="relatedList" class="related-list"></div>\n    </div></x>')
+        _fh = _bmpx.fill_related(_tm, {"slug": "r_b", "name": "B ジャグラー"}, _rr)
+        _fh2 = _bmpx.fill_related(_tm, {"slug": "r_b", "name": "B ジャグラー"}, _rr[:2])
+    finally:
+        _bmpx._pd.machine_class = _mc3
+    t("★★関連機種：同じシリーズが先・残りは一覧で近い順・検索に載せない機種と自分は入れない★★",
+      _rel == ["r_e", "r_a", "r_c", "r_d"])
+    t("　箱は見える形でリンクを書く（隠したままにしない）",
+      'href="/machines/r_e/"' in _fh and "is-hidden" not in _fh)
+    t("★★保存済みのページと比べるときは関連機種の箱を伏せる（夜の新台公開を止めない）★★",
+      _bmpx.mask_related(_fh) == _bmpx.mask_related(_fh2) and _fh != _fh2)
+    t("　（配線）ページの一致検査が伏せてから比べている",
+      "mask_related(out.read_text(encoding=\"utf-8\")) != mask_related(h)" in inspect.getsource(_bmpx.stale_pages))
     _mc2 = _bmpx._pd.machine_class
     try:
         _bmpx._pd.machine_class = lambda m: "LEGACY_COMPLETE"
-        _lt, _ld = _bmpx.build_title_desc({"name": "機J", "checker": _set, "strategy": "設定狙い主体・天井なし"}, True)
+        _lt, _ld =_bmpx.build_title_desc({"name": "機J", "checker": _set, "strategy": "設定狙い主体・天井なし"}, True)
         _lt2, _ld2 = _bmpx.build_title_desc({"name": "機K", "checker": _lg, "strategy": "5.6枚 通常600G〜"}, False)
     finally:
         _bmpx._pd.machine_class = _mc2
