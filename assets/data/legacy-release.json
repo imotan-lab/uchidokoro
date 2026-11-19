@@ -51,6 +51,11 @@
    "url": "https://p-town.dmm.com/machines/4754",
    "checked": "2026-11-14"
   },
+  "birdie_wing": {
+   "release": "2026-06-08",
+   "url": "https://p-town.dmm.com/machines/4996",
+   "checked": "2026-11-20"
+  },
   "bofuri": {
    "release": "2024-06-03",
    "url": "https://p-town.dmm.com/machines/4566",
@@ -518,6 +523,7 @@
   "bandori": "2026-11-15",
   "basilisk_tenzen": "2026-11-10",
   "biohazard": "2026-11-14",
+  "birdie_wing": "2026-11-20",
   "bofuri": "2026-11-13",
   "burning_express": "2026-11-14",
   "chibaryo2": "2026-11-10",
