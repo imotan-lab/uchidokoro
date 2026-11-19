@@ -9265,13 +9265,17 @@
     "excellent": 850,
     "good": 720,
     "caution": 660,
-    "note": "AT間天井1000G+α。"
+    "note": "AT間天井1000G+α。",
+    "ceiling": 1000,
+    "target": 720
    },
    "reset": {
     "excellent": 500,
     "good": 350,
     "caution": 280,
-    "note": "設定変更後は天井700G+αに短縮。350G〜が狙い目。"
+    "note": "設定変更後は天井700G+αに短縮。350G〜が狙い目。",
+    "ceiling": 700,
+    "target": 350
    }
   },
   "limit": 1000,
