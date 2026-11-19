@@ -2732,7 +2732,7 @@
   "slug": "dmm_5090",
   "name": "スマート沖スロ ハイハイシオサイRe",
   "seo": {
-   "title": "スマート沖スロ ハイハイシオサイRe 天井・スペック"
+   "title": "スマート沖スロ ハイハイシオサイRe 天井・狙い目"
   },
   "info": "",
   "strategy": "",
@@ -2763,7 +2763,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-16",
+   "decided_at": "2026-11-20",
    "input_digest": "sha256:b846b5df3eec4a57afe2110940227c1df18879b923f7fccacb52dd36fc1d795b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -2796,7 +2796,8 @@
     "excellent": 650,
     "target": 600
    }
-  }
+  },
+  "targetProjection": "8274ea204095e581"
  },
  {
   "slug": "dmm_5111",
