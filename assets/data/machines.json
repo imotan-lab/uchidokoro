@@ -4078,7 +4078,9 @@
   },
   "limit": null,
   "tenjo_display": "通常モード999G+α",
-  "tenjo_games": 999
+  "tenjo_games": 999,
+  "series": "ハイビ",
+  "release_date": "2026-06-22"
  },
  {
   "slug": "birdie_wing",
