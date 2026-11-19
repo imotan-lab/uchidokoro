@@ -81,6 +81,11 @@
    "url": "https://p-town.dmm.com/machines/4814",
    "checked": "2026-11-16"
   },
+  "dragon_hanahana_senko": {
+   "release": "2023-12-18",
+   "url": "https://p-town.dmm.com/machines/4453",
+   "checked": "2026-11-19"
+  },
   "dumbbell": {
    "release": "2024-12-16",
    "url": "https://p-town.dmm.com/machines/4669",
@@ -206,6 +211,11 @@
    "url": "https://p-town.dmm.com/machines/4434",
    "checked": "2026-11-14"
   },
+  "king_hanahana": {
+   "release": "2023-03-20",
+   "url": "https://p-town.dmm.com/machines/4311",
+   "checked": "2026-11-19"
+  },
   "kizumonogatari": {
    "release": "2023-09-04",
    "url": "https://p-town.dmm.com/machines/4390",
@@ -266,6 +276,11 @@
    "url": "https://p-town.dmm.com/machines/4588",
    "checked": "2026-11-11"
   },
+  "mushoku": {
+   "release": "2025-12-22",
+   "url": "https://p-town.dmm.com/machines/4924",
+   "checked": "2026-11-19"
+  },
   "my_juggler_v": {
    "release": "2021-12-06",
    "url": "https://p-town.dmm.com/machines/4029",
@@ -285,6 +300,11 @@
    "release": "2025-11-17",
    "url": "https://p-town.dmm.com/machines/4873",
    "checked": "2026-11-11"
+  },
+  "new_king_hanahana_v": {
+   "release": "2026-01-05",
+   "url": "https://p-town.dmm.com/machines/4912",
+   "checked": "2026-11-19"
   },
   "okidoki_black": {
    "release": "2024-07-01",
@@ -474,6 +494,7 @@
   "code_geass": "2026-11-13",
   "darlifra": "2026-11-11",
   "dmc5_st": "2026-11-16",
+  "dragon_hanahana_senko": "2026-11-19",
   "dumbbell": "2026-11-11",
   "enen": "2026-11-14",
   "enen2": "2026-11-19",
@@ -499,6 +520,7 @@
   "kaguya": "2026-11-15",
   "karakuri": "2026-11-18",
   "kengan_ashura": "2026-11-14",
+  "king_hanahana": "2026-11-19",
   "kizumonogatari": "2026-11-14",
   "koukaku": "2026-11-10",
   "kurea_bt": "2026-11-15",
@@ -511,10 +533,12 @@
   "milliongod_kiseki": "2026-11-16",
   "monkeyv": "2026-11-19",
   "mr_juggler": "2026-11-11",
+  "mushoku": "2026-11-19",
   "my_juggler_v": "2026-11-17",
   "nanatsuma": "2026-11-16",
   "neo_aim_juggler": "2026-11-18",
   "neoplanet": "2026-11-11",
+  "new_king_hanahana_v": "2026-11-19",
   "okidoki_black": "2026-11-14",
   "okidoki_encore": "2026-11-13",
   "okidoki_gold": "2026-11-14",
