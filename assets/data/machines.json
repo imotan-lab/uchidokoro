@@ -2804,9 +2804,15 @@
   "seo": {
    "title": "Lウミンチュ 天井・スペック"
   },
-  "info": "",
+  "info": "スマスロ∀タイプ",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "ウミンチュ",
+   "うみんちゅ",
+   "海人",
+   "L海人",
+   "スマスロウミンチュ"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -2862,7 +2868,8 @@
    "normal": {
     "ceiling": 999
    }
-  }
+  },
+  "series": ""
  },
  {
   "slug": "prskkm",
