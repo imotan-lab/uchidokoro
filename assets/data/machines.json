@@ -6744,7 +6744,9 @@
   },
   "limit": 720,
   "tenjo_display": "最大9周期（約720G相当）",
-  "tenjo_games": null
+  "tenjo_games": null,
+  "series": "絶対衝激",
+  "release_date": "2025-11-04"
  },
  {
   "slug": "shake_bt",
