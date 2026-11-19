@@ -4325,7 +4325,7 @@
    "title": "スマスロスーパーリオエース2 狙い目・天井・解析まとめ"
   },
   "info": "スマスロAT",
-  "strategy": "チェッカー基準 ボーナス間500G〜 / リセット300G〜",
+  "strategy": "チェッカー基準 ボーナス間500G〜 / リセット300G〜 / ボーナススルー 0スルー500G〜／7スルー0G〜",
   "aliases": [
    "スーパーリオエース2",
    "リオエース2",
@@ -4343,6 +4343,11 @@
     {
      "key": "reset",
      "label": "リセット"
+    },
+    {
+     "key": "suru",
+     "label": "ボーナススルー",
+     "hasSuru": true
     }
    ],
    "normal": {
@@ -4358,12 +4363,58 @@
     "note": "設定変更時はボーナス間天井500G+αに短縮、スルー天井も4スルー後5回目に短縮。"
    },
    "suru": {
-    "excellent": 7,
-    "good": 7,
-    "caution": 6,
-    "note": "ボーナス7回スルー後の8回目でAT当選。設定変更後は4スルー後5回目に短縮。",
-    "suruMax": 7,
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+    "suru": [
+     {
+      "count": 0,
+      "caution": 450,
+      "good": 500,
+      "excellent": 600
+     },
+     {
+      "count": 1,
+      "caution": 450,
+      "good": 500,
+      "excellent": 600
+     },
+     {
+      "count": 2,
+      "caution": 450,
+      "good": 500,
+      "excellent": 600
+     },
+     {
+      "count": 3,
+      "caution": 450,
+      "good": 500,
+      "excellent": 600
+     },
+     {
+      "count": 4,
+      "caution": 450,
+      "good": 500,
+      "excellent": 600
+     },
+     {
+      "count": 5,
+      "caution": 450,
+      "good": 500,
+      "excellent": 600
+     },
+     {
+      "count": 6,
+      "caution": 450,
+      "good": 500,
+      "excellent": 600
+     },
+     {
+      "count": 7,
+      "caution": 0,
+      "good": 0,
+      "excellent": 0,
+      "note": "7回スルー後の8回目のボーナスでAT当選。"
+     }
+    ],
+    "suruMax": 7
    }
   },
   "limit": 800,

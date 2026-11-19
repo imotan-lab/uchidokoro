@@ -48,6 +48,18 @@
    "at": "2026-10-29",
    "seq": 4,
    "had_checker": false
+  },
+  {
+   "slug": "super_rio_ace2",
+   "mode": "suru",
+   "why": "出典は7回スルー以降を狙い目とし、スルー回数ごとのG数の表が無いため、0〜6スルーは通常欄と同じ線、7スルーは0Gからとした",
+   "judges": [
+    "claude",
+    "codex"
+   ],
+   "at": "2026-11-20",
+   "seq": 7,
+   "had_checker": true
   }
  ]
 }
