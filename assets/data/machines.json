@@ -6881,16 +6881,23 @@
     "excellent": 1280,
     "good": 900,
     "caution": 730,
-    "note": "天井1280G+α（ボーナス間）。"
+    "note": "天井1280G+α（ボーナス間）。",
+    "ceiling": 1280,
+    "target": 900
    },
    "reset": {
     "excellent": 900,
     "good": 500,
     "caution": 360,
     "note": "設定変更後は900G+αに短縮。500G〜が狙い目。"
-   }
+   },
+   "coinRate": 31.9
   },
-  "limit": 1280
+  "limit": 1280,
+  "tenjo_games": 1280,
+  "tenjo_display": "1280G+α",
+  "release_date": "2025-10-06",
+  "series": ""
  },
  {
   "slug": "onimusha3",
