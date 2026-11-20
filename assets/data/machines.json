@@ -13351,7 +13351,7 @@
   "slug": "dmm_5096",
   "name": "Lアカマター",
   "seo": {
-   "title": "Lアカマター スペック・基本情報"
+   "title": "Lアカマター 天井・スペック"
   },
   "info": "",
   "strategy": "",
@@ -13359,30 +13359,29 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
+   "indexable": true,
    "machine_profile": "AT_CZ",
    "ceiling_state": "PRESENT",
    "confirmed_topics": [
+    "ceiling",
     "gameplay",
     "spec"
    ],
    "pending_topics": [
     "cz",
-    "ceiling",
     "setting",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CLAIMS_LT_3"
-   ],
+   "reason_codes": [],
    "claims": [
     "at:MAIN_AT",
+    "ceiling:GAME:通常時",
     "payout_range"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-03",
-   "input_digest": "sha256:da957df702eb4440a53c6cd2d01ceb10a9973cfd7f880367423b51c5b6c87f62"
+   "decided_at": "2026-11-21",
+   "input_digest": "sha256:c48362c25ff74c0a1eb5b0843497d59db8d0b97117dffc1534073e239236e93f"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-12-07",
@@ -13398,6 +13397,18 @@
     "p-town.dmm.com"
    ],
    "observed_model_code": "LアカマターL1"
+  },
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "ceiling": 999
+   }
   }
  },
  {
