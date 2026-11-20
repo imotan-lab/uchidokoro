@@ -3589,6 +3589,9 @@
     }
   },
   "diff_checked": {
+    "babel": {
+      "checked": "2026-11-21"
+    },
     "burning_express": {
       "checked": "2026-11-14"
     },
