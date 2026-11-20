@@ -4381,7 +4381,9 @@
     "excellent": 600,
     "good": 500,
     "caution": 450,
-    "note": "ボーナス間天井750G+α。"
+    "note": "ボーナス間天井750G+α。",
+    "ceiling": 750,
+    "target": 500
    },
    "reset": {
     "excellent": 400,
@@ -4442,7 +4444,8 @@
      }
     ],
     "suruMax": 7
-   }
+   },
+   "coinRate": 31.2
   },
   "limit": 800,
   "tenjo_display": "ボーナス間750G+α",
