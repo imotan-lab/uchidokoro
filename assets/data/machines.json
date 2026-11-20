@@ -2822,12 +2822,12 @@
    "ceiling_state": "PRESENT",
    "confirmed_topics": [
     "ceiling",
+    "setting",
     "spec"
    ],
    "pending_topics": [
     "gameplay",
     "cz",
-    "setting",
     "strategy",
     "reset"
    ],
@@ -2835,13 +2835,14 @@
     "NO_UNIQUE_GAMEPLAY"
    ],
    "claims": [
+    "bonus_prob",
     "ceiling:GAME:BIG後",
     "ceiling:GAME:REG後",
     "payout_range"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-16",
-   "input_digest": "sha256:1a4d868fef8b1c1f4892f284650d171c4471e155f8f62772267e93c8f8249e5b"
+   "decided_at": "2026-11-21",
+   "input_digest": "sha256:21c30660b2cd548c76851b5760c2274fae13613ad62d4db0112ff40206ef9cab"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-19",
