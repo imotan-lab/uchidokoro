@@ -431,6 +431,11 @@
    "url": "https://p-town.dmm.com/machines/4712",
    "checked": "2026-11-14"
   },
+  "super_rio_ace2": {
+   "release": "2026-05-11",
+   "url": "https://p-town.dmm.com/machines/4984",
+   "checked": "2026-11-21"
+  },
   "takt_opus": {
    "release": "2026-05-11",
    "url": "https://p-town.dmm.com/machines/5000",
@@ -609,6 +614,7 @@
   "shaman_king": "2026-11-15",
   "shinuchi_yoshimune": "2026-11-11",
   "super_blackjack": "2026-11-14",
+  "super_rio_ace2": "2026-11-21",
   "takt_opus": "2026-11-10",
   "tekken6": "2026-11-16",
   "tenken": "2026-11-13",
