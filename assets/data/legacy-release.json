@@ -221,6 +221,11 @@
    "url": "https://p-town.dmm.com/machines/4805",
    "checked": "2026-11-14"
   },
+  "jashinchan": {
+   "release": "2026-08-03",
+   "url": "https://p-town.dmm.com/machines/5020",
+   "checked": "2026-11-21"
+  },
   "kabaneri": {
    "release": "2026-03-02",
    "url": "https://p-town.dmm.com/machines/4930",
@@ -577,6 +582,7 @@
   "hokuto_tensei2": "2026-11-20",
   "isekai_quattro_bt": "2026-11-17",
   "iza_bancho": "2026-11-14",
+  "jashinchan": "2026-11-21",
   "kabaneri": "2026-11-18",
   "kaguya": "2026-11-15",
   "karakuri": "2026-11-18",
