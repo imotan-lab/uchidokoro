@@ -3626,6 +3626,10 @@
     }
   },
   "ko_checked": {
+    "biohazard_re3": {
+      "checked": "2026-11-21",
+      "result": "HAS"
+    },
     "birdie_wing": {
       "checked": "2026-11-20",
       "result": "NONE"
