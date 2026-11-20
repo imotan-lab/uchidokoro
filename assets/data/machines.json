@@ -4261,7 +4261,9 @@
     "excellent": 800,
     "good": 500,
     "caution": 400,
-    "note": "AT間1000G+α天井。"
+    "note": "AT間1000G+α天井。",
+    "ceiling": 1000,
+    "target": 500
    },
    "reset": {
     "excellent": 500,
@@ -4276,7 +4278,8 @@
     "note": "CZ最大6スルーで7回目成功濃厚。4スルー以降から狙い目（暫定）。",
     "suruMax": 6,
     "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   }
+   },
+   "coinRate": 32.8
   },
   "limit": 1100,
   "tenjo_display": "AT間1000G+α",
