@@ -3884,14 +3884,19 @@
     "excellent": 700,
     "good": 450,
     "caution": 390,
-    "note": "CZ間天井700G+α。リセット後は500G+αに短縮。"
+    "note": "CZ間天井700G+α。リセット後は500G+αに短縮。",
+    "ceiling": 700,
+    "target": 450
    },
    "at": {
     "excellent": 1500,
     "good": 920,
     "caution": 840,
-    "note": "AT間天井1500G+α。リセット後は1000G+αに短縮。CZ間と混同しないよう、どちらの基準で見るかを先に固定してください。"
-   }
+    "note": "AT間天井1500G+α。リセット後は1000G+αに短縮。CZ間とは別に数えます。",
+    "ceiling": 1500,
+    "target": 920
+   },
+   "coinRate": 30.8
   },
   "limit": 1500,
   "tenjo_display": "CZ間700G+α／AT間1500G+α",
