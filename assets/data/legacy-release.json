@@ -136,6 +136,11 @@
    "url": "https://p-town.dmm.com/machines/3961",
    "checked": "2026-11-18"
   },
+  "galfy": {
+   "release": "2026-05-25",
+   "url": "https://p-town.dmm.com/machines/4992",
+   "checked": "2026-11-21"
+  },
   "gineiden_dnt": {
    "release": "2025-12-08",
    "url": "https://p-town.dmm.com/machines/4895",
@@ -555,6 +560,7 @@
   "eva_yakusoku": "2026-11-15",
   "fujiko_bt": "2026-11-19",
   "funky_juggler2": "2026-11-18",
+  "galfy": "2026-11-21",
   "gineiden_dnt": "2026-11-14",
   "goblin": "2026-11-15",
   "godeater": "2026-11-15",
