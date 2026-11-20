@@ -5428,7 +5428,9 @@
     "note": "ノーマルタイプのため天井非搭載。設定狙い主体の機種です。"
    }
   },
-  "limit": null
+  "limit": null,
+  "release_date": "2026-02-02",
+  "series": ""
  },
  {
   "slug": "tekken6",
