@@ -214,7 +214,7 @@
   "isekai_quattro_bt": {
    "release": "2026-04-06",
    "url": "https://p-town.dmm.com/machines/4965",
-   "checked": "2026-11-17"
+   "checked": "2026-11-22"
   },
   "iza_bancho": {
    "release": "2025-06-02",
@@ -324,12 +324,17 @@
   "my_juggler_v": {
    "release": "2021-12-06",
    "url": "https://p-town.dmm.com/machines/4029",
-   "checked": "2026-11-17"
+   "checked": "2026-11-22"
   },
   "nanatsuma": {
    "release": "2025-01-20",
    "url": "https://p-town.dmm.com/machines/4709",
    "checked": "2026-11-16"
+  },
+  "nangoku_special": {
+   "release": "2026-07-06",
+   "url": "https://p-town.dmm.com/machines/5031",
+   "checked": "2026-11-22"
   },
   "neo_aim_juggler": {
    "release": "2025-09-01",
@@ -585,7 +590,7 @@
   "hihou": "2026-11-12",
   "hokuto": "2026-11-15",
   "hokuto_tensei2": "2026-11-20",
-  "isekai_quattro_bt": "2026-11-17",
+  "isekai_quattro_bt": "2026-11-22",
   "iza_bancho": "2026-11-14",
   "jashinchan": "2026-11-21",
   "kabaneri": "2026-11-18",
@@ -607,8 +612,9 @@
   "monkeyv": "2026-11-19",
   "mr_juggler": "2026-11-11",
   "mushoku": "2026-11-19",
-  "my_juggler_v": "2026-11-17",
+  "my_juggler_v": "2026-11-22",
   "nanatsuma": "2026-11-16",
+  "nangoku_special": "2026-11-22",
   "neo_aim_juggler": "2026-11-18",
   "neoplanet": "2026-11-11",
   "new_king_hanahana_v": "2026-11-19",
