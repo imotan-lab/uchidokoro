@@ -3979,16 +3979,21 @@
     "excellent": 799,
     "good": 550,
     "caution": 470,
-    "note": "天井最大799G+α＋ボーナス間スイカ9回。"
+    "note": "天井最大799G+α＋ボーナス間スイカ9回。",
+    "ceiling": 799,
+    "target": 550
    },
    "reset": {
     "excellent": 500,
     "good": 0,
     "caution": 0,
     "note": "設定変更後は天井が最大500G+αに短縮され、70%以上でチャンスモード以上が選択されます。リセット濃厚台は0G〜から狙えます。"
-   }
+   },
+   "coinRate": 33.0
   },
-  "limit": 799
+  "limit": 799,
+  "tenjo_games": 799,
+  "tenjo_display": "最大799G+α"
  },
  {
   "slug": "yabachiba",
