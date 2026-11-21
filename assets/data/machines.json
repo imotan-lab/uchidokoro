@@ -4583,13 +4583,17 @@
     "excellent": 800,
     "good": 700,
     "caution": 580,
-    "note": "CZ間天井800G（リセット後400G）。"
+    "note": "CZ間天井800G（リセット後400G）。",
+    "ceiling": 800,
+    "target": 700
    },
    "at": {
     "excellent": 1400,
     "good": 1100,
     "caution": 950,
-    "note": "AT間天井1400G（液晶G数・リセット後1000G）。"
+    "note": "AT間天井1400G（液晶G数・リセット後1000G）。",
+    "ceiling": 1400,
+    "target": 1100
    },
    "suru": {
     "excellent": 6,
@@ -4598,7 +4602,8 @@
     "note": "CZ6スルーで7回目確定（ボーナス当選）。等価4スルー以上から狙い目。",
     "suruMax": 6,
     "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   }
+   },
+   "coinRate": 33
   },
   "limit": 1400,
   "tenjo_display": "CZ間800G+α／AT間1400G+α",
