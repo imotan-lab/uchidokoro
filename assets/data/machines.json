@@ -3943,7 +3943,8 @@
    },
    "coinRate": 37
   },
-  "limit": null
+  "limit": null,
+  "series": ""
  },
  {
   "slug": "nangoku_special",
