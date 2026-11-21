@@ -3627,6 +3627,9 @@
     "monkeyv": {
       "checked": "2026-11-19"
     },
+    "my_juggler_v": {
+      "checked": "2026-11-22"
+    },
     "onepunchman": {
       "checked": "2026-11-21"
     }
@@ -3734,6 +3737,10 @@
     },
     "mr_juggler": {
       "checked": "2026-11-11",
+      "result": "NONE"
+    },
+    "nangoku_special": {
+      "checked": "2026-11-22",
       "result": "NONE"
     },
     "pw_10501": {
