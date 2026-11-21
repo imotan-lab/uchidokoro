@@ -246,6 +246,11 @@
    "url": "https://p-town.dmm.com/machines/4434",
    "checked": "2026-11-14"
   },
+  "kerot5bt": {
+   "release": "2026-07-06",
+   "url": "https://p-town.dmm.com/machines/5015",
+   "checked": "2026-11-22"
+  },
   "king_hanahana": {
    "release": "2023-03-20",
    "url": "https://p-town.dmm.com/machines/4311",
@@ -587,6 +592,7 @@
   "kaguya": "2026-11-15",
   "karakuri": "2026-11-18",
   "kengan_ashura": "2026-11-14",
+  "kerot5bt": "2026-11-22",
   "king_hanahana": "2026-11-19",
   "kizumonogatari": "2026-11-14",
   "koukaku": "2026-11-10",
