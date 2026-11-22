@@ -78,264 +78,6 @@
   "targetProjection": "deb3b0bf03305c8f"
  },
  {
-  "slug": "pw_10503",
-  "name": "スマスロ リコリス・リコイル",
-  "seo": {
-   "title": "スマスロ リコリス・リコイル 天井・狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "",
-  "aliases": [
-   "リコリコ",
-   "スマスロリコリコ",
-   "リコリス・リコイル",
-   "りこりこ"
-  ],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [
-    "ceiling",
-    "cz",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at_prob",
-    "ceiling:GAME:AT間",
-    "ceiling:GAME:CZ間",
-    "cz:オポジットバトル",
-    "cz:ファーストリコリス",
-    "games_per_50",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-11-17",
-   "input_digest": "sha256:9da2a483149e4f9803fd62ae50c57f3a7b799bfed00ee07fc3c08b8aaf52577b"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-09-07",
-  "identity": {
-   "manufacturer_id": "sammy",
-   "official_product_url": "https://p-town.dmm.com/machines/5033",
-   "announced_name": "スマスロ リコリス・リコイル",
-   "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5033 型式=L スマスロ リコリス・リコイル KX メーカー=サミー 導入=2026-09-07 確認日=2026-08-16",
-   "market_release_date": "2026-09-07",
-   "_model_code_sources": [
-    "p-town.dmm.com",
-    "p-world.co.jp"
-   ],
-   "_legacy_evidence_ref": "pworld:10503 型式=L スマスロ リコリス・リコイル KX 検定=6S0400 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10503",
-   "regulatory_model_code": "L スマスロ リコリス・リコイル KX"
-  },
-  "checker": {
-   "coinRate": 31.8,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "ceiling": 850,
-    "caution": 300,
-    "good": 300,
-    "excellent": 400,
-    "target": 300
-   }
-  },
-  "series": "",
-  "targetProjection": "a39769cb5ba2151d"
- },
- {
-  "slug": "dmm_5073",
-  "name": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン",
-  "seo": {
-   "title": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン 天井・狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "",
-  "aliases": [
-   "ガンゲイル",
-   "ガンゲイル・オンライン",
-   "GGO",
-   "がんげいる",
-   "SAOオルタナティブ"
-  ],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [
-    "ceiling",
-    "cz",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "ceiling:GAME:",
-    "cz:イエスマム",
-    "games_per_50",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-11-11",
-   "input_digest": "sha256:5c2fed8e3d2862c5cb5c2cee3ff82b6243379ddec03195727c69cb0d8045c94b"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-11-02",
-  "identity": {
-   "manufacturer_id": "kyoraku",
-   "official_product_url": "https://p-town.dmm.com/machines/5073",
-   "announced_name": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン",
-   "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5073 型式=Lガンゲイル・オンラインMD メーカー=京楽 導入=2026-11-02 確認日=2026-10-26",
-   "market_release_date": "2026-11-02",
-   "_model_code_sources": [
-    "vote:dmm-ptown"
-   ],
-   "regulatory_model_code": "Lガンゲイル・オンラインMD"
-  },
-  "checker": {
-   "coinRate": 31.0,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット後"
-    }
-   ],
-   "normal": {
-    "ceiling": 975,
-    "caution": 700,
-    "good": 800,
-    "excellent": 900,
-    "target": 800
-   },
-   "reset": {
-    "caution": 150,
-    "good": 200,
-    "excellent": 250,
-    "target": 200
-   }
-  },
-  "targetProjection": "6a7d10edf22193c9",
-  "series": "ソードアート・オンライン"
- },
- {
-  "slug": "dmm_5104",
-  "name": "L聖闘士星矢 黄金十二宮",
-  "seo": {
-   "title": "L聖闘士星矢 黄金十二宮 天井・狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "",
-  "aliases": [
-   "聖闘士星矢",
-   "星矢",
-   "星矢黄金十二宮",
-   "黄金十二宮",
-   "せいんとせいや"
-  ],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [
-    "ceiling",
-    "cz",
-    "gameplay",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at:MAIN_AT",
-    "at:UPPER_AT",
-    "at_prob",
-    "ceiling:CYCLE:",
-    "ceiling:GAME:AT間",
-    "ceiling:GAME:CZ間",
-    "cz:whoareyou",
-    "cz:影ノ襲来",
-    "games_per_50",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-11-17",
-   "input_digest": "sha256:269f0352e1d7d1c33011477e86f602dafb642f9f070e46d1c3c0ec0c7029c9ec"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-11-02",
-  "identity": {
-   "manufacturer_id": "sanslay",
-   "official_product_url": "https://p-town.dmm.com/machines/5104",
-   "announced_name": "L聖闘士星矢 黄金十二宮",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5104 型式=L聖闘士星矢黄金十二宮TG メーカー=サンスリー 導入=2026-11-02 確認日=2026-10-20",
-   "market_release_date": "2026-11-02",
-   "observed_model_code": "L聖闘士星矢黄金十二宮TG",
-   "_observed_model_code_sources": [
-    "p-town.dmm.com"
-   ]
-  },
-  "checker": {
-   "coinRate": 31.3,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "AT間"
-    }
-   ],
-   "normal": {
-    "ceiling": 1200,
-    "caution": 860,
-    "good": 860,
-    "excellent": 860,
-    "target": 860
-   }
-  },
-  "series": "",
-  "targetProjection": "a91974b73f2ffe5c"
- },
- {
   "slug": "tokyo_ghoul",
   "name": "L 東京喰種",
   "seo": {
@@ -600,18 +342,18 @@
   "series": ""
  },
  {
-  "slug": "dmm_5120",
-  "name": "スロット Vivy -Fluorite Eye’s Song-",
+  "slug": "pw_10503",
+  "name": "スマスロ リコリス・リコイル",
   "seo": {
-   "title": "スロット Vivy -Fluorite Eye’s Song- 天井・狙い目"
+   "title": "スマスロ リコリス・リコイル 天井・狙い目"
   },
   "info": "スマスロAT",
   "strategy": "",
   "aliases": [
-   "Vivy",
-   "ヴィヴィ",
-   "ゔぃゔぃ",
-   "ビビ"
+   "リコリコ",
+   "スマスロリコリコ",
+   "リコリス・リコイル",
+   "りこりこ"
   ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
@@ -634,32 +376,37 @@
    "claims": [
     "at_prob",
     "ceiling:GAME:AT間",
-    "cz:アクセスチャンスex",
+    "ceiling:GAME:CZ間",
+    "cz:オポジットバトル",
+    "cz:ファーストリコリス",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
    "decided_at": "2026-11-17",
-   "input_digest": "sha256:6722ee8e16f18eeb224b308500dc43f7ef7b78f5f9330009c1d5e4448acd428a"
+   "input_digest": "sha256:9da2a483149e4f9803fd62ae50c57f3a7b799bfed00ee07fc3c08b8aaf52577b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-11-02",
+  "release_date": "2026-09-07",
   "identity": {
-   "manufacturer_id": "daitogiken",
-   "official_product_url": "https://p-town.dmm.com/machines/5120",
-   "announced_name": "スロット Vivy -Fluorite Eye’s Song-",
-   "identity_tier": "CATALOG_BOUND",
+   "manufacturer_id": "sammy",
+   "official_product_url": "https://p-town.dmm.com/machines/5033",
+   "announced_name": "スマスロ リコリス・リコイル",
+   "identity_tier": "CATALOG_CODE_MATCHED",
    "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5120 型式=L/Vivy/A5 メーカー=大都技研 導入=2026-11-02 確認日=2026-10-15",
-   "market_release_date": "2026-11-02",
-   "observed_model_code": "L/Vivy/A5",
-   "_observed_model_code_sources": [
-    "p-town.dmm.com"
-   ]
+   "identity_evidence_ref": "dmm:5033 型式=L スマスロ リコリス・リコイル KX メーカー=サミー 導入=2026-09-07 確認日=2026-08-16",
+   "market_release_date": "2026-09-07",
+   "_model_code_sources": [
+    "p-town.dmm.com",
+    "p-world.co.jp"
+   ],
+   "_legacy_evidence_ref": "pworld:10503 型式=L スマスロ リコリス・リコイル KX 検定=6S0400 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10503",
+   "regulatory_model_code": "L スマスロ リコリス・リコイル KX"
   },
   "checker": {
-   "coinRate": 31,
+   "coinRate": 31.8,
    "unit": "G",
    "modes": [
     {
@@ -668,27 +415,223 @@
     }
    ],
    "normal": {
-    "ceiling": 800,
-    "caution": 450,
-    "good": 550,
-    "target": 550
+    "ceiling": 850,
+    "caution": 300,
+    "good": 300,
+    "excellent": 400,
+    "target": 300
    }
   },
   "series": "",
-  "targetProjection": "d9017d3adaea3f1b"
+  "targetProjection": "a39769cb5ba2151d"
  },
  {
-  "slug": "dmm_5079",
-  "name": "スマスロ ラグナドール",
+  "slug": "dmm_5073",
+  "name": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン",
   "seo": {
-   "title": "スマスロ ラグナドール 天井・狙い目"
+   "title": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン 天井・狙い目"
   },
   "info": "スマスロAT",
   "strategy": "",
   "aliases": [
-   "ラグナドール",
-   "らぐなどーる",
-   "ラグナ"
+   "ガンゲイル",
+   "ガンゲイル・オンライン",
+   "GGO",
+   "がんげいる",
+   "SAOオルタナティブ"
+  ],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "ceiling",
+    "cz",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "ceiling:GAME:",
+    "cz:イエスマム",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-11-11",
+   "input_digest": "sha256:5c2fed8e3d2862c5cb5c2cee3ff82b6243379ddec03195727c69cb0d8045c94b"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-11-02",
+  "identity": {
+   "manufacturer_id": "kyoraku",
+   "official_product_url": "https://p-town.dmm.com/machines/5073",
+   "announced_name": "L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5073 型式=Lガンゲイル・オンラインMD メーカー=京楽 導入=2026-11-02 確認日=2026-10-26",
+   "market_release_date": "2026-11-02",
+   "_model_code_sources": [
+    "vote:dmm-ptown"
+   ],
+   "regulatory_model_code": "Lガンゲイル・オンラインMD"
+  },
+  "checker": {
+   "coinRate": 31.0,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット後"
+    }
+   ],
+   "normal": {
+    "ceiling": 975,
+    "caution": 700,
+    "good": 800,
+    "excellent": 900,
+    "target": 800
+   },
+   "reset": {
+    "caution": 150,
+    "good": 200,
+    "excellent": 250,
+    "target": 200
+   }
+  },
+  "targetProjection": "6a7d10edf22193c9",
+  "series": "ソードアート・オンライン"
+ },
+ {
+  "slug": "sao2",
+  "name": "スマスロ ソードアート・オンラインⅡ",
+  "release_date": "2026-06-08",
+  "seo": {
+   "title": "スマスロ ソードアート・オンラインⅡ 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 通常（CZ間）330G〜 / リセット120G〜",
+  "aliases": [
+   "SAO2",
+   "ソードアート・オンラインⅡ",
+   "ソードアートオンライン2",
+   "ソードアート・オンライン2",
+   "sao2",
+   "ソードアート2",
+   "そーどあーとおんらいん2"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常（CZ間）"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 410,
+    "good": 330,
+    "caution": 250,
+    "byRate": {
+     "eq56": {
+      "excellent": 410,
+      "good": 330,
+      "caution": 250,
+      "note": "CZ間天井499G+α・AT間天井1200G。5.6枚持ちはCZ間330G〜が狙い目。"
+     },
+     "rate55": {
+      "excellent": 420,
+      "good": 340,
+      "caution": 260,
+      "note": "6.0枚はCZ間340G〜。"
+     },
+     "rate50": {
+      "excellent": 430,
+      "good": 350,
+      "caution": 270,
+      "note": "6.5枚はCZ間350G〜。"
+     },
+     "rate45": {
+      "excellent": 440,
+      "good": 360,
+      "caution": 280,
+      "note": "7.0枚はCZ間360G〜。"
+     }
+    },
+    "note": "CZ間天井499G+α(実ゲーム)・AT間天井1200G。CZ間のゲーム数で判断。"
+   },
+   "reset": {
+    "excellent": 180,
+    "good": 120,
+    "caution": 60,
+    "note": "設定変更時CZ間天井256G+αに短縮。CZ間120G〜が狙い目。"
+   }
+  },
+  "limit": 1200,
+  "tenjo_display": "CZ間499G+α／AT間1200G+α",
+  "tenjo_games": 499,
+  "original": {
+   "title": "ソードアート・オンラインII",
+   "kind": "ライトノベル",
+   "search": "ソードアートオンライン ライトノベル"
+  },
+  "strategyByRate": {
+   "eq56": "通常（CZ間）330G〜 / リセット120G〜",
+   "rate55": "通常（CZ間）340G〜 / リセット120G〜",
+   "rate50": "通常（CZ間）350G〜 / リセット120G〜",
+   "rate45": "通常（CZ間）360G〜 / リセット120G〜"
+  },
+  "series": "ソードアート・オンライン"
+ },
+ {
+  "slug": "dmm_5104",
+  "name": "L聖闘士星矢 黄金十二宮",
+  "seo": {
+   "title": "L聖闘士星矢 黄金十二宮 天井・狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "",
+  "aliases": [
+   "聖闘士星矢",
+   "星矢",
+   "星矢黄金十二宮",
+   "黄金十二宮",
+   "せいんとせいや"
   ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
@@ -712,73 +655,155 @@
     "at:MAIN_AT",
     "at:UPPER_AT",
     "at_prob",
+    "ceiling:CYCLE:",
     "ceiling:GAME:AT間",
     "ceiling:GAME:CZ間",
-    "cz:ラグナドールバトル",
+    "cz:whoareyou",
+    "cz:影ノ襲来",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-18",
-   "input_digest": "sha256:85577b354a48939e630f2ed51e2a126ee8fc56285514e4eb07689713dc8e901b"
+   "decided_at": "2026-11-17",
+   "input_digest": "sha256:269f0352e1d7d1c33011477e86f602dafb642f9f070e46d1c3c0ec0c7029c9ec"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
   "identity": {
-   "manufacturer_id": "universal",
-   "official_product_url": "https://p-town.dmm.com/machines/5079",
-   "announced_name": "スマスロ ラグナドール",
+   "manufacturer_id": "sanslay",
+   "official_product_url": "https://p-town.dmm.com/machines/5104",
+   "announced_name": "L聖闘士星矢 黄金十二宮",
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5079 型式=未掲載 メーカー=ミズホ 導入=2026-11 確認日=2026-09-03",
+   "identity_evidence_ref": "dmm:5104 型式=L聖闘士星矢黄金十二宮TG メーカー=サンスリー 導入=2026-11-02 確認日=2026-10-20",
    "market_release_date": "2026-11-02",
-   "observed_model_code": "LラグナドールZI",
+   "observed_model_code": "L聖闘士星矢黄金十二宮TG",
    "_observed_model_code_sources": [
     "p-town.dmm.com"
    ]
   },
   "checker": {
-   "coinRate": 31.0,
+   "coinRate": 31.3,
    "unit": "G",
    "modes": [
     {
      "key": "normal",
      "label": "AT間"
+    }
+   ],
+   "normal": {
+    "ceiling": 1200,
+    "caution": 860,
+    "good": 860,
+    "excellent": 860,
+    "target": 860
+   }
+  },
+  "series": "",
+  "targetProjection": "a91974b73f2ffe5c"
+ },
+ {
+  "slug": "pw_10521",
+  "name": "スマスロ 獣王",
+  "seo": {
+   "title": "スマスロ 獣王 天井・狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "",
+  "aliases": [
+   "獣王",
+   "じゅうおう",
+   "ジュウオウ",
+   "スマスロ獣王"
+  ],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "ceiling",
+    "gameplay",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "cz",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "at_prob",
+    "ceiling:GAME:通常時",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-11-11",
+   "input_digest": "sha256:86b831056449691b89bf9ceaa38e34428616bfa19a8232ee0fd69dca9c5d4546"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-05",
+  "identity": {
+   "manufacturer_id": "sammy",
+   "official_product_url": "https://p-town.dmm.com/machines/5061",
+   "announced_name": "スマスロ 獣王",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5061 型式=未掲載 メーカー=サミー 導入=2026-10-05 確認日=2026-08-16",
+   "market_release_date": "2026-10-05",
+   "_legacy_evidence_ref": "pworld:10521 型式=L 獣王 XZ 検定=6S0560 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10521",
+   "observed_model_code": "L 獣王 XZ",
+   "_observed_model_code_sources": [
+    "p-world.co.jp"
+   ]
+  },
+  "checker": {
+   "coinRate": 31.8,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "非サバ連後"
     },
     {
-     "key": "cz",
-     "label": "CZ間"
+     "key": "savaren",
+     "label": "サバ連後"
     },
     {
      "key": "reset",
-     "label": "リセット後"
+     "label": "設定変更後"
     }
    ],
    "normal": {
     "ceiling": 999,
-    "caution": 720,
-    "good": 720,
-    "excellent": 720,
-    "target": 720
+    "caution": 590,
+    "good": 610,
+    "excellent": 650,
+    "target": 610
    },
-   "cz": {
-    "caution": 390,
-    "good": 390,
-    "excellent": 390,
-    "ceiling": 500,
-    "target": 390
+   "savaren": {
+    "caution": 540,
+    "good": 590,
+    "excellent": 660,
+    "ceiling": 999,
+    "target": 590
    },
    "reset": {
-    "caution": 120,
-    "good": 120,
-    "excellent": 120,
-    "ceiling": 500,
-    "target": 120
+    "caution": 250,
+    "good": 250,
+    "excellent": 320,
+    "target": 250
    }
   },
-  "series": "",
-  "targetProjection": "b49a6d3a08dc2560"
+  "targetProjection": "abeb0676d126baa8",
+  "series": ""
  },
  {
   "slug": "dmm_5095",
@@ -886,18 +911,18 @@
   "series": "モンスターハンター"
  },
  {
-  "slug": "pw_10521",
-  "name": "スマスロ 獣王",
+  "slug": "dmm_5120",
+  "name": "スロット Vivy -Fluorite Eye’s Song-",
   "seo": {
-   "title": "スマスロ 獣王 天井・狙い目"
+   "title": "スロット Vivy -Fluorite Eye’s Song- 天井・狙い目"
   },
   "info": "スマスロAT",
   "strategy": "",
   "aliases": [
-   "獣王",
-   "じゅうおう",
-   "ジュウオウ",
-   "スマスロ獣王"
+   "Vivy",
+   "ヴィヴィ",
+   "ゔぃゔぃ",
+   "ビビ"
   ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
@@ -907,189 +932,61 @@
    "ceiling_state": "PRESENT",
    "confirmed_topics": [
     "ceiling",
-    "gameplay",
+    "cz",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "cz",
+    "gameplay",
     "strategy",
     "reset"
    ],
    "reason_codes": [],
    "claims": [
-    "at:MAIN_AT",
     "at_prob",
-    "ceiling:GAME:通常時",
+    "ceiling:GAME:AT間",
+    "cz:アクセスチャンスex",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-11",
-   "input_digest": "sha256:86b831056449691b89bf9ceaa38e34428616bfa19a8232ee0fd69dca9c5d4546"
+   "decided_at": "2026-11-17",
+   "input_digest": "sha256:6722ee8e16f18eeb224b308500dc43f7ef7b78f5f9330009c1d5e4448acd428a"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10-05",
+  "release_date": "2026-11-02",
   "identity": {
-   "manufacturer_id": "sammy",
-   "official_product_url": "https://p-town.dmm.com/machines/5061",
-   "announced_name": "スマスロ 獣王",
+   "manufacturer_id": "daitogiken",
+   "official_product_url": "https://p-town.dmm.com/machines/5120",
+   "announced_name": "スロット Vivy -Fluorite Eye’s Song-",
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5061 型式=未掲載 メーカー=サミー 導入=2026-10-05 確認日=2026-08-16",
-   "market_release_date": "2026-10-05",
-   "_legacy_evidence_ref": "pworld:10521 型式=L 獣王 XZ 検定=6S0560 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10521",
-   "observed_model_code": "L 獣王 XZ",
+   "identity_evidence_ref": "dmm:5120 型式=L/Vivy/A5 メーカー=大都技研 導入=2026-11-02 確認日=2026-10-15",
+   "market_release_date": "2026-11-02",
+   "observed_model_code": "L/Vivy/A5",
    "_observed_model_code_sources": [
-    "p-world.co.jp"
+    "p-town.dmm.com"
    ]
   },
   "checker": {
-   "coinRate": 31.8,
+   "coinRate": 31,
    "unit": "G",
    "modes": [
     {
      "key": "normal",
-     "label": "非サバ連後"
-    },
-    {
-     "key": "savaren",
-     "label": "サバ連後"
-    },
-    {
-     "key": "reset",
-     "label": "設定変更後"
+     "label": "通常"
     }
    ],
    "normal": {
-    "ceiling": 999,
-    "caution": 590,
-    "good": 610,
-    "excellent": 650,
-    "target": 610
-   },
-   "savaren": {
-    "caution": 540,
-    "good": 590,
-    "excellent": 660,
-    "ceiling": 999,
-    "target": 590
-   },
-   "reset": {
-    "caution": 250,
-    "good": 250,
-    "excellent": 320,
-    "target": 250
+    "ceiling": 800,
+    "caution": 450,
+    "good": 550,
+    "target": 550
    }
   },
-  "targetProjection": "abeb0676d126baa8",
-  "series": ""
- },
- {
-  "slug": "sao2",
-  "name": "スマスロ ソードアート・オンラインⅡ",
-  "release_date": "2026-06-08",
-  "seo": {
-   "title": "スマスロ ソードアート・オンラインⅡ 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚 通常（CZ間）330G〜 / リセット120G〜",
-  "aliases": [
-   "SAO2",
-   "ソードアート・オンラインⅡ",
-   "ソードアートオンライン2",
-   "ソードアート・オンライン2",
-   "sao2",
-   "ソードアート2",
-   "そーどあーとおんらいん2"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常（CZ間）"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 410,
-    "good": 330,
-    "caution": 250,
-    "byRate": {
-     "eq56": {
-      "excellent": 410,
-      "good": 330,
-      "caution": 250,
-      "note": "CZ間天井499G+α・AT間天井1200G。5.6枚持ちはCZ間330G〜が狙い目。"
-     },
-     "rate55": {
-      "excellent": 420,
-      "good": 340,
-      "caution": 260,
-      "note": "6.0枚はCZ間340G〜。"
-     },
-     "rate50": {
-      "excellent": 430,
-      "good": 350,
-      "caution": 270,
-      "note": "6.5枚はCZ間350G〜。"
-     },
-     "rate45": {
-      "excellent": 440,
-      "good": 360,
-      "caution": 280,
-      "note": "7.0枚はCZ間360G〜。"
-     }
-    },
-    "note": "CZ間天井499G+α(実ゲーム)・AT間天井1200G。CZ間のゲーム数で判断。"
-   },
-   "reset": {
-    "excellent": 180,
-    "good": 120,
-    "caution": 60,
-    "note": "設定変更時CZ間天井256G+αに短縮。CZ間120G〜が狙い目。"
-   }
-  },
-  "limit": 1200,
-  "tenjo_display": "CZ間499G+α／AT間1200G+α",
-  "tenjo_games": 499,
-  "original": {
-   "title": "ソードアート・オンラインII",
-   "kind": "ライトノベル",
-   "search": "ソードアートオンライン ライトノベル"
-  },
-  "strategyByRate": {
-   "eq56": "通常（CZ間）330G〜 / リセット120G〜",
-   "rate55": "通常（CZ間）340G〜 / リセット120G〜",
-   "rate50": "通常（CZ間）350G〜 / リセット120G〜",
-   "rate45": "通常（CZ間）360G〜 / リセット120G〜"
-  },
-  "series": "ソードアート・オンライン"
+  "series": "",
+  "targetProjection": "d9017d3adaea3f1b"
  },
  {
   "slug": "sengoku_otome5",
@@ -1219,6 +1116,109 @@
   "series": "戦国乙女"
  },
  {
+  "slug": "dmm_5079",
+  "name": "スマスロ ラグナドール",
+  "seo": {
+   "title": "スマスロ ラグナドール 天井・狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "",
+  "aliases": [
+   "ラグナドール",
+   "らぐなどーる",
+   "ラグナ"
+  ],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "ceiling",
+    "cz",
+    "gameplay",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "at:UPPER_AT",
+    "at_prob",
+    "ceiling:GAME:AT間",
+    "ceiling:GAME:CZ間",
+    "cz:ラグナドールバトル",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-11-18",
+   "input_digest": "sha256:85577b354a48939e630f2ed51e2a126ee8fc56285514e4eb07689713dc8e901b"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-11-02",
+  "identity": {
+   "manufacturer_id": "universal",
+   "official_product_url": "https://p-town.dmm.com/machines/5079",
+   "announced_name": "スマスロ ラグナドール",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5079 型式=未掲載 メーカー=ミズホ 導入=2026-11 確認日=2026-09-03",
+   "market_release_date": "2026-11-02",
+   "observed_model_code": "LラグナドールZI",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  },
+  "checker": {
+   "coinRate": 31.0,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "AT間"
+    },
+    {
+     "key": "cz",
+     "label": "CZ間"
+    },
+    {
+     "key": "reset",
+     "label": "リセット後"
+    }
+   ],
+   "normal": {
+    "ceiling": 999,
+    "caution": 720,
+    "good": 720,
+    "excellent": 720,
+    "target": 720
+   },
+   "cz": {
+    "caution": 390,
+    "good": 390,
+    "excellent": 390,
+    "ceiling": 500,
+    "target": 390
+   },
+   "reset": {
+    "caution": 120,
+    "good": 120,
+    "excellent": 120,
+    "ceiling": 500,
+    "target": 120
+   }
+  },
+  "series": "",
+  "targetProjection": "b49a6d3a08dc2560"
+ },
+ {
   "slug": "kabaneri",
   "name": "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦",
   "seo": {
@@ -1342,83 +1342,6 @@
   },
   "series": "",
   "release_date": "2026-03-02"
- },
- {
-  "slug": "dmm_5121",
-  "name": "L牙狼 闇を照らす者",
-  "seo": {
-   "title": "L牙狼 闇を照らす者 天井・狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "",
-  "aliases": [
-   "牙狼",
-   "ガロ",
-   "がろ",
-   "スマスロ牙狼"
-  ],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [
-    "ceiling",
-    "cz",
-    "gameplay",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at:MAIN_AT",
-    "ceiling:GAME:通常時",
-    "cz:牙狼mode",
-    "games_per_50",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-11-18",
-   "input_digest": "sha256:07294ae1b9fe175b3932b10dcbe52a032cb93b4865fa3147903f26d4f2c93a5b"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-11-02",
-  "identity": {
-   "manufacturer_id": "dmm:SANSEI LAB",
-   "official_product_url": "https://p-town.dmm.com/machines/5121",
-   "announced_name": "L牙狼 闇を照らす者",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5121 型式=L牙狼闇を照らす者CJ メーカー=サンセイR&D 導入=2026-11-02 確認日=2026-10-11",
-   "market_release_date": "2026-11-02",
-   "observed_model_code": "L牙狼闇を照らす者CJ",
-   "_observed_model_code_sources": [
-    "p-town.dmm.com"
-   ]
-  },
-  "checker": {
-   "coinRate": 32.9,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "ceiling": 999,
-    "good": 660,
-    "target": 660
-   }
-  },
-  "series": "",
-  "targetProjection": "1c082c0cdc071eef"
  },
  {
   "slug": "enen2",
@@ -1617,97 +1540,6 @@
    ]
   },
   "series": "とある"
- },
- {
-  "slug": "dmm_5113",
-  "name": "L魔法少女にあこがれて",
-  "seo": {
-   "title": "L魔法少女にあこがれて 天井・狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "",
-  "aliases": [
-   "まほあこ",
-   "まほうしょうじょにあこがれて",
-   "魔法少女にあこがれて",
-   "スマスロまほあこ"
-  ],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": true,
-   "machine_profile": "AT_CZ",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [
-    "ceiling",
-    "cz",
-    "gameplay",
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [],
-   "claims": [
-    "at:MAIN_AT",
-    "at:UPPER_AT",
-    "at_prob",
-    "ceiling:GAME:AT間",
-    "cz:まほあこチャレンジ",
-    "games_per_50",
-    "payout_range",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-11-11",
-   "input_digest": "sha256:08769fbb2292f237b9b19f5175ad2c3da8c746995f61d0373ea74c01e347c795"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10-19",
-  "identity": {
-   "manufacturer_id": "newgin",
-   "official_product_url": "https://p-town.dmm.com/machines/5113",
-   "announced_name": "L魔法少女にあこがれて",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5113 型式=L魔法少女にあこがれてNP メーカー=ニューギン 導入=2026-10 確認日=2026-09-24",
-   "market_release_date": "2026-10-19",
-   "observed_model_code": "L魔法少女にあこがれてNP",
-   "_observed_model_code_sources": [
-    "p-town.dmm.com"
-   ]
-  },
-  "checker": {
-   "coinRate": 31.4,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "設定変更後"
-    }
-   ],
-   "normal": {
-    "ceiling": 999,
-    "caution": 400,
-    "good": 450,
-    "excellent": 600,
-    "target": 450
-   },
-   "reset": {
-    "caution": 200,
-    "good": 250,
-    "excellent": 400,
-    "target": 250
-   }
-  },
-  "targetProjection": "b77bbafa7eaa787d",
-  "series": ""
  },
  {
   "slug": "monkeyv",
@@ -2048,139 +1880,81 @@
   "release_date": "2023-12-04"
  },
  {
-  "slug": "shinuchi_yoshimune",
-  "name": "真打 吉宗",
+  "slug": "dmm_5121",
+  "name": "L牙狼 闇を照らす者",
   "seo": {
-   "title": "真打 吉宗 狙い目・天井・期待値まとめ"
+   "title": "L牙狼 闇を照らす者 天井・狙い目"
   },
   "info": "スマスロAT",
-  "strategy": "5.6枚 CZ間410G〜 / AT間470G〜",
+  "strategy": "",
   "aliases": [
-   "真打吉宗",
-   "しんうちよしむね",
-   "吉宗真打",
-   "しんうち"
+   "牙狼",
+   "ガロ",
+   "がろ",
+   "スマスロ牙狼"
   ],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "ceiling",
+    "cz",
+    "gameplay",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "ceiling:GAME:通常時",
+    "cz:牙狼mode",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-11-18",
+   "input_digest": "sha256:07294ae1b9fe175b3932b10dcbe52a032cb93b4865fa3147903f26d4f2c93a5b"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-11-02",
+  "identity": {
+   "manufacturer_id": "dmm:SANSEI LAB",
+   "official_product_url": "https://p-town.dmm.com/machines/5121",
+   "announced_name": "L牙狼 闇を照らす者",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5121 型式=L牙狼闇を照らす者CJ メーカー=サンセイR&D 導入=2026-11-02 確認日=2026-10-11",
+   "market_release_date": "2026-11-02",
+   "observed_model_code": "L牙狼闇を照らす者CJ",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  },
   "checker": {
+   "coinRate": 32.9,
    "unit": "G",
    "modes": [
     {
      "key": "normal",
-     "label": "CZ間"
-    },
-    {
-     "key": "at",
-     "label": "AT間"
+     "label": "通常"
     }
    ],
    "normal": {
-    "excellent": 700,
-    "good": 410,
-    "caution": 290,
-    "note": "CZ間天井1000G+α（6周期）でCZ当選。液晶のゲーム数カウンターで確認。",
-    "byRate": {
-     "eq56": {
-      "caution": 290,
-      "good": 410,
-      "target": 410,
-      "excellent": 700,
-      "note": "5.6枚ならCZ間410G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
-     },
-     "rate55": {
-      "caution": 310,
-      "good": 430,
-      "target": 430,
-      "excellent": 730,
-      "note": "6.0枚では430G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
-     },
-     "rate50": {
-      "caution": 360,
-      "good": 480,
-      "target": 480,
-      "excellent": 780,
-      "note": "6.5枚では480G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
-     },
-     "rate45": {
-      "caution": 420,
-      "good": 540,
-      "target": 540,
-      "excellent": 830,
-      "note": "7.0枚では540G〜が狙い目ラインです（AT後にCZをスルーしていない台の目安です）。"
-     }
-    },
-    "target": 410,
-    "ceiling": 1000
-   },
-   "at": {
-    "excellent": 900,
-    "good": 470,
-    "caution": 360,
-    "note": "AT間天井1500G+αでAT当選。CZ間とAT間、どちらの前提で見るかを明確にしてから狙い目を判断してください。",
-    "byRate": {
-     "eq56": {
-      "caution": 360,
-      "good": 470,
-      "target": 470,
-      "excellent": 900,
-      "note": "5.6枚ならAT間470G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
-     },
-     "rate55": {
-      "caution": 390,
-      "good": 490,
-      "target": 490,
-      "excellent": 930,
-      "note": "6.0枚ではAT間490G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
-     },
-     "rate50": {
-      "caution": 440,
-      "good": 550,
-      "target": 550,
-      "excellent": 980,
-      "note": "6.5枚ではAT間550G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
-     },
-     "rate45": {
-      "caution": 510,
-      "good": 620,
-      "target": 620,
-      "excellent": 1050,
-      "note": "7.0枚ではAT間620G〜が狙い目ラインです（AT後にCZをスルーしていない台の目安です）。"
-     }
-    },
-    "target": 470,
-    "ceiling": 1500
-   },
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "coinRate": 31
+    "ceiling": 999,
+    "good": 660,
+    "target": 660
+   }
   },
-  "limit": 1500,
-  "tenjo_display": "CZ間1000G+α／AT間1500G+α",
-  "tenjo_games": 1000,
-  "strategyByRate": {
-   "eq56": "CZ間410G〜 / AT間470G〜",
-   "rate55": "CZ間430G〜 / AT間490G〜",
-   "rate50": "CZ間480G〜 / AT間550G〜",
-   "rate45": "CZ間540G〜 / AT間620G〜"
-  },
-  "release_date": "2026-04-06",
-  "series": "吉宗"
+  "series": "",
+  "targetProjection": "1c082c0cdc071eef"
  },
  {
   "slug": "valvrave2",
@@ -2727,6 +2501,232 @@
   },
   "series": "革命機ヴァルヴレイヴ",
   "release_date": "2025-11-04"
+ },
+ {
+  "slug": "dmm_5113",
+  "name": "L魔法少女にあこがれて",
+  "seo": {
+   "title": "L魔法少女にあこがれて 天井・狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "",
+  "aliases": [
+   "まほあこ",
+   "まほうしょうじょにあこがれて",
+   "魔法少女にあこがれて",
+   "スマスロまほあこ"
+  ],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "ceiling",
+    "cz",
+    "gameplay",
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [],
+   "claims": [
+    "at:MAIN_AT",
+    "at:UPPER_AT",
+    "at_prob",
+    "ceiling:GAME:AT間",
+    "cz:まほあこチャレンジ",
+    "games_per_50",
+    "payout_range",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-11-11",
+   "input_digest": "sha256:08769fbb2292f237b9b19f5175ad2c3da8c746995f61d0373ea74c01e347c795"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-19",
+  "identity": {
+   "manufacturer_id": "newgin",
+   "official_product_url": "https://p-town.dmm.com/machines/5113",
+   "announced_name": "L魔法少女にあこがれて",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5113 型式=L魔法少女にあこがれてNP メーカー=ニューギン 導入=2026-10 確認日=2026-09-24",
+   "market_release_date": "2026-10-19",
+   "observed_model_code": "L魔法少女にあこがれてNP",
+   "_observed_model_code_sources": [
+    "p-town.dmm.com"
+   ]
+  },
+  "checker": {
+   "coinRate": 31.4,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "設定変更後"
+    }
+   ],
+   "normal": {
+    "ceiling": 999,
+    "caution": 400,
+    "good": 450,
+    "excellent": 600,
+    "target": 450
+   },
+   "reset": {
+    "caution": 200,
+    "good": 250,
+    "excellent": 400,
+    "target": 250
+   }
+  },
+  "targetProjection": "b77bbafa7eaa787d",
+  "series": ""
+ },
+ {
+  "slug": "shinuchi_yoshimune",
+  "name": "真打 吉宗",
+  "seo": {
+   "title": "真打 吉宗 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚 CZ間410G〜 / AT間470G〜",
+  "aliases": [
+   "真打吉宗",
+   "しんうちよしむね",
+   "吉宗真打",
+   "しんうち"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "CZ間"
+    },
+    {
+     "key": "at",
+     "label": "AT間"
+    }
+   ],
+   "normal": {
+    "excellent": 700,
+    "good": 410,
+    "caution": 290,
+    "note": "CZ間天井1000G+α（6周期）でCZ当選。液晶のゲーム数カウンターで確認。",
+    "byRate": {
+     "eq56": {
+      "caution": 290,
+      "good": 410,
+      "target": 410,
+      "excellent": 700,
+      "note": "5.6枚ならCZ間410G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
+     },
+     "rate55": {
+      "caution": 310,
+      "good": 430,
+      "target": 430,
+      "excellent": 730,
+      "note": "6.0枚では430G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
+     },
+     "rate50": {
+      "caution": 360,
+      "good": 480,
+      "target": 480,
+      "excellent": 780,
+      "note": "6.5枚では480G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
+     },
+     "rate45": {
+      "caution": 420,
+      "good": 540,
+      "target": 540,
+      "excellent": 830,
+      "note": "7.0枚では540G〜が狙い目ラインです（AT後にCZをスルーしていない台の目安です）。"
+     }
+    },
+    "target": 410,
+    "ceiling": 1000
+   },
+   "at": {
+    "excellent": 900,
+    "good": 470,
+    "caution": 360,
+    "note": "AT間天井1500G+αでAT当選。CZ間とAT間、どちらの前提で見るかを明確にしてから狙い目を判断してください。",
+    "byRate": {
+     "eq56": {
+      "caution": 360,
+      "good": 470,
+      "target": 470,
+      "excellent": 900,
+      "note": "5.6枚ならAT間470G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
+     },
+     "rate55": {
+      "caution": 390,
+      "good": 490,
+      "target": 490,
+      "excellent": 930,
+      "note": "6.0枚ではAT間490G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
+     },
+     "rate50": {
+      "caution": 440,
+      "good": 550,
+      "target": 550,
+      "excellent": 980,
+      "note": "6.5枚ではAT間550G〜が目安です（AT後にCZをスルーしていない台の目安です）。"
+     },
+     "rate45": {
+      "caution": 510,
+      "good": 620,
+      "target": 620,
+      "excellent": 1050,
+      "note": "7.0枚ではAT間620G〜が狙い目ラインです（AT後にCZをスルーしていない台の目安です）。"
+     }
+    },
+    "target": 470,
+    "ceiling": 1500
+   },
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "coinRate": 31
+  },
+  "limit": 1500,
+  "tenjo_display": "CZ間1000G+α／AT間1500G+α",
+  "tenjo_games": 1000,
+  "strategyByRate": {
+   "eq56": "CZ間410G〜 / AT間470G〜",
+   "rate55": "CZ間430G〜 / AT間490G〜",
+   "rate50": "CZ間480G〜 / AT間550G〜",
+   "rate45": "CZ間540G〜 / AT間620G〜"
+  },
+  "release_date": "2026-04-06",
+  "series": "吉宗"
  },
  {
   "slug": "dmm_5090",
