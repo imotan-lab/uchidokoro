@@ -13266,9 +13266,13 @@
   "seo": {
    "title": "スマスロ 快盗天使ツインエンジェル2 スペック・基本情報"
   },
-  "info": "",
+  "info": "スマスロA+ART",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "ツイン2",
+   "スマスロツイン2",
+   "ツインエンジェル2"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -13317,7 +13321,8 @@
     }
    ],
    "normal": {}
-  }
+  },
+  "series": ""
  },
  {
   "slug": "dmm_5109",
