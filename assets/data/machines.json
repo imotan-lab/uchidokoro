@@ -574,34 +574,36 @@
       "excellent": 410,
       "good": 330,
       "caution": 250,
-      "note": "CZ間天井499G+α・AT間天井1200G。5.6枚持ちはCZ間330G〜が狙い目。"
+      "note": "CZ間天井は499G+α、AT間天井は1200Gです。5.6枚交換で持ちメダルを使う場合は、CZ間330Gからが狙い目です。"
      },
      "rate55": {
       "excellent": 420,
       "good": 340,
       "caution": 260,
-      "note": "6.0枚はCZ間340G〜。"
+      "note": "6.0枚交換ではCZ間340Gからが狙い目です。"
      },
      "rate50": {
       "excellent": 430,
       "good": 350,
       "caution": 270,
-      "note": "6.5枚はCZ間350G〜。"
+      "note": "6.5枚交換ではCZ間350Gからが狙い目です。"
      },
      "rate45": {
       "excellent": 440,
       "good": 360,
       "caution": 280,
-      "note": "7.0枚はCZ間360G〜。"
+      "note": "7.0枚交換ではCZ間360Gからが狙い目です。"
      }
     },
-    "note": "CZ間天井499G+α(実ゲーム)・AT間天井1200G。CZ間のゲーム数で判断。"
+    "note": "CZ間天井は実ゲーム数で499G+α、AT間天井は1200Gです。CZ間のゲーム数で判断します。",
+    "ceiling": 499,
+    "target": 330
    },
    "reset": {
     "excellent": 180,
     "good": 120,
     "caution": 60,
-    "note": "設定変更時CZ間天井256G+αに短縮。CZ間120G〜が狙い目。"
+    "note": "設定変更時はCZ間天井が256G+αに短縮されます。CZ間120Gからが狙い目です。"
    }
   },
   "limit": 1200,
