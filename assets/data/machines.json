@@ -461,6 +461,7 @@
    "reason_codes": [],
    "claims": [
     "ceiling:GAME:",
+    "ceiling:THROUGH:ボーナス",
     "cz:イエスマム",
     "games_per_50",
     "payout_range",
@@ -468,7 +469,7 @@
    ],
    "policy_mode": "normal",
    "decided_at": "2026-11-23",
-   "input_digest": "sha256:5c2fed8e3d2862c5cb5c2cee3ff82b6243379ddec03195727c69cb0d8045c94b"
+   "input_digest": "sha256:4bf3f470689215d5a05c28be561c27f2a5e2bfdd4f87c7ee04022139466cff6d"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
