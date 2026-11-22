@@ -23,16 +23,17 @@
    "confirmed_topics": [
     "ceiling",
     "cz",
+    "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "gameplay",
     "strategy",
     "reset"
    ],
    "reason_codes": [],
    "claims": [
+    "at:MAIN_AT",
     "at_prob",
     "ceiling:GAME:AT間",
     "ceiling:GAME:ボーナス間",
@@ -41,8 +42,8 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-16",
-   "input_digest": "sha256:1f550aa13988cd6b2453f003fb0dd30b58d81fbdf153f5c404dd63170e948445"
+   "decided_at": "2026-11-23",
+   "input_digest": "sha256:fe11af33db82260632cebff7e2b2c02322e2742f6ac058ecdaee5b3d3db44968"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
