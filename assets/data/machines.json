@@ -848,15 +848,15 @@
     "ceiling:CYCLE:リプレイ20回（オトモ潜水艇）",
     "ceiling:GAME:AT間",
     "ceiling:GAME:CZ間",
-    "ceiling:THROUGH:CZ",
+    "ceiling:THROUGH:CZの連続失敗",
     "cz:アイルー福引",
     "cz:ブレイクゾーン",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-11",
-   "input_digest": "sha256:d1de1742fbd6f2d9bf8d9e6fb279f1172bc0bd79169746f5e16188bc605840b1"
+   "decided_at": "2026-11-24",
+   "input_digest": "sha256:c23a056948b4fb05959b43b65041de34772e4a33c1b43775db4c1f2473a9e503"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
@@ -890,10 +890,10 @@
     }
    ],
    "normal": {
+    "ceiling": 999,
     "caution": 470,
     "good": 490,
     "excellent": 580,
-    "ceiling": 999,
     "target": 490
    },
    "cz": {
@@ -911,8 +911,8 @@
     "target": 390
    }
   },
-  "targetProjection": "cf663efe2b860baa",
-  "series": "モンスターハンター"
+  "series": "モンスターハンター",
+  "targetProjection": "cf663efe2b860baa"
  },
  {
   "slug": "dmm_5120",
