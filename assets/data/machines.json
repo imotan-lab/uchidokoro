@@ -948,6 +948,7 @@
    "reason_codes": [],
    "claims": [
     "at_prob",
+    "ceiling:CYCLE:規定ポイント到達",
     "ceiling:GAME:AT間",
     "cz:アクセスチャンスex",
     "games_per_50",
@@ -956,7 +957,7 @@
    ],
    "policy_mode": "normal",
    "decided_at": "2026-11-24",
-   "input_digest": "sha256:6722ee8e16f18eeb224b308500dc43f7ef7b78f5f9330009c1d5e4448acd428a"
+   "input_digest": "sha256:72475a1dd0d0fdcb08cf5d736ad955d457a2b493263b6da52e623bb07fc9fbff"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11-02",
