@@ -497,8 +497,11 @@ def selftest() -> int:
       compare([mk("slopachi-quest.com",
                   [one("すぱ娘チャレンジ", "4G+α", "約40%")])],
               _DMM_CTX)["adopted"] == [])
+    # ★「まだ先」の導入日は今日から作る★（2026-11-24＝決め打ちの 2026-12-01 が導入7日前に入り、CIが赤くなった・罠⑳-b）
+    import datetime as _dtx
+    _far = (_ab._today_jst() + _dtx.timedelta(days=60)).isoformat()
     t("★★導入がまだ先ならDMM単独でも採らない★★",
-      compare(_solo, {**_DMM_CTX, "release_date": "2026-12-01"})["adopted"] == [])
+      compare(_solo, {**_DMM_CTX, "release_date": _far})["adopted"] == [])
     t("　独立2票のときは根拠が「独立2出典で一致」になる",
       (compare([mk("chonborista.com", [one("すぱ娘チャレンジ", "4G+α", "約40%")]),
                 mk("nana-press.com", [one("すぱ娘チャレンジ", "4G+α", "約40%")])],
