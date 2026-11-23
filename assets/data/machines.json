@@ -13399,9 +13399,13 @@
   "seo": {
    "title": "Lアカマター 天井・スペック"
   },
-  "info": "",
+  "info": "スマスロ疑似ボーナス",
   "strategy": "",
-  "aliases": [],
+  "aliases": [
+   "アカマター",
+   "あかまたー",
+   "スマスロ アカマター"
+  ],
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
@@ -13455,7 +13459,8 @@
    "normal": {
     "ceiling": 999
    }
-  }
+  },
+  "series": ""
  },
  {
   "slug": "dmm_5127",
