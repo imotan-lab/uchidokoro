@@ -70,8 +70,8 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "4a40e30d6fc0093895ff9c36d8bc8c1069b7b9b3f8ef96c36c318c3e4bfaff79",
-  "service-worker.js": "dd6ac889ebaaa9717b2f709d103a69ddd6469538515a4d936baccbe82a52b7c9",
-  "setting.html": "61d38c1f5e5bf612a67f3f6a51f782dacce2851f8db27f697b264d29801f63ce",
+  "service-worker.js": "246bce20b9fcd63040570b1d6d3ede1a108297d56c8ab7b96070464a90abb7da",
+  "setting.html": "a2b7a88d6efee2cf82f85523e69b676c0d2855f0c14e0064c2a2a5e3714d63c9",
   "terms.html": "cfb07f039c9a57ad5c451118e31abfb7031fd9a4c98d4c0f88f76fd016711a65"
  }
 }
