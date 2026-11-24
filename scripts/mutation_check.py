@@ -901,7 +901,7 @@ MUTATIONS = [
         "why": "★2AIの確定値を材料へ足すのをやめる"
                "（確定値を載せた機種が毎日『再現できません』で止まる）★",
         "file": "scripts/grow_machine.py",
-        "before": "        _added = _cv.merge_into(mat, slug)",
+        "before": '        _added = _cv.merge_into(mat, slug, skip=_rv_gone, rows=_rv.get("rows"))',
         "after": "        _added = []",
         "run": ["scripts/grow_machine.py"],
     },
@@ -909,19 +909,19 @@ MUTATIONS = [
         "why": "★育てる側で出典を取り直すのをやめる"
                "（控えを手で書き換えても、育てる経路だけは公開できた型）★",
         "file": "scripts/grow_machine.py",
-        "before": ('            _rv = _cv.reverify(slug, '
+        "before": ('        _rv = _cv.reverify(slug, '
                    'name=vo.get("identity_name") or name,\n'
-                   '                               official_url=url, '
+                   '                           official_url=url, '
                    'detail=True)'),
-        "after": '            _rv = {"invalid": [], "review": []}',
+        "after": '        _rv = {"invalid": [], "review": [], "gone": []}',
         "run": ["scripts/grow_machine.py"],
     },
     {
         "why": "★取り直しに、その機種の名前ではなく空を渡す"
                "（別機種の控えで照合できてしまう）★",
         "file": "scripts/grow_machine.py",
-        "before": '            _rv = _cv.reverify(slug, name=vo.get("identity_name") or name,',
-        "after": '            _rv = _cv.reverify(slug, name="",',
+        "before": '        _rv = _cv.reverify(slug, name=vo.get("identity_name") or name,',
+        "after": '        _rv = _cv.reverify(slug, name="",',
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -3373,7 +3373,7 @@ MUTATIONS = [
                "（★材料が1件も読めない機種＝いちばん助けが要る機種で、"
                "2AIの答えが使われない★＝この直しの目的そのもの）★",
         "file": "scripts/add_machine_run.py",
-        "before": '        _added = _cv.merge_into(mat, out["slug"])',
+        "before": '        _added = _cv.merge_into(mat, out["slug"], skip=_rv_gone, rows=_rvd.get("rows"))',
         "after": "        _added = []",
         "run": ["scripts/add_machine_run.py"],
         "issues": [669],
@@ -4474,10 +4474,10 @@ MUTATIONS = [
     {
         "why": "公開直前の再検証を呼ばない（控えの手書きを見破れない・Codex8回目）",
         "file": "scripts/add_machine_run.py",
-        "before": "            _rvd = _cv.reverify(out[\"slug\"], name=name,\n"
-                  "                                official_url=official_url,"
+        "before": "        _rvd = _cv.reverify(out[\"slug\"], name=name,\n"
+                  "                            official_url=official_url,"
                   " detail=True)",
-        "after": '            _rvd = {"invalid": [], "review": []}',
+        "after": '        _rvd = {"invalid": [], "review": [], "gone": []}',
         "run": ["scripts/add_machine_run.py"],
     },
     {
@@ -4672,9 +4672,9 @@ MUTATIONS = [
     {
         "why": "育てる側で出典を確かめ直さない（控えの手書きが通る・Codex17回目）",
         "file": "scripts/grow_machine.py",
-        "before": "            _rv = _cv.reverify(slug, name=vo.get(\"identity_name\") or name,\n"
-                  "                               official_url=url, detail=True)",
-        "after": '            _rv = {"invalid": [], "review": []}',
+        "before": "        _rv = _cv.reverify(slug, name=vo.get(\"identity_name\") or name,\n"
+                  "                           official_url=url, detail=True)",
+        "after": '        _rv = {"invalid": [], "review": [], "gone": []}',
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -5583,12 +5583,10 @@ MUTATIONS = [
         "why": "★書けたあとに指紋を控える呼び出しを消す★"
                "（毎日同じ機種をぜんぶやり直す）",
         "file": "scripts/grow_machine.py",
-        "before": ("        _absorbed()\n"
-                   "        # ★★指紋は probe_rows の有無に関係なく控える★★"
-                   "（Codexの指摘4）\n"
-                   "        remember_after_write(a.slug, "
+        "before": ('        if not r.get("cv_gone"):\n'
+                   "            remember_after_write(a.slug, "
                    'got.get("cv_used") or "")'),
-        "after": "        _absorbed()",
+        "after": '        if not r.get("cv_gone"):\n            pass',
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -6295,12 +6293,219 @@ MUTATIONS = [
         "run": ["scripts/task_guard.py"],
     },
     {
-        "why": "★同定の根拠が消えても止めない★"
+        "why": "★同定の根拠が消えても2AIへ回さない★"
                "（★相手のサイトが題に正式名を入れると根拠の検査を通らない＝"
-               "2AIの判断の土台が消えたまま公開が続く・Codexの指摘1★）",
+               "2AIの判断の土台が消えたまま黙って通る・Codexの指摘1★）",
         "file": "scripts/confirmed_values.py",
-        "before": "                    if not _p or _p not in now_text:",
+        "before": "                    if _p not in now_text:",
         "after": "                    if False:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確かめ直しで引用・根拠が消えたら、2AIへ回さず止める★"
+               "（★なな徹の作り替えで正しい確定値の更新が止まった・2026-11-24の運営者判断の逆戻り★）",
+        "file": "scripts/confirmed_values.py",
+        "before": "            except SourceChanged as e:",
+        "after": "            except ZeroDivisionError as e:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★機械が同定できないページで同定の根拠が消えたら、2AIへ回さず止める★"
+               "（★なな徹の「機種名：」の行が消えた形・2026-11-24 Codexの指摘5★）",
+        "file": "scripts/confirmed_values.py",
+        "before": ("            raise SourceChanged(\n"
+                   "                f\"同定の根拠がそのページに見当たりません"),
+        "after": ("            raise ConfirmedError(\n"
+                  "                f\"同定の根拠がそのページに見当たりません"),
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★控えの根拠の文が空（こちらの記録の欠け）でも止めず、出典の変化として2AIへ回す★"
+               "（2026-11-24 Codexの指摘4）",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if _ov0 and (not page_form(_ov0.get(\"proof\"))\n",
+        "after": "            if _ov0 and (False\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★引用か根拠が消えた値を、新台の初公開で材料から外さない★"
+               "（★出典が訂正済みの古い値がその晩はじめて読者に出る・2026-11-24 Codexの指摘1★）",
+        "file": "scripts/confirmed_values.py",
+        "before": "                gone.append(field)\n                continue\n            except Exception",
+        "after": "                continue\n            except Exception",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★合流で、引用か根拠が消えた項目を飛ばさない★（2026-11-24 Codexの指摘1・2回目の指摘3）",
+        "file": "scripts/confirmed_values.py",
+        "before": "        if field in _skip:\n            continue",
+        "after": "        if False:\n            continue",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★育成で、引用か根拠が消えた項目も合流させる★"
+               "（★出典が変わった値が、まだ載っていない欄に初めて入る・2026-11-24 Codexの2回目の指摘1★）",
+        "file": "scripts/grow_machine.py",
+        "before": '        _added = _cv.merge_into(mat, slug, skip=_rv_gone, rows=_rv.get("rows"))',
+        "after": "        _added = _cv.merge_into(mat, slug, skip=())",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★新台の初公開で、引用か根拠が消えた項目も合流させる★"
+               "（★出典が訂正済みの古い値がその晩はじめて読者に出る・2026-11-24 Codexの指摘1★）",
+        "file": "scripts/add_machine_run.py",
+        "before": '        _added = _cv.merge_into(mat, out["slug"], skip=_rv_gone, rows=_rvd.get("rows"))',
+        "after": '        _added = _cv.merge_into(mat, out["slug"], skip=())',
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★育成で、書く直前に初めて消えた項目を数えない（合流させないはずの値が初めて載る）★"
+               "（2026-11-24 Codexの3回目の指摘1）",
+        "file": "scripts/grow_machine.py",
+        "before": "                  & set((first or {}).get(\"cv_added\") or []))\n",
+        "after": "                  & set())\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★確かめ直しで、題が変わって機械が同定できなくなった出典を2AIへ回さず止める★"
+               "（2026-11-24 Codexの3回目の指摘3）",
+        "file": "scripts/confirmed_values.py",
+        "before": "            raise SourceChanged(\n                f\"そのページは「{name}」のページだと確かめられません",
+        "after": "            raise ConfirmedError(\n                f\"そのページは「{name}」のページだと確かめられません",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★合流が控えを読み直す（確かめている間に足された値が、確かめずに入る）★"
+               "（2026-11-24 Codexの4回目の指摘2）",
+        "file": "scripts/confirmed_values.py",
+        "before": "    for field, rec in (for_slug(slug) if rows is None else rows).items():",
+        "after": "    for field, rec in for_slug(slug).items():",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確かめ直しで、出典の直下の根拠か理由が欠けた控えを止めずに2AIへ回す★"
+               "（2026-11-24 Codexの4回目の指摘3）",
+        "file": "scripts/confirmed_values.py",
+        "before": "                         or not page_form((src or {}).get(\"identity_proof\"))\n",
+        "after": "",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★育成で、見送った値がある回も反映済みの指紋を控える（出典が戻っても拾い直さない）★"
+               "（2026-11-24 Codexの6回目の指摘2）",
+        "file": "scripts/grow_machine.py",
+        "before": "            out[\"cv_used\"] = \"\"\n",
+        "after": "            pass\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★育成で、合流0件でも使わない控えの取得失敗で止める（関係ない更新が止まる）★"
+               "（2026-11-24 Codexの6回目の指摘1）",
+        "file": "scripts/grow_machine.py",
+        "before": "        _rv_bad = _cv.used_invalid(_rv, _added)\n",
+        "after": "        _rv_bad = list(_rv.get(\"invalid\") or [])\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★新台で、合流0件でも使わない控えの取得失敗で止める（関係ない公開が止まる）★"
+               "（2026-11-24 Codexの6回目の指摘1）",
+        "file": "scripts/add_machine_run.py",
+        "before": "        _rv_bad = _cv.used_invalid(_rvd, _added)\n",
+        "after": "        _rv_bad = list(_rvd.get(\"invalid\") or [])\n",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★invalid の持ち主を名前の前方一致で推す（似た名前の別の項目に付ける）★"
+               "（2026-11-24 Codexの8回目の指摘1）",
+        "file": "scripts/confirmed_values.py",
+        "before": "            ng_owner[_i] = field         # ★この項目のぶん★",
+        "after": "            ng_owner[_i] = next((f for f in rows if ng[_i].startswith(f\"{slug} / {f}: \")), field)  # ★この項目のぶん★",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★書く直前の確かめ直し用の取り置き外しが、その機種の出典を外さない★"
+               "（2026-11-24 Codexの8回目の指摘2）",
+        "file": "scripts/confirmed_values.py",
+        "before": "        return sum(1 for u in urls if u and _nmw._CACHE.pop(u, None) is not None)\n",
+        "after": "        return 0\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★育成の書く直前の確かめ直しで、出典の取り置きを外さない（古いページで通る）★"
+               "（2026-11-24 Codexの8回目の指摘2）",
+        "file": "scripts/grow_machine.py",
+        "before": "        _cv.forget_cached_sources(slug)\n        again = plan_one(",
+        "after": "        again = plan_one(",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★周りの指紋の幅が読めない控えで、確かめ直し全体が例外で落ちる★"
+               "（2026-11-24 Codexの9回目の指摘3）",
+        "file": "scripts/confirmed_values.py",
+        "before": "                    except (TypeError, ValueError, OverflowError):\n"
+                  "                        ng.append(f\"{slug} / {field}: 控えの周りの指紋の幅が読めません\"",
+        "after": "                    except ZeroDivisionError:\n"
+                 "                        ng.append(f\"{slug} / {field}: 控えの周りの指紋の幅が読めません\"",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★見送りの印を「書く理由」にも数える（中身が同じでも記事を書き直す）★"
+               "（2026-11-24 Codexの9回目の指摘2）",
+        "file": "scripts/grow_machine.py",
+        "before": "    if with_gone and _row.get(\"gone\"):\n",
+        "after": "    if _row.get(\"gone\"):\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★書く直前に見送った項目がある回も、反映済みの指紋を控える（付けた印が消える）★"
+               "（2026-11-24 Codexの8回目の指摘3）",
+        "file": "scripts/grow_machine.py",
+        "before": "        if not r.get(\"cv_gone\"):\n            remember_after_write(",
+        "after": "        if True:\n            remember_after_write(",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★見送った項目があっても、控えが同じなら確かめ直しに来ない★"
+               "（2026-11-24 Codexの7回目の指摘2）",
+        "file": "scripts/grow_machine.py",
+        "before": "    if with_gone and _row.get(\"gone\"):\n        return True\n",
+        "after": "    if False:\n        return True\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★書けた回に見送った項目の印を外さない（毎日やり直す）★（2026-11-24 Codexの7回目の指摘2）",
+        "file": "scripts/grow_machine.py",
+        "before": "        _row.pop(\"gone\", None)      # ★見送った項目の印は",
+        "after": "        pass      # ★見送った項目の印は",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★止める理由に、合流させていない項目の問題まで入れる★（2026-11-24 Codexの7回目の指摘1）",
+        "file": "scripts/confirmed_values.py",
+        "before": "            + [m for f in added for m in (by.get(f) or [])])\n",
+        "after": "            + [m for f in by for m in (by.get(f) or [])])\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★育成の書く直前の確認で新しく出たお知らせを捨てる★（2026-11-24 Codexの6回目の指摘3）",
+        "file": "scripts/grow_machine.py",
+        "before": "        out[\"notes\"] = [n for n in (again.get(\"notes\") or [])\n",
+        "after": "        out[\"notes\"] = [n for n in ([])\n",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★育成の書く直前の確認で新しく出た問いを捨てる★（2026-11-24 Codexの指摘2）",
+        "file": "scripts/grow_machine.py",
+        "before": "        if _key(q) not in seen:",
+        "after": "        if False:",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★取り消しの案内で項目名を詰める（末尾に空白のある別の項目を消す）★"
+               "（2026-11-24 Codexの指摘3・3回目の指摘2）",
+        "file": "scripts/confirmed_values.py",
+        "before": "    if _SHELL_SAFE.fullmatch(slug) and _SHELL_SAFE.fullmatch(field):",
+        "after": "    if slug.strip() and field.strip():",
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -10546,8 +10751,8 @@ MUTATIONS = [
     {
         "why": "★育成：書く直前の確かめ直しに導入日を渡さない（延期だけの日は書けない・Codex指摘）★",
         "file": "scripts/grow_machine.py",
-        "before": "                         verify=lambda *a, **k: {\"problems\": [], \"release\": _planned_release})\n",
-        "after": "                         verify=lambda *a, **k: {\"problems\": [], \"release\": \"\"})\n",
+        "before": "                         verify=lambda *a, **k: {\"problems\": [], \"release\": _planned_release},\n",
+        "after": "                         verify=lambda *a, **k: {\"problems\": [], \"release\": \"\"},\n",
         "run": ["scripts/grow_machine.py"],
     },
     {

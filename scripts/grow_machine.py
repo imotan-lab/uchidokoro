@@ -401,6 +401,8 @@ def remember_sources(slug: str, urls: list) -> bool:
         if _was.get("cv"):
             got[slug]["cv"] = _was["cv"]
             got[slug]["rules"] = _was.get("rules") or ""
+        if _was.get("gone"):
+            got[slug]["gone"] = _was["gone"]     # ★見送った項目の印も残す★（remember_gone）
         tmp = f"{PROBE_STATE}.{os.getpid()}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(got, f, ensure_ascii=False, indent=1)
@@ -439,6 +441,7 @@ def remember_confirmed(slug: str, fp: str = "") -> bool:
         _row = got.get(slug) if isinstance(got.get(slug), dict) else {}
         _row = dict(_row)
         _row["cv"] = fp
+        _row.pop("gone", None)      # ★見送った項目の印は、書けた回に外す★（remember_gone）
         # ★どの決まりで書いたかも残す★（決まりを変えたら調べ直すため）
         _row["rules"] = GROW_RULES_VERSION
         got[slug] = _row
@@ -462,6 +465,35 @@ def confirm_and_remember(rows: list, slug: str) -> bool:
     指紋は `remember_after_write()` が担当する。
     """
     return _pp.confirm(rows)
+
+
+def remember_gone(slug: str, gone) -> bool:
+    """★出典から記録した文が消えて見送った項目を、次回まで覚える★（2026-11-24・Codexの7回目の指摘2）
+
+    ★下見でも書く★＝「次回も確かめ直す」の印なので、書いても記事は変わらない。
+    外すのは remember_confirmed（記事に反映できた回）だけ。読めない・書けないときは続ける。
+    """
+    gone = sorted({str(g) for g in (gone or []) if g})
+    if not gone:
+        return False
+    try:
+        got = {}
+        if os.path.exists(PROBE_STATE):
+            with open(PROBE_STATE, encoding="utf-8") as f:
+                got = json.load(f)
+            if not isinstance(got, dict):
+                got = {}
+        _row = dict(got.get(slug) if isinstance(got.get(slug), dict) else {})
+        _row["gone"] = gone
+        got[slug] = _row
+        tmp = f"{PROBE_STATE}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(got, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, PROBE_STATE)
+        return True
+    except Exception as e:                # noqa: BLE001
+        print(f"  見送った項目を控えられません（続けます）: {e}")
+        return False
 
 
 def remember_after_write(slug: str, cv_used: str) -> bool:
@@ -1007,7 +1039,7 @@ def has_confirmed(slug: str) -> bool:
     return bool(isinstance(got, dict) and got)
 
 
-def confirmed_drift(slug: str) -> bool:
+def confirmed_drift(slug: str, with_gone: bool = True) -> bool:
     """★前に書いたときから、2AIの確定値が変わったか★（2026-09-05）
 
     ★なぜ要るか（Codexの指摘1・自分で確かめた）★＝
@@ -1025,6 +1057,12 @@ def confirmed_drift(slug: str) -> bool:
     # ★★育て方の決まりが変わっていたら、必ず調べ直す★★（2026-09-06）
     #   ★これが無いと、古い決まりで控えた機種を人が消して回るしかない★
     if str(_row.get("rules") or "") != GROW_RULES_VERSION:
+        return True
+    # ★★前回、出典から記録した文が消えて見送った項目があれば、必ず確かめ直す★★
+    #   （2026-11-24・Codexの7回目の指摘2＝控えが同じだと、出典が戻っても来なかった）
+    #   ★with_gone=False は「書く理由」用★（Codexの9回目の指摘2＝見送りの印は
+    #   確かめ直しに来る理由であって、記事を書き直す理由ではない）
+    if with_gone and _row.get("gone"):
         return True
     return str(_row.get("cv") or "") != now
 
@@ -2941,7 +2979,7 @@ def release_drift(cur: dict, accepted, release_probe=None, today=None) -> str:
 
 
 def plan_one(slug: str, gather=None, verify=None, probe=None,
-             find=None, release_probe=None) -> dict:
+             find=None, release_probe=None, cv_skip=()) -> dict:
     """育てられるか調べて、新しい機種データ・記事を作る（★書き込まない★）。
 
     ★指紋は「読む前」に取る★（2026-08-05・Codex103回目の指摘1）
@@ -3268,9 +3306,43 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     #   ★記事には古い値・控えには新しい指紋★になり、その分が消える。
     out["cv_used"] = confirmed_fingerprint(slug)
     try:
-        _added = _cv.merge_into(mat, slug)
-        if _added:
-            _log("  2AIで確定した値を材料に足しました: " + " / ".join(_added))
+        # ★★合流の前に確かめる★★（2026-11-24・Codexの2回目の指摘1）＝
+        #   引用か根拠がページから消えた項目（gone）は合流させない＝2AIが答えるまで新しく載せない。
+        #   ★前に載せた値だった場合★は、作り直した記事からその値が消えるので
+        #   「前に載せた内容を再現できない」で書かずに止まり、2AIへの問い（下の review）が出る
+        #   ＝公開中の記事は前の値のまま・2AIが記録し直せば翌朝に通る。
+        #   ★確定値が無い機種は reverify の中で何もせず返る★（取りに行かない）
+        _rv = _cv.reverify(slug, name=vo.get("identity_name") or name,
+                           official_url=url, detail=True)
+        # ★cv_skip＝書く直前の確認で、最初の計画が見送った項目★（Codexの7回目の指摘1）＝
+        #   書くのは最初の計画なので、その項目は再計画でも合流させない（使っていない項目の
+        #   取得失敗で止まらないように）
+        _rv_gone = sorted(set(_rv.get("gone") or []) | set(cv_skip or ()))
+        out["cv_gone"] = sorted(_rv.get("gone") or [])   # ★書く直前の確認で比べる★（apply_one）
+        _added = _cv.merge_into(mat, slug, skip=_rv_gone, rows=_rv.get("rows"))
+        out["cv_added"] = sorted(_added or [])   # ★記事に実際に合流した項目★（late_gone）
+        if _rv_gone:
+            # ★見送った値がある回は、控え全体の指紋を「反映済み」として控えない★
+            #   （Codexの6回目の指摘2＝控えると、出典が戻っても控えが同じなので
+            #   二度と確かめ直しに来ず、見送った値が記事に入らない）
+            out["cv_used"] = ""
+            # ★見送った項目を次回まで覚えておく★（Codexの7回目の指摘2＝前に控えた指紋が
+            #   今と同じだと確かめ直しに来ない）。書けた回（remember_confirmed）で外れる
+            remember_gone(slug, _rv_gone)
+        # ★止める理由は、実際に合流させた項目の問題だけ★（Codexの6回目・7回目の指摘1）＝
+        #   今回は使わない控えの問題は止めずにお知らせに出す（関係ない更新まで止まった）
+        _rv_bad = _cv.used_invalid(_rv, _added)
+        _rv_unused = [m for m in (_rv.get("invalid") or []) if m not in _rv_bad]
+        if _rv_unused:
+            out["notes"] += [f"今回は使わない確定値の控えに問題があります: {x}"
+                             for x in _rv_unused[:3]]
+        _rv = dict(_rv, invalid=_rv_bad)
+        if _rv_gone:
+            _log("  出典から記録した文が消えた値は、2AIが答えるまで載せません: "
+                 + " / ".join(_rv_gone))
+        if _added or _rv_gone:
+            if _added:
+                _log("  2AIで確定した値を材料に足しました: " + " / ".join(_added))
             # ★★育てる側も、出典を取り直して確かめる★★
             #   （2026-08-24・Codexの17回目）
             #   ★新台側だけ再確認を通していた★＝
@@ -3281,14 +3353,17 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
             #     （2026-09-08・台帳#585・運営者の承認）
             #     引用も根拠もページに在るのに、無関係な場所が変わっただけで
             #     止めていた＝確かめた値が1日で使えなくなっていた。
-            _rv = _cv.reverify(slug, name=vo.get("identity_name") or name,
-                               official_url=url, detail=True)
+            #   ★取り直しは合流の前（上）で済ませている★
             for _q in (_rv.get("review") or []):
                 # ★消さずに2AIへ★（判断は人でも機械でもなく2AI）
                 out["questions"].append(
-                    {"text": ("出典の引用の周りが変わっています。"
+                    {"text": ("出典のページが変わっています（引用の周りが変わった／"
+                              "記録した引用や同定の根拠が見当たらない）。"
                               "いまのページを読んで、この値の根拠として"
-                              f"まだ成り立つか判断してください: {_q}"),
+                              "まだ成り立つか判断してください（成り立つなら今のページの文で"
+                              "confirmed_values.py --record し直す・成り立たなければ、"
+                              "下の行の末尾にある命令でその項目だけ取り消す"
+                              f"＝--field を省くと機種の確定値が全部消える）: {_q}"),
                      "kind": "source_context_changed", "slug": slug})
             if _rv.get("invalid"):
                 out["problems"] += [
@@ -3355,7 +3430,8 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     # ★★やることがあるかの判断は `growth_reasons` の1か所★★
     #   （2026-09-03。★ここに埋めていたら、壊し方の道具が
     #     「この守りは試験で守られていません」と言った★）
-    _nn = growth_reasons(_nn, cur, old_detail, machine, detail, confirmed_drift(slug))
+    _nn = growth_reasons(_nn, cur, old_detail, machine, detail,
+                         confirmed_drift(slug, with_gone=False))
     out["problems"] += _nn
     out["nothing_new_only"] = bool(_clean and _nn)
     # ★「前に載っていた内容が再現できない」は人へ回す★（黙って止め続けない）
@@ -3695,6 +3771,28 @@ def _regather(plan: dict):
     return _g
 
 
+def new_questions(before, after) -> list:
+    """★2回目の計画で新しく出た問いだけ返す★（1回目に出したものは二度出さない）"""
+    def _key(q):
+        return str((q or {}).get("text") if isinstance(q, dict) else q)
+    seen = {_key(q) for q in (before or [])}
+    out = []
+    for q in (after or []):
+        if _key(q) not in seen:
+            seen.add(_key(q))
+            out.append(q)
+    return out
+
+
+def late_gone(first: dict, again: dict) -> list:
+    """★書く直前の確認で初めて「出典から記録した文が消えた」項目★（2026-11-24・Codexの3回目の指摘1）"""
+    #   ★最初の計画で実際に合流した項目だけ★（Codexの5回目の指摘1＝機械が採った項目や
+    #   合流しなかった項目が消えても、書く中身は変わらないので止めない）
+    return sorted((set((again or {}).get("cv_gone") or [])
+                   - set((first or {}).get("cv_gone") or []))
+                  & set((first or {}).get("cv_added") or []))
+
+
 def apply_one(got: dict) -> dict:
     """育てた結果を書き込む（★全部そろうか、何も残さないか★）。
 
@@ -3709,7 +3807,7 @@ def apply_one(got: dict) -> dict:
     slug = got["slug"]
     machine, detail = got["machine"], got["detail"]
     out = {"slug": slug, "problems": [], "wrote": [], "was": got["was"],
-           "now": got["now"]}
+           "now": got["now"], "questions": [], "notes": []}
     # ★指紋が無い計画では何もしない★（先に断る＝無駄な描画もしない）
     if not got.get("fingerprint"):
         out["problems"].append("計画時の指紋がありません（書きません）")
@@ -3753,8 +3851,12 @@ def apply_one(got: dict) -> dict:
         #   空で渡すと古い導入日で作り直し、導入日だけが変わる（延期を受け取った）日は
         #   「育てるものがありません」で必ず止まって書けなかった。
         _planned_release = str((machine or {}).get("release_date") or "")
+        # ★確定値の出典は取り直す★（Codexの8回目の指摘2＝最初の計画で取ったページを
+        #   使い回すと、その間に消えた引用に気づかない）
+        _cv.forget_cached_sources(slug)
         again = plan_one(slug, gather=_regather(got),
-                         verify=lambda *a, **k: {"problems": [], "release": _planned_release})
+                         verify=lambda *a, **k: {"problems": [], "release": _planned_release},
+                         cv_skip=got.get("cv_gone") or ())
         # ↑ 取得はやり直さない。前提（区分・方針・台帳・目印）だけ見直す
         #   ★材料は計画のときの控えを渡す★（2026-10-25）＝空にすると、
         #   名鑑から読んだ値が「消える」と判定され、書く直前で必ず止まった
@@ -3762,6 +3864,25 @@ def apply_one(got: dict) -> dict:
             if "材料を集められません" in p or "本人性" in p:
                 continue
             out["problems"].append(f"書く直前の確認で止めました: {p}")
+        # ★★書く直前の確認で新しく出た2AIへの問いも返す★★（2026-11-24・Codexの指摘2）＝
+        #   引用・根拠が消えたものを止めずに2AIへ回すようにしたので、ここで捨てると
+        #   書く直前に初めて消えた引用が誰にも聞かれないまま書かれる
+        out["questions"] = new_questions(got.get("questions"), again.get("questions"))
+        # ★書く直前に見送った項目も結果に載せる★（Codexの8回目の指摘3＝CLI が書けた回に
+        #   反映済みの指紋を控えると、付けたばかりの見送りの印が消えた）
+        out["cv_gone"] = sorted(set(got.get("cv_gone") or [])
+                                | set(again.get("cv_gone") or []))
+        # ★書く直前に初めて出たお知らせも返す★（Codexの6回目の指摘3）
+        out["notes"] = [n for n in (again.get("notes") or [])
+                        if n not in (got.get("notes") or [])]
+        # ★★書く直前に初めて、出典から記録した文が消えた値があれば書かない★★
+        #   （2026-11-24・Codexの3回目の指摘1）＝書くのは最初の計画の中身なので、
+        #   そのまま書くと、合流させないはずの値が初めて載りうる。問いは上で返す。
+        _late_gone = late_gone(got, again)
+        if _late_gone:
+            out["problems"].append(
+                "書く直前の確認で、出典から記録した文が消えた値が見つかりました"
+                f"（{' / '.join(_late_gone)}）＝2AIが答えるまで書きません")
         if out["problems"]:
             return out
 
@@ -4636,7 +4757,7 @@ def selftest() -> int:
     try:
         # ★どの材料に足したかまで見る★（依頼148の指摘4）
         #   slugだけ見ていると、空の辞書へ誤って繋いでも合格してしまう。
-        def _spy(mat, slug):
+        def _spy(mat, slug, skip=(), rows=None):
             # ★「集めた材料そのもの」に足しているか★（別の辞書ではないこと）
             seen.append((slug, mat is the_mat))
             return []
@@ -4677,7 +4798,7 @@ def selftest() -> int:
             # ★本物と同じ形で返す★（2026-09-08・台帳#585）
             return {"invalid": [], "review": []}
         _cv.reverify = _rvspy
-        _cv.merge_into = lambda mat, slug_: ["ceiling"]
+        _cv.merge_into = lambda mat, slug_, skip=(), rows=None: ["ceiling"]
         with _st_env():
             _rv_out = plan_one(
                 _ST_SLUG,
@@ -4754,6 +4875,76 @@ def selftest() -> int:
                     verify=lambda *a, **k: {"problems": [], "release": ""})
         finally:
             _cv.reverify = _rvspy
+        t("★★書く直前の確認で新しく出た問いだけを返す（同じ問いは二度出さない）★★"
+          "（2026-11-24・Codexの指摘2）",
+          new_questions([{"text": "a"}], [{"text": "a"}, {"text": "b"}, {"text": "b"}])
+          == [{"text": "b"}]
+          and new_questions(None, None) == [])
+        t("★★引用か根拠が消えた項目は合流させない（2AIが答えるまで新しく載せない）★★"
+          "（2026-11-24・Codexの2回目の指摘1／呼ぶ引数まで見る）",
+          '_added = _cv.merge_into(mat, slug, skip=_rv_gone, rows=_rv.get("rows"))' in inspect.getsource(plan_one)
+          and '_rv_gone = sorted(set(_rv.get("gone") or []) | set(cv_skip or ()))'
+          in inspect.getsource(plan_one))
+        t("★★書く直前に初めて消えた項目だけを数える★★（Codexの3回目の指摘1）",
+          late_gone({"cv_gone": ["a"], "cv_added": ["b"]}, {"cv_gone": ["a", "b"]}) == ["b"]
+          and late_gone({"cv_gone": ["a"], "cv_added": ["b"]}, {"cv_gone": ["a"]}) == []
+          # ★記事に合流していない項目が消えても止めない★（Codexの5回目の指摘1）
+          and late_gone({"cv_gone": [], "cv_added": []}, {"cv_gone": ["b"]}) == []
+          and late_gone({}, {}) == [])
+        t("★★書く直前に初めて消えた項目があれば書かない（計画が gone を持ち回る）★★"
+          "（呼ぶ引数まで見る）",
+          "_late_gone = late_gone(got, again)" in inspect.getsource(apply_one)
+          and "        if _late_gone:\n            out[\"problems\"].append(" in inspect.getsource(apply_one)
+          and 'out["cv_gone"] = sorted(_rv.get("gone") or [])' in inspect.getsource(plan_one)
+          and 'out["cv_added"] = sorted(_added or [])' in inspect.getsource(plan_one))
+        # ★★見送った項目を覚え、次回は必ず確かめ直す・書けたら外す★★（Codexの7回目の指摘2）
+        global PROBE_STATE
+        _ps_keep, _cf_keep = PROBE_STATE, globals()["confirmed_fingerprint"]
+        import tempfile as _tf_g
+        _gd = _tf_g.mkdtemp(prefix="grow_gone_")
+        try:
+            PROBE_STATE = os.path.join(_gd, "grow_sources.json")
+            globals()["confirmed_fingerprint"] = lambda s: "X"
+            remember_confirmed("zzz_g", "X")
+            _d0 = confirmed_drift("zzz_g")
+            remember_gone("zzz_g", ["ceiling"])
+            _d1 = confirmed_drift("zzz_g")
+            remember_confirmed("zzz_g", "X")
+            _d2 = confirmed_drift("zzz_g")
+            remember_gone("zzz_g", ["ceiling"])
+            _d3 = confirmed_drift("zzz_g", with_gone=False)
+        finally:
+            PROBE_STATE = _ps_keep
+            globals()["confirmed_fingerprint"] = _cf_keep
+            import shutil as _sh_g
+            _sh_g.rmtree(_gd, ignore_errors=True)
+        t("★★見送った項目があれば、控えが同じでも次回は確かめ直す／書けたら印を外す★★"
+          "（Codexの7回目の指摘2）",
+          _d0 is False and _d1 is True and _d2 is False
+          # ★書く理由（with_gone=False）では見送りの印を数えない★（Codexの9回目の指摘2）
+          and _d3 is False)
+        _ap_src = inspect.getsource(apply_one)
+        t("★★書く直前の確かめ直しは出典を取り直す／見送った項目を結果に載せ、"
+          "その回は反映済みの指紋を控えない★★（Codexの8回目の指摘2・3）",
+          "        _cv.forget_cached_sources(slug)\n        again = plan_one(" in _ap_src
+          and 'out["cv_gone"] = sorted(set(got.get("cv_gone") or [])' in _ap_src
+          and '        if not r.get("cv_gone"):\n            remember_after_write(' in inspect.getsource(_main))
+        _pl_src = inspect.getsource(plan_one)
+        t("★★見送った値がある回は、反映済みの指紋を控えない★★（Codexの6回目の指摘2）"
+          "／★合流0件なら使わない控えの問題で止めない（お知らせだけ）★（6回目の指摘1）",
+          '        if _rv_gone:\n            # ★見送った値がある回は' in _pl_src
+          and '            out["cv_used"] = ""\n' in _pl_src
+          and '        _rv_bad = _cv.used_invalid(_rv, _added)' in _pl_src
+          and '        _rv = dict(_rv, invalid=_rv_bad)' in _pl_src
+          and '            remember_gone(slug, _rv_gone)' in _pl_src
+          and 'cv_skip=got.get("cv_gone") or ())' in inspect.getsource(apply_one))
+        t("★★書く直前に初めて出たお知らせも返し、CLIが出している★★（Codexの6回目の指摘3）",
+          'out["notes"] = [n for n in (again.get("notes") or [])' in inspect.getsource(apply_one)
+          and 'for _n in r.get("notes") or []:' in inspect.getsource(_main))
+        t("★★書く直前の問いを結果に載せ、CLIが出している★★（呼ぶ引数まで見る）",
+          'out["questions"] = new_questions(got.get("questions"), again.get("questions"))'
+          in inspect.getsource(apply_one)
+          and 'for _q in r.get("questions") or []:' in inspect.getsource(_main))
         t("★★引用の周りが変わったら、止めずに2AIへ回す★★"
           "（★止めると、無関係な場所が動くだけで確定値が使えなくなる"
           "・台帳#585★）",
@@ -5142,7 +5333,8 @@ def selftest() -> int:
       #   ★探していた文字列は3つ引数の古い形★で、どこにも無かった。
       and (lambda a, b: (a + b) in io.open(
           os.path.abspath(__file__), encoding="utf-8").read())(
-              "growth_reasons(_nn, cur, ", "old_detail, machine, detail, confirmed_drift(slug))"))
+              "growth_reasons(_nn, cur, ", "old_detail, machine, detail,\n"
+              "                         confirmed_drift(slug, with_gone=False))"))
     # ── ★ひな型のずれを見つける関数そのものを試す★（2026-09-03・罠⑤）
     #   ★上の様子見の試験は、この関数を丸ごと差し替える★ので、
     #   中の判定を空にしても緑のままだった（壊し方の道具が見つけた）。
@@ -6902,12 +7094,19 @@ def _main() -> int:
         print("（下見です。書き込むには --apply）")
         return 0
     r = apply_one(got)
+    # ★書く直前の確認で新しく出た問いも出す★（2026-11-24・Codexの指摘2）
+    for _n in r.get("notes") or []:
+        print("  （お知らせ）" + str(_n))
+    for _q in r.get("questions") or []:
+        print("  ★2AIに聞くこと: " + str((_q or {}).get("text") if isinstance(_q, dict) else _q))
     # ★書けたときだけ控える★（依頼182のP1）
     if not r["problems"]:
         mark_checked(a.slug, _dt.date.today())
         _absorbed()
         # ★★指紋は probe_rows の有無に関係なく控える★★（Codexの指摘4）
-        remember_after_write(a.slug, got.get("cv_used") or "")
+        #   ★書く直前に見送った項目がある回は控えない★（Codexの8回目の指摘3）
+        if not r.get("cv_gone"):
+            remember_after_write(a.slug, got.get("cv_used") or "")
         _close_stuck_questions(a.slug)       # ★書けた★
     for p in r["problems"]:
         print("  -", p)

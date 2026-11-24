@@ -3534,8 +3534,12 @@ def review_questions(reviews) -> list:
     """
     out = []
     for r in (reviews or []):
-        out.append("出典の引用の周りが変わっています。いまのページを読んで、"
-                   f"この値の根拠としてまだ成り立つか判断してください: {r}")
+        out.append("出典のページが変わっています（引用の周りが変わった／記録した引用や"
+                   "同定の根拠が見当たらない）。いまのページを読んで、"
+                   "この値の根拠としてまだ成り立つか判断してください"
+                   "（成り立つなら今のページの文で confirmed_values.py --record し直す・"
+                   "成り立たなければ、下の行の末尾にある命令でその項目だけ取り消す"
+                   f"＝--field を省くと機種の確定値が全部消える）: {r}")
     return out
 
 
@@ -3722,23 +3726,43 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #   後段で読むので、ここに無いと NameError でタスクごと落ちる。
     _rv_review = []
     try:
-        _added = _cv.merge_into(mat, out["slug"])
-        if _added:
-            _log("  2AIで確定した値を材料に足しました: " + " / ".join(_added))
-            # ★★公開直前に、その機種の控えだけ取り直して確かめる★★
-            #   （2026-08-24・Codexの8回目）
-            #   ★控えの読み直しは、保存されたURLと引用を信じている★ので、
-            #   控えを手で書き換えられたら偽の引用でも通る。
-            #   ★全件はやらない★＝いま書こうとしている機種だけ・出典は各1回。
-            # ★確かめ済みの名前とURLを渡す★（2026-08-24・Codexの9回目）
-            #   まだ一覧に無い新台は、控えだけでは機種名を引けない。
-            #   ★★止めるものと、2AIへ回すものを分ける★★
-            #     （2026-09-08・台帳#585・運営者の承認）
-            _rvd = _cv.reverify(out["slug"], name=name,
-                                official_url=official_url, detail=True)
+        # ★★公開直前に、その機種の控えだけ取り直して確かめる★★
+        #   （2026-08-24・Codexの8回目）
+        #   ★控えの読み直しは、保存されたURLと引用を信じている★ので、
+        #   控えを手で書き換えられたら偽の引用でも通る。
+        #   ★全件はやらない★＝いま書こうとしている機種だけ・出典は各1回。
+        # ★確かめ済みの名前とURLを渡す★（2026-08-24・Codexの9回目）
+        #   まだ一覧に無い新台は、控えだけでは機種名を引けない。
+        #   ★★止めるものと、2AIへ回すものを分ける★★
+        #     （2026-09-08・台帳#585・運営者の承認）
+        # ★★合流の前に確かめる★★（2026-11-24・Codexの2回目の指摘3）＝
+        #   引用か根拠がページから消えた項目（gone）を合流させないため。
+        #   合流のあとで外すと、確定値に道を譲って消えた機械の行が戻らない。
+        #   ★確定値が無い機種は reverify の中で何もせず返る★（取りに行かない）
+        _rvd = _cv.reverify(out["slug"], name=name,
+                            official_url=official_url, detail=True)
+        # ★★引用か根拠がページから消えた値は、2AIが答えるまで載せない★★
+        #   （2026-11-24・Codexの指摘1＝出典が訂正済みの古い値を初公開で載せうる）
+        #   ★機種ごとは止めない★（その値の箱が「未確認」になるだけ）
+        _rv_gone = list(_rvd.get("gone") or [])
+        _added = _cv.merge_into(mat, out["slug"], skip=_rv_gone, rows=_rvd.get("rows"))
+        # ★止める理由は、実際に合流させた項目の問題だけ★（Codexの6回目・7回目の指摘1）＝
+        #   今夜は使わない控えの問題は止めずにログへ残す（関係ない公開まで止まった）
+        _rv_bad = _cv.used_invalid(_rvd, _added)
+        _rv_unused = [m for m in (_rvd.get("invalid") or []) if m not in _rv_bad]
+        if _rv_unused:
+            _log("  （お知らせ）今夜は使わない確定値の控えに問題があります: "
+                 + " / ".join(_rv_unused[:3]))
+        _rvd = dict(_rvd, invalid=_rv_bad)
+        if _added or _rv_gone:
+            if _added:
+                _log("  2AIで確定した値を材料に足しました: " + " / ".join(_added))
+            if _rv_gone:
+                _log("  出典から記録した文が消えた値は、2AIが答えるまで載せません: "
+                     + " / ".join(_rv_gone))
             _rv = _rvd.get("invalid") or []
             # ★2AIへ回すものは、あとで ask_2ai へ足す★
-            #   （`out["ask_2ai"]` はここより後で作られるので溜めておく）
+            #   （ask_2ai はここより後で作られるので溜めておく）
             _rv_review = list(_rvd.get("review") or [])   # ★上で空に用意済み★
             if _rv:
                 out["problems"] += [
@@ -3746,7 +3770,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
                     for x in _rv]
                 _log("  ★控えの再確認で問題★: " + " / ".join(_rv[:3]))
             if _rv_review:
-                _log("  出典の引用の周りが変わっています（2AIへ回します）: "
+                _log("  出典のページが変わっています（2AIへ回します）: "
                      + " / ".join(_rv_review[:3]))
     except Exception as e:                # noqa: BLE001
         # ★読めないことを黙って「無い」にしない★
@@ -3896,7 +3920,7 @@ def _review_reaches_ask():
             "maker_questions": [], "lineage_questions": [],
             "maker_relation_checks": [],
             "observed_model_code": None}
-        _cv2.merge_into = lambda mat, slug_: ["ceiling"]
+        _cv2.merge_into = lambda mat, slug_, skip=(), rows=None: ["ceiling"]
         _cv2.reverify = lambda slug_, **kw: {
             "invalid": [],
             "review": ["a / ceiling: 引用の周りが変わっています",
@@ -5126,7 +5150,7 @@ def _selftest_body() -> int:
         _keep_mrg = _cv.merge_into
         _merge_called = {"n": 0}
 
-        def _fake_merge(mat_, slug_):
+        def _fake_merge(mat_, slug_, skip=(), rows=None):
             _merge_called["n"] += 1
             mat_["adopted"]["games_per_50"] = {
                 "value": "50", "sources": ["https://a.example/1"],
@@ -5171,7 +5195,7 @@ def _selftest_body() -> int:
         _keep_mrg2 = _cv.merge_into
         _merge2 = {"n": 0}
 
-        def _fake_merge2(mat_, slug_):
+        def _fake_merge2(mat_, slug_, skip=(), rows=None):
             _merge2["n"] += 1
             mat_["adopted"]["games_per_50"] = {
                 "value": "50", "sources": ["https://a.example/1"],
@@ -6927,6 +6951,19 @@ def _selftest_body() -> int:
       "（★呼ぶ引数まで見る＝空に差し替えても気づく★）",
       'out["ask_2ai"] += review_questions(_rv_review)'
       in inspect.getsource(run_one))
+    t("★★引用か根拠が消えた値は、初公開で材料から外す★★（2026-11-24・Codexの指摘1）"
+      "（★呼ぶ引数まで見る＝空に差し替えても気づく★）",
+      '_added = _cv.merge_into(mat, out["slug"], skip=_rv_gone, rows=_rvd.get("rows"))'
+      in inspect.getsource(run_one)
+      and '_rv_gone = list(_rvd.get("gone") or [])' in inspect.getsource(run_one))
+    t("★★合流0件なら、使わない控えの問題で公開を止めない（ログに残すだけ）★★"
+      "（Codexの6回目の指摘1）",
+      '        _rv_bad = _cv.used_invalid(_rvd, _added)' in inspect.getsource(run_one)
+      and '        _rvd = dict(_rvd, invalid=_rv_bad)' in inspect.getsource(run_one))
+    t("★★取り消しは項目だけ（--field を省くと全部消える）と問いに書く★★（Codexの指摘3）"
+      "（命令そのものは reverify が機種と項目から作る＝confirmed_values の試験）",
+      "--field を省くと機種の確定値が全部消える"
+      in review_questions(["zzz_a / ceiling: 出典のページが変わり"])[0])
     # ★関数そのものを直接呼んで確かめる★（罠③＝表示の道と別に置く）
     t("★引用の周りが変わったものは、そのまま質問になる★",
       len(review_questions(["a / ceiling: 引用の周りが変わっています"])) == 1

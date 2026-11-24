@@ -604,6 +604,16 @@ class ConfirmedError(Exception):
     """確定値に関する異常（★迷ったら記録しない★）。"""
 
 
+class SourceChanged(ConfirmedError):
+    """★ページは取れたが、引用か同定の根拠がそこに無い★（2026-11-24・運営者「2AIで判定でいいよ」）
+
+    ★記録するとき★は今までどおり断る（ConfirmedError の子なので同じに扱われる）＝
+      2AIが挙げた逐語の実在照合は、言うだけでは通さない唯一の歯止め。
+    ★確かめ直し（reverify）のとき★は止めずに2AIへ回す＝相手のサイトの作り替えで
+      「機種名：」の行が消えただけで、正しい確定値の更新が止まっていた（なな徹・6機種11件）。
+    """
+
+
 def _empty() -> dict:
     return {"schema_version": SCHEMA, "machines": {}}
 
@@ -1241,7 +1251,10 @@ def verify_source(src: dict, name: str, fetch=None, judged_by=None) -> dict:
         proof_raw = " ".join(str(src.get("identity_proof") or "").split())
         proof = page_form(proof_raw)
         if not why_same or not proof:
-            raise ConfirmedError(
+            # ★SourceChanged★（2026-11-24・Codexの3回目の指摘3）＝記録するときは今までどおり断る。
+            #   確かめ直しでは、前は機械が同定できたページの題が作り替えで変わった形なので、
+            #   止めずに2AIへ回す（その値は gone で合流させない）
+            raise SourceChanged(
                 f"そのページは「{name}」のページだと確かめられません（{why}）: "
                 f"{src['url']}／同じ機種だと2AIが判断したなら "
                 "--source-identity に『URL|根拠の逐語引用|理由』を付けます")
@@ -1277,7 +1290,7 @@ def verify_source(src: dict, name: str, fetch=None, judged_by=None) -> dict:
         #   根拠として出させ、機械が確かめる。これで、別機種のページを
         #   通すには「対象機種の正式名称がそのページに載っている」ことが要る。
         if proof not in text_of(html):
-            raise ConfirmedError(
+            raise SourceChanged(
                 f"同定の根拠がそのページに見当たりません（{src['url']}）: "
                 f"{proof[:40]}")
         src["identity_override"] = {
@@ -1297,7 +1310,7 @@ def verify_source(src: dict, name: str, fetch=None, judged_by=None) -> dict:
     text = text_of(html)
     quote = page_form(src["quote"])
     if quote not in text:
-        raise ConfirmedError(
+        raise SourceChanged(
             f"引用がそのページに見当たりません（{src['url']}）: {quote[:40]}")
     if _built_override:
         # ★★引用と根拠の「周り」の指紋を控える★★（2026-09-08・台帳#585）
@@ -1626,17 +1639,38 @@ def reverify(slug: str, fetch=None, name: str = "",
     ★戻り値は問題の一覧★（空なら合格）。
     ★`detail=True` なら `{"invalid": [...], "review": [...]}`★
       （2026-09-08・台帳#585）
-      invalid … 引用や根拠がページから消えた＝**止める**
-      review  … 引用も根拠もあるが、その周りが変わった＝**2AIが判断し直す**
+      invalid … ページを取れない・公式URLが別の機種を指す・指紋の箱が無い＝**止める**
+      review  … 引用か根拠が消えた／その周りが変わった＝**2AIが判断し直す**
+               （引用・根拠が消えたものも 2026-11-24 から review＝運営者「2AIで判定でいいよ」）
       ★既定（detail=False）が返すのは invalid だけ★＝
       review で公開を止めない。止めると、出典ページの無関係な場所が
       動いただけで確定値が使えなくなる（それが台帳#585の中身）。
     """
     ng = []
     rv = []                                # ★2AIへ回すもの★
+    gone = []                              # ★引用か根拠がページから消えた項目★（2026-11-24）
+    ng_owner = {}                          # ★ng の何番目がどの項目のものか★（2026-11-24）
 
     def _done():
-        return {"invalid": ng, "review": rv} if detail else ng
+        # ★gone＝2AIが答えるまで、新しく載せない項目★（Codexの指摘＝新台の初公開で
+        #   出典が訂正済みの古い値を載せうる）。呼ぶ側が merge_into(skip=gone) で合流させない
+        # ★rows＝確かめた控えそのもの★（Codexの4回目の指摘2＝合流が控えを読み直すと、
+        #   その間に足された確かめていない値が混ざる）。呼ぶ側が merge_into(rows=) に渡す
+        # ★invalid_fields＝項目ごとの invalid／invalid_global＝項目に結び付かない invalid★
+        #   （Codexの7回目の指摘1＝止めるのは、実際に合流させた項目の問題だけにするため）
+        #   ★持ち主は作った時点の項目で決める★（Codexの8回目の指摘1＝文の先頭から推すと、
+        #   「ceiling#AT」と「ceiling#AT: 2」のような名前で別の項目に付けた）
+        _by, _gl = {}, []
+        for _i, _m in enumerate(ng):
+            _f = ng_owner.get(_i)
+            if _f is None:
+                _gl.append(_m)
+            else:
+                _by.setdefault(_f, []).append(_m)
+        return ({"invalid": ng, "review": rv, "gone": sorted(set(gone)),
+                 "rows": dict(rows or {}),
+                 "invalid_fields": _by, "invalid_global": _gl}
+                if detail else ng)
 
     rows = for_slug(slug)
     if not rows:
@@ -1691,9 +1725,24 @@ def reverify(slug: str, fetch=None, name: str = "",
         return pages[url]
 
     for field, r in rows.items():
+        _ng0 = len(ng)
         for src in (r.get("sources") or []):
             url = str((src or {}).get("url") or "")
             if not url:
+                continue
+            # ★★控えそのものの欠け（2AIの同定の根拠の文が空）は、出典を見る前に止める★★
+            #   （2026-11-24・Codexの指摘4＝出典の変化ではなく、こちらの記録が壊れている。
+            #   出典を見てからだと、引用も消えた日に「2AIへ回す」側へ流れて見逃した。
+            #   ★取り直しを免除する出典（下の据え置き）より前に置く★＝Codexの3回目の指摘4）
+            #   ★出典の直下の根拠（identity_proof）と理由（identity_why）も見る★
+            #   （Codexの4回目の指摘3＝片方だけ欠けると、ページが同じでも
+            #   「確かめられません」から2AIへ回す側へ流れた）
+            _ov0 = (src or {}).get("identity_override") or {}
+            if _ov0 and (not page_form(_ov0.get("proof"))
+                         or not page_form((src or {}).get("identity_proof"))
+                         or not str((src or {}).get("identity_why") or "").strip()):
+                ng.append(f"{slug} / {field}: 控えに同定の根拠の文がありません"
+                          f"（{url}）／記録し直してください")
                 continue
             # ★相手に断られるようになった出典は、断られる前に確かめた分を据え置く★
             #   （2026-11-04・運営者の判断・kept_without_refetch）
@@ -1709,6 +1758,18 @@ def reverify(slug: str, fetch=None, name: str = "",
                 got = verify_source(dict(src), name or slug,
                                     lambda _u, _h=html: _h,
                                     judged_by=r.get("agreed_by"))
+            except SourceChanged as e:
+                # ★★引用か同定の根拠がページから消えた＝2AIが判断し直す★★
+                #   （2026-11-24・運営者「機械的なことやめない？2AIで判定でいいよ」）
+                #   ★止めても読者は守られない★（止まるのは記事の更新だけで、
+                #   公開中の記事は前の値のまま）。2AIが今のページを読み、
+                #   今の文で記録し直す（confirmed_values --record）か、取り消す（--forget）。
+                rv.append(f"{slug} / {field}: 出典のページが変わり、記録した文が"
+                          f"見つかりません（{url}／{str(e)[:80]}）"
+                          "／2AIで判断し直してください"
+                          f"／取り消すなら次の命令: {forget_hint(slug, field)}")
+                gone.append(field)
+                continue
             except Exception as e:                           # noqa: BLE001
                 ng.append(f"{slug} / {field}: 出典を確かめ直せません"
                           f"（{url}／{str(e)[:60]}）")
@@ -1737,7 +1798,18 @@ def reverify(slug: str, fetch=None, name: str = "",
                     ctx = old.get("context") or {}
                     _q = page_form((src or {}).get("quote"))
                     _p = page_form(old.get("proof"))
-                    _w = int(ctx.get("window") or CTX_WINDOW)
+                    # ★幅が読めない控えは、その項目だけ止める（処理全体を落とさない）★
+                    #   （Codexの9回目の指摘3）
+                    #   ★入れ物の形も見る★（Codexの10回目の指摘1＝辞書でない context・
+                    #   大きすぎる数でも全体が例外で落ちた）
+                    try:
+                        if not isinstance(ctx, dict):
+                            raise TypeError("context が辞書ではありません")
+                        _w = int(ctx.get("window") or CTX_WINDOW)
+                    except (TypeError, ValueError, OverflowError):
+                        ng.append(f"{slug} / {field}: 控えの周りの指紋の幅が読めません"
+                                  f"（{url}）／記録し直してください")
+                        continue
                     # ★★根拠が今もページに在るかを、ここでも必ず見る★★
                     #   （2026-09-08・Codexの指摘1・自分で再現して確かめた）
                     #   ★`verify_source` の根拠の検査は「機械が同定できな
@@ -1747,13 +1819,16 @@ def reverify(slug: str, fetch=None, name: str = "",
                     #   引用は残っているので、そこも通ってしまう。
                     #   ＝2AIが「この機種のページだ」と判断した前提が
                     #     消えているのに、公開が続く。
-                    #   ★これは止める（2AIへ回すではない）★＝
-                    #     判断の土台そのものが無くなっているため。
-                    if not _p or _p not in now_text:
-                        ng.append(
+                    #   ★止めずに2AIへ回す★（2026-11-24・運営者「2AIで判定でいいよ」）＝
+                    #     黙って通すのではなく、2AIが今のページで判断し直す。
+                    #   ★根拠の文が空の控えは、出典を見る前に止めている★（上の _ov0）
+                    if _p not in now_text:
+                        rv.append(
                             f"{slug} / {field}: 2AIが同じ機種だと判断した"
                             f"根拠が、そのページから消えています（{url}）"
-                            "／判断し直してください")
+                            "／2AIで判断し直してください"
+                            f"／取り消すなら次の命令: {forget_hint(slug, field)}")
+                        gone.append(field)
                         continue
                     if ctx.get("quote") or ctx.get("proof"):
                         if (context_fingerprint(now_text, _q, _w)
@@ -1762,7 +1837,8 @@ def reverify(slug: str, fetch=None, name: str = "",
                                 != str(ctx.get("proof") or "")):
                             rv.append(
                                 f"{slug} / {field}: 引用の周りが変わっています"
-                                f"（{url}）／2AIで判断し直してください")
+                                f"（{url}）／2AIで判断し直してください"
+                                f"／取り消すなら次の命令: {forget_hint(slug, field)}")
                     elif old["text_sha256"] != now_sha:
                         # ★周りの指紋を持たない古い記録★（移行の道）
                         #   ★全文が同じなら周りも同じ★なので通してよい。
@@ -1770,7 +1846,10 @@ def reverify(slug: str, fetch=None, name: str = "",
                         rv.append(
                             f"{slug} / {field}: 出典の本文が変わっています"
                             f"（{url}・引用の周りの控えがまだありません）"
-                            "／2AIで判断し直してください")
+                            "／2AIで判断し直してください"
+                            f"／取り消すなら次の命令: {forget_hint(slug, field)}")
+        for _i in range(_ng0, len(ng)):
+            ng_owner[_i] = field         # ★この項目のぶん★（Codexの8回目の指摘1）
     return _done()
 
 def forget(slug: str, field=None) -> dict:
@@ -1957,8 +2036,14 @@ def _same_ceiling_box(a: dict, b: dict) -> bool:
     return True
 
 
-def merge_into(material: dict, slug: str) -> list:
+def merge_into(material: dict, slug: str, skip=(), rows=None) -> list:
     """集めた材料に、2AIが確定した値を足す。★足したものの一覧を返す★
+
+    ★skip＝足さない項目★（2026-11-24・Codexの指摘）＝確かめ直しで引用か根拠が
+      ページから消えた項目（reverify の gone）。2AIが答えるまで新しく載せない。
+      ★合流の前に外す★＝合流のあとで外すと、確定値に道を譲って消えた機械の行が戻らない。
+    ★rows＝確かめ直しが読んだ控えそのもの★（Codexの4回目の指摘2）＝渡されたらそれだけを使い、
+      控えを読み直さない（読み直すと、確かめている間に足された値が確かめずに入る）。
 
     ★機械が採れたものは、原則として上書きしない★（人の記録で塗り替えない）
     ★例外は1つだけ★（2026-09-24）＝機械の値が1社だけ（SINGLE_NEAR_RELEASE）で、
@@ -1977,7 +2062,10 @@ def merge_into(material: dict, slug: str) -> list:
     if not isinstance(material, dict):
         return added
     targets = allowed_fields()
-    for field, rec in for_slug(slug).items():
+    _skip = {str(f) for f in (skip or ())}
+    for field, rec in (for_slug(slug) if rows is None else rows).items():
+        if field in _skip:
+            continue
         where = targets.get(base_field(field))
         if not where:
             # ★知らない項目は黙って捨てない★
@@ -2148,10 +2236,213 @@ def merge_into(material: dict, slug: str) -> list:
     return added
 
 
+_SHELL_SAFE = _re.compile(r"[\w#:.\-]+")
+
+
+def forget_cached_sources(slug: str) -> int:
+    """★その機種の確定値の出典を、取り置き（プロセス内の控え）から外す★（2026-11-24・Codexの8回目の指摘2）
+
+    ★書く直前の確かめ直し用★＝外さないと、最初の計画で取ったページを使い回し、
+    その間に引用が消えても気づかない。外した数を返す（読めなければ0）。
+    """
+    try:
+        import new_machine_watch as _nmw
+        urls = {str((src or {}).get("url") or "")
+                for rec in (for_slug(slug) or {}).values()
+                for src in ((rec or {}).get("sources") or [])}
+        return sum(1 for u in urls if u and _nmw._CACHE.pop(u, None) is not None)
+    except Exception:                      # noqa: BLE001
+        return 0
+
+
+def used_invalid(rvd: dict, added) -> list:
+    """★確かめ直しの invalid のうち、止める理由にするもの★（2026-11-24・Codexの6回目・7回目の指摘1）
+
+    ★実際に合流させた項目の問題と、項目に結び付かない問題（公式URLが別の機種など）だけ★。
+    合流させていない項目（機械が採った・見送った）の問題では止めない＝呼ぶ側がお知らせに出す。
+    合流が0件なら何も止めない。項目ごとの内訳を持たない古い形は、合流があれば全部を返す。
+    """
+    added = [str(f) for f in (added or [])]
+    if not added:
+        return []
+    rvd = rvd or {}
+    if "invalid_fields" not in rvd:
+        return list(rvd.get("invalid") or [])
+    by = rvd.get("invalid_fields") or {}
+    return (list(rvd.get("invalid_global") or [])
+            + [m for f in added for m in (by.get(f) or [])])
+
+
+def forget_hint(slug: str, field: str) -> str:
+    """★2AIへの問いに添える「その項目だけ取り消す」命令★（2026-11-24・Codexの指摘3）
+
+    ★--field を省くと機種の確定値が全部消える★ので、機種と項目を名指しした形にする。
+    ★問いの文から取り出さない★（項目名に「:」が入りうる＝ceiling#bonus:late を
+    ceiling#bonus と読み違えて別の項目を消す・Codexの2回目）。reverify が自分で作る。
+    """
+    # ★項目名は保存したまま・引用符を使わずにそのまま打てるものだけ命令にする★
+    #   （Codexの3回目の指摘2＝strip すると末尾に空白のある別の項目と同じ命令になった／
+    #   4回目の指摘1＝引用符で包んでも PowerShell 5.1 は「"」を落として別の項目を消した）。
+    #   文字・数字・「_ # : . -」だけの名前なら、どのシェルでもそのまま1つの引数で届く。
+    #   それ以外は命令を出さず、--list で正確な名前を確かめさせる。
+    slug, field = str(slug or ""), str(field or "")
+    if _SHELL_SAFE.fullmatch(slug) and _SHELL_SAFE.fullmatch(field):
+        return (f"python scripts/confirmed_values.py --forget --slug {slug} "
+                f"--field {field}")
+    return ("python scripts/confirmed_values.py --forget --slug <機種> --field <項目>"
+            "（★項目名は python scripts/confirmed_values.py --list で正確に確かめる・"
+            "--field を省くと機種の値が全部消える★）")
+
+
 # ---------------------------------------------------------------- selftest
 
-def _proof_gone_stops(slug, name, quote, src_ov) -> bool:
-    """★同定の根拠が消えたら止まるか★（2026-09-08・Codexの指摘1）
+def _raises_source_changed(src, name, html) -> bool:
+    """★記録するとき、引用が無いページは SourceChanged で断るか★（2026-11-24）"""
+    try:
+        verify_source(src, name, lambda u: html)
+    except SourceChanged:
+        return True
+    except Exception:                      # noqa: BLE001
+        return False
+    return False
+
+
+def _write_one_ceiling(slug, src) -> None:
+    """★試験用：天井1件だけの控えを書く★（もう1つの出典は機械が同定できる普通のページ）"""
+    json.dump({"schema_version": SCHEMA, "machines": {slug: {
+        "ceiling": {
+            "value": {"kind": "GAME", "amount": "999", "unit": "G",
+                      "benefit": "AT当選"},
+            "sources": [src, {"url": "https://nana-press.com/kaiseki/x",
+                              "quote": str(src.get("quote") or "")}],
+            "lineages": ["vote:chonborista", "vote:nana-press"],
+            "agreed_by": ["claude", "codex"],
+            "why": "2AIで突き合わせました",
+            "decided_at": "2026-08-24",
+            "official_url": ""}}}},
+        open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
+
+
+def _unidentified_proof_gone(slug, name, quote, src_ov) -> dict:
+    """★機械が同定できないページのまま、根拠の文だけ消えたとき★（2026-11-24・Codexの指摘5）"""
+    def page(first):
+        return ("<html><head><title>解析まとめ</title></head><body>"
+                f"<p>{first}</p><p>{quote}</p></body></html>")
+    ov = verify_source(dict(src_ov), name, lambda u: page(f"{name} の解析です。"))
+    _write_one_ceiling(slug, ov)
+
+    def other(u):
+        return ("<html><head><title>" + name + "</title></head><body><h1>"
+                + name + f"</h1><p>{quote}</p></body></html>")
+    return reverify(slug, name=name, detail=True,
+                    fetch=lambda u: (page("ページを作り替えました。")
+                                     if "chonbo" in u else other(u)))
+
+
+def _title_and_quote_changed(slug, name, quote) -> dict:
+    """★機械同定で記録した出典の題が作り替えで変わり、引用も消えたとき★（Codexの3回目の指摘3）"""
+    plain = {"url": "https://chonborista.com/slot/t", "quote": quote,
+             "verified_at": "2026-11-20"}
+    _write_one_ceiling(slug, plain)
+
+    def page(u):
+        if "chonbo" in u:
+            return ("<html><head><title>解析まとめ</title></head><body>"
+                    f"<p>{name} の解析です。</p><p>いまは別のことが書いてあります。</p>"
+                    "</body></html>")
+        return ("<html><head><title>" + name + "</title></head><body><h1>"
+                + name + f"</h1><p>{quote}</p></body></html>")
+    return reverify(slug, name=name, detail=True, fetch=page)
+
+
+def _src_identity_missing(slug, name, quote, ov, key) -> dict:
+    """★出典の直下の根拠か理由だけが欠けた控え★（Codexの4回目の指摘3）＝ページは同じ"""
+    bad = json.loads(json.dumps(ov, ensure_ascii=False))
+    bad.pop(key, None)
+    _write_one_ceiling(slug, bad)
+    far = "あ" * 400
+
+    def page(u):
+        if "chonbo" not in u:
+            return ("<html><head><title>" + name + "</title></head><body><h1>"
+                    + name + f"</h1><p>{quote}</p></body></html>")
+        return ("<html><head><title>解析まとめ</title></head><body>"
+                f"<p>{name} の解析です。</p><p>{far}</p><p>{quote}</p>"
+                f"<p>{far}</p><p></p></body></html>")
+    return reverify(slug, name=name, detail=True, fetch=page)
+
+
+def _owner_by_creation(slug, name, quote, ov) -> dict:
+    """★invalid の持ち主を、名前の前方一致で取り違えないか★（Codexの8回目の指摘1）
+
+    「ceiling#AT」（問題なし）と「ceiling#AT: 2」（控えの根拠が空＝invalid）を並べる。
+    """
+    bad = json.loads(json.dumps(ov, ensure_ascii=False))
+    bad["identity_override"]["proof"] = ""
+
+    def rec(src):
+        return {"value": {"kind": "GAME", "amount": "999", "unit": "G", "benefit": "AT当選"},
+                "sources": [src, {"url": "https://nana-press.com/kaiseki/x",
+                                  "quote": str(src.get("quote") or "")}],
+                "lineages": ["vote:chonborista", "vote:nana-press"],
+                "agreed_by": ["claude", "codex"], "why": "2AIで突き合わせました",
+                "decided_at": "2026-08-24", "official_url": ""}
+    json.dump({"schema_version": SCHEMA, "machines": {slug: {
+        "ceiling#AT": rec(ov), "ceiling#AT: 2": rec(bad)}}},
+        open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
+    far = "あ" * 400
+
+    def page(u):
+        if "chonbo" not in u:
+            return ("<html><head><title>" + name + "</title></head><body><h1>"
+                    + name + f"</h1><p>{quote}</p></body></html>")
+        return ("<html><head><title>解析まとめ</title></head><body>"
+                f"<p>{name} の解析です。</p><p>{far}</p><p>{quote}</p>"
+                f"<p>{far}</p><p></p></body></html>")
+    return reverify(slug, name=name, detail=True, fetch=page)
+
+
+def _kept_empty_proof(slug, name, quote, ov) -> dict:
+    """★取り直しを免除する出典でも、控えの根拠の文が空なら止まるか★（Codexの3回目の指摘4）"""
+    global _KEEP_POLICY_FOR_TEST
+    bad = json.loads(json.dumps(ov, ensure_ascii=False))
+    bad["identity_override"]["proof"] = ""
+    bad["verified_at"] = "2026-10-01"
+    _write_one_ceiling(slug, bad)
+    keep = _KEEP_POLICY_FOR_TEST
+    _KEEP_POLICY_FOR_TEST = {"hosts": {"chonborista.com": {
+        "status": "BLOCKED", "keep_verified_before": "2026-11-04"}}}
+    try:
+        return reverify(slug, name=name, detail=True,
+                        fetch=lambda u: ("<html><head><title>" + name + "</title></head>"
+                                         f"<body><h1>{name}</h1><p>{quote}</p></body></html>"))
+    finally:
+        _KEEP_POLICY_FOR_TEST = keep
+
+
+def _empty_proof_stops(slug, name, quote, ov, keep_quote=True) -> dict:
+    """★控えの根拠の文が空なら止まるか★（2026-11-24・Codexの指摘4）
+
+    keep_quote=False … 引用も消えた日（Codexの2回目＝出典を見てからだと2AIへ回す側へ流れた）
+    """
+    bad = json.loads(json.dumps(ov, ensure_ascii=False))
+    bad["identity_override"]["proof"] = ""
+    _write_one_ceiling(slug, bad)
+    far = "あ" * 400
+    body = quote if keep_quote else "いまは別のことが書いてあります。"
+
+    def page(u):
+        if "chonbo" not in u:
+            return ("<html><head><title>" + name + "</title></head><body><h1>"
+                    + name + f"</h1><p>{quote}</p></body></html>")
+        return ("<html><head><title>解析まとめ</title></head><body>"
+                f"<p>{name} の解析です。</p><p>{far}</p><p>{body}</p>"
+                f"<p>{far}</p><p></p></body></html>")
+    return reverify(slug, name=name, detail=True, fetch=page)
+
+
+def _proof_gone_reviews(slug, name, quote, src_ov) -> bool:
+    """★同定の根拠が消えたら2AIへ回るか★（2026-09-08・Codexの指摘1／2026-11-24から止めずに2AIへ）
 
     ★筋書き（実際に起こりうる）★
       記録時 … 出典ページの題が機種名でないので機械同定に失敗し、
@@ -2160,7 +2451,7 @@ def _proof_gone_stops(slug, name, quote, src_ov) -> bool:
                機械同定が成功するので `verify_source` の根拠の検査を
                ★丸ごと通らない★。同時に根拠の文だけ消えている。
                引用は残っているので、そこも通る。
-    ★期待★ invalid（止める）／review には出さない
+    ★期待★ review（2AIへ回す）に「根拠が…消えて」が出る／invalid には出さない
     """
     far = "あ" * 400
     old_html = ("<html><head><title>解析まとめ</title></head><body>"
@@ -2186,9 +2477,10 @@ def _proof_gone_stops(slug, name, quote, src_ov) -> bool:
         open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
     got = reverify(slug, name=name, detail=True,
                    fetch=lambda u: (new_html if "chonbo" in u else other))
-    return (got["review"] == []
-            and [x for x in got["invalid"] if "根拠が、そのページから消えて" in x]
-            != [])
+    return (got["invalid"] == []
+            and [x for x in got["review"] if "根拠が、そのページから消えて" in x]
+            != []
+            and got["gone"] == ["ceiling"])
 
 
 def _fp_missing_review(slug, name, quote, src_ov) -> bool:
@@ -3505,9 +3797,12 @@ def selftest() -> int:
 
             def _fetch_changed(u):
                 return _page("いまは別のことが書いてあります。")
-            t("★★引用が消えていたら公開前に気づく★★"
-              "／★控えを手で書き換えても、取り直せば分かる★",
-              reverify(_rv_slug, fetch=_fetch_changed) != [])
+            _chg = reverify(_rv_slug, fetch=_fetch_changed, detail=True)
+            t("★★引用が消えていたら公開前に気づき、2AIへ回す★★"
+              "／★控えを手で書き換えても、取り直せば分かる★"
+              "（2026-11-24から止めずに2AIへ）",
+              _chg["invalid"] == []
+              and [x for x in _chg["review"] if "記録した文が見つかりません" in x])
 
             # ★★相手に断られるようになった出典は、断られる前に確かめた分を据え置く★★
             #   （2026-11-04・運営者「今の時点で弾かれたんだから、それまでのはそのままでいい」）
@@ -3708,13 +4003,17 @@ def selftest() -> int:
               "（★止めるのではなく、判断し直させる★）",
               _near["invalid"] == []
               and [x for x in _near["review"] if "引用の周りが変わって" in x])
-            t("★★引用そのものが消えたら止める★★"
-              "（★2AIへ回すのではなく、公開させない★）",
-              reverify(
-                  _rv_slug, detail=True,
-                  fetch=lambda u: (_page4("いまは別のことが書いてあります。")
-                                   if "chonbo" in u else _page(_quote))
-              )["invalid"] != [])
+            _qgone = reverify(
+                _rv_slug, detail=True,
+                fetch=lambda u: (_page4("いまは別のことが書いてあります。")
+                                 if "chonbo" in u else _page(_quote)))
+            t("★★引用そのものが消えたら2AIへ回す★★"
+              "（2026-11-24・運営者「2AIで判定でいいよ」＝止めない・黙って通さない）",
+              _qgone["invalid"] == []
+              and [x for x in _qgone["review"] if "記録した文が見つかりません" in x])
+            t("　★記録するときは今までどおり断る★（引用の実在照合は言うだけでは通さない歯止め）",
+              _raises_source_changed(dict(_src_ov), _rv_name,
+                                     _page4("いまは別のことが書いてあります。")))
             t("　★既定（detail=False）が返すのは止める理由だけ★"
               "＝引用の周りが変わっただけでは公開を止めない",
               reverify(
@@ -3729,9 +4028,117 @@ def selftest() -> int:
             #     機械同定が成功して `verify_source` の根拠の検査を
             #     丸ごと通らない★。引用は残っているので、そこも通る。
             #   ＝2AIの判断の土台が消えているのに公開が続いていた。
-            t("★★同定の根拠がページから消えたら止める★★"
-              "（★2AIへ回すのではなく公開させない＝判断の土台が無い★）",
-              _proof_gone_stops(_rv_slug, _rv_name, _quote, _src_ov))
+            t("★★同定の根拠がページから消えたら2AIへ回す★★"
+              "（2026-11-24・運営者「2AIで判定でいいよ」＝止めない・黙って通さない）",
+              _proof_gone_reviews(_rv_slug, _rv_name, _quote, _src_ov))
+            # ★★機械が同定できないまま根拠だけ消えたページも2AIへ回す★★
+            #   （2026-11-24・Codexの指摘5＝上の試験は作り替え後のページを機械が同定できるので、
+            #   verify_source の「同定の根拠が見当たらない」を止める側へ戻しても気づかない）
+            _ng_unid = _unidentified_proof_gone(_rv_slug, _rv_name, _quote, _src_ov)
+            t("★★機械が同定できないページで根拠だけ消えても、止めずに2AIへ回す★★"
+              "（なな徹の作り替えで「機種名：」の行が消えた形）",
+              _ng_unid["invalid"] == []
+              and [x for x in _ng_unid["review"] if "同定の根拠がそのページに見当たりません" in x]
+              and _ng_unid["gone"] == ["ceiling"])
+            t("★★控えの根拠の文が空（こちらの記録の欠け）は止める★★（Codexの指摘4）",
+              [x for x in _empty_proof_stops(_rv_slug, _rv_name, _quote, _ov4)["invalid"]
+               if "控えに同定の根拠の文がありません" in x])
+            _ep2 = _empty_proof_stops(_rv_slug, _rv_name, _quote, _ov4, keep_quote=False)
+            t("　★引用も消えた日でも、控えの欠けは止める（2AIへ回す側へ流さない）★"
+              "（Codexの2回目の指摘4）",
+              [x for x in _ep2["invalid"] if "控えに同定の根拠の文がありません" in x]
+              and _ep2["gone"] == [])
+            _tq = _title_and_quote_changed(_rv_slug, _rv_name, _quote)
+            t("★★題が作り替えで変わり引用も消えた出典は、止めずに2AIへ回す★★（Codexの3回目の指摘3）",
+              _tq["invalid"] == [] and _tq["gone"] == ["ceiling"]
+              and [x for x in _tq["review"] if "確かめられません" in x])
+            _mi_p = _src_identity_missing(_rv_slug, _rv_name, _quote, _ov4, "identity_proof")
+            _mi_w = _src_identity_missing(_rv_slug, _rv_name, _quote, _ov4, "identity_why")
+            t("★★出典の直下の根拠か理由だけが欠けた控えは止める（2AIへ回す側へ流さない）★★"
+              "（Codexの4回目の指摘3）",
+              all([x for x in _m["invalid"] if "控えに同定の根拠の文がありません" in x]
+                  and _m["gone"] == [] for _m in (_mi_p, _mi_w)))
+            _ke = _kept_empty_proof(_rv_slug, _rv_name, _quote, _ov4)
+            t("★★取り直しを免除する出典でも、控えの根拠の文が空なら止める★★（Codexの3回目の指摘4）",
+              [x for x in _ke["invalid"] if "控えに同定の根拠の文がありません" in x])
+            # ★★止める理由は、実際に合流させた項目の問題だけ★★（Codexの6回目・7回目の指摘1）
+            _ui = {"invalid": ["s / ceiling: a", "s / at: b", "s: c"],
+                   "invalid_fields": {"ceiling": ["s / ceiling: a"], "at": ["s / at: b"]},
+                   "invalid_global": ["s: c"]}
+            t("★★止める理由は、合流させた項目の問題と項目に結び付かない問題だけ★★"
+              "（合流0件なら止めない・内訳の無い古い形は合流があれば全部）",
+              used_invalid(_ui, ["at"]) == ["s: c", "s / at: b"]
+              and used_invalid(_ui, []) == []
+              and used_invalid({"invalid": ["x"]}, ["ceiling"]) == ["x"]
+              and used_invalid({"invalid": ["x"]}, []) == [])
+            t("　reverify が項目ごとの内訳を返す（項目に結び付く invalid は項目へ）",
+              set((_kept_empty_proof(_rv_slug, _rv_name, _quote, _ov4)
+                   .get("invalid_fields") or {})) == {"ceiling"})
+            try:
+                _ob = _owner_by_creation(_rv_slug, _rv_name, _quote, _ov4)
+            except Exception as _e_ob:                    # noqa: BLE001
+                _ob = {"_crash": f"{type(_e_ob).__name__}: {_e_ob}"}
+            t("★★invalid の持ち主は作った時点の項目＝名前の前方一致で取り違えない★★"
+              "（Codexの8回目の指摘1）",
+              set((_ob.get("invalid_fields") or {})) == {"ceiling#AT: 2"}
+              and used_invalid(_ob, ["ceiling#AT"]) == []
+              and used_invalid(_ob, ["ceiling#AT: 2"]) != [])
+            _bw = json.loads(json.dumps(_ov4, ensure_ascii=False))
+            _bw["identity_override"].setdefault("context", {})["window"] = "幅"
+            try:
+                _bw_rv = _src_identity_missing(_rv_slug, _rv_name, _quote, _bw, "_none_")
+            except Exception as _e_bw:                    # noqa: BLE001
+                _bw_rv = {"_crash": f"{type(_e_bw).__name__}: {_e_bw}"}
+            _bw2 = json.loads(json.dumps(_ov4, ensure_ascii=False))
+            _bw2["identity_override"]["context"] = ["bad"]
+            _bw_more = []
+            for _b in (_bw2,):
+                try:
+                    _bw_more.append(_src_identity_missing(_rv_slug, _rv_name, _quote, _b, "_none_"))
+                except Exception as _e_bw2:                # noqa: BLE001
+                    _bw_more.append({"_crash": f"{type(_e_bw2).__name__}: {_e_bw2}"})
+            t("★★周りの指紋の幅が読めない控えは、その項目だけ止める（処理全体を落とさない）★★"
+              "（Codexの9回目の指摘3／辞書でない context・大きすぎる数も＝10回目の指摘1）",
+              all([x for x in (_r.get("invalid") or []) if "幅が読めません" in x]
+                  and set((_r.get("invalid_fields") or {})) == {"ceiling"}
+                  for _r in [_bw_rv] + _bw_more))
+            # ★★書く直前の確かめ直し用に、その機種の出典の取り置きを外す★★（Codexの8回目の指摘2）
+            _write_one_ceiling(_rv_slug, _ov4)
+            import new_machine_watch as _nmw_fc
+            _nmw_fc._CACHE[_ov4["url"]] = ("<html></html>", _ov4["url"])
+            _nmw_fc._CACHE["https://other.example/keep"] = ("<html></html>", "x")
+            _fc_n = forget_cached_sources(_rv_slug)
+            t("★★書く直前の確かめ直しの前に、その機種の出典の取り置きを外す（ほかは残す）★★"
+              "（Codexの8回目の指摘2）",
+              _fc_n >= 1 and _ov4["url"] not in _nmw_fc._CACHE
+              and "https://other.example/keep" in _nmw_fc._CACHE)
+            _nmw_fc._CACHE.pop("https://other.example/keep", None)
+            # ★★消えた項目は合流させない＝機械が今夜採った行も残る★★（Codexの2回目の指摘3）
+            _write_one_ceiling(_rv_slug, _ov4)
+            _weak = {"kind": "GAME", "amount": "800", "unit": "G",
+                     "basis": "SINGLE_NEAR_RELEASE"}
+            _mm = {"ceilings": {"adopted": [dict(_weak)]}}
+            _mm_skip = merge_into(_mm, _rv_slug, skip=["ceiling"])
+            t("★★引用か根拠が消えた項目は合流させない（機械が今夜1社で採った行は消えない）★★",
+              _mm_skip == [] and _mm == {"ceilings": {"adopted": [_weak]}})
+            t("　（対照）skip しなければ同じ控えは合流する",
+              merge_into({"ceilings": {"adopted": [dict(_weak)]}}, _rv_slug) == ["ceiling"])
+            t("★★合流は確かめ直しが読んだ控えだけを使う（読み直さない）★★（Codexの4回目の指摘2）"
+              "＝確かめている間に足された値が、確かめずに入らない",
+              merge_into({"ceilings": {"adopted": []}}, _rv_slug, rows={}) == []
+              and "ceiling" in (_ng_unid.get("rows") or {}))
+            t("★★取り消しの案内は機種と項目を名指しする（--field を省くと全部消える）★★"
+              "（Codexの指摘3／項目名に「:」があっても読み違えない＝2回目の指摘2）",
+              forget_hint("zzz_a", "ceiling#bonus:late")
+              == "python scripts/confirmed_values.py --forget --slug zzz_a --field ceiling#bonus:late"
+              and forget_hint("zzz_a", "gameplay#通常時のCZ").endswith("--field gameplay#通常時のCZ")
+              # ★空白・引用符を含む名前は命令にしない★（シェルで別の項目に化ける・Codexの3回目と4回目）
+              and "--field <項目>" in forget_hint("zzz_a", "ceiling ")
+              and "--field <項目>" in forget_hint("zzz_a", 'ceiling#he"llo')
+              and "--field <項目>" in forget_hint("", "ceiling")
+              # ★命令は行の最後・後ろに何も付けない★（Codexの5回目の指摘3）
+              and [x for x in _ng_unid["review"]
+                   if x.endswith(f"--forget --slug {_rv_slug} --field ceiling")])
             # ★★控えは、あとから今のページで上書きされない★★
             #   （2026-09-08・Codexの「不変性の試験が無い」）
             #   ★上書きされると、見張りが毎回自己一致して永久に通る★（罠㉕）
