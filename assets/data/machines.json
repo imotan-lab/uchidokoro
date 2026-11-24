@@ -1394,8 +1394,10 @@
     "good": 400,
     "caution": 300,
     "note": "リセット時は天井650G+α。88G・250G前後に前兆発生ポイント。",
-    "target": 400
-   }
+    "target": 400,
+    "ceiling": 650
+   },
+   "coinRate": 33.1
   },
   "limit": {
    "normal": 850,
