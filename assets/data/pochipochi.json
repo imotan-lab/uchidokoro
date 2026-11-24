@@ -2005,6 +2005,34 @@
         6
       ]
     },
+    "monkeyv": {
+      "fields": [
+        {
+          "id": "bb",
+          "label": "AT初当たり回数",
+          "rateKey": "bb",
+          "sub": "初当たりのみ"
+        }
+      ],
+      "note": "AT初当たりは天井・周期経由も含めてカウントします。",
+      "rates": {
+        "bb": {
+          "1": "1/299.8",
+          "2": "1/295.5",
+          "4": "1/258.8",
+          "5": "1/235.7",
+          "6": "1/222.9"
+        }
+      },
+      "resultNote": "※AT初当たり確率は高設定ほど高くなります。回数が少ないうちは参考程度に見てください。",
+      "settings": [
+        1,
+        2,
+        4,
+        5,
+        6
+      ]
+    },
     "mr_juggler": {
       "fields": [
         {
@@ -3810,9 +3838,6 @@
     "hokuto_tensei2": {
       "checked": "2026-11-20"
     },
-    "monkeyv": {
-      "checked": "2026-11-19"
-    },
     "my_juggler_v": {
       "checked": "2026-11-22"
     },
@@ -3945,6 +3970,10 @@
     "midoridon_viva": {
       "checked": "2026-11-14",
       "result": "HAS"
+    },
+    "monkeyv": {
+      "checked": "2026-11-25",
+      "result": "NONE"
     },
     "mr_juggler": {
       "checked": "2026-11-11",
