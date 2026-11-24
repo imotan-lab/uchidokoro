@@ -2558,14 +2558,15 @@
     "at:UPPER_AT",
     "at_prob",
     "ceiling:GAME:AT間",
+    "ceiling:GAME:設定変更後のAT間",
     "cz:まほあこチャレンジ",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-11-11",
-   "input_digest": "sha256:08769fbb2292f237b9b19f5175ad2c3da8c746995f61d0373ea74c01e347c795"
+   "decided_at": "2026-11-25",
+   "input_digest": "sha256:c025cb593e35f1d5a7c0762206716288f9271f355fa47cce3bbcf3accbcc57ec"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-19",
@@ -2610,7 +2611,8 @@
     "ceiling": 799
    }
   },
-  "series": ""
+  "series": "",
+  "targetProjection": "32d5628c83968aa8"
  },
  {
   "slug": "shinuchi_yoshimune",
