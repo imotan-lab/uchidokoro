@@ -2606,10 +2606,10 @@
     "caution": 200,
     "good": 250,
     "excellent": 400,
-    "target": 250
+    "target": 250,
+    "ceiling": 799
    }
   },
-  "targetProjection": "b77bbafa7eaa787d",
   "series": ""
  },
  {
