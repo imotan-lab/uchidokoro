@@ -6963,7 +6963,7 @@ def _selftest_body() -> int:
     t("★★取り消しは項目だけ（--field を省くと全部消える）と問いに書く★★（Codexの指摘3）"
       "（命令そのものは reverify が機種と項目から作る＝confirmed_values の試験）",
       "--field を省くと機種の確定値が全部消える"
-      in review_questions(["zzz_a / ceiling: 出典のページが変わり"])[0])
+      in "".join(review_questions(["zzz_a / ceiling: 出典のページが変わり"])))
     # ★関数そのものを直接呼んで確かめる★（罠③＝表示の道と別に置く）
     t("★引用の周りが変わったものは、そのまま質問になる★",
       len(review_questions(["a / ceiling: 引用の周りが変わっています"])) == 1
