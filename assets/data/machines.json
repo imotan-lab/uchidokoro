@@ -1541,7 +1541,8 @@
     "caution": 350,
     "good": 350,
     "excellent": 350,
-    "target": 350
+    "target": 350,
+    "ceiling": 777
    },
    "modes": [
     {
@@ -1552,7 +1553,8 @@
      "key": "reset",
      "label": "設定変更後（AT間）"
     }
-   ]
+   ],
+   "coinRate": 30.8
   },
   "series": "とある"
  },
