@@ -2720,6 +2720,12 @@
           "label": "合算",
           "rateKey": "bonusTotal",
           "sub": "BIG REG SBBの合算"
+        },
+        {
+          "id": "rcherryB",
+          "label": "リアルチェリー（平行揃い）",
+          "rateKey": "rcherryB",
+          "sub": "通常時"
         }
       ],
       "rates": {
@@ -2729,6 +2735,13 @@
           "4": "1/271.8",
           "5": "1/264.8",
           "6": "1/260.3"
+        },
+        "rcherryB": {
+          "1": "1/993.0",
+          "2": "1/885.6",
+          "4": "1/799.2",
+          "5": "1/728.2",
+          "6": "1/668.7"
         }
       },
       "settings": [
@@ -4013,6 +4026,10 @@
     },
     "revue_starlight": {
       "checked": "2026-11-11",
+      "result": "HAS"
+    },
+    "rotis": {
+      "checked": "2026-11-25",
       "result": "HAS"
     },
     "sao2": {
