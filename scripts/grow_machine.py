@@ -549,8 +549,48 @@ def mark_checked(slug: str, today) -> bool:
         return False
 
 
+def last_tried() -> dict:
+    """slug → 最後に --apply を試した日（書けたかどうかに関係なく）。読めなければ空。"""
+    try:
+        with open(STATE_PATH, encoding="utf-8") as f:
+            got = json.load(f)
+        got = (got or {}).get("last_tried")
+        return got if isinstance(got, dict) else {}
+    except Exception:                     # noqa: BLE001
+        return {}
+
+
+def mark_tried(slug: str, today) -> bool:
+    """★--apply を試した日を控える★（2026-11-25・Codexの指摘＝先に見る組の中の順番に使う）
+
+    先に見る組（見送り・2AIの新しい答え）の中で、前の日に試した機種を後ろへ回し、
+    詰まった機種が毎朝先頭を占めて、まだ試していない答えに届かなくなるのを防ぐ。
+    ★書けなくても処理は止めない★（順番が機種一覧の並びに戻るだけ）。
+    """
+    try:
+        got = {}
+        if os.path.exists(STATE_PATH):
+            try:
+                with open(STATE_PATH, encoding="utf-8") as f:
+                    got = json.load(f)
+                if not isinstance(got, dict):
+                    got = {}
+            except Exception as e:        # noqa: BLE001
+                print(f"  試した日の控えを読めません（書きません）: {e}")
+                return False
+        got.setdefault("last_tried", {})[slug] = today.isoformat()
+        tmp = f"{STATE_PATH}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(got, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, STATE_PATH)
+        return True
+    except Exception as e:                # noqa: BLE001
+        print(f"  試した日を控えられません（続けます）: {e}")
+        return False
+
+
 def targets(rows: list, today=None, state: dict = None,
-            conf=None, broken: list = None) -> list:
+            conf=None, broken: list = None, tried: dict = None) -> list:
     """育てる対象（`AUTO_PENDING` の機種のうち、今日見る日のもの）。
 
     ★外したものを `broken` に入れて返す★（2026-08-27・Codexの指摘13）
@@ -562,6 +602,8 @@ def targets(rows: list, today=None, state: dict = None,
       直す前は、書けた日に見た日を控えるので、見送った項目（gone）や翌日の2AIの答えがあっても
       導入から61日を過ぎた機種は7日後まで候補に出なかった（実例＝ssb1 が11/19に天井4件を見送り、次は11/26）。
       判定は confirmed_drift の1か所（見送りの印・確定値の指紋・育て方の決まりの版）。読めなければ先に見る側へ倒す。
+      ★先に見る組の中は、最後に試した日（tried）の古い順★（Codexの指摘＝詰まった機種が毎朝先頭を占めない・
+      まだ試していない機種が先。同じ日なら機種一覧の並び）。
     """
     first, out = [], []
     for m in rows:
@@ -582,6 +624,8 @@ def targets(rows: list, today=None, state: dict = None,
                        today, state or {}, conf):
                 continue
         out.append(m["slug"])
+    _tr = tried or {}
+    first.sort(key=lambda s: str(_tr.get(s) or ""))
     return first + out
 
 
@@ -5841,11 +5885,37 @@ def selftest() -> int:
         try:
             globals()["confirmed_drift"] = _fake_cd
             _tg_pr = targets(_pr_rows, _pr_day, _pr_seen)
+            _tg_pr2 = targets(_pr_rows, _pr_day, _pr_seen, tried={"zzz_pb": "2026-11-24"})
         finally:
             globals()["confirmed_drift"] = _keep_cd
         t("★★前回見送った・答えが来た機種（確定値の変化）は、間隔の途中でも先頭に出る★★"
           "／読めない機種も先に見る側へ倒す／変化なしで間隔の途中の機種は今までどおり待つ",
           _tg_pr == ["zzz_pb", "zzz_pc", "zzz_pd"])
+        t("★★先に見る組の中は、最後に試した日の古い順（まだ試していない機種が先）★★"
+          "（Codexの指摘＝詰まった機種が毎朝先頭を占めない）",
+          _tg_pr2 == ["zzz_pc", "zzz_pb", "zzz_pd"])
+        _keep_sp_tr = globals()["STATE_PATH"]
+        _tmp_tr = __import__("tempfile").mkdtemp()
+        try:
+            globals()["STATE_PATH"] = os.path.join(_tmp_tr, "grow_check.json")
+            _w_tr = mark_tried("zzz_pc", _pr_day)
+            _r_tr = last_tried()
+        finally:
+            globals()["STATE_PATH"] = _keep_sp_tr
+            __import__("shutil").rmtree(_tmp_tr, ignore_errors=True)
+        t("★試した日を控えて読み戻せる★（mark_tried → last_tried）",
+          _w_tr is True and _r_tr == {"zzz_pc": "2026-11-25"})
+        import inspect as _ins_tr
+        _src_main_tr = _ins_tr.getsource(main.__wrapped__)   # ★ここでは _main が差し替え中★（本物を見る）
+        _mc_lines = [i for i, ln in enumerate(_src_main_tr.splitlines()) if "mark_checked(a.slug" in ln]
+        _lines_main_tr = _src_main_tr.splitlines()
+        t("★★本体は対象を全部の名前で出す（先頭10件で切らない）・試した日を渡す・--apply で試した日を控える★★"
+          "（Codexの指摘＝手順書は出た対象を順に処理する）",
+          '" ".join(tg))' in _src_main_tr and "tried=last_tried()" in _src_main_tr
+          and "mark_tried(a.slug" in _src_main_tr)
+        t("★★見送った項目がある回は、見た日（mark_checked）を進めない★★（Codexの指摘4＝印が書けなくても7日待ちに戻らない）",
+          len(_mc_lines) == 2 and all("cv_gone" in _lines_main_tr[i] or "cv_gone" in _lines_main_tr[i - 1]
+                                       for i in _mc_lines))
 
         # ── 2026-08-27・行き詰まったら人ではなく2AIへ回す ────────
         #   ★運営者の指示★「2AIで結論出して。人に頼らないで。
@@ -7013,10 +7083,11 @@ def _main() -> int:
     _today = _dt.date.today()
     _seen = last_checked()
     _broken = []
-    tg = targets(rows, _today, _seen, broken=_broken)
+    tg = targets(rows, _today, _seen, broken=_broken, tried=last_tried())
     if not a.slug:
         _all = targets(rows)
-        print(f"育てる対象: {len(tg)}機種 " + " ".join(tg[:10]))
+        # ★全部の名前を出す★（2026-11-25・Codexの指摘＝直す前は先頭10件だけで、手順書は「出た対象を順に処理」）
+        print(f"育てる対象: {len(tg)}機種 " + " ".join(tg))
         if len(_all) > len(tg):
             print(f"（{len(_all) - len(tg)}機種は今日は見ません＝"
                   f"導入日から遠いので間隔を空けています）")
@@ -7031,6 +7102,8 @@ def _main() -> int:
                   "（python scripts/grow_machine.py --slug <機種> --apply）")
             return 2
         return 0
+    if a.apply:
+        mark_tried(a.slug, _dt.date.today())    # ★試した日★（先に見る組の中の順番・targets）
     got = plan_one(a.slug)
     # ★次回の様子見のための控えは「材料まで見に行けた」ときだけ★
     #   （2026-08-14・依頼185のP1）失敗した回の顔ぶれで上書きすると、
@@ -7108,7 +7181,10 @@ def _main() -> int:
             # ★調べたが足すものが無かった＝正常に終わっている★
             #   （以前の条件 `was == now` は、problems があるときは
             #     now が None のままなので**一度も成立しなかった**）
-            mark_checked(a.slug, _dt.date.today())
+            # ★見送った項目がある回は、見た日を進めない★（2026-11-25・Codexの指摘4＝見送りの印だけ
+            #   書けなかったとき、間隔の7日待ちに戻らないように）
+            if not got.get("cv_gone"):
+                mark_checked(a.slug, _dt.date.today())
             _absorbed()
             # ★★指紋は probe_rows の有無に関係なく控える★★
             #   （2026-09-06・Codexの指摘4）＝軽い様子見をしていない日は
@@ -7133,7 +7209,8 @@ def _main() -> int:
         print("  ★2AIに聞くこと: " + str((_q or {}).get("text") if isinstance(_q, dict) else _q))
     # ★書けたときだけ控える★（依頼182のP1）
     if not r["problems"]:
-        mark_checked(a.slug, _dt.date.today())
+        if not r.get("cv_gone"):
+            mark_checked(a.slug, _dt.date.today())   # ★見送った項目がある回は見た日を進めない★（Codexの指摘4）
         _absorbed()
         # ★★指紋は probe_rows の有無に関係なく控える★★（Codexの指摘4）
         #   ★書く直前に見送った項目がある回は控えない★（Codexの8回目の指摘3）

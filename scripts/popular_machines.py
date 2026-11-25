@@ -674,7 +674,9 @@ def others_order(today, rows, last_reviewed: dict, stuck_slugs=(), exclude=()) -
         last = str((last_reviewed or {}).get(s) or "")[:10]
         if not last and "publication_policy" in m and not rel:
             continue
-        if last and last >= lim:
+        # ★止まったままの直しの記録がある機種は、直近に点検していても飛ばさない★（2026-11-25・運営者
+        #   「見送られたことは次優先的に処理」／Codexの指摘＝直す前は10日の除外が先頭の判定より先だった）
+        if last and last >= lim and s not in stuck_set:
             continue
         got.append((0 if s in stuck_set else 1, last, i, s))
     return [x[3] for x in sorted(got)]
@@ -1253,6 +1255,10 @@ def selftest() -> int:
       not ({"auto_new", "auto_future", "auto_norel"} & set(_got)))
     t("　新台期間を過ぎた新台は記録が無くても選ぶ（直す前に漏れていた形）", "auto_old" in _got)
     t("　今日の人気機種は外す", "pop" not in _got)
+    t("★★止まったままの直しの記録がある機種は、直近10日に点検していても先頭に出る★★"
+      "（2026-11-25・運営者「順番回ってくるまで放置とかないように」）",
+      others_order("2026-11-11", [{"slug": "a"}, {"slug": "b"}],
+                   {"a": "2026-10-31", "b": "2026-11-10"}, stuck_slugs=["b"]) == ["b", "a"])
 
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")

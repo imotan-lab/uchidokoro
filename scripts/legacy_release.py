@@ -75,6 +75,10 @@ def read(path: str = None) -> dict:
         raise LegacyReleaseError("legacy-release.json の applied が壊れています")
     if not isinstance(d.setdefault("kept", {}), dict):
         raise LegacyReleaseError("legacy-release.json の kept が壊れています")
+    _fl = d.setdefault("failed", {})
+    if not isinstance(_fl, dict) or any(
+            not isinstance(n, int) or isinstance(n, bool) or n < 1 for n in _fl.values()):
+        raise LegacyReleaseError("legacy-release.json の failed が壊れています")
     return d
 
 
@@ -86,12 +90,15 @@ def release_for(slug: str, path: str = None) -> str:
 def _save(d: dict, path: str = None) -> None:
     p = path or STORE
     tmp = p + ".tmp"
+    _failed = dict(sorted((d.get("failed") or {}).items()))
     d = {"schema": SCHEMA, "machines": dict(sorted(d["machines"].items())),
          "tries": dict(sorted(d.get("tries", {}).items())),
          # ★機種一覧へ写した導入日★（結び付けを取り消したら、残っていないか見張り番が見る）
          "applied": dict(sorted((d.get("applied") or {}).items())),
          # ★写した導入日の取り残しを、2AIが「このままでよい」と決めた記録★（--keep-release）
          "kept": dict(sorted((d.get("kept") or {}).items()))}
+    if _failed:
+        d["failed"] = _failed     # ★続けて読めなかった回数★（はじめて読めなかった機種を次の回に先頭で取り直す）
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(d, ensure_ascii=False, indent=1) + "\n")
     os.replace(tmp, p)
@@ -207,7 +214,10 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
                     - datetime.date.fromisoformat(rec["checked"])).days < RECHECK_DAYS:
                 continue
             cands.append((s, u))
-    cands.sort(key=lambda su: str(d["tries"].get(su[0], "")))
+    # ★★前回はじめて読めなかった機種は、次の回に先頭で取り直す★★（2026-11-25・運営者「見送られたことは次優先的に処理」）＝
+    #   続けて2回読めなければ、いつもの順（試した日の古い順）へ戻す（取れない機種が先頭に居座らない）
+    _fl = d.setdefault("failed", {})
+    cands.sort(key=lambda su: (0 if _fl.get(su[0]) == 1 else 1, str(d["tries"].get(su[0], ""))))
     done, failed = [], []
     for s, u in cands[:max(0, n)]:
         d["tries"][s] = today
@@ -215,11 +225,14 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
             rel = fetch(u)
         except Exception as e:                                   # noqa: BLE001
             failed.append((s, str(e)[:120]))
+            _fl[s] = int(_fl.get(s) or 0) + 1
             log(f"読めなかった {s}: {str(e)[:120]}")
             continue
         if not _REL_RE.match(rel):
             failed.append((s, f"導入日の形が違います: {rel!r}"))
+            _fl[s] = int(_fl.get(s) or 0) + 1
             continue
+        _fl.pop(s, None)
         old = (d["machines"].get(s) or {}).get("release")
         d["machines"][s] = {"release": rel, "url": u, "checked": today}
         done.append((s, old, rel))
@@ -511,6 +524,24 @@ def selftest() -> int:
                  bound=bound, today="2026-11-11", path=p, log=lambda *a: None)
     t("★★確かめて30日たっていない機種は取り直さない★★（直す前は毎日20件取り直し、毎日コミットしていた）",
       not r2["done"] and [x[0] for x in r2["failed"]] == ["d"])
+    # ★★はじめて読めなかった機種は次の回に先頭・続けて2回なら居座らない★★（2026-11-25・運営者「見送られたことは次優先的に処理」）
+    p3 = os.path.join(os.path.dirname(p), "lr_fail.json")
+    _rows3 = [{"slug": "x"}, {"slug": "y"}, {"slug": "z"}]
+    _b3 = {"x": U % 7, "y": U % 8, "z": U % 9}.get
+    _pg3 = {U % 7: "2025-01-01", U % 8: "2025-02-01", U % 9: "読めない"}
+    _save({"machines": {}, "tries": {"x": "2026-11-01", "y": "2026-11-02", "z": "2026-11-03"}}, p3)
+    _f1 = refresh(1, True, rows=_rows3, fetch=lambda u: _pg3[u], bound=_b3, today="2026-11-10", path=p3, log=lambda *a: None)
+    _save(dict(read(p3), tries={"x": "2026-11-01", "y": "2026-11-02", "z": "2026-11-10"},
+               failed={"z": 1}), p3)
+    _f2 = refresh(1, True, rows=_rows3, fetch=lambda u: _pg3[u], bound=_b3, today="2026-11-11", path=p3, log=lambda *a: None)
+    _f3 = refresh(1, True, rows=_rows3, fetch=lambda u: _pg3[u], bound=_b3, today="2026-11-12", path=p3, log=lambda *a: None)
+    _pg3[U % 9] = "2025-03-01"
+    _f4 = refresh(3, True, rows=_rows3, fetch=lambda u: _pg3[u], bound=_b3, today="2026-11-13", path=p3, log=lambda *a: None)
+    t("★★前回はじめて読めなかった機種は、次の回に先頭で取り直す★★（試した日が新しくても）",
+      [x[0] for x in _f1["done"]] == ["x"] and [x[0] for x in _f2["failed"]] == ["z"])
+    t("　続けて2回読めなければいつもの順へ戻す（居座らない）／取れたら回数を消す",
+      [x[0] for x in _f3["done"]] == ["y"] and read(p3).get("failed") == {}
+      and "z" in read(p3)["machines"] and _f4["done"])
     p2 = os.path.join(os.path.dirname(p), "lr_re.json")
     _save({"machines": {"a": {"release": "2025-06-02", "url": U % 1, "checked": "2026-10-11"}},
            "tries": {"a": "2026-10-11"}}, p2)

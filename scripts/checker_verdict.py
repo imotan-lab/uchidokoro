@@ -1710,9 +1710,28 @@ def _count_mode_tests(t) -> None:
         t("★★止めた欄の割り当て★★＝人気順・止めた欄の無い機種と直近7日に試した機種は除く",
           count_next(5, "2026-11-11", _qm, _qs, popular=["zzz_pop"]) == ["zzz_pop", "zzz_cnt"]
           and count_next(5, "2026-11-16", _qm, _qs, popular=["zzz_pop"]) == ["zzz_pop", "zzz_cnt", "zzz_tried"])
+        t("★★道具が止まった（ERROR）機種は、翌日に先頭で1回やり直す★★（2026-11-25・運営者「見送られたことは次優先的に処理」）"
+          "／同じ日は選ばない／続けて2回なら7日あける",
+          count_next(5, "2026-11-11", _qm, {"tried": {"zzz_tried": {"at": "2026-11-10", "result": "ERROR", "n": 1}}},
+                     popular=["zzz_pop"]) == ["zzz_tried", "zzz_pop", "zzz_cnt"]
+          and "zzz_tried" not in count_next(5, "2026-11-10", _qm, {"tried": {"zzz_tried": {
+              "at": "2026-11-10", "result": "ERROR", "n": 1}}}, popular=["zzz_pop"])
+          and "zzz_tried" not in count_next(5, "2026-11-11", _qm, {"tried": {"zzz_tried": {
+              "at": "2026-11-10", "result": "ERROR", "n": 2, "errs": 2}}}, popular=["zzz_pop"]))
         # ★★本物の書き込みを通す★★（一時の置き場）
         with open(MACHINES, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(json.dumps([mk()], ensure_ascii=False, indent=1) + "\n")
+        _keep_cq = globals()["COUNT_QUEUE"]
+        try:
+            globals()["COUNT_QUEUE"] = os.path.join(tmpd, "count_q.json")
+            _ct1 = count_tried("zzz_cnt", "ERROR", "2026-11-10")
+            _ct2 = count_tried("zzz_cnt", "ERROR", "2026-11-11")
+            _ct3 = count_tried("zzz_cnt", "UNDECIDED", "2026-11-12")
+            _ct4 = count_tried("zzz_cnt", "ERROR", "2026-11-20")
+        finally:
+            globals()["COUNT_QUEUE"] = _keep_cq
+        t("★止まった（ERROR）回は続けた回数を数え、2AIの答えのあとは1からやり直す★",
+          _ct1.get("errs") == 1 and _ct2.get("errs") == 2 and "errs" not in _ct3 and _ct4.get("errs") == 1)
         dp = os.path.join(tmpd, "dec.json")
         with open(dp, "w", encoding="utf-8") as fh:
             json.dump(d(), fh, ensure_ascii=False)
@@ -2513,7 +2532,14 @@ def count_next(n: int, today: str, ms=None, store=None, popular=None) -> list:
         s = str(m.get("slug") or "")
         if not s or not stopped_keys(m):
             continue
-        last = str(((store.get("tried") or {}).get(s) or {}).get("at") or "")[:10]
+        _rec = (store.get("tried") or {}).get(s) or {}
+        last = str(_rec.get("at") or "")[:10]
+        # ★★道具が止まった（ERROR）機種は、翌日に先頭で1回やり直す★★（2026-11-25・運営者「見送られたことは次優先的に処理」）＝
+        #   2AIが「決まらない・材料が無い」と答えた機種だけ COUNT_RETRY_DAYS 日あける。続けて2回止まれば同じくあける
+        if (str(_rec.get("result") or "") == "ERROR" and int(_rec.get("errs") or 1) == 1
+                and last and last < today):
+            got.append((-1, i, s))
+            continue
         if last and last > lim:
             continue
         got.append((rank.get(s, 10 ** 6), i, s))
@@ -2530,6 +2556,9 @@ def count_tried(slug: str, result: str, today: str) -> dict:
     st = _count_store()
     cur = st["tried"].get(slug) or {}
     st["tried"][slug] = {"at": today, "result": result, "n": int(cur.get("n") or 0) + 1}
+    if result == "ERROR":       # ★続けて止まった回数★（count_next が翌日に1回だけ先頭でやり直すのに使う）
+        st["tried"][slug]["errs"] = (int(cur.get("errs") or 1) + 1
+                                     if str(cur.get("result") or "") == "ERROR" else 1)
     tmp = COUNT_QUEUE + ".tmp"
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(st, ensure_ascii=False, indent=1) + "\n")

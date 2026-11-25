@@ -33,6 +33,7 @@ RESULTS = ("APPLIED", "NO_BOX", "UNDECIDED", "UNREADABLE", "ERROR")
 #   UNREADABLE … 材料が読めなかった（mode_ask が止まった）
 #   ERROR      … 道具が止まった（その日のログに理由）
 DONE_RESULTS = ("APPLIED", "NO_BOX")   # ★記事への反映まで済んだ結果★（これだけを「進んだ」と数える）
+TRANSIENT_RESULTS = ("UNREADABLE", "ERROR")   # ★2AIの答えではなく、読めなかった・止まった★（翌日に先頭で1回やり直す）
 RETRY_DAYS = 14          # 決まらなかった機種をもう一度選ぶまでの日数
 STALL_DAYS = 3           # これだけ1件も進まなければ番人が知らせる
 NEW_DAYS = 60            # 導入からこの日数までは「新台」として早めに見直す
@@ -144,7 +145,15 @@ def pick(n: int, machines: list, decided: set, tried: dict, today: str) -> list:
     #   新台の見直しを1件だけ先頭に置き、残りの枠はまだやっていない機種へ回す。
     head = due_new[:RECHECK_PER_DAY]
     rest_due = due_new[RECHECK_PER_DAY:] + due_old
-    return (head + never + old + rest_due)[:max(0, n)]
+    # ★★読めなかった・道具が止まった（UNREADABLE / ERROR）機種は、翌日に先頭で1回やり直す★★
+    #   （2026-11-25・運営者「見送られたことは次優先的に処理」「順番回ってくるまで放置とかないように」）＝
+    #   直す前は、2AIが決めて「決まらない」と答えた機種と同じく14日あけていた。
+    #   続けて2回なら RETRY_DAYS のあけ方へ戻す（相手のサイトが長く読めない機種が毎朝の枠を占めない）
+    retry = [s for s in order if str((tried.get(s) or {}).get("result", "")) in TRANSIENT_RESULTS
+             and int((tried.get(s) or {}).get("fails") or 1) == 1
+             and str((tried.get(s) or {}).get("at", "")) < today]
+    rest = [s for s in head + never + old + rest_due if s not in retry]
+    return (retry + rest)[:max(0, n)]
 
 
 NEW_STALL_DAYS = 7       # まだ一度も済んでいない機種が、これだけ1件も済まなければ止まっている
@@ -157,6 +166,11 @@ def record_tried(prev: dict, today: str, result: str) -> dict:
     一度も見ていない機種が進んでいなくても番人が気づけない。初めて済んだ日を別に持つ。
     """
     rec = {"at": today, "result": result}
+    if result in TRANSIENT_RESULTS:
+        # ★続けて読めなかった・止まった回数★（pick が翌日に1回だけ先頭でやり直すのに使う）
+        _pv = prev or {}
+        rec["fails"] = (int(_pv.get("fails") or 1) + 1
+                        if str(_pv.get("result", "")) in TRANSIENT_RESULTS else 1)
     first = str((prev or {}).get("first_done_at") or "")
     # ★first_done_at の無い古い記録で、前に済んでいたなら、その済んだ日を引き継ぐ★（2026-11-10・Codexの指摘＝
     #   直す前は見直しの日を「初めて済んだ日」にし、まだやっていない機種が進まないことを隠した・28件）
@@ -253,6 +267,19 @@ def selftest() -> int:
         _tr3 = {s: {"at": "2026-11-03", "result": "APPLIED"} for s in ("n1", "n2", "n3")}
         t("★★新台の見直しが3件あっても先頭は1件、2件目の枠はまだやっていない機種★★",
           pick(2, _ms3, {"n1", "n2", "n3"}, _tr3, "2026-11-20") == ["n1", "o1"])
+        # ★★読めなかった・止まった機種は翌日に先頭で1回やり直す★★（2026-11-25・運営者「見送られたことは次優先的に処理」）
+        _ms4 = [{"slug": s} for s in ("u", "v", "w")]
+        _e1 = record_tried(None, "2026-11-24", "UNREADABLE")
+        _e2 = record_tried(_e1, "2026-11-25", "ERROR")
+        t("★★前の日に読めなかった機種は、まだやっていない機種より先に選ぶ★★（直す前は14日あけていた）",
+          pick(2, _ms4, set(), {"w": _e1}, "2026-11-25") == ["w", "u"])
+        t("　同じ日のうちには選び直さない／2AIが決めて「決まらない」は今までどおり14日あける",
+          "w" not in pick(3, _ms4, set(), {"w": _e1}, "2026-11-24")
+          and "w" not in pick(3, _ms4, set(), {"w": {"at": "2026-11-24", "result": "UNDECIDED"}}, "2026-11-25"))
+        t("　続けて2回読めなければ14日あける（毎朝の枠を占めない）",
+          _e1.get("fails") == 1 and _e2.get("fails") == 2
+          and "w" not in pick(3, _ms4, set(), {"w": _e2}, "2026-11-26")
+          and record_tried(_e2, "2026-12-10", "APPLIED").get("fails") is None)
         t("★導入前の機種は7日おきの見直しにしない★",
           recheck_days({"release_date": "2026-12-07"}, "2026-11-20") == RECHECK_OLD)
         # ★★見直しばかりで、まだやっていない機種が進まなければ止まっている★★（2026-11-10）

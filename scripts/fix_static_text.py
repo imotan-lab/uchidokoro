@@ -204,7 +204,11 @@ def next_page(state: dict, today: str = None) -> str:
 
 
 def mark_tried(page: str, day: str) -> None:
-    """★読み終われなかった（照合が割れた・公開できなかった）ページを数日うしろへ回す★"""
+    """★2AIの照合が割れて読み終われなかったページを数日うしろへ回す★
+
+    ★直しが決まったのに公開できなかったときは呼ばない★（2026-11-25・運営者「見送られたことは次優先的に処理」）＝
+    読んだ日が古いまま残るので、翌朝いちばん先にそのページへ戻る。
+    """
     if page not in ROTATION:
         raise ValueError(f"読む順番に無いページです: {page}")
     p = _state_path()

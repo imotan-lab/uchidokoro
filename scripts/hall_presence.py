@@ -117,7 +117,11 @@ def read(path: str = None) -> dict:
         for s, d in tries.items():
             if not isinstance(d, str) or not DATE_RE.match(d):
                 bad.append("%s: 試した日の形が違います（%r）" % (s, d))
-    extra = set(data) - {"schema", "line", "line_why", "machines", "tries"}
+    failed = data.get("failed", {})
+    if not isinstance(failed, dict) or any(
+            not isinstance(n, int) or isinstance(n, bool) or n < 1 for n in failed.values()):
+        bad.append("failed（続けて読めなかった回数）の形が違います")
+    extra = set(data) - {"schema", "line", "line_why", "machines", "tries", "failed"}
     if extra:
         bad.append("知らない項目があります（%s）" % sorted(extra))
     if bad:
@@ -276,8 +280,12 @@ def refresh(n: int, apply: bool, fetch=None, today: str = None, rows=None,
         if u:
             bound.append((s, u))
     # ★最後に試した日が古い順（一度も試していない機種が先）・同じ日はランキングの並び順★
+    # ★★前回はじめて読めなかった機種は、次の回に先頭で取り直す★★（2026-11-25・運営者「見送られたことは次優先的に処理」）＝
+    #   続けて2回読めなければ、いつもの順へ戻す（取れない機種が先頭に居座らない・前のCodexの指摘）
     order = {s: i for i, s in enumerate(cands)}
-    bound.sort(key=lambda su: (data["tries"].get(su[0], ""), order[su[0]]))
+    _fl = data.setdefault("failed", {})
+    bound.sort(key=lambda su: (0 if _fl.get(su[0]) == 1 else 1,
+                               data["tries"].get(su[0], ""), order[su[0]]))
     done, failed, dropped = [], [], []
     for s, u in bound[:max(0, n)]:
         data["tries"][s] = today
@@ -292,8 +300,10 @@ def refresh(n: int, apply: bool, fetch=None, today: str = None, rows=None,
             st = read_count(fetch(u))
         except Exception as ex:                              # noqa: BLE001
             failed.append((s, str(ex)[:120]))
+            _fl[s] = int(_fl.get(s) or 0) + 1
             log("読めなかった %s: %s" % (s, str(ex)[:120]))
             continue
+        _fl.pop(s, None)
         old = (old_e or {}).get("stores")
         data["machines"][s] = {"stores": st, "checked": today, "url": u}
         done.append((s, old, st))
@@ -302,6 +312,9 @@ def refresh(n: int, apply: bool, fetch=None, today: str = None, rows=None,
     if apply and (done or failed or dropped):
         data["machines"] = dict(sorted(data["machines"].items()))
         data["tries"] = dict(sorted(data["tries"].items()))
+        data["failed"] = dict(sorted(_fl.items()))
+        if not data["failed"]:
+            data.pop("failed")
         _save(data, path)
     return {"done": done, "failed": failed, "broken": broken, "dropped": dropped,
             "added": sorted(after - before), "restored": sorted(before - after),
@@ -487,7 +500,10 @@ def selftest() -> int:
             r = refresh(1, True, fetch=lambda u: got2[u], today="2026-11-09", path=p, log=lambda *_: None)
             t("1日目は並び順の先頭（取れない）", [x[0] for x in r["failed"]] == ["s1"])
             r = refresh(1, True, fetch=lambda u: got2[u], today="2026-11-10", path=p, log=lambda *_: None)
-            t("2日目は取れなかった機種を後ろへ回し、ほかを確かめる", [x[0] for x in r["done"]] == ["s2"])
+            t("★★2日目は、はじめて読めなかった機種を先頭で取り直す★★（2026-11-25・運営者「見送られたことは次優先的に処理」）",
+              [x[0] for x in r["failed"]] == ["s1"] and read(p).get("failed") == {"s1": 2})
+            r = refresh(1, True, fetch=lambda u: got2[u], today="2026-11-11", path=p, log=lambda *_: None)
+            t("3日目は続けて2回取れなかった機種を後ろへ回し、ほかを確かめる（居座らない）", [x[0] for x in r["done"]] == ["s2"])
             t("取れなかった日は確かめた日にしない", "s1" not in read(p)["machines"])
             # ── 結び直したら古い記録を残さない（Codex）──
             binds["s2"] = {"url": "https://p-town.dmm.com/machines/22"}
@@ -501,6 +517,7 @@ def selftest() -> int:
             # ── 番人（外した機種も見る）──
             got2["https://p-town.dmm.com/machines/11"] = page(300, 300)
             refresh(5, True, fetch=lambda u: got2[u], today="2026-11-12", path=p, log=lambda *_: None)
+            t("　取れたら続けて読めなかった回数を消す", "failed" not in read(p))
             code, _ = check(today="2026-11-20", path=p)
             t("21日以内なら0", code == 0)
             # 外した機種（s2）だけが古い状態を作る＝ページに出る機種だけを見ると気づけない
