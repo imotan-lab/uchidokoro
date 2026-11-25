@@ -4094,7 +4094,9 @@
    },
    "coinRate": 31
   },
-  "limit": 900
+  "limit": 900,
+  "tenjo_games": 900,
+  "tenjo_display": "ボーナス間最大900G"
  },
  {
   "slug": "dark_haibi",
