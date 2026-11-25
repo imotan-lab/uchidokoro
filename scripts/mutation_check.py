@@ -1141,8 +1141,15 @@ MUTATIONS = [
     {
         "why": "★モード一覧：前の日の割り当てで手を付けられなかった機種を、今日に引き継がない★",
         "file": "scripts/mode_queue.py",
-        "before": "    got = (carry + [s for s in pick(n, machines, decided, tried, today) if s not in carry])[:max(0, n)]",
+        "before": "    got = (carry + fill)[:max(0, n)]",
         "after": "    got = pick(n, machines, decided, tried, today)",
+        "run": ["scripts/mode_queue.py"],
+    },
+    {
+        "why": "★モード一覧：引き継いだ見直しを1日の見直し枠に数えない（まだやっていない機種が外れる）★",
+        "file": "scripts/mode_queue.py",
+        "before": "    room = max(0, RECHECK_PER_DAY - sum(1 for s in carry if s in done))",
+        "after": "    room = RECHECK_PER_DAY",
         "run": ["scripts/mode_queue.py"],
     },
     {

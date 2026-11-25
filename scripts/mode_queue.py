@@ -172,7 +172,20 @@ def plan_next(n: int, machines: list, decided: set, tried: dict, today: str, pla
     carry = []
     if plan.get("date") and str(plan["date"]) < today:
         carry = [s for s in slugs if s in names and str((tried.get(s) or {}).get("at", "")) < str(plan["date"])]
-    got = (carry + [s for s in pick(n, machines, decided, tried, today) if s not in carry])[:max(0, n)]
+    # ★引き継いだ見直し（済んだ機種）も、1日 RECHECK_PER_DAY 件の見直し枠に数える★（Codexの6回目の指摘＝
+    #   持ち越した見直しと今日の見直しで2枠が埋まり、まだ一度もやっていない機種が外れた）
+    done = done_slugs(decided, tried)
+    room = max(0, RECHECK_PER_DAY - sum(1 for s in carry if s in done))
+    fill = []
+    for s in pick(n + len(carry) + RECHECK_PER_DAY, machines, decided, tried, today):
+        if s in carry:
+            continue
+        if s in done:
+            if room <= 0:
+                continue
+            room -= 1
+        fill.append(s)
+    got = (carry + fill)[:max(0, n)]
     return got, {"date": today, "slugs": got}
 
 
@@ -302,6 +315,14 @@ def selftest() -> int:
                              {"u": record_tried(None, "2026-11-25", "APPLIED")}, "2026-11-26", _p1)
         t("★★同じ日は割り当てを使い回し、日が変わったら手を付けられなかった機種を先頭に引き継ぐ★★（Codexの5回目の指摘）",
           _g1 == ["u", "v"] and _g2 == ["v"] and _p2 is None and _g3[0] == "v" and _p3["slugs"][0] == "v")
+        # 引き継いだ見直しも1日1件の見直し枠に数える（Codexの6回目の指摘）
+        _ms5 = [{"slug": "n1", "release_date": "2026-11-02"}, {"slug": "n2", "release_date": "2026-11-02"},
+                {"slug": "o1"}]
+        _tr5 = {"n1": record_tried(None, "2026-11-03", "APPLIED"), "n2": record_tried(None, "2026-11-04", "APPLIED")}
+        _g5, _p5 = plan_next(2, _ms5, {"n1", "n2"}, _tr5, "2026-11-20",
+                             {"date": "2026-11-19", "slugs": ["n2"]})
+        t("★★引き継いだ見直しも1日1件の見直し枠に数える（まだやっていない機種を外さない）★★（Codexの6回目の指摘）",
+          pick(2, _ms5, {"n1", "n2"}, _tr5, "2026-11-20")[0] == "n1" and _g5 == ["n2", "o1"])
         t("　先に待っていた失敗が、あとの失敗に追い越されない（古い失敗が先）",
           pick(1, _ms4, set(), {"u": record_tried(None, "2026-11-24", "ERROR"),
                                 "w": record_tried(None, "2026-11-20", "UNREADABLE")}, "2026-11-25") == ["w"])
