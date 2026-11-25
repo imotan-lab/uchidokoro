@@ -557,20 +557,32 @@ def targets(rows: list, today=None, state: dict = None,
       ★直す前は黙って飛ばしていた★ので、判定書が壊れた機種は
       **永久に候補から消え、全体は exit 0 のまま**だった。
       ＝誰も気づけない（★飛ばしたことを黙らない★）。
+    ★★前回見送った項目がある機種・2AIの確定値が変わった機種は、間隔を待たずに先頭で見る★★
+      （2026-11-25・運営者「見送られたことは次優先的に処理」「順番回ってくるまで放置とかないように」）＝
+      直す前は、書けた日に見た日を控えるので、見送った項目（gone）や翌日の2AIの答えがあっても
+      導入から61日を過ぎた機種は7日後まで候補に出なかった（実例＝ssb1 が11/19に天井4件を見送り、次は11/26）。
+      判定は confirmed_drift の1か所（見送りの印・確定値の指紋・育て方の決まりの版）。読めなければ先に見る側へ倒す。
     """
-    out = []
+    first, out = [], []
     for m in rows:
         prob = grow_scope_problem(m)
         if prob:
             if broken is not None and "判定書が壊れています" in prob:
                 broken.append(f"{m.get('slug')}: {prob[:70]}")
             continue                       # 壊れているものは別途 audit が拾う
-        if today is not None and not due(m["slug"],
-                                        str(m.get("release_date") or ""),
-                                        today, state or {}, conf):
-            continue
+        if today is not None:
+            try:
+                _drift = confirmed_drift(m["slug"])
+            except Exception:              # noqa: BLE001
+                _drift = True
+            if _drift:
+                first.append(m["slug"])
+                continue
+            if not due(m["slug"], str(m.get("release_date") or ""),
+                       today, state or {}, conf):
+                continue
         out.append(m["slug"])
-    return out
+    return first + out
 
 
 # ★育てても持ち越す控え★（2026-08-16・依頼213の指摘2／台帳#376）
@@ -5814,6 +5826,26 @@ def selftest() -> int:
           "／★直す前は永久に候補から消え、全体は成功に見えた★",
           _got_broken and "zzz_broken" in _got_broken[0])
         t("　壊れていない機種は今までどおり候補になる", _tg == ["zzz_ok"])
+        # ★★見送った項目・2AIの新しい答えがある機種は、間隔を待たずに先頭で見る★★（2026-11-25・運営者）
+        _keep_cd = globals()["confirmed_drift"]
+
+        def _fake_cd(s, with_gone=True):
+            if s == "zzz_pb":
+                raise OSError("読めない")
+            return s == "zzz_pc"
+        _pr_rows = [dict(_bad_rows[1], slug=_s, release_date="2026-01-05")
+                    for _s in ("zzz_pa", "zzz_pb", "zzz_pc", "zzz_pd")]
+        _pr_day = __import__("datetime").date(2026, 11, 25)
+        _pr_seen = {"zzz_pa": "2026-11-24", "zzz_pb": "2026-11-24",
+                    "zzz_pc": "2026-11-24", "zzz_pd": "2026-11-10"}
+        try:
+            globals()["confirmed_drift"] = _fake_cd
+            _tg_pr = targets(_pr_rows, _pr_day, _pr_seen)
+        finally:
+            globals()["confirmed_drift"] = _keep_cd
+        t("★★前回見送った・答えが来た機種（確定値の変化）は、間隔の途中でも先頭に出る★★"
+          "／読めない機種も先に見る側へ倒す／変化なしで間隔の途中の機種は今までどおり待つ",
+          _tg_pr == ["zzz_pb", "zzz_pc", "zzz_pd"])
 
         # ── 2026-08-27・行き詰まったら人ではなく2AIへ回す ────────
         #   ★運営者の指示★「2AIで結論出して。人に頼らないで。

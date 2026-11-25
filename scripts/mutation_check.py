@@ -925,6 +925,30 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★見送った項目・2AIの新しい答えがある機種も、間隔が来るまで待たせる"
+               "（運営者「順番回ってくるまで放置とかないように」・ssb1 が7日待った型）★",
+        "file": "scripts/grow_machine.py",
+        "before": '            if _drift:\n                first.append(m["slug"])',
+        "after": '            if False:\n                first.append(m["slug"])',
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★見送った・答えが来た機種を、先頭ではなく後ろに並べる"
+               "（締切の11:00までに届かない）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    return first + out",
+        "after": "    return out + first",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★確定値の変化を読めない機種を、先に見る側へ倒さない"
+               "（読めないあいだ見送りの印も答えも見落とす）★",
+        "file": "scripts/grow_machine.py",
+        "before": "                _drift = True",
+        "after": "                _drift = False",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★取り直しに失敗しても止めずに記事を作る"
                "（作ってから止めると、次の工程が拾える形で残る）★",
         "file": "scripts/grow_machine.py",

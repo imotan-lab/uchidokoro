@@ -55,7 +55,7 @@
   "scripts/fix_plain_style.py": "b8af9b83920fa38aea0210f9bcaa5ddadbc742dca902b39eb0762746743c6d56",
   "scripts/gates.py": "af602e39ec3b52da0971f2cc2035434943aeca1c917e38fb13cba0fc81a23aeb",
   "scripts/grow_legacy.py": "e4d9bd2939367f92b5fd6167c19f53eb0baefd6d4ef87732250f21aba2c70094",
-  "scripts/grow_machine.py": "05effb3cc419c1fcc932a57e1c26e8ed83d2eec53fbef909cb494c8aa655eb55",
+  "scripts/grow_machine.py": "d397a80c470b512d272c326536db667cc9a80455fff5c624fba77a772552f261",
   "scripts/hall_presence.py": "2ffb1bd270842874311829103ca1e118b91ad496dc8e7ab4f8985cdc451c82a9",
   "scripts/hub_prose.json": "9c946d0842b3310bb2370308805affb9e631d757212985ed470f940950e8b5f6",
   "scripts/machine_meta.py": "e33a65816df008bfd0215fbbceda1409f47b6470005f0235a0e5edf6dd8388a6",
@@ -70,7 +70,7 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "4a40e30d6fc0093895ff9c36d8bc8c1069b7b9b3f8ef96c36c318c3e4bfaff79",
-  "service-worker.js": "10e398a6a1f38492bd49fce5d3a3d934aa6e90b05ed1cbc39283f897534c97a2",
+  "service-worker.js": "1df14d94b59a082b747eca2070caa6545dd4370354f5cd8de19a77f1a60b8a96",
   "setting.html": "99c2a9f4758e7d4f9a6c4d79e7b8e86a53e34a0ba7598a83507f46221561c533",
   "terms.html": "cfb07f039c9a57ad5c451118e31abfb7031fd9a4c98d4c0f88f76fd016711a65"
  }
