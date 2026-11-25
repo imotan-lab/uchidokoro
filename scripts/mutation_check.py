@@ -1076,6 +1076,41 @@ MUTATIONS = [
         "run": ["scripts/checker_verdict.py"],
     },
     {
+        "why": "★ランキング点検：前の日にはじめてやり切れなかった件を、まだ試していない件の後ろへ回す★",
+        "file": "scripts/ranking_queue.py",
+        "before": "    return (first + fresh + mixed)[:max(0, n - done_today)]",
+        "after": "    return (fresh + mixed + first)[:max(0, n - done_today)]",
+        "run": ["scripts/ranking_queue.py"],
+    },
+    {
+        "why": "★ランキング点検：続けてやり切れなかった回数を数えない（何回でも毎日先頭）★",
+        "file": "scripts/ranking_queue.py",
+        "before": "if str(e.get(\"result\") or \"\") in AGAIN_RESULTS else 1",
+        "after": "if False else 1",
+        "run": ["scripts/ranking_queue.py"],
+    },
+    {
+        "why": "★リセット期待値：前の日にはじめてやり切れなかった機種を、まだ試していない機種の後ろへ回す★",
+        "file": "scripts/reset_ev.py",
+        "before": "    return (first + fresh + mixed)[:max(0, n)]",
+        "after": "    return (fresh + mixed + first)[:max(0, n)]",
+        "run": ["scripts/reset_ev.py"],
+    },
+    {
+        "why": "★リセット期待値：続けてやり切れなかった回数を数えない★",
+        "file": "scripts/reset_ev.py",
+        "before": "if _prev.get(\"result\") in TRY_RESULTS else 1",
+        "after": "if False else 1",
+        "run": ["scripts/reset_ev.py"],
+    },
+    {
+        "why": "★新台の待ち行列：見つけ直しで「最後に試した日」を進める（着手できなかった機種が先頭から外れる）★",
+        "file": "scripts/pending_machines.py",
+        "before": "        it[\"tries\"] = int(it.get(\"tries\", 0)) + 1\n",
+        "after": "        it[\"tries\"] = int(it.get(\"tries\", 0)) + 1\n        it[\"last_try\"] = _today()\n",
+        "run": ["scripts/pending_machines.py"],
+    },
+    {
         "why": "★止めた欄：続けて止まった回数を数えない（何回止まっても毎朝先頭）★",
         "file": "scripts/checker_verdict.py",
         "before": '                                     if str(cur.get("result") or "") == "ERROR" else 1)',
@@ -2543,15 +2578,15 @@ MUTATIONS = [
     {
         "why": "★読めない件を「まだの件」と同じ並びに置く（リセットが読めない日が続くと天井へ永久に進まない）★",
         "file": "scripts/ranking_queue.py",
-        "before": "    return (fresh + mixed)[:max(0, n - done_today)]",
-        "after": "    return (sorted(fresh + retry, key=lambda it: (order[it[0]], it[2])) + old)[:max(0, n - done_today)]",
+        "before": "    return (first + fresh + mixed)[:max(0, n - done_today)]",
+        "after": "    return (first + sorted(fresh + retry, key=lambda it: (order[it[0]], it[2])) + old)[:max(0, n - done_today)]",
         "run": ["scripts/ranking_queue.py"],
     },
     {
         "why": "★動かし直すと、今日すでに試した件の数を差し引かず1日の件数を超える★",
         "file": "scripts/ranking_queue.py",
-        "before": "    return (fresh + mixed)[:max(0, n - done_today)]",
-        "after": "    return (fresh + mixed)[:max(0, n)]",
+        "before": "    return (first + fresh + mixed)[:max(0, n - done_today)]",
+        "after": "    return (first + fresh + mixed)[:max(0, n)]",
         "run": ["scripts/ranking_queue.py"],
     },
     {
@@ -2620,8 +2655,8 @@ MUTATIONS = [
     {
         "why": "★読めない件を全部先に置く（読めない件が続くかぎり、確かめ終えた件の確かめ直しに枠が回らない）★",
         "file": "scripts/ranking_queue.py",
-        "before": "    return (fresh + mixed)[:max(0, n - done_today)]",
-        "after": "    return (fresh + retry + old)[:max(0, n - done_today)]",
+        "before": "    return (first + fresh + mixed)[:max(0, n - done_today)]",
+        "after": "    return (first + fresh + retry + old)[:max(0, n - done_today)]",
         "run": ["scripts/ranking_queue.py"],
     },
     {

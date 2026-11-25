@@ -332,6 +332,18 @@ function formatReleaseDate(dateStr){
   const search = document.getElementById("machineSearch");
   const empty = document.getElementById("machineEmpty");
 
+  // ★入力した文字を消す「×」★（2026-11-25・運営者）＝文字があるときだけ出す。
+  //   ★機種一覧の読み込みより先に付ける★（Codex＝読み込みに失敗すると×が動かなかった）。
+  //   消したら input を起こす＝読み込めていれば一覧の描き直しも同じ道で走る
+  const searchClear = document.getElementById("machineSearchClear");
+  function syncClear() { if (searchClear) searchClear.classList.toggle("is-hidden", !search.value); }
+  search.addEventListener("input", syncClear);
+  if (searchClear) searchClear.addEventListener("click", () => {
+    search.value = "";
+    search.dispatchEvent(new Event("input"));
+    search.focus();
+  });
+
   try {
     const res = await fetch("assets/data/machines.json");
     if (!res.ok) throw new Error("machines.json load failed");
@@ -465,16 +477,7 @@ function formatReleaseDate(dateStr){
       });
     }
 
-    // ★入力した文字を消す「×」★（2026-11-25・運営者）＝文字があるときだけ出す
-    const searchClear = document.getElementById("machineSearchClear");
-    function syncClear() { if (searchClear) searchClear.classList.toggle("is-hidden", !search.value); }
-    search.addEventListener("input", event => { syncClear(); render(event.target.value); });
-    if (searchClear) searchClear.addEventListener("click", () => {
-      search.value = "";
-      syncClear();
-      render("");
-      search.focus();
-    });
+    search.addEventListener("input", event => render(event.target.value));
     showAllBtn.addEventListener("click", syncClear);
     if (showAllBtnTop) showAllBtnTop.addEventListener("click", syncClear);
     syncClear();

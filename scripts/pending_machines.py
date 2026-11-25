@@ -230,7 +230,9 @@ def add(data: dict, name: str, url: str, maker: str, release: str,
                     "source_machine_id": str(source_machine_id or ""), "folded_into": folded["queue_id"]}
     if it:
         it["tries"] = int(it.get("tries", 0)) + 1
-        it["last_try"] = _today()
+        # ★見つけ直しでは「最後に試した日」を進めない★（2026-11-25・Codexの3回目の指摘＝毎晩の巡回で見つけ直すと
+        #   前の晩に着手できなかった機種と着手した機種が同じ日付にそろい、着手できなかった機種が先頭から外れた）。
+        #   試した日を書くのは記事づくりに着手した mark_tried だけ
         it["last_reason"] = reason[:300]
         # ★名前や登場年月が変わることがある（公式の書き換え）★
         # ★★空の値では上書きしない★★（2026-10-02・Codex review201）＝
@@ -883,8 +885,11 @@ def selftest() -> int:
                   "release", "identity_source", "source_machine_id",
                   "first_seen", "last_try", "tries", "last_reason", "release_seen"})
     d["items"]["q_0001"]["release_seen"] = "2000-01-01"
+    d["items"]["q_0001"]["last_try"] = "2000-01-02"
     add(d, "テスト機", DMM + "5049", "m", "2026-09", "まだ無い",
         source_machine_id="5049")
+    t("★★見つけ直しでは「最後に試した日」を進めない★★（Codexの3回目の指摘＝着手できなかった機種が先頭から外れた）",
+      d["items"]["q_0001"].get("last_try") == "2000-01-02")
     t("★★既にある控えでも、導入日を受け取ったら受け取った日を新しくする★★（代役の指摘＝未定の新台の🔴は既存の控えで決まる）",
       d["items"]["q_0001"].get("release_seen") == _today())
     t("★★同じ機種を二重に持たない（試した回数が増える）★★",

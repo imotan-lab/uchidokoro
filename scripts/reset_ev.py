@@ -391,7 +391,10 @@ def tried(slug: str, result: str, store_path: str = "", today: str = "", order_p
         raise EvError(f"slug と結果（{' / '.join(TRY_RESULTS)}）を確かめてください")
     store_path = store_path or STORE
     store = read_store(store_path, order_path)
-    store["tries"][slug] = {"date": today or _today(), "result": result}
+    _prev = store["tries"].get(slug) or {}
+    # ★続けてやり切れなかった回数★（pick が翌日に1回だけ先頭でやり直すのに使う・2026-11-25）
+    _fails = (int(_prev.get("fails") or 1) + 1) if _prev.get("result") in TRY_RESULTS else 1
+    store["tries"][slug] = {"date": today or _today(), "result": result, "fails": _fails}
     # ★始めた日★（Codex impl の3）＝一度も成功しないまま止まっていても、ここから日数を数えて知らせる
     store.setdefault("started", today or _today())
     _replace_bytes(store_path, _store_bytes(store))
@@ -403,6 +406,13 @@ def tried(slug: str, result: str, store_path: str = "", today: str = "", order_p
 def pick(n: int, items: list, store: dict, today: str) -> list:
     """まだ試していない機種（表の順）→ 確かめた日が古い順。今日試した・失敗して2日たっていないものは外す"""
     t = _dt.date.fromisoformat(today)
+
+    def again(s):
+        """★前の回にはじめてやり切れなかった機種★（翌日に先頭で1回やり直す・2026-11-25・運営者
+        「見送られたことは次優先的に処理」）。回数の無い古い記録は今までどおり（先頭には出さない）"""
+        tr = (store.get("tries") or {}).get(s) or {}
+        return (tr.get("result") in TRY_RESULTS and tr.get("fails") == 1
+                and _dt.date.fromisoformat(tr["date"]) < t)
 
     def usable(s):
         tr = (store.get("tries") or {}).get(s)
@@ -416,17 +426,20 @@ def pick(n: int, items: list, store: dict, today: str) -> list:
         return True
     tries = store.get("tries") or {}
     recs = store.get("records") or {}
+    first = [s for s in items if again(s)]
+    first.sort(key=lambda s: (tries[s]["date"], items.index(s)))
     fresh = [s for s in items if s not in tries and usable(s)]
     # ★失敗のやり直しと、確かめ終えた機種の取り直しは1件ずつ交互★（Codex design2 の2）＝
     #   どちらかを先にすると、もう片方に枠が回らなくなる
-    failed = [s for s in items if s in tries and usable(s) and tries[s].get("result") in TRY_RESULTS]
+    failed = [s for s in items if s in tries and usable(s) and tries[s].get("result") in TRY_RESULTS
+              and s not in first]
     failed.sort(key=lambda s: (tries[s]["date"], items.index(s)))
-    redo = [s for s in items if s in tries and usable(s) and s not in failed]
+    redo = [s for s in items if s in tries and usable(s) and s not in failed and s not in first]
     redo.sort(key=lambda s: ((recs.get(s) or {}).get("checked") or "0000-00-00", items.index(s)))
     mixed = []
     for i in range(max(len(failed), len(redo))):
         mixed += failed[i:i + 1] + redo[i:i + 1]
-    return (fresh + mixed)[:max(0, n)]
+    return (first + fresh + mixed)[:max(0, n)]
 
 
 def plan_today(n: int, items: list, store: dict, today: str) -> list:
@@ -736,6 +749,19 @@ def selftest() -> int:
     st_m["records"] = {s: {"checked": "2026-11-01"} for s in "defg"}
     t("★失敗のやり直しと、確かめた機種の取り直しは交互★",
       pick(4, items, st_m, "2026-11-10") == ["a", "d", "b", "e"])
+    # ★★前の日にはじめてやり切れなかった機種は、翌日に先頭で1回やり直す★★（2026-11-25・運営者「見送られたことは次優先的に処理」）
+    st_f = json.loads(json.dumps(st))
+    st_f["tries"]["b"]["fails"] = 1
+    t("★★前の日にはじめてやり切れなかった機種は、まだ試していない機種より先★★（直す前は2日あけ、戻っても後ろ）",
+      pick(3, items, st_f, "2026-11-10") == ["b", "d", "e"])
+    st_f["tries"]["b"]["fails"] = 2
+    t("　続けて2回なら日をあける（毎日の枠を占めない）", "b" not in pick(7, items, st_f, "2026-11-10"))
+    with tempfile.TemporaryDirectory() as _tdf:
+        _sp = os.path.join(_tdf, "ev.json")
+        _op = os.path.join(_tdf, "order.json")
+        _r1 = tried("zz", "ERROR", _sp, "2026-11-08", _op)
+        _r2 = tried("zz", "UNREADABLE", _sp, "2026-11-09", _op)
+        t("　続けてやり切れなかった回数を数える", _r1.get("fails") == 1 and _r2.get("fails") == 2)
     t("★NO_EV はなな徹を見た記録が要る★",
       record_problems("x", {"state": "NO_EV", "searched": ["https://www.slopachi-quest.com/article/x/"],
                             "by": "claude,codex", "why": "スロパチクエストに表が無かったので値なし",

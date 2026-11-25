@@ -38,6 +38,10 @@ RESULTS = ("NOTE", "FIXED", "NO_NOTE", "ASKED", "UNDECIDED", "UNREADABLE", "ERRO
 #   UNREADABLE … 材料が読めなかった
 #   ERROR      … 道具が止まった（その日のログに理由）
 DONE_RESULTS = ("NOTE", "FIXED", "NO_NOTE", "ASKED")
+# ★★その日にやり切れなかった件（締切・利用制限・読めない・止まった）は、翌日に先頭で1回やり直す★★
+#   （2026-11-25・運営者「見送られたことは次優先的に処理」「道具が〜とか言い訳無用」）＝直す前は2日あけ、
+#   戻っても一度も試していない件が先だった。続けて2回なら下の RETRY_DAYS のあけ方へ戻す（枠を占めない）
+AGAIN_RESULTS = ("UNDECIDED", "UNREADABLE", "ERROR")
 RETRY_DAYS = 2
 STALL_DAYS = 3          # これだけ1件も確かめ終えなければ番人が知らせる
 STALE_DAYS = 10         # 上位10のどれかが、これより長く確かめ直されていなければ番人が知らせる
@@ -106,6 +110,14 @@ def pick(n: int, items: list, store: dict, today: str) -> list:
     st = store.get("items") or {}
     cutoff = (_dt.date.fromisoformat(today) - _dt.timedelta(days=RETRY_DAYS)).isoformat()
 
+    def again(it):
+        """★前の回にはじめてやり切れなかった件★（翌日に先頭で1回やり直す）"""
+        e = st.get(_key(it[0], it[1])) or {}
+        tried = str(e.get("tried_at") or "")
+        # ★回数の無い古い記録は今までどおり★（何回続いたか分からないので、先頭には出さない）
+        return (str(e.get("result") or "") in AGAIN_RESULTS and e.get("fails") == 1
+                and bool(tried) and tried < today)
+
     def usable(it):
         e = st.get(_key(it[0], it[1])) or {}
         tried = str(e.get("tried_at") or "")
@@ -116,7 +128,9 @@ def pick(n: int, items: list, store: dict, today: str) -> list:
         return True
 
     order = {r: i for i, r in enumerate(RANKINGS)}
-    cand = [it for it in items if usable(it)]
+    first = [it for it in items if again(it)]
+    first.sort(key=lambda it: (str((st.get(_key(it[0], it[1])) or {}).get("tried_at") or ""), order[it[0]], it[2]))
+    cand = [it for it in items if usable(it) and it not in first]
 
     def ent(it):
         return st.get(_key(it[0], it[1])) or {}
@@ -146,7 +160,7 @@ def pick(n: int, items: list, store: dict, today: str) -> list:
             mixed.append(retry[i])
         if i < len(old):
             mixed.append(old[i])
-    return (fresh + mixed)[:max(0, n - done_today)]
+    return (first + fresh + mixed)[:max(0, n - done_today)]
 
 
 def plan_today(n: int, items: list, store: dict, today: str) -> tuple:
@@ -185,6 +199,11 @@ def tried(slug: str, ranking: str, result: str, today: str = "", path: str = "")
     today = today or _today()
     data = read_store(path)
     e = dict(data["items"].get(_key(ranking, slug)) or {})
+    # ★続けてやり切れなかった回数★（pick が翌日に1回だけ先頭でやり直すのに使う・2026-11-25）
+    if result in AGAIN_RESULTS:
+        e["fails"] = (int(e.get("fails") or 1) + 1) if str(e.get("result") or "") in AGAIN_RESULTS else 1
+    else:
+        e.pop("fails", None)
     e["tried_at"] = today
     e["result"] = result
     if result in DONE_RESULTS:
@@ -266,6 +285,21 @@ def selftest() -> int:
       [(r, s) for r, s, _ in pick(4, items, st5, today)]
       == [("reset", "a"), ("tenjo", "c"), ("tenjo", "a"), ("reset", "b")])
     t("件数どおりに切る", len(pick(2, items, {"items": {}}, today)) == 2)
+    # ★★前の日にはじめてやり切れなかった件は、翌日に先頭で1回やり直す★★（2026-11-25・運営者「見送られたことは次優先的に処理」）
+    st12 = {"items": {"tenjo::a": {"tried_at": "2026-11-09", "result": "ERROR", "fails": 1}}}
+    t("★★前の日にはじめてやり切れなかった件は、まだ試していない件より先★★（直す前は2日あけ、戻っても後ろ）",
+      [(r, s) for r, s, _ in pick(2, items, st12, today)] == [("tenjo", "a"), ("reset", "a")])
+    st13 = {"items": {"tenjo::a": {"tried_at": "2026-11-09", "result": "ERROR", "fails": 2}}}
+    t("　続けて2回なら日をあける（毎日の枠を占めない）／同じ日は選ばない",
+      ("tenjo", "a") not in [(r, s) for r, s, _ in pick(4, items, st13, today)]
+      and ("tenjo", "a") not in [(r, s) for r, s, _ in pick(4, items, st12, "2026-11-09")])
+    _tmpq = os.path.join(tempfile.mkdtemp(prefix="rq_"), "q.json")
+    _f1 = tried("a", "tenjo", "UNDECIDED", "2026-11-08", _tmpq)
+    _f2 = tried("a", "tenjo", "ERROR", "2026-11-09", _tmpq)
+    _f3 = tried("a", "tenjo", "NOTE", "2026-11-10", _tmpq)
+    _f4 = tried("a", "tenjo", "UNREADABLE", "2026-11-11", _tmpq)
+    t("　続けてやり切れなかった回数を数え、確かめ終えたら消す",
+      _f1.get("fails") == 1 and _f2.get("fails") == 2 and "fails" not in _f3 and _f4.get("fails") == 1)
     st8 = {"items": {"reset::a": {"tried_at": "2026-11-05", "result": "UNREADABLE"},
                      "reset::b": {"tried_at": "2026-11-06", "result": "UNREADABLE"}}}
     t("★読めない件が続いても、まだ試していない天井の件を先に選ぶ★（天井へ永久に進まない形）",

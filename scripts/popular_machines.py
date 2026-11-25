@@ -640,7 +640,9 @@ def plan_today(today, budget: int, machines=None, store=None) -> dict:
 # ★その他の機種は、最後に点検した日からこの日数のあいだ選ばない★（一周＝約35日より必ず短く保つ）
 OTHERS_SKIP_DAYS = 10
 # ★止まったままの直しの記録として先頭に出すまでの日数★（見張り番の repair_journal.STUCK_DAYS=14 とは別）
-OTHERS_STUCK_DAYS = 1
+#   ★0＝終わっていない直しは全部★（2026-11-25・Codexの3回目の指摘＝1だと「24時間たったか」で数えるので、
+#   前の日の10時に止まった直しが翌朝5時の選定に入らなかった。朝の選定の時点で動いている直しは無い）
+OTHERS_STUCK_DAYS = 0
 
 
 def others_order(today, rows, last_reviewed: dict, stuck_slugs=(), exclude=()) -> list:
@@ -1264,8 +1266,8 @@ def selftest() -> int:
       others_order("2026-11-11", [{"slug": "a"}, {"slug": "b"}],
                    {"a": "2026-10-31", "b": "2026-11-10"}, stuck_slugs=["b"]) == ["b", "a"])
     import inspect as _ins_st
-    t("★★昨日止まった直しも先頭に出す（見張り番の14日ではなく1日で拾う）★★（Codexの指摘）",
-      OTHERS_STUCK_DAYS == 1 and "_rj.stuck(days=OTHERS_STUCK_DAYS)" in _ins_st.getsource(others_today))
+    t("★★昨日止まった直しも翌朝の先頭に出す（見張り番の14日ではなく、終わっていない直しを全部）★★（Codexの指摘）",
+      OTHERS_STUCK_DAYS == 0 and "_rj.stuck(days=OTHERS_STUCK_DAYS)" in _ins_st.getsource(others_today))
 
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
