@@ -1132,6 +1132,20 @@ MUTATIONS = [
         "run": ["scripts/repair_journal.py"],
     },
     {
+        "why": "★ランキング点検：持ち越しがある日の初回に、今日すでに試した件の数を差し引かない（1日の件数を超える）★",
+        "file": "scripts/ranking_queue.py",
+        "before": "    return got[:max(0, n - done_today)], {\"date\": today, \"keys\": [_key(it[0], it[1]) for it in got]}",
+        "after": "    return got, {\"date\": today, \"keys\": [_key(it[0], it[1]) for it in got]}",
+        "run": ["scripts/ranking_queue.py"],
+    },
+    {
+        "why": "★モード一覧：前の日の割り当てで手を付けられなかった機種を、今日に引き継がない★",
+        "file": "scripts/mode_queue.py",
+        "before": "    got = (carry + [s for s in pick(n, machines, decided, tried, today) if s not in carry])[:max(0, n)]",
+        "after": "    got = pick(n, machines, decided, tried, today)",
+        "run": ["scripts/mode_queue.py"],
+    },
+    {
         "why": "★止めた欄：続けて止まった回数を数えない（何回止まっても毎朝先頭）★",
         "file": "scripts/checker_verdict.py",
         "before": '                                     if str(cur.get("result") or "") == "ERROR" else 1)',

@@ -157,6 +157,25 @@ def pick(n: int, machines: list, decided: set, tried: dict, today: str) -> list:
     return (retry + rest)[:max(0, n)]
 
 
+def plan_next(n: int, machines: list, decided: set, tried: dict, today: str, plan) -> tuple:
+    """★その日の割り当て★（純関数）→ (今日やる機種, 控えに書く plan か None)
+
+    ★同じ日は最初に決めた割り当てを使い回す★（済んだ機種は除く）。
+    ★★日が変わったら、前の日の割り当てで手を付けられなかった機種を先頭に引き継ぐ★★（2026-11-25・Codexの5回目の指摘＝
+      手を付けなかった機種には何も書かないので落ちないと考えていたが、新台の見直しの日が来ると並びが変わり、外れた）
+    """
+    plan = plan if isinstance(plan, dict) else {}
+    slugs = [s for s in (plan.get("slugs") or []) if isinstance(s, str)]
+    if plan.get("date") == today:
+        return [s for s in slugs if str((tried.get(s) or {}).get("at", "")) != today][:max(0, n)], None
+    names = {str(m.get("slug")) for m in machines if isinstance(m, dict)}
+    carry = []
+    if plan.get("date") and str(plan["date"]) < today:
+        carry = [s for s in slugs if s in names and str((tried.get(s) or {}).get("at", "")) < str(plan["date"])]
+    got = (carry + [s for s in pick(n, machines, decided, tried, today) if s not in carry])[:max(0, n)]
+    return got, {"date": today, "slugs": got}
+
+
 NEW_STALL_DAYS = 7       # まだ一度も済んでいない機種が、これだけ1件も済まなければ止まっている
 
 
@@ -277,6 +296,12 @@ def selftest() -> int:
         t("　同じ日のうちには選び直さない／2AIが決めて「決まらない」は今までどおり14日あける",
           "w" not in pick(3, _ms4, set(), {"w": _e1}, "2026-11-24")
           and "w" not in pick(3, _ms4, set(), {"w": {"at": "2026-11-24", "result": "UNDECIDED"}}, "2026-11-25"))
+        _g1, _p1 = plan_next(2, _ms4, set(), {}, "2026-11-25", None)
+        _g2, _p2 = plan_next(2, _ms4, set(), {"u": record_tried(None, "2026-11-25", "APPLIED")}, "2026-11-25", _p1)
+        _g3, _p3 = plan_next(2, [{"slug": "zz"}] + _ms4, set(),
+                             {"u": record_tried(None, "2026-11-25", "APPLIED")}, "2026-11-26", _p1)
+        t("★★同じ日は割り当てを使い回し、日が変わったら手を付けられなかった機種を先頭に引き継ぐ★★（Codexの5回目の指摘）",
+          _g1 == ["u", "v"] and _g2 == ["v"] and _p2 is None and _g3[0] == "v" and _p3["slugs"][0] == "v")
         t("　先に待っていた失敗が、あとの失敗に追い越されない（古い失敗が先）",
           pick(1, _ms4, set(), {"u": record_tried(None, "2026-11-24", "ERROR"),
                                 "w": record_tried(None, "2026-11-20", "UNREADABLE")}, "2026-11-25") == ["w"])
@@ -366,7 +391,10 @@ def _main() -> int:
         return 0
     decided = decided_slugs()
     if a.next:
-        got = pick(a.next, machines, decided, tried, today)
+        got, plan = plan_next(a.next, machines, decided, tried, today, store.get("plan"))
+        if plan is not None:
+            store["plan"] = plan
+            _write_store(store)
         print(" ".join(got) if got else "（今朝やる機種はありません）")
         return 0
     p = progress(machines, decided, tried, today)
