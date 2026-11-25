@@ -964,10 +964,10 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
-        "why": "★--apply で試した日を控えない（先に見る組の順番が回らない）★",
+        "why": "★試した日を控えない（先に見る組の順番が回らない）★",
         "file": "scripts/grow_machine.py",
-        "before": "        mark_tried(a.slug, _dt.date.today())    # ★試した日★（先に見る組の中の順番・targets）",
-        "after": "        pass",
+        "before": "    mark_tried(a.slug, _dt.date.today())\n",
+        "after": "    pass\n",
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -1043,8 +1043,36 @@ MUTATIONS = [
     {
         "why": "★止めた欄：道具が止まった機種を、翌日に先頭でやり直さない（7日待つ）★",
         "file": "scripts/checker_verdict.py",
-        "before": "            got.append((-1, i, s))",
-        "after": "            got.append((rank.get(s, 10 ** 6), i, s))",
+        "before": "            got.append((-1, last, i, s))",
+        "after": "            got.append((rank.get(s, 10 ** 6), \"\", i, s))",
+        "run": ["scripts/checker_verdict.py"],
+    },
+    {
+        "why": "★その他の担当順：止まった直しを見張り番と同じ14日で拾う（昨日止まった直しが2週間先頭に来ない）★",
+        "file": "scripts/popular_machines.py",
+        "before": "        stuck_slugs = [x.get(\"slug\") for x in _rj.stuck(days=OTHERS_STUCK_DAYS)]",
+        "after": "        stuck_slugs = [x.get(\"slug\") for x in _rj.stuck()]",
+        "run": ["scripts/popular_machines.py"],
+    },
+    {
+        "why": "★導入日：朝の担当の回で読めなかった機種を、夕方の取り直しに入れない（絞り込みで候補から消える）★",
+        "file": "scripts/legacy_release.py",
+        "before": "            if u9 and _ID_RE.match(u9):\n                cands.append((s9, u9))",
+        "after": "            if False:\n                cands.append((s9, u9))",
+        "run": ["scripts/legacy_release.py"],
+    },
+    {
+        "why": "★モード一覧：先に待っていた失敗を、あとの失敗が追い越す★",
+        "file": "scripts/mode_queue.py",
+        "before": "    retry.sort(key=lambda s: str((tried.get(s) or {}).get(\"at\", \"\")))",
+        "after": "    pass",
+        "run": ["scripts/mode_queue.py"],
+    },
+    {
+        "why": "★止めた欄：先に待っていた失敗を、あとの失敗が追い越す★",
+        "file": "scripts/checker_verdict.py",
+        "before": "            got.append((-1, last, i, s))",
+        "after": "            got.append((-1, \"\", i, s))",
         "run": ["scripts/checker_verdict.py"],
     },
     {
@@ -12267,8 +12295,8 @@ MUTATIONS = [
     {
         "why": "★止めた欄の割り当て：直近7日に試した機種も毎日選ぶ★",
         "file": "scripts/checker_verdict.py",
-        "before": "        if last and last > lim:\n            continue\n        got.append((rank.get(s, 10 ** 6), i, s))",
-        "after": "        got.append((rank.get(s, 10 ** 6), i, s))",
+        "before": "        if last and last > lim:\n            continue\n        got.append((rank.get(s, 10 ** 6), \"\", i, s))",
+        "after": "        got.append((rank.get(s, 10 ** 6), \"\", i, s))",
         "run": ["scripts/checker_verdict.py"],
     },
     {

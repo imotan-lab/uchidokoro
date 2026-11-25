@@ -48,9 +48,14 @@
   <section class="top-intro" aria-label="機種を探す">
     <h1 class="top-h1">スマスロ・パチスロの天井・狙い目と小役カウンター</h1>
     <p class="top-lead">機種名を入れると、天井・狙い目・やめどき・小役カウンターをすぐ確認できます。</p>
-    <label class="visually-hidden" for="machineSearch">機種名で探す</label>
-    <input id="machineSearch" class="search-input" type="search" placeholder="機種名で探す（例: 北斗、バキ、ゴッドイーター）">
   </section>
+  <div class="top-search">
+    <label class="visually-hidden" for="machineSearch">機種名で探す</label>
+    <div class="search-field">
+      <input id="machineSearch" class="search-input" type="search" placeholder="機種名で探す（例: 北斗、バキ、ゴッドイーター）">
+      <button id="machineSearchClear" class="search-clear is-hidden" type="button" aria-label="入力した文字を消す">×</button>
+    </div>
+  </div>
 
   <section id="upcomingSection" class="upcoming-section is-hidden" aria-label="近日導入の新台">
     <h2 class="sec-head">近日導入の新台<span class="sec-sub">導入日の近い順</span></h2>
@@ -460,7 +465,19 @@ function formatReleaseDate(dateStr){
       });
     }
 
-    search.addEventListener("input", event => render(event.target.value));
+    // ★入力した文字を消す「×」★（2026-11-25・運営者）＝文字があるときだけ出す
+    const searchClear = document.getElementById("machineSearchClear");
+    function syncClear() { if (searchClear) searchClear.classList.toggle("is-hidden", !search.value); }
+    search.addEventListener("input", event => { syncClear(); render(event.target.value); });
+    if (searchClear) searchClear.addEventListener("click", () => {
+      search.value = "";
+      syncClear();
+      render("");
+      search.focus();
+    });
+    showAllBtn.addEventListener("click", syncClear);
+    if (showAllBtnTop) showAllBtnTop.addEventListener("click", syncClear);
+    syncClear();
     render();
 
   } catch (error) {

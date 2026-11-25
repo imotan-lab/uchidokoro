@@ -5909,7 +5909,7 @@ def selftest() -> int:
         _src_main_tr = _ins_tr.getsource(main.__wrapped__)   # ★ここでは _main が差し替え中★（本物を見る）
         _mc_lines = [i for i, ln in enumerate(_src_main_tr.splitlines()) if "mark_checked(a.slug" in ln]
         _lines_main_tr = _src_main_tr.splitlines()
-        t("★★本体は対象を全部の名前で出す（先頭10件で切らない）・試した日を渡す・--apply で試した日を控える★★"
+        t("★★本体は対象を全部の名前で出す（先頭10件で切らない）・試した日を渡す・下見でも試した日を控える★★"
           "（Codexの指摘＝手順書は出た対象を順に処理する）",
           '" ".join(tg))' in _src_main_tr and "tried=last_tried()" in _src_main_tr
           and "mark_tried(a.slug" in _src_main_tr)
@@ -7102,8 +7102,9 @@ def _main() -> int:
                   "（python scripts/grow_machine.py --slug <機種> --apply）")
             return 2
         return 0
-    if a.apply:
-        mark_tried(a.slug, _dt.date.today())    # ★試した日★（先に見る組の中の順番・targets）
+    # ★試した日★（先に見る組の中の順番・targets）＝下見でも控える（Codexの2回目の指摘＝手順は下見→claim→--apply の順で、
+    #   下見や受け付けで止まった機種に日付が付かず、毎朝先頭に残った）
+    mark_tried(a.slug, _dt.date.today())
     got = plan_one(a.slug)
     # ★次回の様子見のための控えは「材料まで見に行けた」ときだけ★
     #   （2026-08-14・依頼185のP1）失敗した回の顔ぶれで上書きすると、

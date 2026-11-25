@@ -128,12 +128,25 @@ button, input, select { font: inherit; }
   background: var(--bg2);
   border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 6px 8px 6px 24px;
+  padding: 6px 36px 6px 24px;
   color: var(--text);
   font-size: var(--fs-input);
 }
 .header-search-input::placeholder { color: var(--muted2); }
 .header-search-input:focus { outline: none; border-color: var(--gold); }
+/* ★検索の文字を消す「×」★（2026-11-25・運営者）＝文字があるときだけ右端に出す。ブラウザの標準の×は消して1つにそろえる */
+.search-field { position: relative; }
+.search-clear {
+  position: absolute; top: 50%; right: 4px; transform: translateY(-50%);
+  width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--muted); font-size: 1.25rem; line-height: 1; cursor: pointer;
+}
+.search-clear:hover, .search-clear:focus-visible { color: var(--text); background: var(--line); outline: none; }
+.header-search-input::-webkit-search-cancel-button,
+.search-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
+.search-field .search-input { padding-right: 48px; }
+.search-field .search-input + .search-clear { right: 8px; width: 36px; height: 36px; }
 .header-dropdown {
   position: absolute;
   top: calc(100% + 4px);
@@ -266,7 +279,8 @@ button, input, select { font: inherit; }
 /* 数値の出どころ（控えめ表示・2026-07-30）。強調しすぎず、読み飛ばされない程度に。 */
 .source-note { margin: 6px 0 10px 0; color: var(--muted); font-size: var(--fs-label); line-height: 1.6; }
 
-.article-section-wrap { display: grid; }
+/* ★列は画面の幅を超えない★（2026-11-25＝列が「中身の最小幅」に合わせて広がり、7列の表がある記事でページ全体が横にはみ出した・東京喰種） */
+.article-section-wrap { display: grid; grid-template-columns: minmax(0, 1fr); }
 .article-block {
   padding: 16px 0;
   border-bottom: 1px solid var(--line);
@@ -404,6 +418,9 @@ button, input, select { font: inherit; }
 
 /* ARTICLE SECTIONS */
 .article-item { padding-left: 12px; border-left: 2px solid var(--line2); margin-bottom: 20px; }
+/* ★スマホに収まらない表は、その欄の中だけで横に送れるようにする★（2026-11-25・設定1〜6を並べた7列の表など）＝
+   ページ全体は広げない。文は折り返すので、横に送れるのは表がはみ出したときだけ */
+.article-item { min-width: 0; overflow-x: auto; }
 .article-item:last-child { margin-bottom: 0; }
 .article-title { color: var(--gold); font-size: var(--fs-body); font-weight: 800; margin: 0 0 8px; }
 .article-body { color: var(--soft); font-size: var(--fs-body); line-height: 1.85; margin: 0 0 10px; }
@@ -850,6 +867,8 @@ button, input, select { font: inherit; }
 .data-table th { background: var(--panel); color: var(--muted); font-size: var(--fs-min); font-weight: 700; padding: 7px 8px; border: 1px solid var(--line2); text-align: left; }
 .data-table td { color: var(--text); font-size: var(--fs-sub); font-weight: 700; padding: 6px 8px; border: 1px solid var(--line2); line-height: 1.5; vertical-align: top; }
 .data-table td:first-child { color: var(--soft); width: 38%; }
+/* ★4列以上の表（設定1〜6の表など）は、左端の項目名を1行に保つ★（2026-11-25＝狭い画面で1文字ずつ折り返していた。表は欄の中で横に送れる） */
+.data-table td:first-child:nth-last-child(n+4), .data-table th:first-child:nth-last-child(n+4) { width: auto; white-space: nowrap; }
 
 /* TOP PAGE (2026-11-09・運営者が試し版Bを選んだ) ★トップだけ（body.page-top）に効かせる★
    並び＝見出しと1文→検索→近日導入3件→人気TOP10→ランキング・早見表→はじめての方へ→掲載機種の一覧（折りたたみ）→短い説明。
@@ -864,10 +883,19 @@ button, input, select { font: inherit; }
   background: var(--band);
   box-shadow: 0 0 0 100vmax var(--band);
   clip-path: inset(0 -100vmax);
-  padding: 18px 0 22px;
+  padding: 18px 0 6px;
 }
 .page-top .top-h1 { font-size: 22px; font-weight: 800; line-height: 1.35; letter-spacing: .01em; color: var(--band-text); margin: 0 0 6px; text-wrap: balance; }
-.page-top .top-lead { font-size: var(--fs-sub); color: var(--band-soft); margin: 0 0 14px; line-height: 1.7; }
+.page-top .top-lead { font-size: var(--fs-sub); color: var(--band-soft); margin: 0; line-height: 1.7; }
+/* ★トップの検索は、下へスクロールしても上の帯の下についてくる★（2026-11-25・運営者）＝
+   帯の見出しの外（main の直下）に置かないと、帯といっしょに流れてしまう。top は上の帯（ヘッダー）の高さ */
+.page-top .top-search {
+  position: sticky; top: var(--top-header-h, 56px); z-index: 40;
+  background: var(--band);
+  box-shadow: 0 0 0 100vmax var(--band);
+  clip-path: inset(0 -100vmax);
+  padding: 8px 0 14px;
+}
 .page-top .search-input { border-radius: 6px; border: 1.5px solid #ffffff; background: #ffffff; }
 .page-top .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
 

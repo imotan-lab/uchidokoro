@@ -214,6 +214,19 @@ def refresh(n: int, apply: bool, rows=None, fetch=None, bound=None, today: str =
                     - datetime.date.fromisoformat(rec["checked"])).days < RECHECK_DAYS:
                 continue
             cands.append((s, u))
+    # ★朝の担当の回（only）で初めて読めなかった機種は、夕方の取り直しにも入れる★（Codexの2回目の指摘＝
+    #   導入日がある昔の機種・30日以内に確かめた機種は上の絞り込みで外れ、先頭どころか候補に出なかった）
+    if only is None:
+        _have = {s for s, _u in cands}
+        for s9, n9 in sorted((d.get("failed") or {}).items()):
+            if n9 != 1 or s9 in _have:
+                continue
+            try:
+                u9 = bound(s9)
+            except Exception:                                    # noqa: BLE001
+                continue
+            if u9 and _ID_RE.match(u9):
+                cands.append((s9, u9))
     # ★★前回はじめて読めなかった機種は、次の回に先頭で取り直す★★（2026-11-25・運営者「見送られたことは次優先的に処理」）＝
     #   続けて2回読めなければ、いつもの順（試した日の古い順）へ戻す（取れない機種が先頭に居座らない）
     _fl = d.setdefault("failed", {})
@@ -539,6 +552,13 @@ def selftest() -> int:
     _f4 = refresh(3, True, rows=_rows3, fetch=lambda u: _pg3[u], bound=_b3, today="2026-11-13", path=p3, log=lambda *a: None)
     t("★★前回はじめて読めなかった機種は、次の回に先頭で取り直す★★（試した日が新しくても）",
       [x[0] for x in _f1["done"]] == ["x"] and [x[0] for x in _f2["failed"]] == ["z"])
+    p4 = os.path.join(os.path.dirname(p), "lr_fail2.json")
+    _save({"machines": {"w": {"release": "2025-01-01", "url": U % 6, "checked": "2026-11-12"}},
+           "tries": {"w": "2026-11-12"}, "failed": {"w": 1}}, p4)
+    _f5 = refresh(1, True, rows=[{"slug": "w", "release_date": "2025-01-01"}], fetch=lambda u: "2025-01-01",
+                  bound={"w": U % 6}.get, today="2026-11-13", path=p4, log=lambda *a: None)
+    t("★朝の担当の回で初めて読めなかった機種は、夕方の取り直しにも入る★（導入日がある・30日以内に確かめた機種でも）",
+      [x[0] for x in _f5["done"]] == ["w"])
     t("　続けて2回読めなければいつもの順へ戻す（居座らない）／取れたら回数を消す",
       [x[0] for x in _f3["done"]] == ["y"] and read(p3).get("failed") == {}
       and "z" in read(p3)["machines"] and _f4["done"])

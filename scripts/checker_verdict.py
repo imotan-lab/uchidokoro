@@ -1718,6 +1718,10 @@ def _count_mode_tests(t) -> None:
               "at": "2026-11-10", "result": "ERROR", "n": 1}}}, popular=["zzz_pop"])
           and "zzz_tried" not in count_next(5, "2026-11-11", _qm, {"tried": {"zzz_tried": {
               "at": "2026-11-10", "result": "ERROR", "n": 2, "errs": 2}}}, popular=["zzz_pop"]))
+        t("　先に待っていた失敗が、あとの失敗に追い越されない（古い失敗が先・Codexの2回目の指摘）",
+          count_next(1, "2026-11-11", _qm, {"tried": {
+              "zzz_pop": {"at": "2026-11-10", "result": "ERROR", "n": 1},
+              "zzz_tried": {"at": "2026-11-06", "result": "ERROR", "n": 1}}}, popular=["zzz_pop"]) == ["zzz_tried"])
         # ★★本物の書き込みを通す★★（一時の置き場）
         with open(MACHINES, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(json.dumps([mk()], ensure_ascii=False, indent=1) + "\n")
@@ -2538,12 +2542,12 @@ def count_next(n: int, today: str, ms=None, store=None, popular=None) -> list:
         #   2AIが「決まらない・材料が無い」と答えた機種だけ COUNT_RETRY_DAYS 日あける。続けて2回止まれば同じくあける
         if (str(_rec.get("result") or "") == "ERROR" and int(_rec.get("errs") or 1) == 1
                 and last and last < today):
-            got.append((-1, i, s))
+            got.append((-1, last, i, s))       # ★古い失敗が先★（Codexの2回目の指摘）
             continue
         if last and last > lim:
             continue
-        got.append((rank.get(s, 10 ** 6), i, s))
-    return [x[2] for x in sorted(got)][:max(0, int(n))]
+        got.append((rank.get(s, 10 ** 6), "", i, s))
+    return [x[3] for x in sorted(got)][:max(0, int(n))]
 
 
 def count_tried(slug: str, result: str, today: str) -> dict:
@@ -3956,7 +3960,9 @@ def main() -> int:
         try:
             if a.stopped_tried:
                 got = count_tried(a.stopped_tried, a.result, _today)
-                print(f"{a.stopped_tried}: 作り直せなかった回を控えました（{got['result']}・{got['n']}回目・{COUNT_RETRY_DAYS}日あけてまた選びます）")
+                _when = ("明日の先頭でもう一度選びます" if got.get("errs") == 1
+                         else f"{COUNT_RETRY_DAYS}日あけてまた選びます")
+                print(f"{a.stopped_tried}: 作り直せなかった回を控えました（{got['result']}・{got['n']}回目・{_when}）")
                 return 0
             nxt = count_next(a.stopped_next, _today)
         except (OSError, ValueError) as e:

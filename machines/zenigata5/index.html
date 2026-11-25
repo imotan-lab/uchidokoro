@@ -47,6 +47,7 @@
     <div class="header-search-wrap">
       <span class="header-search-icon">🔍</span>
       <input id="headerSearch" class="header-search-input" type="search" placeholder="機種を検索" aria-label="機種を検索">
+      <button id="headerSearchClear" class="search-clear is-hidden" type="button" aria-label="入力した文字を消す">×</button>
       <div id="headerDropdown" class="header-dropdown"></div>
     </div>
   </div>
@@ -148,7 +149,7 @@
 
     <!-- RELATED-BEGIN --><div class="article-block" id="relatedBlock">
       <h2 class="block-label">▶ 関連機種</h2>
-      <div id="relatedList" class="related-list"><a class="related-item" href="/machines/babel/">スマスロ バベル</a><a class="related-item" href="/machines/shake_bt/">SHAKE BONUS TRIGGER</a><a class="related-item" href="/machines/onimusha3/">L新鬼武者3</a><a class="related-item" href="/machines/zettai_shougeki4/">L 絶対衝激Ⅳ</a><a class="related-item" href="/machines/kurea_bt/">LBクレアの秘宝伝 ボーナストリガーver.</a><a class="related-item" href="/machines/railgun2/">スマスロ とある科学の超電磁砲2</a><a class="related-item" href="/machines/neo_aim_juggler/">ネオアイムジャグラーEX</a><a class="related-item" href="/machines/neoplanet/">スマスロネオプラネット</a></div>
+      <div id="relatedList" class="related-list"><a class="related-item" href="/machines/babel/">スマスロ バベル</a><a class="related-item" href="/machines/shake_bt/">SHAKE BONUS TRIGGER</a><a class="related-item" href="/machines/onimusha3/">L新鬼武者3</a><a class="related-item" href="/machines/zettai_shougeki4/">L 絶対衝激Ⅳ</a><a class="related-item" href="/machines/kurea_bt/">LBクレアの秘宝伝 ボーナストリガーver.</a><a class="related-item" href="/machines/railgun2/">スマスロ とある科学の超電磁砲2</a><a class="related-item" href="/machines/revengers/">L東京リベンジャーズ</a><a class="related-item" href="/machines/neoplanet/">スマスロネオプラネット</a></div>
     </div><!-- RELATED-END -->
 
     <div class="article-block" id="affiliateBlock">
@@ -208,7 +209,16 @@
     .then(res => res.json())
     .then(machines => { allMachines = machines; });
 
+  // ★入力した文字を消す「×」★（2026-11-25・運営者）＝文字があるときだけ出す
+  const searchClear = document.getElementById("headerSearchClear");
+  if (searchClear) searchClear.addEventListener("click", function(){
+    searchInput.value = "";
+    searchInput.dispatchEvent(new Event("input"));
+    searchInput.focus();
+  });
+
   searchInput.addEventListener("input", function(){
+    if (searchClear) searchClear.classList.toggle("is-hidden", !this.value);
     const query = normalizeText(this.value);
     dropdown.innerHTML = "";
     if (!query) { dropdown.style.display = "none"; return; }

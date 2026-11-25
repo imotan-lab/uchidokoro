@@ -152,6 +152,7 @@ def pick(n: int, machines: list, decided: set, tried: dict, today: str) -> list:
     retry = [s for s in order if str((tried.get(s) or {}).get("result", "")) in TRANSIENT_RESULTS
              and int((tried.get(s) or {}).get("fails") or 1) == 1
              and str((tried.get(s) or {}).get("at", "")) < today]
+    retry.sort(key=lambda s: str((tried.get(s) or {}).get("at", "")))   # ★古い失敗が先★（Codexの2回目の指摘）
     rest = [s for s in head + never + old + rest_due if s not in retry]
     return (retry + rest)[:max(0, n)]
 
@@ -276,6 +277,9 @@ def selftest() -> int:
         t("　同じ日のうちには選び直さない／2AIが決めて「決まらない」は今までどおり14日あける",
           "w" not in pick(3, _ms4, set(), {"w": _e1}, "2026-11-24")
           and "w" not in pick(3, _ms4, set(), {"w": {"at": "2026-11-24", "result": "UNDECIDED"}}, "2026-11-25"))
+        t("　先に待っていた失敗が、あとの失敗に追い越されない（古い失敗が先）",
+          pick(1, _ms4, set(), {"u": record_tried(None, "2026-11-24", "ERROR"),
+                                "w": record_tried(None, "2026-11-20", "UNREADABLE")}, "2026-11-25") == ["w"])
         t("　続けて2回読めなければ14日あける（毎朝の枠を占めない）",
           _e1.get("fails") == 1 and _e2.get("fails") == 2
           and "w" not in pick(3, _ms4, set(), {"w": _e2}, "2026-11-26")

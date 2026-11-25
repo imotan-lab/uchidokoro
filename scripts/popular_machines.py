@@ -639,6 +639,8 @@ def plan_today(today, budget: int, machines=None, store=None) -> dict:
 
 # ★その他の機種は、最後に点検した日からこの日数のあいだ選ばない★（一周＝約35日より必ず短く保つ）
 OTHERS_SKIP_DAYS = 10
+# ★止まったままの直しの記録として先頭に出すまでの日数★（見張り番の repair_journal.STUCK_DAYS=14 とは別）
+OTHERS_STUCK_DAYS = 1
 
 
 def others_order(today, rows, last_reviewed: dict, stuck_slugs=(), exclude=()) -> list:
@@ -693,7 +695,9 @@ def others_today(today, n: int, machines=None) -> dict:
     warn = ""
     try:
         import repair_journal as _rj
-        stuck_slugs = [x.get("slug") for x in _rj.stuck()]
+        # ★1日動いていない直しの記録で先頭に出す★（2026-11-25・Codexの指摘＝14日の見張り番の基準だと、
+        #   昨日止まった直しは2週間先頭に来なかった。見張り番の知らせは今までどおり14日）
+        stuck_slugs = [x.get("slug") for x in _rj.stuck(days=OTHERS_STUCK_DAYS)]
     except Exception as e:                                   # noqa: BLE001
         stuck_slugs, warn = [], f"止まったままの直しの記録を読めません（{type(e).__name__}）＝その分は先頭に来ません"
     pop = plan_today(today, 6, machines=rows).get("popular") or []
@@ -1259,6 +1263,9 @@ def selftest() -> int:
       "（2026-11-25・運営者「順番回ってくるまで放置とかないように」）",
       others_order("2026-11-11", [{"slug": "a"}, {"slug": "b"}],
                    {"a": "2026-10-31", "b": "2026-11-10"}, stuck_slugs=["b"]) == ["b", "a"])
+    import inspect as _ins_st
+    t("★★昨日止まった直しも先頭に出す（見張り番の14日ではなく1日で拾う）★★（Codexの指摘）",
+      OTHERS_STUCK_DAYS == 1 and "_rj.stuck(days=OTHERS_STUCK_DAYS)" in _ins_st.getsource(others_today))
 
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")

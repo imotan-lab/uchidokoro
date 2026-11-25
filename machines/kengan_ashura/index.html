@@ -47,6 +47,7 @@
     <div class="header-search-wrap">
       <span class="header-search-icon">🔍</span>
       <input id="headerSearch" class="header-search-input" type="search" placeholder="機種を検索" aria-label="機種を検索">
+      <button id="headerSearchClear" class="search-clear is-hidden" type="button" aria-label="入力した文字を消す">×</button>
       <div id="headerDropdown" class="header-dropdown"></div>
     </div>
   </div>
@@ -148,7 +149,7 @@
 
     <!-- RELATED-BEGIN --><div class="article-block" id="relatedBlock">
       <h2 class="block-label">▶ 関連機種</h2>
-      <div id="relatedList" class="related-list"><a class="related-item" href="/machines/madomagi_forte/">スマスロ劇場版 魔法少女まどか☆マギカ フォルテ</a><a class="related-item" href="/machines/basilisk_tenzen/">スマスロバジリスク～甲賀忍法帖～絆2 天膳 BLACK EDITION</a><a class="related-item" href="/machines/tensura/">スマスロ転生したらスライムだった件</a><a class="related-item" href="/machines/goji_eva/">スマスロ ゴジラvsエヴァンゲリオン</a><a class="related-item" href="/machines/sengoku_otome4/">L戦国乙女4 戦乱に閃く炯眼の軍師</a><a class="related-item" href="/machines/code_geass/">スマスロ コードギアス 反逆のルルーシュ/復活のルルーシュ</a><a class="related-item" href="/machines/kizumonogatari/">パチスロ傷物語 -始マリノ刻-</a><a class="related-item" href="/machines/chibaryo2/">チバリヨ2</a></div>
+      <div id="relatedList" class="related-list"><a class="related-item" href="/machines/madomagi_forte/">スマスロ劇場版 魔法少女まどか☆マギカ フォルテ</a><a class="related-item" href="/machines/dragon_hanahana_senko/">ドラゴンハナハナ～閃光～-30</a><a class="related-item" href="/machines/tensura/">スマスロ転生したらスライムだった件</a><a class="related-item" href="/machines/basilisk_tenzen/">スマスロバジリスク～甲賀忍法帖～絆2 天膳 BLACK EDITION</a><a class="related-item" href="/machines/sengoku_otome4/">L戦国乙女4 戦乱に閃く炯眼の軍師</a><a class="related-item" href="/machines/goji_eva/">スマスロ ゴジラvsエヴァンゲリオン</a><a class="related-item" href="/machines/kizumonogatari/">パチスロ傷物語 -始マリノ刻-</a><a class="related-item" href="/machines/code_geass/">スマスロ コードギアス 反逆のルルーシュ/復活のルルーシュ</a></div>
     </div><!-- RELATED-END -->
 
     <div class="article-block" id="affiliateBlock">
@@ -208,7 +209,16 @@
     .then(res => res.json())
     .then(machines => { allMachines = machines; });
 
+  // ★入力した文字を消す「×」★（2026-11-25・運営者）＝文字があるときだけ出す
+  const searchClear = document.getElementById("headerSearchClear");
+  if (searchClear) searchClear.addEventListener("click", function(){
+    searchInput.value = "";
+    searchInput.dispatchEvent(new Event("input"));
+    searchInput.focus();
+  });
+
   searchInput.addEventListener("input", function(){
+    if (searchClear) searchClear.classList.toggle("is-hidden", !this.value);
     const query = normalizeText(this.value);
     dropdown.innerHTML = "";
     if (!query) { dropdown.style.display = "none"; return; }
