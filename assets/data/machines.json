@@ -3581,7 +3581,8 @@
   ],
   "limit": null,
   "tenjo_display": "999まいる",
-  "tenjo_games": null
+  "tenjo_games": null,
+  "series": ""
  },
  {
   "slug": "world_dai_star",
