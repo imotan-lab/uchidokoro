@@ -4884,7 +4884,7 @@
   "seo": {
    "title": "サンダーV 設定判別・狙い目まとめ"
   },
-  "info": "スマスロノーマル",
+  "info": "スマスロBT",
   "strategy": "設定狙い主体・天井なし",
   "aliases": [
    "サンダー",
@@ -4906,7 +4906,8 @@
    }
   },
   "limit": null,
-  "release_date": "2026-03-02"
+  "release_date": "2026-03-02",
+  "series": ""
  },
  {
   "slug": "koukaku",
