@@ -892,6 +892,56 @@ def check_one(page, machine: dict) -> list[str]:
         except Exception as e:
             ngs.append(f"R12b: 検査に失敗: {type(e).__name__}")
 
+    # ★★R18：スマホの幅で横にはみ出していないか★★（2026-11-25・運営者＝東京喰種のページが390pxの画面で470pxに広がっていた）
+    ngs += check_phone_width(page)
+    return ngs
+
+
+# ★R18 で測るスマホの幅★（iPhone の標準と、狭い Android）
+PHONE_WIDTHS = (390, 360)
+OVERFLOW_JS = """() => {
+  const W = document.documentElement.clientWidth;
+  const sw = document.documentElement.scrollWidth;
+  const bad = [];
+  for (const e of document.querySelectorAll('body *')) {
+    const r = e.getBoundingClientRect();
+    if (!r.width || r.right <= W + 1) continue;
+    const p = e.parentElement;
+    if (p && p.getBoundingClientRect().right > W + 1) continue;   // いちばん外側のはみ出しだけ
+    const cls = (typeof e.className === 'string' && e.className) ? '.' + e.className.split(' ')[0] : '';
+    bad.push(e.tagName + cls + '「' + (e.innerText || '').replace(/\\s+/g, ' ').slice(0, 24) + '」');
+  }
+  return {W: W, sw: sw, bad: bad.slice(0, 3)};
+}"""
+
+
+def judge_phone_width(width: int, got) -> list:
+    """★純関数★ ページ全体の横幅が画面の幅を超えていれば NG（欄の中だけで横に送れる表は数えない）"""
+    if not isinstance(got, dict) or not isinstance(got.get("sw"), (int, float)) \
+            or not isinstance(got.get("W"), (int, float)):
+        return [f"R18: スマホの幅（{width}px）で横幅を測れません"]
+    if got["sw"] > got["W"] + 1:
+        return [f"R18: スマホの幅（{width}px）でページが横にはみ出しています（{int(got['sw'])}px）"
+                f": {' / '.join(got.get('bad') or []) or '（どの要素か特定できず）'}"]
+    return []
+
+
+def check_phone_width(page) -> list:
+    """★R18★ 画面をスマホの幅にして測り、終わったら元の幅に戻す"""
+    ngs = []
+    before = page.viewport_size or {"width": 1280, "height": 720}
+    try:
+        for w in PHONE_WIDTHS:
+            page.set_viewport_size({"width": w, "height": 844})
+            page.wait_for_timeout(150)
+            ngs += judge_phone_width(w, page.evaluate(OVERFLOW_JS))
+    except Exception as e:                # noqa: BLE001
+        ngs.append(f"R18: 検査に失敗: {type(e).__name__}")
+    finally:
+        try:
+            page.set_viewport_size(before)
+        except Exception:                 # noqa: BLE001
+            pass
     return ngs
 
 
@@ -1411,6 +1461,14 @@ def selftest() -> int:
     t("　ブラウザが足す tbody は作りの違いに数えない",
       judge_boxes([{**b, "sig": (b["sig"][:1] + ["tbody"] + b["sig"][1:])}
                    for b in good], det) == [])
+    # ★★R18：スマホの幅で横にはみ出していないか★★（2026-11-25・運営者）
+    t("★★R18：ページの横幅が画面より広ければ NG（東京喰種の 470px／390px）★★",
+      judge_phone_width(390, {"W": 390, "sw": 470, "bad": ["TABLE.data-table「項目 設定1」"]}) != [])
+    t("　画面の幅に収まっていれば OK（欄の中だけで横に送れる表は数えない）",
+      judge_phone_width(390, {"W": 390, "sw": 390, "bad": ["TABLE.data-table「項目」"]}) == [])
+    t("　測れなければ OK にしない", judge_phone_width(360, None) != [] and judge_phone_width(360, {"W": 360}) != [])
+    t("　R18 は check_one から必ず呼ばれる（呼び忘れると誰も見ない）",
+      "ngs += check_phone_width(page)" in __import__("inspect").getsource(check_one))
     print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")
     return 0 if ok_all else 1
 

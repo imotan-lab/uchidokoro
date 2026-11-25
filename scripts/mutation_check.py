@@ -1153,6 +1153,34 @@ MUTATIONS = [
         "run": ["scripts/mode_queue.py"],
     },
     {
+        "why": "★R18：スマホの幅のはみ出しを check_one から呼ばない（誰も見ない）★",
+        "file": "scripts/audit_render.py",
+        "before": "    ngs += check_phone_width(page)\n",
+        "after": "    pass\n",
+        "run": ["scripts/audit_render.py"],
+    },
+    {
+        "why": "★R18：ページの横幅が画面より広くても NG にしない★",
+        "file": "scripts/audit_render.py",
+        "before": "    if got[\"sw\"] > got[\"W\"] + 1:",
+        "after": "    if False:",
+        "run": ["scripts/audit_render.py"],
+    },
+    {
+        "why": "★画面写し：縦に長いページを分けずに1枚にする（細かい崩れが読めない）★",
+        "file": "scripts/phone_shot.py",
+        "before": "        h = min(SLICE_H, total_h - y)",
+        "after": "        h = total_h",
+        "run": ["scripts/phone_shot.py"],
+    },
+    {
+        "why": "★点検表：あとから足した項目を、前に済ませた担当にも求める（全部の担当が未完了に戻る）★",
+        "file": "scripts/machine_turn.py",
+        "before": "            and not (k in ITEM_SINCE and started < ITEM_SINCE[k])]",
+        "after": "            and True]",
+        "run": ["scripts/machine_turn.py"],
+    },
+    {
         "why": "★止めた欄：続けて止まった回数を数えない（何回止まっても毎朝先頭）★",
         "file": "scripts/checker_verdict.py",
         "before": '                                     if str(cur.get("result") or "") == "ERROR" else 1)',
@@ -11301,8 +11329,8 @@ MUTATIONS = [
     {
         "why": "★担当機種：1項目でも残っていても仕上がった扱いにする★",
         "file": "scripts/machine_turn.py",
-        "before": "            if (tr.get(\"items\") or {}).get(k, {}).get(\"result\") in (None, \"LATER\")]\n",
-        "after": "            if False]\n",
+        "before": "            if (tr.get(\"items\") or {}).get(k, {}).get(\"result\") in (None, \"LATER\")\n",
+        "after": "            if False\n",
         "run": ["scripts/machine_turn.py"],
     },
     {

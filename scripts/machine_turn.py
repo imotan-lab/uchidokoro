@@ -74,7 +74,11 @@ COMMON_ITEMS = (
     ("sources", "出典の控え（同じページのままか・隔離・題の変化）", "machine_sources --recheck --slug"),
     ("gap", "★大手サイトにあって、この記事に無い項目を足す★（数値は独立2出典で確かめたものだけ）", "STEP 1-G（add_items）"),
     ("hall", "全国の設置店舗数（ランキングから外すかの数）", "hall_presence --refresh 1 --slug --apply（候補でなければ NA）"),
+    ("display", "★スマホの幅の表示崩れ★（はみ出し・重なり・1文字ずつの折り返し・欠けた表）",
+     "audit_render --slug（R18）＋ phone_shot --slug の画面写しを見る"),
 )
+# ★あとから足した項目は、足した日以降に始めた担当にだけ求める★（前に済ませた担当を「そろっていない」に戻さない）
+ITEM_SINCE = {"display": "2026-11-26"}   # 運営者「こういう表示のおかしいものとかも更新のタイミングで見てね」（2026-11-25）
 # ★噂は昔の機種だけ★＝運営者「新台は噂はそもそもない」（STEP 1-R の決まり）
 LEGACY_ITEMS = (
     ("rumor", "噂・未確定情報の欄（新しい噂・公式の否定）", "STEP 1-R"),
@@ -216,8 +220,10 @@ def missing(slug: str, tr: dict, rows) -> list:
     row = next((m for m in rows if isinstance(m, dict) and m.get("slug") == slug), None)
     if row is None:
         return []
+    started = str(tr.get("started") or "")
     return [k for k, _w, _s in items_for(row)
-            if (tr.get("items") or {}).get(k, {}).get("result") in (None, "LATER")]
+            if (tr.get("items") or {}).get(k, {}).get("result") in (None, "LATER")
+            and not (k in ITEM_SINCE and started < ITEM_SINCE[k])]
 
 
 def pending(rows=None, path: str = None) -> list:
@@ -444,6 +450,11 @@ def selftest() -> int:
       and "derived" in ka and "meta" in ka and "release" not in ka
       and "values" in kl and "values" in ka and "hall" in ka and "facts" in kl)
     t("★噂は昔の機種だけ（運営者「新台は噂はそもそもない」）★", "rumor" in kl and "rumor" not in ka)
+    _done_all = {k: {"at": "2026-11-20", "result": "OK", "note": ""} for k in kl if k != "display"}
+    t("★★スマホの幅の表示崩れ（display）は昔の機種にも新台にもある・足した日より前に始めた担当には求めない★★（2026-11-25・運営者）",
+      "display" in kl and "display" in ka
+      and missing("zzz_l", {"started": "2026-11-20", "items": _done_all}, rows) == []
+      and missing("zzz_l", {"started": "2026-11-26", "items": _done_all}, rows) == ["display"])
     try:
         done("zzz_l", "article", "OK", rows=rows, today="2026-11-10", path=p)
         _no_start = False
@@ -515,7 +526,8 @@ def selftest() -> int:
         _wrong = True
     t("　その機種に無い項目は記録できない（昔の機種の derived）", _wrong)
     start("zzz_l", today="2026-11-17", path=p)
-    t("★次に担当が回ってきたら、全項目を数え直す★", len(pending(rows, p)[0][1]) == len(kl))
+    t("★次に担当が回ってきたら、全項目を数え直す★（あとから足した項目は、足した日より前に始めた担当には数えない）",
+      len(pending(rows, p)[0][1]) == len([k for k in kl if not (k in ITEM_SINCE and "2026-11-17" < ITEM_SINCE[k])]))
     t("★★人気機種を今週見終わったと印したのに、その週に点検表を始めていなければ挙げる★★",
       popular_without_turn("2026-11-18", ["zzz_l", "zzz_x"], "2026-11-16", p) == ["zzz_x"]
       and popular_without_turn("2026-11-24", ["zzz_l"], "2026-11-23", p) == ["zzz_l"])
