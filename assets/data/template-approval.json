@@ -6,7 +6,7 @@
   "CNAME": "327a46d0a9fe00ef4a85721fec20aa84af66049b4a2e27029773bc1927b502fa",
   "about.html": "e8fe4acf657bff182aec9dc4991a1eb2241226b7bfa99a6178eed0107520ab68",
   "ads.txt": "e652db9bd62edb46d3cb65ec2822cd510b7c1e76becce15c7e60575ddb693a52",
-  "assets/css/practical.css": "94166fb857366d000378b57839a69a4b9bf520677b51bf60c8107e1854971ee5",
+  "assets/css/practical.css": "a9b7072927b5fffd9522d0271d4145b34337d22c013f3eb2f5c0e8dc5a293449",
   "assets/data/claim-allowlist.json": "a9aa01b940b4f61925d176072290772e76911ae43b1cb7f39b112bdda65a8a01",
   "assets/data/ledger.json": "1d496682cc43b0c44b98b4a314f9286d50093c425568cec21d1bbf8d7dc6b886",
   "assets/data/source-registry.json": "04a755e507c115889e5b35a3c0206be3612f9dd3130113ae2c3f694b662a2341",
@@ -70,7 +70,7 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "4a40e30d6fc0093895ff9c36d8bc8c1069b7b9b3f8ef96c36c318c3e4bfaff79",
-  "service-worker.js": "a31b2dfdaf69f71b3fc4d96b0d3bced80b09667ea7694d72b9937aa667e8656d",
+  "service-worker.js": "26a19285c4427ddd5849b338f5708f54387116ea75208736082cee94a138ba5c",
   "setting.html": "18cc2cc0d5cb14201134573c01df78b98b29762a400fd3498e0bb60a1d0b761b",
   "terms.html": "cfb07f039c9a57ad5c451118e31abfb7031fd9a4c98d4c0f88f76fd016711a65"
  }

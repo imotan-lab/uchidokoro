@@ -670,6 +670,11 @@ button, input, select { font: inherit; }
 .ev-table tbody td:nth-child(2) { color: var(--muted); white-space: nowrap; }
 .ev-table td .ev-yen { color: var(--muted); font-size: var(--fs-label); display: block; }
 .ev-table td.ev-delta { white-space: nowrap; font-weight: 700; }
+/* 見出しと金額を途中で折り返さない（2026-11-25・スマホで「天井ま／で」「（約19,400／円）」に割れていた）。狭い画面で収まらなければ欄の中で横に送る */
+.ev-table thead th { white-space: nowrap; }
+.ev-table td .ev-yen { white-space: nowrap; }
+#evTableBlock { overflow-x: auto; }
+@media (max-width: 420px) { .ev-table thead th, .ev-table tbody td { padding-left: 5px; padding-right: 5px; } }
 
 .is-landscape .site-header { position: static; }
 .is-landscape .setting-input-grid { grid-template-columns: 1fr 1fr 1fr; gap: 6px 16px; }
