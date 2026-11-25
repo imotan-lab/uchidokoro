@@ -1111,6 +1111,27 @@ MUTATIONS = [
         "run": ["scripts/pending_machines.py"],
     },
     {
+        "why": "★ランキング点検：前の日の割り当てで手を付けられなかった件を、今日に引き継がない★",
+        "file": "scripts/ranking_queue.py",
+        "before": "    got = (carry + [it for it in pick(n, items, store, today) if it not in carry])[:max(0, n)]",
+        "after": "    got = pick(n, items, store, today)",
+        "run": ["scripts/ranking_queue.py"],
+    },
+    {
+        "why": "★リセット期待値：前の日の割り当てで手を付けられなかった機種を、今日に引き継がない★",
+        "file": "scripts/reset_ev.py",
+        "before": "        chosen = (carry + [s for s in pick(PER_DAY, items, store, today) if s not in carry])[:PER_DAY]",
+        "after": "        chosen = pick(PER_DAY, items, store, today)",
+        "run": ["scripts/reset_ev.py"],
+    },
+    {
+        "why": "★直しの記録：--stuck-days を無視していつも14日で数える（朝の担当が昨日止まった記録を拾えない）★",
+        "file": "scripts/repair_journal.py",
+        "before": "            got = stuck(days=max(0, a.stuck_days))",
+        "after": "            got = stuck()",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
         "why": "★止めた欄：続けて止まった回数を数えない（何回止まっても毎朝先頭）★",
         "file": "scripts/checker_verdict.py",
         "before": '                                     if str(cur.get("result") or "") == "ERROR" else 1)',

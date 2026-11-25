@@ -2150,6 +2150,9 @@ def _selftest() -> int:
           any(x["finding_id"] == f15 for x in stuck()))
         t("　最近動いた記録は挙げない", not any(x["finding_id"] == f15 for x in stuck(_old_t + 86400)))
         t("　閉じた記録（取り下げ済み）は挙げない", not any(x["finding_id"] == f11 for x in stuck(_tst.time() + 30 * 86400)))
+        t("★★0日なら昨日止まった記録も挙げる・入口は --stuck-days をそのまま渡す★★（2026-11-25・Codexの4回目の指摘）",
+          any(x["finding_id"] == f15 for x in stuck(_old_t + 86400, days=0))
+          and "stuck(days=max(0, a.stuck_days))" in __import__("inspect").getsource(main))
         # ★★封のあと「直さない」と2AIが決めた記録も取り下げられる★★（2026-11-10・Codexの3回目＝実害）
         r14 = detect("zzz14", "text_gone", "十四番の文です。", source_sha256="5" * 64)
         f14 = r14["finding_id"]
@@ -2661,6 +2664,8 @@ def main() -> int:
                     help="--resolve で確かめる検査の名前（none＝検査なし・公開済みの直しだけ）")
     ap.add_argument("--stuck", action="store_true",
                     help=f"見張り番：{STUCK_DAYS}日以上動いていない、終わっていない記録（1＝ある）")
+    ap.add_argument("--stuck-days", type=int, default=STUCK_DAYS,
+                    help="--stuck で数える日数（朝の担当は 0＝終わっていない記録を全部。見張り番は既定の14）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
 
@@ -2668,7 +2673,9 @@ def main() -> int:
         return _selftest()
     if a.stuck:
         try:
-            got = stuck()
+            # ★朝の担当は --stuck-days 0 で、昨日止まった記録も拾う★（2026-11-25・Codexの4回目の指摘＝
+            #   選定（popular_machines --others）は全部を先頭に出すのに、担当が見る一覧は14日のままだった）
+            got = stuck(days=max(0, a.stuck_days))
         except Exception as e:                                   # noqa: BLE001
             print(f"🟠 直しの記録を読めません: {type(e).__name__}: {e}")
             return 2

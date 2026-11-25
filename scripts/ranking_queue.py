@@ -177,7 +177,14 @@ def plan_today(n: int, items: list, store: dict, today: str) -> tuple:
         #   STEP 0 の件をやって止まり、動かし直すと1日6件になった）
         done_today = sum(1 for e in st.values() if str((e or {}).get("tried_at") or "") == today)
         return left[:max(0, n - done_today)], None
-    got = pick(n, items, store, today)
+    # ★★前の日の割り当てで手を付けられなかった件は、今日の先頭に引き継ぐ★★（2026-11-25・Codexの4回目の指摘＝
+    #   日が変わると選び直していたので、締切で残った件が落ちて、また順番待ちになった）
+    carry = []
+    if plan.get("date") and plan.get("date") < today:
+        by_key = {_key(it[0], it[1]): it for it in items}
+        carry = [by_key[k] for k in plan.get("keys") or []
+                 if k in by_key and str((st.get(k) or {}).get("tried_at") or "") < str(plan["date"])]
+    got = (carry + [it for it in pick(n, items, store, today) if it not in carry])[:max(0, n)]
     return got, {"date": today, "keys": [_key(it[0], it[1]) for it in got]}
 
 
@@ -298,6 +305,11 @@ def selftest() -> int:
     _f2 = tried("a", "tenjo", "ERROR", "2026-11-09", _tmpq)
     _f3 = tried("a", "tenjo", "NOTE", "2026-11-10", _tmpq)
     _f4 = tried("a", "tenjo", "UNREADABLE", "2026-11-11", _tmpq)
+    _stc = {"items": {"reset::a": {"tried_at": "2026-11-09", "result": "NOTE", "done_at": "2026-11-09"}},
+            "plan": {"date": "2026-11-09", "keys": ["reset::a", "tenjo::a", "tenjo::c"]}}
+    _gc, _pc = plan_today(2, items, _stc, today)
+    t("★★前の日の割り当てで手を付けられなかった件は、今日の先頭に引き継ぐ★★（Codexの4回目の指摘＝締切で残った件が落ちた）",
+      [(r, s) for r, s, _ in _gc] == [("tenjo", "a"), ("tenjo", "c")] and _pc["date"] == today)
     t("　続けてやり切れなかった回数を数え、確かめ終えたら消す",
       _f1.get("fails") == 1 and _f2.get("fails") == 2 and "fails" not in _f3 and _f4.get("fails") == 1)
     st8 = {"items": {"reset::a": {"tried_at": "2026-11-05", "result": "UNREADABLE"},

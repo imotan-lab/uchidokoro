@@ -448,7 +448,13 @@ def plan_today(n: int, items: list, store: dict, today: str) -> list:
     if p.get("date") == today and isinstance(p.get("slugs"), list):
         chosen = p["slugs"]
     else:
-        chosen = pick(PER_DAY, items, store, today)
+        # ★★前の日の割り当てで手を付けられなかった機種は、今日の先頭に引き継ぐ★★（2026-11-25・Codexの4回目の指摘＝
+        #   日が変わると選び直していたので、締切で残った機種が落ちて、また順番待ちになった）
+        carry = []
+        if p.get("date") and str(p["date"]) < today and isinstance(p.get("slugs"), list):
+            _tr = store.get("tries") or {}
+            carry = [s for s in p["slugs"] if s in items and str((_tr.get(s) or {}).get("date") or "") < str(p["date"])]
+        chosen = (carry + [s for s in pick(PER_DAY, items, store, today) if s not in carry])[:PER_DAY]
         store["plan"] = {"date": today, "slugs": chosen}
     done = {s for s, tr in (store.get("tries") or {}).items() if tr.get("date") == today}
     return [s for s in chosen if s not in done][:max(0, n)]
@@ -774,6 +780,11 @@ def selftest() -> int:
     st2["tries"]["d"] = {"date": "2026-11-10", "result": "EV"}
     p2 = plan_today(5, items, st2, "2026-11-10")
     t("同じ日は同じ割り当てを使い回し、試した分は差し引く", p1[1:] == p2 and len(p2) == 4)
+    st3 = json.loads(json.dumps(st2))
+    p3 = plan_today(PER_DAY, ["h"] + items, st3, "2026-11-11")
+    t("★★前の日の割り当てで手を付けられなかった機種は、今日の先頭に引き継ぐ★★（Codexの4回目の指摘）"
+      "／まだ試していない新しい機種（h）より先",
+      p3[:4] == p1[1:] and p3[4] == "h")
     ok_n = sum(1 for _n, c in results if c)
     print(f"\n{ok_n}/{len(results)} 合格")
     return 0 if ok_n == len(results) else 1
