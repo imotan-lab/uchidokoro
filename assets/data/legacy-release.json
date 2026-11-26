@@ -531,6 +531,11 @@
    "url": "https://p-town.dmm.com/machines/4885",
    "checked": "2026-11-25"
   },
+  "yabachiba": {
+   "release": "2026-07-06",
+   "url": "https://p-town.dmm.com/machines/5047",
+   "checked": "2026-11-27"
+  },
   "yajikita_mairu": {
    "release": "2026-08-03",
    "url": "https://p-town.dmm.com/machines/5027",
@@ -674,6 +679,7 @@
   "umineko2": "2026-11-26",
   "valvrave": "2026-11-19",
   "valvrave2": "2026-11-25",
+  "yabachiba": "2026-11-27",
   "yajikita_mairu": "2026-11-26",
   "yorumungando": "2026-11-13",
   "yoshimune": "2026-11-14",
