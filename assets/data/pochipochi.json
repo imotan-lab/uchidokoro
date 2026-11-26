@@ -1,5 +1,34 @@
 {
   "configs": {
+    "bakemonogatari": {
+      "fields": [
+        {
+          "id": "watermelon",
+          "label": "スイカ回数",
+          "rateKey": "watermelon",
+          "sub": "全状態"
+        }
+      ],
+      "note": "スイカは全状態でカウントし、総ゲーム数にも同じ範囲のゲーム数を入れてください。",
+      "rates": {
+        "watermelon": {
+          "1": "1/87.4",
+          "2": "1/85.8",
+          "3": "1/84.9",
+          "4": "1/79.7",
+          "5": "1/74.8",
+          "6": "1/69.9"
+        }
+      },
+      "settings": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
     "basilisk_tenzen": {
       "fields": [
         {
@@ -3956,6 +3985,10 @@
     }
   },
   "ko_checked": {
+    "bakemonogatari": {
+      "checked": "2026-11-27",
+      "result": "HAS"
+    },
     "biohazard_re3": {
       "checked": "2026-11-21",
       "result": "HAS"

@@ -223,6 +223,16 @@ fetch("assets/data/machines.json").then(r=>r.json()).then(machines=>{
 // 機種別設定判別データ（追加機種はここに追記）
 const MACHINE_CONFIGS = {
   // ★POCHI-AUTO-BEGIN★（scripts/pochipochi.py が控えから作る・手で書かない）
+  bakemonogatari: {
+    settings: [1, 2, 3, 4, 5, 6],
+    note: "スイカは全状態でカウントし、総ゲーム数にも同じ範囲のゲーム数を入れてください。",
+    fields: [
+      {"id": "watermelon", "label": "スイカ回数", "sub": "全状態", "rateKey": "watermelon"},
+    ],
+    rates: {
+      watermelon: {1:1/87.4,2:1/85.8,3:1/84.9,4:1/79.7,5:1/74.8,6:1/69.9},
+    }
+  },
   basilisk_tenzen: {
     settings: [1, 2, 3, 4, 5, 6],
     fields: [
@@ -1431,16 +1441,6 @@ const MACHINE_CONFIGS = {
     resultNote: '※共通ベル確率で設定推測。2000G以上のデータ推奨。',
     rates: {
       bell: {1:1/99.3, 2:1/96.4, 4:1/84.0, 5:1/79.0, 6:1/77.1}
-    }
-  },
-  bakemonogatari: {
-    note: 'スイカは通常時のみカウント。',
-    fields: [
-      { id: 'watermelon', label: 'スイカ回数', sub: '通常時のみ', rateKey: 'watermelon' }
-    ],
-    resultNote: '※スイカ確率が設定判別の軸。1/80を切れば高設定の目安。',
-    rates: {
-      watermelon: {1:1/87.4, 2:1/85.8, 4:1/79.7, 5:1/74.8, 6:1/69.9}
     }
   },
   magireco: {
