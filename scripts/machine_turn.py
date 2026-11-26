@@ -425,6 +425,8 @@ def plan_text(slug: str, rows=None, path: str = None) -> str:
     for k, what, step in items_for(row):
         got = tr["items"].get(k)
         mark = f"{got['result']}（{got['at']}）" if got else "未"
+        if not got and tr["started"] and k in ITEM_SINCE and str(tr["started"]) < ITEM_SINCE[k]:
+            mark = f"対象外（{ITEM_SINCE[k]}より前に始めた担当）"   # ★missing() と同じ決まり★（2026-11-26・Codexの指摘）
         lines.append(f"  [{mark}] {k}: {what} ／ {step}")
     return "\n".join(lines)
 
