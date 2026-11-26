@@ -39,12 +39,14 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import hashlib
+import html as _html_mod
 import io
 import json
 import os
 import re
 import subprocess
 import sys
+import unicodedata as _ud
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -58,6 +60,11 @@ BASIS = os.path.join(_lp.DOCS, "add_items_basis.json")
 ADDED = os.path.join(BASE, "assets", "data", "added-sections.json")
 WHY_MIN = 15
 OPS = ("add_section", "add_rows", "add_line", "add_fact")
+# ★設定示唆の札に書ける数字は「設定1〜6」だけ★＝その形の後ろに数字・単位・記号が続くものは数字として残す
+#   ★後ろに続いてよい語を決める★（「設定6割」のような数量を番号として通さない＝Codexの7回目）
+_SETTEI_N = r"設定[1-6](?=以上|以下|濃厚|否定|示唆|確定|期待|優遇|が|の|を|は|と|・|、|。|）|\)|$)"
+# ★漢数字・大字（数字の判定 numerals.is_numeral_char が拾わないものも含む）★＝札では使えない（Codexの6回目）
+_KANJI_DIGITS = set("〇一二三四五六七八九十百千万零壱弐貳参參肆伍陸漆柒捌玖拾佰仟萬")
 # ★基本情報表に1行足す（昔の機種だけ）★（2026-11-10・洗い出し4回目＝導入日・メーカーの行が92機種で無かった）
 #   導入日は fields に "legacy_release" と書くと、昔の機種の導入日の控え（DMMの機種ページの値）の数字が使える
 LEGACY_RELEASE_FIELD = "legacy_release"
@@ -359,6 +366,67 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
                 if not p:
                     sec.setdefault("body", []).append(t)
                     done.append(f"「{sec['title']}」に1文")
+            elif sec.get("type") == "settei" and "tables" not in sec:
+                # ★★設定示唆の札（rows＝要素 trigger と示唆 hint）に行を足す★★（2026-11-26）
+                #   札は trigger と hint の2つの文字だけ（強さの印など知らない鍵は断る）・同じ札は足さない・
+                #   数字は表と同じく記事か名指しした確定値に在るものだけ（下の _numbers_ok が見る）
+                #   ★描画と同じ形の欄だけ★（tables の鍵が在る欄はブラウザが表として描くので、ここでは足さない＝Codexの指摘）
+                import numerals as _nm
+                import build_new_article as _bna_v
+                if not isinstance(sec.get("rows"), list):
+                    p.append(f"{w}: 欄「{sec.get('title')}」の札（rows）が読めません（記事データを確かめてください）")
+                    continue
+                rows = a.get("rows")
+                if not isinstance(rows, list) or not rows:
+                    p.append(f"{w}: rows は1行以上です")
+                    continue
+                for r_i, r in enumerate(rows):
+                    if not isinstance(r, dict) or set(r) != {"trigger", "hint"}:
+                        p.append(f"{w}: rows[{r_i}] は設定示唆の札なので trigger と hint の2つだけで書きます")
+                        continue
+                    for k in ("trigger", "hint"):
+                        p += _text_ng(r[k], f"{w} rows[{r_i}].{k}", 1, CELL_MAX)
+                        # ★出どころの照合には「設定N」を除いた文字を渡す★（設定の番号を「6濃」のような単位つきの数と読ませない＝Codexの7回目）
+                        texts.append(re.sub(_SETTEI_N, "設定", r[k]) if isinstance(r[k], str) else "")
+                        if isinstance(r[k], str) and not _bna_v.visible_text(r[k], markdown=False).strip():
+                            p.append(f"{w}: rows[{r_i}].{k} は読者に見える文字で書きます")
+                        # ★文字参照（&#55; など）は書かない★＝ブラウザでは数字に化けて照合をすり抜ける（Codexの2回目の指摘）
+                        if isinstance(r[k], str) and _html_mod.unescape(r[k]) != r[k]:
+                            p.append(f"{w}: rows[{r_i}].{k} に文字参照（&…;）は書けません")
+                        # ★桁区切り（2,300G）は書かない★＝数字が2と300Gに分かれて照合をすり抜ける（Codexの3回目の指摘）
+                        if isinstance(r[k], str) and re.search(r"[0-9０-９][,，][0-9０-９]", r[k]):
+                            p.append(f"{w}: rows[{r_i}].{k} の数字に桁区切りのカンマは使えません")
+                        # ★数字のすぐ前後に空白を置かない・半角の - 以外のマイナス記号を使わない★
+                        #   （空白は単位の区切り、全角マイナスは符号と読まれず照合をすり抜ける＝Codexの4回目の指摘）
+                        if isinstance(r[k], str) and (re.search(r"[0-9０-９]\s|\s[0-9０-９]", r[k])
+                                                      or re.search(r"[－−‐―ー‑–—][0-9０-９]", r[k])):
+                            p.append(f"{w}: rows[{r_i}].{k} の数字の前後に空白やマイナス記号を置けません")
+                        # ★★札に書ける数字は「設定1〜6」の形だけ★★（Codexの5回目＝分数・小数・符号が共有の数字照合をすり抜ける）
+                        #   示唆は「設定6濃厚」「設定4以上濃厚」の形で足りる。確率などの数字は表（add_section）で書く
+                        #   ★数としての値を持つ文字は全部数字とみなす★（unicodedata.numeric＝廿・貮など名簿に無い異体字も拾う＝Codexの8回目）
+                        if isinstance(r[k], str) and any(_nm.is_numeral_char(ch) or ch in _KANJI_DIGITS
+                                                         or _ud.numeric(ch, None) is not None
+                                                         for ch in re.sub(_SETTEI_N, "", r[k])):
+                            p.append(f"{w}: rows[{r_i}].{k} の札に書ける数字は「設定1〜6」だけです（確率などは表で足す）")
+                        # ★数字は半角の算用数字だけ★（漢数字・丸数字は数字の照合をすり抜けるため＝Codexの指摘）
+                        if isinstance(r[k], str) and any(_nm.is_numeral_char(ch) and not ("0" <= ch <= "9")
+                                                         for ch in r[k]):
+                            p.append(f"{w}: rows[{r_i}].{k} の数字は半角の算用数字で書きます（漢数字・丸数字は使えません）")
+                    # ★既存の札は辞書のほか配列（[要素, 示唆]）の形もある★＝見える2セルで比べる（Codexの指摘）
+                    def _cell_txt(c):
+                        return re.sub(r"\s+", " ", str(c.get("text") if isinstance(c, dict) else c)).strip()
+                    _have = {(_cell_txt(x.get("trigger")), _cell_txt(x.get("hint"))) if isinstance(x, dict)
+                             else tuple(_cell_txt(c) for c in x[:2])
+                             for x in (sec.get("rows") or []) if isinstance(x, (dict, list))}
+                    if (_cell_txt(r["trigger"]), _cell_txt(r["hint"])) in _have:
+                        p.append(f"{w}: rows[{r_i}] と同じ札がもうあります（同じ行がもうあります）")
+                    elif r in (sec.get("rows") or []) or (_cell_txt(r["trigger"]), _cell_txt(r["hint"])) in {
+                            (_cell_txt(x.get("trigger")), _cell_txt(x.get("hint")))
+                            for x in rows[:r_i] if isinstance(x, dict)}:
+                        p.append(f"{w}: rows[{r_i}] と同じ行がもうあります")
+                if not p:
+                    sec.setdefault("rows", []).extend(rows)
+                    done.append(f"「{sec['title']}」の札に{len(rows)}行")
             else:
                 ti = a.get("table", 0)
                 tbls = sec.get("tables") or []
@@ -817,6 +885,99 @@ def selftest() -> int:
     finally:
         g.update(keep)
         _cvx.for_slug = keep_fs
+    # ★★設定示唆の札（type=settei の rows＝要素と示唆）にも行を足せる★★（2026-11-26・朝の更新タスク）
+    #   直す前は add_rows が表（tables）しか見ず、大手にあって記事に無い札（例＝BT中のムービーの別パターン）を足す道が無かった
+    _st = {"slug": "zzz_g", "sections": [
+        {"title": "天井・恩恵", "body": ["天井は非搭載です。"]},
+        {"title": "設定示唆まとめ", "type": "settei", "rows": [{"trigger": "終了画面：カヲル", "hint": "設定6濃厚"}]}]}
+    _rs = plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                              "rows": [{"trigger": "ムービー：リリス", "hint": "高設定示唆（強）"}]}), conf)
+    t("★★設定示唆の札にも、要素と示唆の行を足せる★★",
+      not _rs["problems"] and _rs["sections"][1]["rows"][-1] == {"trigger": "ムービー：リリス", "hint": "高設定示唆（強）"})
+    _rs2 = plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                               "rows": [{"trigger": "ムービー：リリス", "hint": "高設定示唆", "badge": "strong"}]}), conf)
+    t("　札の行は trigger と hint の2つだけ（知らない鍵は断る）", bool(_rs2["problems"]))
+    _rs3 = plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                               "rows": [{"trigger": "終了画面：カヲル", "hint": "設定6濃厚"}]}), conf)
+    t("　同じ札がもうあれば断る", any("同じ行" in x for x in _rs3["problems"]))
+    _rs4 = plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                               "rows": [{"trigger": "ムービー：謎", "hint": "設定7以上濃厚"}]}), conf)
+    t("　札の文字にも、記事と確定値に無い数字は書けない", any("無い数字" in x for x in _rs4["problems"]))
+    _rs5 = plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                               "rows": [{"trigger": "ムービー：謎", "hint": "設定七濃厚"}]}), conf)
+    t("　漢数字・丸数字で数字の照合をすり抜けられない（Codexの指摘）", any("算用数字" in x for x in _rs5["problems"]))
+    _rs6 = plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                               "rows": [{"trigger": "ムービー：リリス", "hint": "高設定示唆（強）"},
+                                        {"trigger": "ムービー：リリス", "hint": "高設定示唆（強）"}]}), conf)
+    t("　同じ依頼の中の重複も断る（Codexの指摘）", any("同じ行" in x for x in _rs6["problems"]))
+    _rs7 = plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                               "rows": [{"trigger": "ムービー：リリス", "hint": "&nbsp;"}]}), conf)
+    t("　読者に見えない文字だけの札は断る（Codexの指摘）", any("見える文字" in x for x in _rs7["problems"]))
+    _rs10 = plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                                "rows": [{"trigger": "ムービー：謎", "hint": "設定&#55 濃厚"}]}), conf)
+    _st11 = {"slug": "zzz_g", "sections": [{"title": "設定示唆まとめ", "type": "settei",
+                                           "rows": [["終了画面：全員集合", "設定2以上濃厚"]]}]}
+    _rs11 = plan(_st11, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                                  "rows": [{"trigger": "終了画面：全員集合", "hint": "設定2以上濃厚"}]}), conf)
+    t("　配列の形の既存の札と同じ内容も断る（Codexの2回目の指摘）", any("同じ札" in x for x in _rs11["problems"]))
+    _st12 = {"slug": "zzz_g", "sections": [{"title": "設定示唆まとめ", "type": "settei",
+                                           "rows": [{"trigger": "終了画面：リオ", "hint": {"text": "奇数設定期待度アップ", "badge": "weak"}}]}]}
+    _rs12 = plan(_st12, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                                  "rows": [{"trigger": "終了画面：リオ", "hint": "奇数設定期待度アップ"}]}), conf)
+    t("　示唆セルが text と badge の辞書の既存の札と同じ内容も断る（Codexの3回目の指摘）",
+      any("同じ札" in x for x in _rs12["problems"]))
+    _rs13 = plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                                "rows": [{"trigger": "ムービー：謎", "hint": "1,6G以内で濃厚"}]}), conf)
+    t("　桁区切りのカンマで数字を分けて照合をすり抜けられない（Codexの3回目の指摘）",
+      any("桁区切り" in x for x in _rs13["problems"]))
+    _rs14 = plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                                "rows": [{"trigger": "ムービー：謎", "hint": "6 回到達で濃厚"}]}), conf)
+    _rs15 = plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                                "rows": [{"trigger": "ムービー：謎", "hint": "－6枚で濃厚"}]}), conf)
+    t("　数字の後ろの空白・全角マイナスで単位や符号を隠せない（Codexの4回目の指摘）",
+      any("空白やマイナス" in x for x in _rs14["problems"]) and any("空白やマイナス" in x for x in _rs15["problems"]))
+    _rs16 = plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                                "rows": [{"trigger": "終了画面：カヲル", "hint": "設定6濃厚"}]}), conf)
+    _st17 = {"slug": "zzz_g", "sections": [{"title": "設定示唆まとめ", "type": "settei",
+                                           "rows": [{"trigger": "終了画面 加賀&赤城", "hint": "高設定示唆"}]}]}
+    _rs17 = plan(_st17, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                                  "rows": [{"trigger": "終了画面  加賀&赤城", "hint": "高設定示唆"}]}), conf)
+    _bad = [plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                                "rows": [{"trigger": "ムービー：謎", "hint": h}]}), conf)
+            for h in ("1/100で出現", ".6%で濃厚", "﹣6枚で濃厚", "設定16濃厚", "設定柒濃厚", "出現率の設定6%で濃厚",
+                      "出現率の設定6割で濃厚", "設定貳以上濃厚", "設定6濃厚（出現率は廿%）", "出現率は貮割")]
+    t("★★札に書ける数字は「設定1〜6」だけ（分数・小数・符号で照合をすり抜けない＝Codexの5回目）★★",
+      all(any("設定1〜6」だけ" in x for x in b["problems"]) for b in _bad))
+    _ok6 = plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                               "rows": [{"trigger": "REG中キャラ紹介：カヲル", "hint": "設定6濃厚"}]}), conf)
+    t("　「設定6濃厚」は書ける", not _ok6["problems"])
+    _st_b = {"slug": "zzz_g", "sections": [
+        {"title": "天井・恩恵", "body": ["天井は非搭載です。設定6の機械割は高めです。"]},
+        {"title": "設定示唆まとめ", "type": "settei", "rows": [{"trigger": "終了画面：アスカ", "hint": "高設定示唆"}]}]}
+    _ok6b = plan(_st_b, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                                  "rows": [{"trigger": "REG中キャラ紹介：カヲル", "hint": "設定6濃厚"}]}), conf)
+    t("　記事に「設定6濃厚」の文字が無くても「設定6濃厚」は書ける（Codexの7回目＝濃を単位と読んで断っていた）",
+      not _ok6b["problems"])
+    _rs18 = plan(_st, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                                "rows": [{"trigger": "終了画面 加賀&赤城", "hint": "高設定示唆"},
+                                         {"trigger": "終了画面  加賀&赤城", "hint": "高設定示唆"}]}), conf)
+    t("　同じ依頼の中で空白の数だけ違う札も断る（Codexの5回目の重箱）", any("同じ行" in x for x in _rs18["problems"]))
+    t("　空白の数だけ違う同じ札も断る（Codexの4回目の重箱）",
+      any("同じ札" in x for x in _rs16["problems"]) and any("同じ札" in x for x in _rs17["problems"]))
+    t("　文字参照（&#55 など）で表示上の数字を隠せない（Codexの2回目の指摘）",
+      any("文字参照" in x for x in _rs10["problems"]))
+    _st8 = {"slug": "zzz_g", "sections": [{"title": "設定示唆まとめ", "type": "settei", "tables": [],
+                                          "rows": [{"trigger": "終了画面：カヲル", "hint": "設定6濃厚"}]}]}
+    _rs8 = plan(_st8, row, dec({"op": "add_rows", "section": "設定示唆まとめ",
+                                "rows": [{"trigger": "ムービー：リリス", "hint": "高設定示唆（強）"}]}), conf)
+    t("　表の鍵（tables）を持つ欄には札を足さない（ブラウザは表として描く＝Codexの指摘）", bool(_rs8["problems"]))
+    try:
+        _rs9 = plan({"slug": "zzz_g", "sections": [{"title": "設定示唆まとめ", "type": "settei", "rows": None}]}, row,
+                    dec({"op": "add_rows", "section": "設定示唆まとめ",
+                         "rows": [{"trigger": "ムービー：リリス", "hint": "高設定示唆（強）"}]}), conf)
+    except Exception as _e9:                      # noqa: BLE001  ★例外で落ちたら❌と数える★
+        _rs9 = {"problems": [f"例外: {type(_e9).__name__}"]}
+    t("　札が壊れた欄では例外で落ちずに理由を返す（Codexの指摘）", any("読めません" in x for x in _rs9["problems"]))
     print(f"\n{ok[0]}/{sum(ok)} 合格")
     return 0 if ok[1] == 0 else 1
 
