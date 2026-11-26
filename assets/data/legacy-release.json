@@ -436,6 +436,11 @@
    "url": "https://p-town.dmm.com/machines/4583",
    "checked": "2026-11-11"
   },
+  "sf6": {
+   "release": "2026-08-03",
+   "url": "https://p-town.dmm.com/machines/5068",
+   "checked": "2026-11-27"
+  },
   "shake_bt": {
    "release": "2025-10-20",
    "url": "https://p-town.dmm.com/machines/4893",
@@ -650,6 +655,7 @@
   "sengoku_otome4": "2026-11-13",
   "sengoku_otome5": "2026-11-24",
   "sf5": "2026-11-11",
+  "sf6": "2026-11-27",
   "shake_bt": "2026-11-15",
   "shaman_king": "2026-11-26",
   "shinuchi_yoshimune": "2026-11-25",
