@@ -979,8 +979,12 @@ def _inner_occurrence(token: str, q: str) -> bool:
         for mo in _re.finditer(_re.escape(f1), q):
             if mo.start() < 1 or mo.end() >= len(q):
                 continue                   # ★引用の端に触れる出現は数えない★
+            # ★小数点で始まる値の前が数字なら、数の途中（−0.5枚 の .5枚）なので数えない★（Codex review334 の1）
+            if f1[:1] in ".．" and q[mo.start() - 1:mo.start()].isdigit():
+                continue
             # ★符号で始まらない値の直前（空白を挟んでも）に符号があれば、符号を落とした値なので数えない★（Codex review310 の2・review333）
-            if f1[:1] not in _SIGN_CHARS and _re.search("[%s]\\s*$" % _re.escape(_SIGN_CHARS), q[:mo.start()]):
+            #   ★見るのは数字で始まる値だけ★（「— 最大500枚」の区切りのダッシュを符号と読まない＝Codex review334 の2）
+            if f1[:1].isnumeric() and _re.search("[%s]\\s*$" % _re.escape(_SIGN_CHARS), q[:mo.start()]):
                 continue
             if f1[:1].isnumeric() and _num_edge(q, mo.start() - 1, -1):
                 continue                   # ★別の数の一部（左）★
@@ -4722,6 +4726,9 @@ def selftest() -> int:
           and not wording_problems("item_values#d", ["300枚"], [{"quote": "対象期間（月曜〜金曜）300枚プレゼント！"}])
           # ★Codex review333★
           and not wording_problems("item_values#d", ["500枚±50枚"], [{"quote": "試算の誤差は±50枚です。平均差枚の目安は500枚±50枚です。"}])
+          # ★Codex review334★
+          and bool(wording_problems("item_values#d", [".5枚"], [{"quote": "平均差枚は−0.5枚です。"}]))
+          and not wording_problems("item_values#d", ["最大500枚"], [{"quote": "記念キャンペーン — 最大500枚を獲得できます。"}])
           and bool(wording_problems("item_values#d", ["2.5枚"], [{"quote": "純増は2.5枚/1Gです"}]))
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
           # ★範囲の判定は「数＋単位」だけ（Codex review317 の2）★
