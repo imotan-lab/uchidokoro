@@ -12940,13 +12940,6 @@ MUTATIONS = [
         "run": ["scripts/checker_verdict.py"],
     },
     {
-        "why": "★チェッカー：まいるの線を、一覧の文や注記に「G」で書ける★",
-        "file": "scripts/checker_verdict.py",
-        "before": "    return {(str(v), \"G\"), (str(v), \"\")} if unit == \"G\" else {(str(v), \"\")}\n",
-        "after": "    return {(str(v), \"G\"), (str(v), \"\")}\n",
-        "run": ["scripts/checker_verdict.py"],
-    },
-    {
         "why": "★大手との差：item_values の照合で空白の連なりを詰めない（-  500枚 が通る）★",
         "file": "scripts/add_items.py",
         "before": "    text = re.sub(r\"[\\s　]+\", \" \", text)\n",
@@ -13148,6 +13141,20 @@ MUTATIONS = [
         "before": "            if _re.match(r\"\\s*[/／]\", q[mo.end():]):\n",
         "after": "            if False:\n",
         "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：item_values で、複合単位や分数の後ろ半分（2.5枚/1G の 1G）を値にできる★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if _re.search(r\"[/／]\\s*$\", q[:mo.start()]):\n",
+        "after": "            if False:\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★大手との差：伏せる表示値が無いときも文の空白を詰める（記事と同じ書き方が通らない）★",
+        "file": "scripts/add_items.py",
+        "before": "    if not strs:\n        return text                       # ★伏せる表示値が無ければ文はそのまま★",
+        "after": "    if False:\n        return text                       # ★伏せる表示値が無ければ文はそのまま★",
+        "run": ["scripts/add_items.py"],
     },
     {
         "why": "★チェッカー：まいるの機種でも、早見表の天井（G数）を混ぜる★",

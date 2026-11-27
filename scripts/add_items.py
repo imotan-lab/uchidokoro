@@ -147,6 +147,8 @@ def mask_items(text: str, strs) -> str:
     """
     if not isinstance(text, str):
         return text                       # ★文字でないものは形の検査が断る★（ここで例外にしない＝Codex review314 の4）
+    if not strs:
+        return text                       # ★伏せる表示値が無ければ文はそのまま★（記事の側の数の読み方とそろえる＝Codex review319 の2）
     # ★空白の連なりは1つに詰めてから見る★（「-  500枚」の空白2つで符号を飛び越えさせない＝Codex review311 の1）
     #   ★改行しない空白（U+00A0）なども空白として詰める★（Codex review318 の2）
     text = re.sub(r"[\s　]+", " ", text)
@@ -1213,6 +1215,11 @@ def selftest() -> int:
                                  "fields": ["item_values#s"]}), _confI7)["problems"]
     t("★★全角の数字・先に伏せた表示値のあとの範囲（１００枚-500枚・100.0枚-500枚）も作れない★★",
       any("無い数字" in x for x in _rW) and any("無い数字" in x for x in _rD))
+    _detN = {"slug": "zzz_g", "sections": [{"title": "天井・恩恵", "body": ["平均差枚は-\u00a0500枚です。"]},
+                                           {"title": "噂・未確定情報", "type": "rumor", "body": ["噂です。"]}]}
+    t("　確定値を名指ししない足す文は、記事と同じ書き方（改行しない空白つき）のまま通る（Codex review319 の2）",
+      not plan(_detN, row, dec({"op": "add_section", "title": "差枚",
+                                "table": {"headers": ["項目", "値"], "rows": [["差枚", "-\u00a0500枚"]]}}), conf)["problems"])
     t("★★改行しない空白を挟んだ符号（- 500枚）も足せない★★",
       any("無い数字" in x for x in _ivs("平均差枚は- 500枚です")))
     _dIk = dec({"op": "add_section", "title": "差枚",

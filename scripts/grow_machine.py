@@ -2244,6 +2244,27 @@ def _carry_meta_tests(t) -> None:
     finally:
         globals()["added_basis"] = _keep_ab
     t("　名指しした確定値が取り消されたら、出どころが記事の数でも持ち越さない", _got_iv8 == [])
+    # ★出どころの控えが無い古い記録でも、名指しした項目が gone なら持ち越さない★（壊し方 1586 だけが捕まえる形）
+    try:
+        globals()["added_basis"] = lambda s, ti, basis=None: ([], ["item_values#red"])
+        _new_iv11 = {"sections": [{"title": "天井・恩恵", "body": ["赤BB直撃は1/8192です。"]}]}
+        _got_iv11 = carry_added_sections(_old_iv, _new_iv11, "zzz_a", titles={"赤BB直撃"}, confirmed=_conf_iv,
+                                         gone=["item_values#red"])
+    finally:
+        globals()["added_basis"] = _keep_ab
+    t("　出どころの控えが無くても、名指しした項目が出典から消えたら持ち越さない", _got_iv11 == [])
+    # ★名指ししていない確定値でも、gone なら数の出どころに数えない★（壊し方 1580 だけが捕まえる形）
+    try:
+        globals()["added_basis"] = lambda s, ti, basis=None: ([], [])
+        _new_iv12 = {"sections": [{"title": "天井・恩恵", "body": ["通常時の天井は999Gです。"]}]}
+        _got_iv12 = carry_added_sections(_old_n, _new_iv12, "zzz_a", titles={"有利区間"}, confirmed=_conf_n,
+                                         gone=["ceiling#yuuri"])
+        _new_iv13 = {"sections": [{"title": "天井・恩恵", "body": ["通常時の天井は999Gです。"]}]}
+        _got_iv13 = carry_added_sections(_old_n, _new_iv13, "zzz_a", titles={"有利区間"}, confirmed=_conf_n)
+    finally:
+        globals()["added_basis"] = _keep_ab
+    t("　名指ししていない確定値でも、出典から消えたら数の出どころに数えない（対照つき）",
+      _got_iv12 == [] and _got_iv13 == ["有利区間"])
     t("　（配線）持ち越した欄があれば、項目に結び付かない問題（公式URLが別の機種）でも書かない（Codex review312 の3）",
       '    if _carried_f:\n        _bad_c += [x for x in (_rv.get("invalid_global") or [])'
       in inspect.getsource(plan_one).replace("\r\n", "\n"))

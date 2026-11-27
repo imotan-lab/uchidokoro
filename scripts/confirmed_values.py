@@ -1003,6 +1003,9 @@ def _inner_occurrence(token: str, q: str) -> bool:
             # ★後ろに「/」が続くなら、複合単位（2.5枚/G）や分数の途中なので数えない★（Codex review318 の3）
             if _re.match(r"\s*[/／]", q[mo.end():]):
                 continue
+            # ★前に「/」があるなら、複合単位や分数の後ろ半分（2.5枚/1G の 1G）なので数えない★（Codex review319 の1）
+            if _re.search(r"[/／]\s*$", q[:mo.start()]):
+                continue
             return True
     return False
 
@@ -4625,6 +4628,7 @@ def selftest() -> int:
           # ★小数・けた区切りの続きも引用全体で見る★（Codex review314 の1）
           and bool(wording_problems("item_values#d", ["500"], [{"quote": "500の場合および差枚は500.5です"}]))
           and bool(wording_problems("item_values#d", ["500"], [{"quote": "500の場合および差枚は1,500枚です"}]))
+          and bool(wording_problems("item_values#d", ["500"], [{"quote": "500の場合および差枚は1,500です"}]))
           and bool(wording_problems("item_values#d", ["-500"], [{"quote": "-500の場合および差枚は-500.5です"}]))
           # ★「42 %」の書き方も受け取る★（Codex review314 の3）
           and not wording_problems("item_values#d", ["42%"], [{"quote": "継続率は42 %です"}])
@@ -4639,6 +4643,8 @@ def selftest() -> int:
           # ★複合単位の前半を値にしない（Codex review318 の3）★
           and bool(wording_problems("item_values#d", ["2.5枚"], [{"quote": "純増は2.5枚/Gです"}]))
           and not wording_problems("item_values#d", ["2.5枚/G"], [{"quote": "純増は2.5枚/Gです"}])
+          and bool(wording_problems("item_values#d", ["1G"], [{"quote": "純増は2.5枚/1Gです"}]))
+          and bool(wording_problems("item_values#d", ["1G"], [{"quote": "純増は2.5枚 / 1Gです"}]))
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
           # ★範囲の判定は「数＋単位」だけ（Codex review317 の2）★
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "設定6の差枚は-500枚です"}])
