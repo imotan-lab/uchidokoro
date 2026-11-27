@@ -984,7 +984,9 @@ def _inner_occurrence(token: str, q: str) -> bool:
                 continue
             # ★符号で始まらない値の直前（空白を挟んでも）に符号があれば、符号を落とした値なので数えない★（Codex review310 の2・review333）
             #   ★見るのは数字で始まる値だけ★（「— 最大500枚」の区切りのダッシュを符号と読まない＝Codex review334 の2）
-            if f1[:1].isnumeric() and _re.search("[%s]\\s*$" % _re.escape(_SIGN_CHARS), q[:mo.start()]):
+            #   ★小数点で始まる値（.5枚）も数の値として見る★（−.5枚 の .5枚＝Codex review335）
+            if (f1[:1].isnumeric() or (f1[:1] in ".．" and f1[1:2].isnumeric())) \
+                    and _re.search("[%s]\\s*$" % _re.escape(_SIGN_CHARS), q[:mo.start()]):
                 continue
             if f1[:1].isnumeric() and _num_edge(q, mo.start() - 1, -1):
                 continue                   # ★別の数の一部（左）★
@@ -4729,6 +4731,9 @@ def selftest() -> int:
           # ★Codex review334★
           and bool(wording_problems("item_values#d", [".5枚"], [{"quote": "平均差枚は−0.5枚です。"}]))
           and not wording_problems("item_values#d", ["最大500枚"], [{"quote": "記念キャンペーン — 最大500枚を獲得できます。"}])
+          # ★Codex review335★
+          and bool(wording_problems("item_values#d", [".5枚"], [{"quote": "平均差枚は−.5枚です。"}]))
+          and bool(wording_problems("item_values#d", [".5枚"], [{"quote": "平均差枚は− .5枚です。"}]))
           and bool(wording_problems("item_values#d", ["2.5枚"], [{"quote": "純増は2.5枚/1Gです"}]))
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
           # ★範囲の判定は「数＋単位」だけ（Codex review317 の2）★

@@ -13208,8 +13208,8 @@ MUTATIONS = [
     {
         "why": "★確定値：item_values で、符号で始まらない値の直前に符号があっても受け取る（−500枚 から 500枚）★",
         "file": "scripts/confirmed_values.py",
-        "before": "            if f1[:1].isnumeric() and _re.search(\"[%s]\\\\s*$\" % _re.escape(_SIGN_CHARS), q[:mo.start()]):\n",
-        "after": "            if False:\n",
+        "before": "            if (f1[:1].isnumeric() or (f1[:1] in \".．\" and f1[1:2].isnumeric())) \\\n",
+        "after": "            if False \\\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -13222,8 +13222,15 @@ MUTATIONS = [
     {
         "why": "★確定値：item_values で、語で始まる値の直前の区切りのダッシュも符号と読む（— 最大500枚 を断る）★",
         "file": "scripts/confirmed_values.py",
-        "before": "            if f1[:1].isnumeric() and _re.search(\"[%s]\\\\s*$\" % _re.escape(_SIGN_CHARS), q[:mo.start()]):\n",
-        "after": "            if f1[:1] not in _SIGN_CHARS and _re.search(\"[%s]\\\\s*$\" % _re.escape(_SIGN_CHARS), q[:mo.start()]):\n",
+        "before": "            if (f1[:1].isnumeric() or (f1[:1] in \".．\" and f1[1:2].isnumeric())) \\\n",
+        "after": "            if (f1[:1] not in _SIGN_CHARS) \\\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：item_values で、小数点で始まる値（.5枚）の直前の符号を見ない（−.5枚 から .5枚）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if (f1[:1].isnumeric() or (f1[:1] in \".．\" and f1[1:2].isnumeric())) \\\n",
+        "after": "            if (f1[:1].isnumeric()) \\\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {
