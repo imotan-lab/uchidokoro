@@ -51,6 +51,12 @@ SITES = {
 }
 SITE_ORDER = ("nana-press", "slopachi-quest")
 QUOTE_KEYS = ("title", "header", "row", "conditions")
+# ★★表の題にリセットの語が無い「天井短縮時」の表（2026-11-27）★★＝なな徹は、設定変更でも
+#   ほかの契機（ST駆け抜け等）でも短縮される機種で、表を「天井短縮あり時の天井期待値」とだけ題する。
+#   そのときだけ、設定変更（リセット）で天井が短縮されるという同じページの逐語を5つ目の引用に要る。
+#   ★どちらの表を採るかは2AIが原文で決めて why に書く★（機械は語と実在だけ見る）。
+#   直す前は題だけで断り、パリピ孔明・ゴッドイーター・七つの魔剣が2週間決まらないままだった。
+SHORT_KEY = "shortening"
 COND_KEYS = ("rate", "money", "setting", "stop", "not_included")
 TRY_RESULTS = ("UNREADABLE", "UNDECIDED", "ERROR")
 MIN_WHY = 15
@@ -235,16 +241,19 @@ def record_problems(slug: str, rec) -> list:
         if rec.get("site") not in SITES or _site_of(rec.get("url")) != rec.get("site"):
             out.append("出典のURLとサイトが合いません")
         q = rec.get("quotes")
-        if not isinstance(q, dict) or set(q) != set(QUOTE_KEYS):
-            out.append("引用（quotes）は title・header・row・conditions の4つです")
+        if not isinstance(q, dict) or set(q) - {SHORT_KEY} != set(QUOTE_KEYS):
+            out.append("引用（quotes）は title・header・row・conditions の4つ（と、短縮の表なら shortening）です")
         else:
-            for k in QUOTE_KEYS:
+            for k in q:
                 v = q.get(k)
                 if not isinstance(v, str) or not (MIN_QUOTE <= len(v.strip()) <= MAX_QUOTE):
                     out.append(f"引用 {k} は{MIN_QUOTE}〜{MAX_QUOTE}字です")
             if not out:
                 if not any(w in flat(q["title"]) for w in ("リセット", "設定変更")):
-                    out.append("表題の引用に「リセット」か「設定変更」がありません")
+                    sh = flat(q.get(SHORT_KEY) or "")
+                    if not (any(w in sh for w in ("リセット", "設定変更")) and "短縮" in sh):
+                        out.append("表題の引用に「リセット」か「設定変更」がありません"
+                                   "（天井短縮時の表なら、設定変更で天井が短縮されるという逐語を shortening に）")
                 if not any(w in flat(q["header"]) for w in ("5.6", "56")):
                     out.append("見出しの引用に「5.6」か「56」がありません")
                 if type(ev) is int and not signed_amount_in(ev, q["row"]):
@@ -299,7 +308,7 @@ def build_record(dec: dict, fetch=None, today: str = "") -> dict:
     except Exception as e:                       # noqa: BLE001
         raise EvError(f"出典を取り直せません: {type(e).__name__}: {str(e)[:120]}")
     body = flat(_cv.page_text(html, rec["url"]))
-    for k in QUOTE_KEYS:
+    for k in rec["quotes"]:
         if flat(rec["quotes"][k]) not in body:
             raise EvError(f"引用 {k} が、取り直した本文にそのままありません")
     rec["page_sha256"] = "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
@@ -581,7 +590,11 @@ def selftest() -> int:
             "<tr><td>0</td><td>-1195円</td><td>-2,186円</td></tr>"
             "<tr><td>50</td><td>-747円</td><td>-1745円</td></tr></table>"
             "<p>算出条件 設定1・AT終了後即ヤメ・閉店欠損は考慮しない</p>"
-            "<h2>天井期待値（通常時）の表です</h2></body></html>")
+            "<h2>天井期待値（通常時）の表です</h2>"
+            "<h2>天井短縮あり時の天井期待値</h2>"
+            "<p>設定変更時は天井が428Gに短縮される。</p>"
+            "<p>ST終了後は天井が428Gに短縮される。</p>"
+            "<p>設定変更時は朝一の挙動が変わる。</p></body></html>")
     url = "https://nana-press.com/kaiseki/machine/1/2/"
     good = {"slug": "aaa", "state": "EV", "ev_yen": -2186, "site": "nana-press", "url": url,
             "quotes": {"title": "リセット期待値【暫定版】", "header": "打ち出し 等価交換 5.6枚交換",
@@ -610,6 +623,20 @@ def selftest() -> int:
     bad(lambda d: d["quotes"].update(row="0 -1195円 -2,186円 なし"), "本文に無い引用")
     # ★ページに実在する別の表題で試す★（無い引用だと、手前の「本文に無い」で止まり、この守りを試さない）
     bad(lambda d: d["quotes"].update(title="天井期待値（通常時）の表です"), "表題にリセットの語が無い")
+    # ★★表の題にリセットの語が無い「天井短縮時」の表（2026-11-27）★★＝なな徹は設定変更でも
+    #   ほかの契機でも短縮される機種で、表を「天井短縮あり時」とだけ題する。
+    #   設定変更で短縮されるという逐語（shortening）が同じページに在れば、その表を受け取る。
+    _sh = lambda d, s: d["quotes"].update(title="天井短縮あり時の天井期待値", shortening=s)  # noqa: E731
+    d_sh = json.loads(json.dumps(good))
+    _sh(d_sh, "設定変更時は天井が428Gに短縮される。")
+    r_sh = rec_of(d_sh)
+    t("表の題にリセットの語が無くても、設定変更で短縮される逐語があれば受け取る",
+      isinstance(r_sh, dict) and r_sh["quotes"].get("shortening") == "設定変更時は天井が428Gに短縮される。")
+    bad(lambda d: _sh(d, "ST終了後は天井が428Gに短縮される。"), "短縮の逐語に設定変更・リセットの語が無い")
+    bad(lambda d: _sh(d, "設定変更時は朝一の挙動が変わる。"), "設定変更の逐語に短縮の語が無い")
+    bad(lambda d: _sh(d, "設定変更時は天井が400Gに短縮される。"), "短縮の逐語が本文に無い")
+    bad(lambda d: d["quotes"].update(title="天井短縮あり時の天井期待値"), "表の題にリセットの語が無く、短縮の逐語も無い")
+    bad(lambda d: d["quotes"].update(extra="設定変更時は天井が428Gに短縮される。"), "決まっていない引用の鍵")
     bad(lambda d: d["quotes"].update(header="打ち出し 等価交換 だけ"), "見出しに5.6が無い")
     bad(lambda d: d.update(url="https://example.com/x"), "名簿に無いサイト")
     bad(lambda d: d.update(url="https://pachiseven.jp/machines/1", site="pachiseven"),

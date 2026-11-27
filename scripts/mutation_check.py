@@ -12777,6 +12777,35 @@ MUTATIONS = [
         "after": "                                                         or False\n",
         "run": ["scripts/add_items.py"],
     },
+    # ★★リセット期待値：題にリセットの語が無い「天井短縮時」の表（2026-11-27）★★
+    {
+        "why": "★リセット期待値：短縮の逐語に「設定変更・リセット」の語が無くても通す（ST後だけの短縮の表で並べる）★",
+        "file": "scripts/reset_ev.py",
+        "before": "                    if not (any(w in sh for w in (\"リセット\", \"設定変更\")) and \"短縮\" in sh):\n",
+        "after": "                    if not (\"短縮\" in sh):\n",
+        "run": ["scripts/reset_ev.py"],
+    },
+    {
+        "why": "★リセット期待値：設定変更の逐語に「短縮」の語が無くても通す（天井の短縮と関係ない文で表を受け取る）★",
+        "file": "scripts/reset_ev.py",
+        "before": "                    if not (any(w in sh for w in (\"リセット\", \"設定変更\")) and \"短縮\" in sh):\n",
+        "after": "                    if not (any(w in sh for w in (\"リセット\", \"設定変更\"))):\n",
+        "run": ["scripts/reset_ev.py"],
+    },
+    {
+        "why": "★リセット期待値：取り直した本文で照らすのを決まった4つの引用だけにする（短縮の逐語が本文に無くても通す）★",
+        "file": "scripts/reset_ev.py",
+        "before": "    for k in rec[\"quotes\"]:\n        if flat(rec[\"quotes\"][k]) not in body:\n",
+        "after": "    for k in QUOTE_KEYS:\n        if flat(rec[\"quotes\"][k]) not in body:\n",
+        "run": ["scripts/reset_ev.py"],
+    },
+    {
+        "why": "★リセット期待値：決まっていない名前の引用を受け取る★",
+        "file": "scripts/reset_ev.py",
+        "before": "        if not isinstance(q, dict) or set(q) - {SHORT_KEY} != set(QUOTE_KEYS):\n",
+        "after": "        if not isinstance(q, dict) or not set(QUOTE_KEYS) <= set(q):\n",
+        "run": ["scripts/reset_ev.py"],
+    },
 ]
 
 
