@@ -13138,14 +13138,14 @@ MUTATIONS = [
     {
         "why": "★確定値：item_values で、複合単位の前半（2.5枚/G の 2.5枚）を値にできる★",
         "file": "scripts/confirmed_values.py",
-        "before": "                if not (_u and _nx and _nx.group(1) == _u):\n",
+        "before": "                if not (_u and _nx and _nx.group(1) == _u and _nx.end() < len(q) - mo.end()):\n",
         "after": "            if False:\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {
         "why": "★確定値：item_values で、複合単位や分数の後ろ半分（2.5枚/1G の 1G）を値にできる★",
         "file": "scripts/confirmed_values.py",
-        "before": "                if not (_u and _pv and _pv.group(1) == _u):\n",
+        "before": "                if not (_u and _pv and _pv.group(1) == _u and not _re.match(_UNIT_RUN, q[mo.end():])):\n",
         "after": "            if False:\n",
         "run": ["scripts/confirmed_values.py"],
     },
@@ -13157,10 +13157,17 @@ MUTATIONS = [
         "run": ["scripts/add_items.py"],
     },
     {
-        "why": "★確定値：item_values で、もっと長い単位の途中（500回転 の 500回）を値にできる★",
+        "why": "★確定値：item_values で、「/」の右側の単位が引用の端まで続いていても並べた書き方とみなす★",
         "file": "scripts/confirmed_values.py",
-        "before": "            if _u and _re.match(_UNIT_RUN, q[mo.end():]):\n",
-        "after": "            if False:\n",
+        "before": "                if not (_u and _nx and _nx.group(1) == _u and _nx.end() < len(q) - mo.end()):\n",
+        "after": "                if not (_u and _nx and _nx.group(1) == _u):\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：item_values で、「/」の右側の値の単位の語が続いていても並べた書き方とみなす（1回/500回転 の 500回）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "                if not (_u and _pv and _pv.group(1) == _u and not _re.match(_UNIT_RUN, q[mo.end():])):\n",
+        "after": "                if not (_u and _pv and _pv.group(1) == _u):\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {

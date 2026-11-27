@@ -1005,16 +1005,16 @@ def _inner_occurrence(token: str, q: str) -> bool:
             #   ★単位は1文字ではなく、つながった語ごと比べる★（「1回/500回転」の 回 と 回転 は別＝Codex review321 の2）
             _um = _re.search(_UNIT_RUN + "+$", f1)
             _u = _um.group(0) if _um else ""
-            # ★値の単位の後ろに単位の字が続くなら、もっと長い単位の途中（500回転 の 500回）なので数えない★
-            if _u and _re.match(_UNIT_RUN, q[mo.end():]):
-                continue
+            #   （値の後ろの漢字の続き〈500枚獲得〉は単位と決められないので、ここでは見ない＝どの語に付くかは2AI・Codex review322 の1）
             if _re.match(r"\s*[/／]", q[mo.end():]):
                 _nx = _re.match(r"\s*[/／]\s*[0-9][0-9.,]*(" + _UNIT_RUN + "*)", q[mo.end():])
-                if not (_u and _nx and _nx.group(1) == _u):
+                # ★右側の単位が引用の端まで続くなら、どこで終わるか見えないので数えない★（Codex review322 の2）
+                if not (_u and _nx and _nx.group(1) == _u and _nx.end() < len(q) - mo.end()):
                     continue
             if _re.search(r"[/／]\s*$", q[:mo.start()]):
                 _pv = _re.search(r"[0-9](" + _UNIT_RUN + r"*)\s*[/／]\s*$", q[:mo.start()])
-                if not (_u and _pv and _pv.group(1) == _u):
+                # ★「/」の右側の値は、自分の単位の語がそこで終わること★（1回/500回転 の 500回 を並べた書き方と見ない）
+                if not (_u and _pv and _pv.group(1) == _u and not _re.match(_UNIT_RUN, q[mo.end():])):
                     continue
             return True
     return False
@@ -4668,6 +4668,9 @@ def selftest() -> int:
           and bool(wording_problems("item_values#d", ["1回"], [{"quote": "ボーナス当選頻度は1回/500回転です"}]))
           and not wording_problems("item_values#d", ["300pt"], [{"quote": "100pt/200pt/300ptで抽選します"}])
           and not wording_problems("item_values#d", ["500枚"], [{"quote": "平均は500枚です"}])
+          # ★値の後ろの漢字の続きでは断らない・右側の単位が引用の端まで続けば断る（Codex review322）★
+          and not wording_problems("item_values#d", ["500枚"], [{"quote": "ボーナスで500枚獲得できます"}])
+          and bool(wording_problems("item_values#d", ["1回"], [{"quote": "ボーナス当選頻度は1回/500回"}]))
           and bool(wording_problems("item_values#d", ["2.5枚"], [{"quote": "純増は2.5枚/1Gです"}]))
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
           # ★範囲の判定は「数＋単位」だけ（Codex review317 の2）★
