@@ -13145,7 +13145,7 @@ MUTATIONS = [
     {
         "why": "★確定値：item_values で、複合単位や分数の後ろ半分（2.5枚/1G の 1G）を値にできる★",
         "file": "scripts/confirmed_values.py",
-        "before": "                if not (_u and _pv and _pv.group(1) == _u and not _re.match(_UNIT_RUN, q[mo.end():])):\n",
+        "before": "                if not (_u and _pv and _pv.group(1) == _u and not _re.match(_UNIT_CONT, q[mo.end():])):\n",
         "after": "            if False:\n",
         "run": ["scripts/confirmed_values.py"],
     },
@@ -13166,15 +13166,22 @@ MUTATIONS = [
     {
         "why": "★確定値：item_values で、「/」の右側の値の単位の語が続いていても並べた書き方とみなす（1回/500回転 の 500回）★",
         "file": "scripts/confirmed_values.py",
-        "before": "                if not (_u and _pv and _pv.group(1) == _u and not _re.match(_UNIT_RUN, q[mo.end():])):\n",
+        "before": "                if not (_u and _pv and _pv.group(1) == _u and not _re.match(_UNIT_CONT, q[mo.end():])):\n",
         "after": "                if not (_u and _pv and _pv.group(1) == _u):\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {
         "why": "★確定値：item_values で、「/」のある式の単位の途中（500回転/1000回転 の 500回）を値にできる★",
         "file": "scripts/confirmed_values.py",
-        "before": "            if _re.match(_UNIT_RUN, _rest) and (_re.search(r\"[/／]\", f1) or _re.match(_UNIT_RUN + r\"+\\s*[/／]\", _rest)):\n",
+        "before": "            if _re.match(_UNIT_CONT, _rest) and (_re.search(r\"[/／]\", f1) or _re.match(_UNIT_CONT + r\"+\\s*[/／]\", _rest)):\n",
         "after": "            if False:\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：item_values で、単位の続きの字に普通の漢字（程度）まで含める★",
+        "file": "scripts/confirmed_values.py",
+        "before": "_UNIT_CONT = r\"[A-Za-zＡ-Ｚａ-ｚ%％‰‱枚回円個秒倍周転点ァ-ヺー]\"\n",
+        "after": "_UNIT_CONT = r\"[A-Za-zＡ-Ｚａ-ｚ%％‰‱一-龥ァ-ヺー]\"\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {

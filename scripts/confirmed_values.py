@@ -1008,7 +1008,7 @@ def _inner_occurrence(token: str, q: str) -> bool:
             #   （値の後ろの漢字の続き〈500枚獲得〉は単位と決められないので、ここでは見ない＝どの語に付くかは2AI・Codex review322 の1）
             # ★「/」のある式では、値の単位の語がそこで終わること★（500回転/1000回転 の 500回・1回/500回転 の 1回/500回＝Codex review323）
             _rest = q[mo.end():]
-            if _re.match(_UNIT_RUN, _rest) and (_re.search(r"[/／]", f1) or _re.match(_UNIT_RUN + r"+\s*[/／]", _rest)):
+            if _re.match(_UNIT_CONT, _rest) and (_re.search(r"[/／]", f1) or _re.match(_UNIT_CONT + r"+\s*[/／]", _rest)):
                 continue
             if _re.match(r"\s*[/／]", q[mo.end():]):
                 _nx = _re.match(r"\s*[/／]\s*[0-9][0-9.,]*(" + _UNIT_RUN + "*)", q[mo.end():])
@@ -1018,7 +1018,7 @@ def _inner_occurrence(token: str, q: str) -> bool:
             if _re.search(r"[/／]\s*$", q[:mo.start()]):
                 _pv = _re.search(r"[0-9](" + _UNIT_RUN + r"*)\s*[/／]\s*$", q[:mo.start()])
                 # ★「/」の右側の値は、自分の単位の語がそこで終わること★（1回/500回転 の 500回 を並べた書き方と見ない）
-                if not (_u and _pv and _pv.group(1) == _u and not _re.match(_UNIT_RUN, q[mo.end():])):
+                if not (_u and _pv and _pv.group(1) == _u and not _re.match(_UNIT_CONT, q[mo.end():])):
                     continue
             return True
     return False
@@ -1026,6 +1026,8 @@ def _inner_occurrence(token: str, q: str) -> bool:
 
 # ★単位の語をつくる字★＝英字・％・漢字・カタカナ（ひらがな・数字・空白・句読点・括弧は入らない）
 _UNIT_RUN = r"[A-Za-zＡ-Ｚａ-ｚ%％‰‱一-龥ァ-ヺー]"
+# ★値の単位の続きとみなす字★＝単位に使う字だけ（「程度」「獲得」などの漢字は続きと見ない＝Codex review324）
+_UNIT_CONT = r"[A-Za-zＡ-Ｚａ-ｚ%％‰‱枚回円個秒倍周転点ァ-ヺー]"
 
 
 # ★数で終わる値のすぐ後ろ（空白を挟んでも）にあれば、その数の単位とみなす字★（add_items._ITEM_UNIT_AFTER と同じ顔ぶれ＋％）
@@ -4680,6 +4682,9 @@ def selftest() -> int:
           and bool(wording_problems("item_values#d", ["1回/500回"], [{"quote": "ボーナス当選頻度は1回/500回転です"}]))
           and not wording_problems("item_values#d", ["1回/500回転"], [{"quote": "ボーナス当選頻度は1回/500回転です"}])
           and not wording_problems("item_values#d", ["500回転"], [{"quote": "CZは500回転/1000回転で抽選します"}])
+          # ★「程度」などの普通の語は単位の続きと見ない（Codex review324）★
+          and not wording_problems("item_values#d", ["1回/500回転"], [{"quote": "ボーナス当選頻度は1回/500回転程度です"}])
+          and not wording_problems("item_values#d", ["1/8192"], [{"quote": "赤BB直撃は1/8192程度です"}])
           and bool(wording_problems("item_values#d", ["2.5枚"], [{"quote": "純増は2.5枚/1Gです"}]))
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
           # ★範囲の判定は「数＋単位」だけ（Codex review317 の2）★
