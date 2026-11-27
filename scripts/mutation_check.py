@@ -13171,6 +13171,13 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
+        "why": "★確定値：item_values で、「/」のある式の単位の途中（500回転/1000回転 の 500回）を値にできる★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if _re.match(_UNIT_RUN, _rest) and (_re.search(r\"[/／]\", f1) or _re.match(_UNIT_RUN + r\"+\\s*[/／]\", _rest)):\n",
+        "after": "            if False:\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
         "why": "★チェッカー：まいるの機種でも、早見表の天井（G数）を混ぜる★",
         "file": "scripts/checker_verdict.py",
         "before": "    if unit == \"G\" and (n := _lead_int(v)) is not None:\n",

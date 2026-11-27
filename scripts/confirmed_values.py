@@ -1006,6 +1006,10 @@ def _inner_occurrence(token: str, q: str) -> bool:
             _um = _re.search(_UNIT_RUN + "+$", f1)
             _u = _um.group(0) if _um else ""
             #   （値の後ろの漢字の続き〈500枚獲得〉は単位と決められないので、ここでは見ない＝どの語に付くかは2AI・Codex review322 の1）
+            # ★「/」のある式では、値の単位の語がそこで終わること★（500回転/1000回転 の 500回・1回/500回転 の 1回/500回＝Codex review323）
+            _rest = q[mo.end():]
+            if _re.match(_UNIT_RUN, _rest) and (_re.search(r"[/／]", f1) or _re.match(_UNIT_RUN + r"+\s*[/／]", _rest)):
+                continue
             if _re.match(r"\s*[/／]", q[mo.end():]):
                 _nx = _re.match(r"\s*[/／]\s*[0-9][0-9.,]*(" + _UNIT_RUN + "*)", q[mo.end():])
                 # ★右側の単位が引用の端まで続くなら、どこで終わるか見えないので数えない★（Codex review322 の2）
@@ -4671,6 +4675,11 @@ def selftest() -> int:
           # ★値の後ろの漢字の続きでは断らない・右側の単位が引用の端まで続けば断る（Codex review322）★
           and not wording_problems("item_values#d", ["500枚"], [{"quote": "ボーナスで500枚獲得できます"}])
           and bool(wording_problems("item_values#d", ["1回"], [{"quote": "ボーナス当選頻度は1回/500回"}]))
+          # ★「/」のある式では値の単位の語がそこで終わること（Codex review323）★
+          and bool(wording_problems("item_values#d", ["500回"], [{"quote": "CZは500回転/1000回転で抽選します"}]))
+          and bool(wording_problems("item_values#d", ["1回/500回"], [{"quote": "ボーナス当選頻度は1回/500回転です"}]))
+          and not wording_problems("item_values#d", ["1回/500回転"], [{"quote": "ボーナス当選頻度は1回/500回転です"}])
+          and not wording_problems("item_values#d", ["500回転"], [{"quote": "CZは500回転/1000回転で抽選します"}])
           and bool(wording_problems("item_values#d", ["2.5枚"], [{"quote": "純増は2.5枚/1Gです"}]))
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
           # ★範囲の判定は「数＋単位」だけ（Codex review317 の2）★
