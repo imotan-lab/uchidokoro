@@ -114,12 +114,84 @@ def _text_ng(t, where: str, lo: int, hi: int) -> list:
     return out
 
 
-def _numbers_ok(texts: list, pool: tuple, rec_toks=frozenset()) -> list:
-    """★足す数字は、いまの記事・機種行に同じ単位で在るか、名指しした確定値の照合済みの値に在るものだけ★"""
+ITEM_FIELD = "item_values"
+# ★表示値の前後にあってはいけない字★＝数の続き（桁・小数点・区切り・分数）と符号（−500枚 の 500枚 を通さない）
+_ITEM_BEFORE = r"0-9０-９.．,，/／+＋\-−－‐‑–—―▲△*"   # ★* も＝太字の内側から照合を始めさせない（Codex review317 の1）★
+_ITEM_AFTER = "0-9０-９.．,，/／%％‰‱"
+# ★数で終わる表示値（「500」）の後ろに単位を足させない★（Codex review312 の2＝500 を根拠に「500G」が通った）
+_ITEM_UNIT_AFTER = "A-Za-zＡ-Ｚａ-ｚ枚回円個秒倍周十百千万億兆゠-ヺー-ヿｦ-ﾟ"   # ★中点（・）は区切りなので外す★（Codex review313 の5）
+
+
+def item_strings(fields: list, confirmed: dict) -> list:
+    """★名指しした item_values の表示値（出典の書き方のまま）★＝長いものから（短い表示値が長いものの一部を先に消さないように）"""
+    import confirmed_values as _cv
+    out = set()
+    for f in fields or []:
+        if _cv.base_field(f) != ITEM_FIELD:
+            continue
+        rec = (confirmed or {}).get(f)
+        if not isinstance(rec, dict):
+            continue
+        try:
+            out |= {s0 for s0 in record_strings(f, rec.get("value")) if s0}
+        except Exception:                                        # noqa: BLE001
+            continue
+    return sorted(out, key=lambda x: (-len(x), x))
+
+
+def mask_items(text: str, strs) -> str:
+    """★文の中の item_values の表示値を、まるごとの形で在るときだけ伏せる★（2026-11-27・Codex review309 の1）
+
+    ★数をばらして照合しない★＝1/8192 と 約42% から 42/8192 や 8192% を作れないように、
+    表示値がそのまま（前後に数の続きも符号も無く）在るときだけ、その中の数を「出どころがある」とみなす。
+    """
+    if not isinstance(text, str):
+        return text                       # ★文字でないものは形の検査が断る★（ここで例外にしない＝Codex review314 の4）
+    # ★空白の連なりは1つに詰めてから見る★（「-  500枚」の空白2つで符号を飛び越えさせない＝Codex review311 の1）
+    #   ★改行しない空白（U+00A0）なども空白として詰める★（Codex review318 の2）
+    text = re.sub(r"[\s　]+", " ", text)
+    for s0 in strs or ():
+        # ★表示値の空白も同じ形にそろえる★（Codex review312 の6＝「1　/　8192」を出典どおりに書いても通らなかった）
+        s1 = re.sub(r"[\s　]+", " ", s0)
+        after = _ITEM_AFTER + (_ITEM_UNIT_AFTER if s1[-1:].isdigit() else "")
+        # ★前の字と表示値のあいだに空白が1つある形（「- 500枚」「1 / 8192」の 8192）も伏せない★（Codex review310 の1・review313 の2）
+        # ★表示値の前後の太字の印（**）は読み飛ばして境目を見る★（「**500**万枚」で桁を変えさせない＝Codex review315 の2。
+        #   文ぜんたいからは外さない＝記事の側の数の読み方とそろえる・Codex review316 の4）。数で終わる値の後ろの「まいる」も単位（review316 の3）
+        unit_tail = "|まいる" if s1[-1:].isdigit() else ""
+        text = re.sub(r"(?<![%s])(?<![%s] )(?:\*\*)?%s(?!(?:\*\*)?\s*(?:[%s]%s))(?:\*\*)?"
+                      % (_ITEM_BEFORE, _ITEM_BEFORE, re.escape(s1), after, unit_tail),
+                      lambda mo, _s=s1: mo.group(0) if _ranged(_s, mo) else "〓", text)
+    return text
+
+
+def _ranged(s1: str, mo) -> bool:
+    """★符号で始まる表示値の前が「数＋単位」なら、範囲の区切りなので伏せない★（100枚-500枚＝Codex review317 の2）"""
+    import confirmed_values as _cv
+    # ★全角の数字と、先に伏せた表示値（〓）も「数」とみなす★（Codex review318 の1＝１００枚-500枚・100.0枚-500枚 がすり抜けた）
+    _rng = _cv.ITEM_RANGE_BEFORE.replace("[0-9]", "[0-9０-９〓]", 1)
+    return s1[:1] in "+＋-−－‐‑–—―▲△" and bool(re.search(_rng, mo.string[:mo.start()]))
+
+
+def items_used(text: str, strs) -> list:
+    """★その文の照合で実際に伏せた表示値★（長いものから順に・Codex review312 の4＝使っていない短い表示値まで控えていた）"""
+    used, cur = [], mask_items(text, [])
+    for s0 in strs or ():
+        nxt = mask_items(cur, [s0])
+        if nxt != cur:
+            used.append(s0)
+        cur = nxt
+    return used
+
+
+def _numbers_ok(texts: list, pool: tuple, rec_toks=frozenset(), items=()) -> list:
+    """★足す数字は、いまの記事・機種行に同じ単位で在るか、名指しした確定値の照合済みの値に在るものだけ★
+
+    ★item_values の数は、表示値がまるごと文に在るときだけ★（items＝item_strings の戻り値）
+    """
     import decide_now as _dn
     pairs, toks = pool
     bad = []
-    for t in texts:
+    for t in [mask_items(t0, items) for t0 in texts]:
         for nu in _dn.numbers_with_unit(t):
             if nu in pairs or (nu[1] == "" and nu[0] in toks) or nu[0] in rec_toks or _canon(nu[0]) in rec_toks:
                 continue
@@ -165,6 +237,9 @@ def _record_pool(slug: str, fields: list, confirmed: dict) -> tuple:
         except Exception:                                        # noqa: BLE001
             missing.append(f)
             continue
+        import confirmed_values as _cv0
+        if _cv0.base_field(f) == ITEM_FIELD:
+            continue                       # ★数をばらして使わない★（item_strings と mask_items が見る）
         for st in strings:
             for tok, _unit in _dn.numbers_with_unit(st):
                 toks.add(tok)
@@ -264,7 +339,8 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
             # ★直すときは、古い行の数字を「記事にある」に数えない★
             _pool_f = _ds.number_pool(dict(detail, factTable=[x for x in (ft or []) if x not in _same]), row or {}) \
                 if _mine else base_pool
-            made = _numbers_ok([x for x in rw if isinstance(x, str)], _pool_f, rec_toks)
+            made = _numbers_ok([x for x in rw if isinstance(x, str)], _pool_f, rec_toks,
+                               item_strings(a.get("fields") or [], confirmed))
             if made:
                 p.append(f"{w}: 確定値にも記事にも無い数字があります: {'・'.join(made)}")
             if not p:
@@ -348,7 +424,12 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
                 a["_number_sources"] = sorted({
                     f"{nu[0]}{nu[1]}|" + ("fields" if (nu[0] in rec_toks or _canon(nu[0]) in rec_toks)
                                           else "article")
-                    for t0 in texts for nu in _dn0.numbers_with_unit(t0)})
+                    for t0 in texts for nu in _dn0.numbers_with_unit(t0)}
+                    # ★★どの item_values の表示値で照合したかも控える★★（Codex review311 の3＝確定値を訂正・取り消しても、
+                    #   別の欄に同じ数があると古い欄が持ち越されていた）。持ち越すとき、その表示値がまだ控えにあるかを見る
+                    # ★どの項目の表示値かも控える★（Codex review315 の3＝別の項目の同じ値が、訂正を隠していた）
+                    | {f"{s0}|item:{f}" for t0 in texts for s0 in items_used(t0, item_strings(fields, confirmed))
+                       for f in fields if s0 in item_strings([f], confirmed)})
         else:
             sec = next((s for s in secs if isinstance(s, dict) and s.get("title") == a.get("section")), None)
             if sec is None:
@@ -444,17 +525,39 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
                         p.append(f"{w}: rows[{r_i}] の列数が見出し（{len(hdr)}列）と違います")
                         continue
                     for c_i, c in enumerate(r):
+                        # ★★設定示唆の欄の表（見出しつき）は、示唆のセルを札（text と badge）で書ける★★（2026-11-27・
+                        #   朝タスクの後回し＝discup_ur のトロフィーの行が2社にあるのに足せなかった）。強さの印は描画と同じ5つだけ
+                        _settei_tbl = sec.get("type") == "settei"
+                        if _settei_tbl and isinstance(c, dict):
+                            import gates as _gt_b
+                            if set(c) != {"text", "badge"} or c.get("badge") not in _gt_b._BADGE_VALUES \
+                                    or not isinstance(c.get("text"), str):
+                                p.append(f"{w}: rows[{r_i}][{c_i}] の札は text と badge"
+                                         f"（{'/'.join(_gt_b._BADGE_VALUES)}）の2つで書きます")
+                                continue
+                            c = c["text"]
                         if not isinstance(c, str):
-                            p.append(f"{w}: rows[{r_i}][{c_i}] は文字で書きます（設定示唆の札は足せません）")
+                            p.append(f"{w}: rows[{r_i}][{c_i}] は文字で書きます（設定示唆の札は設定示唆の欄の表だけ）")
                             continue
                         p += _text_ng(c, f"{w} rows[{r_i}][{c_i}]", 1, CELL_MAX)
-                        texts.append(c)
+                        # ★設定示唆の欄の表は、数字を半角の算用数字だけで書く★（Codex review309 の3＝丸数字・漢数字は
+                        #   数字の照合をすり抜け「設定⑦以上濃厚」「九十九％」が通った。札の行と同じ決まり）
+                        import numerals as _nm_t
+                        if _settei_tbl and any((_nm_t.is_numeral_char(ch) or ch in _KANJI_DIGITS
+                                                or _ud.numeric(ch, None) is not None) and not ("0" <= ch <= "9")
+                                               for ch in c):
+                            p.append(f"{w}: rows[{r_i}][{c_i}] の数字は半角の算用数字で書きます（漢数字・丸数字は使えません）")
+                        # ★半角の - 以外のマイナス記号（－・− など）は書かない★（数字の照合で符号と読まれない＝Codex review310 の4。札の行と同じ）
+                        if _settei_tbl and re.search(r"[－−‐―ー‑–—]\s*[0-9０-９]", c):
+                            p.append(f"{w}: rows[{r_i}][{c_i}] の数字の前にマイナス記号（－・− など）を置けません")
+                        # ★設定示唆の欄の表だけ、「設定N」の番号は数字の照合から外す★（札と同じ決まり・_SETTEI_N）
+                        texts.append(re.sub(_SETTEI_N, "設定", c) if _settei_tbl else c)
                     if r in (tbl.get("rows") or []):
                         p.append(f"{w}: rows[{r_i}] と同じ行がもうあります")
                 if not p:
                     tbl.setdefault("rows", []).extend(rows)
                     done.append(f"「{sec['title']}」の表に{len(rows)}行")
-        made = _numbers_ok(texts, pool, rec_toks)
+        made = _numbers_ok(texts, pool, rec_toks, item_strings(fields, confirmed))
         if made:
             p.append(f"{w}: 確定値にも記事にも無い数字があります: {'・'.join(made)}"
                      "（独立2出典で確かめて confirmed_values.py --record し、fields に名指しする）")
@@ -654,7 +757,9 @@ def gather(slug: str) -> dict:
             "confirmed_fields": fields,
             "how_to_decide": ("大手サイト（なな徹・スロパチクエスト・パチ7・DMMぱちタウン）のこの機種のページを2AIがそれぞれ読み、"
                               "そちらにあってこの記事に無い項目を挙げる。足す数字は独立2出典で確かめて "
-                              "confirmed_values.py --record してから fields に名指しする。文は自分の言葉で、です・ます。"
+                              "confirmed_values.py --record してから fields に名指しする（決まった形の項目が無い数字は "
+                              "item_values#<見出し> に、出典の書き方のままの表示値の並び {\"values\": [...]} で控える）。"
+                              "文は自分の言葉で、です・ます。"
                               "サイト名・どこから採ったかは書かない。打ち方をすすめる言い方はしない")}
 
 
@@ -978,6 +1083,154 @@ def selftest() -> int:
     except Exception as _e9:                      # noqa: BLE001  ★例外で落ちたら❌と数える★
         _rs9 = {"problems": [f"例外: {type(_e9).__name__}"]}
     t("　札が壊れた欄では例外で落ちずに理由を返す（Codexの指摘）", any("読めません" in x for x in _rs9["problems"]))
+    # ★★設定示唆の欄の表（見出しつき）に札の行を足す★★（2026-11-27・discup_ur）
+    _stT = {"slug": "zzz_g", "sections": [{"title": "設定示唆まとめ", "type": "settei", "tables": [
+        {"label": "終了画面のトロフィー", "headers": ["演出", "示唆"],
+         "rows": [["銅トロフィー", {"text": "設定2以上濃厚", "badge": "weak"}]]}]}]}
+
+    def _tr(cell, sec=None):
+        return plan(sec or _stT, row, dec({"op": "add_rows", "section": "設定示唆まとめ", "table": 0,
+                                           "rows": [["キリン柄トロフィー", cell]]}), conf)
+    _rT1 = _tr({"text": "設定4以上濃厚", "badge": "mid"})
+    t("★★設定示唆の欄の表に、札（text と badge）の行を「設定N」つきで足せる★★",
+      not _rT1["problems"] and _rT1["sections"][0]["tables"][0]["rows"][-1]
+      == ["キリン柄トロフィー", {"text": "設定4以上濃厚", "badge": "mid"}])
+    t("　強さの印は描画と同じ5つだけ", bool(_tr({"text": "設定4以上濃厚", "badge": "big"})["problems"]))
+    t("　札は text と badge の2つだけ", bool(_tr({"text": "設定4以上濃厚", "badge": "mid", "x": "1"})["problems"]))
+    t("　「設定N」以外の数字は今までどおり記事か確定値に要る",
+      any("無い数字" in x for x in _tr({"text": "1/9999で設定4以上濃厚", "badge": "mid"})["problems"]))
+    _stP = {"slug": "zzz_g", "sections": [{"title": "仕様", "type": "table", "tables": [
+        {"headers": ["演出", "示唆"], "rows": [["銅", "設定2以上"]]}]}]}
+    _rP = plan(_stP, row, dec({"op": "add_rows", "section": "仕様", "table": 0,
+                               "rows": [["キリン柄", "設定4以上濃厚"]]}), conf)
+    t("　設定示唆の欄でない表では、「設定N」の数字も照合する（外すのは設定示唆の欄だけ）",
+      any("無い数字" in x for x in _rP["problems"]))
+    t("　設定示唆の欄でない表には札（辞書）を書けない",
+      bool(plan(_stP, row, dec({"op": "add_rows", "section": "仕様", "table": 0,
+                                "rows": [["キリン柄", {"text": "設定2以上", "badge": "mid"}]]}), conf)["problems"]))
+    # ★★記事に足す項目の数字（item_values）を、名指しして使える★★（2026-11-27）
+    _confI = dict(conf, **{"item_values#red": {"value": {"values": ["1/8192", "約80%"]}}})
+    _rI = plan(detail, row, dec({"op": "add_section", "title": "赤BB直撃",
+                                 "table": {"headers": ["項目", "確率"], "rows": [["赤BB直撃", "1/8192"]]},
+                                 "fields": ["item_values#red"]}), _confI)
+    t("★★item_values の控えの数字で欄を足せる★★", not _rI["problems"])
+    _rI2 = plan(detail, row, dec({"op": "add_section", "title": "赤BB直撃",
+                                  "table": {"headers": ["設定", "確率"], "rows": [["1", "1/8193"]]},
+                                  "fields": ["item_values#red"]}), _confI)
+    t("　控えに無い数字は足せない", any("無い数字" in x for x in _rI2["problems"]))
+    # ★★item_values の数はばらして使わない★★（Codex review309 の1＝42/8192・8192% が通った）
+    _confI2 = dict(conf, **{"item_values#red": {"value": {"values": ["1/8192", "約42%"]}}})
+
+    def _ivp(cell):
+        return plan(detail, row, dec({"op": "add_section", "title": "赤BB直撃",
+                                      "table": {"headers": ["項目", "値"], "rows": [["確率", cell]]},
+                                      "fields": ["item_values#red"]}), _confI2)["problems"]
+    t("★★item_values の数を組み替えた値（42/8192・8192%・11/8192・-1/8192）は足せない★★",
+      all(any("無い数字" in x for x in _ivp(c)) for c in ("42/8192", "8192%", "11/8192", "1/8192600", "-1/8192")))
+    t("　表示値がまるごと在れば足せる（約42%・1/8192）", not _ivp("約42%") and not _ivp("1/8192"))
+    _confI3 = dict(conf, **{"item_values#d": {"value": {"values": ["500枚", "1/8192"]}}})
+
+    def _ivq(cell):
+        return plan(detail, row, dec({"op": "add_section", "title": "差枚",
+                                      "table": {"headers": ["項目", "値"], "rows": [["差枚", cell]]},
+                                      "fields": ["item_values#d"]}), _confI3)["problems"]
+    t("★★表示値の前に符号と空白（- 500枚）・後ろに％（1/8192%）があれば足せない★★（Codex review310 の1）",
+      any("無い数字" in x for x in _ivq("- 500枚")) and any("無い数字" in x for x in _ivq("1/8192%"))
+      and not _ivq("平均500枚"))
+    t("★★設定示唆の欄の表に、全角マイナスつきの数（－500枚）は書けない★★（Codex review310 の4）",
+      bool(_tr({"text": "－600で設定4以上濃厚", "badge": "mid"})["problems"]))
+    t("★★空白を挟んだ符号（-  500枚）・空白つきの％や‰（1/8192 %・1/8192‰）も足せない★★（Codex review311 の1）",
+      all(any("無い数字" in x for x in _ivq(c)) for c in ("-  500枚", "1/8192 %", "1/8192‰")))
+    t("　設定示唆の欄の表で、マイナス記号と数のあいだに空白があっても断る（－ 600）（Codex review311 の5）",
+      bool(_tr({"text": "－ 600で設定4以上濃厚", "badge": "mid"})["problems"]))
+    _dIs = dec({"op": "add_section", "title": "差枚",
+                "table": {"headers": ["項目", "値"], "rows": [["差枚", "平均500枚"]]}, "fields": ["item_values#d"]})
+    _rIs = plan(detail, row, _dIs, _confI3)
+    t("★★足した欄の数字の出どころに、照合した item_values の表示値を控える★★（持ち越しで訂正を見るため・Codex review311 の3）",
+      not _rIs["problems"] and "500枚|item:item_values#d" in (_dIs["additions"][0].get("_number_sources") or []))
+    # ★★Codex review312 の2・4・6★★
+    _confI4 = dict(conf, **{"item_values#n": {"value": {"values": ["500", "約500枚", "1　/　8192"]}},
+                            "item_values#m": {"value": {"values": ["約500枚", "500枚"]}}})
+
+    def _ivr(cell, f="item_values#n"):
+        return plan(detail, row, dec({"op": "add_section", "title": "差枚",
+                                      "table": {"headers": ["項目", "値"], "rows": [["差枚", cell]]},
+                                      "fields": [f]}), _confI4)["problems"]
+    t("★★数で終わる表示値（500）に単位を足せない（500G・500ゲーム）★★",
+      any("無い数字" in x for x in _ivr("500G")) and any("無い数字" in x for x in _ivr("500ゲーム"))
+      and not _ivr("平均500です"))
+    t("★★全角空白を含む表示値（1　/　8192）を出典どおりに書ける★★", not _ivr("1　/　8192"))
+    # ★★Codex review313 の2・3・5★★
+    _confI5 = dict(conf, **{"item_values#k": {"value": {"values": ["8192", "500", "600"]}}})
+
+    def _ivk(cell):
+        return plan(detail, row, dec({"op": "add_section", "title": "差枚",
+                                      "table": {"headers": ["項目", "値"], "rows": [["差枚", cell]]},
+                                      "fields": ["item_values#k"]}), _confI5)["problems"]
+    t("★★空白を挟んだ分数の分母（600 / 8192 の 8192）を表示値として伏せない★★",
+      any("無い数字" in x for x in _ivk("600 / 8192")))
+    t("★★半角カナ（500 ｹﾞｰﾑ）・周（500周）を数だけの表示値の後ろに足せない★★",
+      any("無い数字" in x for x in _ivk("500 ｹﾞｰﾑ")) and any("無い数字" in x for x in _ivk("500周")))
+    t("　中点で区切った列挙（500・600）は通る", not _ivk("500・600"))
+    t("★★桁を変える字（500万枚・500 万枚）を数だけの表示値の後ろに足せない★★（Codex review314 の2）",
+      any("無い数字" in x for x in _ivk("500万枚")) and any("無い数字" in x for x in _ivk("500 万枚")))
+    try:
+        _rL = plan(detail, row, dec({"op": "add_section", "title": "差枚",
+                                     "table": {"headers": ["項目", "値"], "rows": [["差枚", "500"]], "label": 42},
+                                     "fields": ["item_values#k"]}), _confI5)["problems"]
+    except Exception as _eL:                      # noqa: BLE001  ★例外で落ちたら❌と数える★
+        _rL = [f"例外: {type(_eL).__name__}"]
+    t("★★太字の印を挟んで桁を変えられない（**500**万枚）★★（Codex review315 の2）",
+      any("無い数字" in x for x in _ivk("**500**万枚")) and not _ivk("**500**です"))
+    t("★★数だけの表示値の後ろに「まいる」を足せない（500まいる・**500**まいる）★★（Codex review316 の3）",
+      any("無い数字" in x for x in _ivk("500まいる")) and any("無い数字" in x for x in _ivk("**500**まいる")))
+    _detB = {"slug": "zzz_g", "sections": [{"title": "天井・恩恵", "body": ["平均は**500**枚です。"]},
+                                           {"title": "噂・未確定情報", "type": "rumor", "body": ["噂です。"]}]}
+    _rB = plan(_detB, row, dec({"op": "add_section", "title": "平均", "body": ["平均の獲得は**500**枚です。"]}), conf)
+    t("　記事にある太字の書き方（**500**枚）は、足す文でも今までどおり通る（Codex review316 の4）", not _rB["problems"])
+    # ★★Codex review317 の1・2★★
+    _confI6 = dict(conf, **{"item_values#s": {"value": {"values": ["500枚", "-500枚"]}}})
+
+    def _ivs(cell, det=detail):
+        return plan(det, row, dec({"op": "add_section", "title": "差枚",
+                                   "table": {"headers": ["項目", "値"], "rows": [["差枚", cell]]},
+                                   "fields": ["item_values#s"]}), _confI6)["problems"]
+    t("★★太字の内側から照合を始めて符号を見落とさない（-**500枚**）★★",
+      any("無い数字" in x for x in _ivs("平均差枚は-**500枚**です")) and not _ivs("平均は**500枚**です"))
+    _det100 = {"slug": "zzz_g", "sections": [{"title": "天井・恩恵", "body": ["最低100枚です。"]},
+                                             {"title": "噂・未確定情報", "type": "rumor", "body": ["噂です。"]}]}
+    t("★★記事の「100枚」と控えの「-500枚」から範囲（100枚-500枚）を作れない★★",
+      any("無い数字" in x for x in _ivs("100枚-500枚", _det100)) and not _ivs("平均差枚は-500枚です", _det100))
+    # ★★Codex review318 の1・2★★
+    _det100w = {"slug": "zzz_g", "sections": [{"title": "天井・恩恵", "body": ["最低１００枚です。"]},
+                                              {"title": "噂・未確定情報", "type": "rumor", "body": ["噂です。"]}]}
+    _confI7 = dict(conf, **{"item_values#s": {"value": {"values": ["100.0枚", "-500枚", "500枚"]}}})
+    _rW = plan(_det100w, row, dec({"op": "add_section", "title": "差枚",
+                                   "table": {"headers": ["項目", "値"], "rows": [["差枚", "１００枚-500枚"]]},
+                                   "fields": ["item_values#s"]}), _confI6)["problems"]
+    _rD = plan(detail, row, dec({"op": "add_section", "title": "差枚",
+                                 "table": {"headers": ["項目", "値"], "rows": [["差枚", "100.0枚-500枚"]]},
+                                 "fields": ["item_values#s"]}), _confI7)["problems"]
+    t("★★全角の数字・先に伏せた表示値のあとの範囲（１００枚-500枚・100.0枚-500枚）も作れない★★",
+      any("無い数字" in x for x in _rW) and any("無い数字" in x for x in _rD))
+    t("★★改行しない空白を挟んだ符号（- 500枚）も足せない★★",
+      any("無い数字" in x for x in _ivs("平均差枚は- 500枚です")))
+    _dIk = dec({"op": "add_section", "title": "差枚",
+                "table": {"headers": ["項目", "値"], "rows": [["差枚", "平均500です"]]}, "fields": ["item_values#k"]})
+    plan(detail, row, _dIk, _confI5)
+    t("★★出どころの控えに、どの項目の表示値かも残す（500|item:item_values#k）★★（Codex review315 の3）",
+      "500|item:item_values#k" in (_dIk["additions"][0].get("_number_sources") or []))
+    t("　表の label が文字でなくても例外にせず、入力の誤りとして返す（Codex review314 の4）",
+      bool(_rL) and not any(x.startswith("例外") for x in _rL))
+    _dIu = dec({"op": "add_section", "title": "差枚",
+                "table": {"headers": ["項目", "値"], "rows": [["差枚", "約500枚"]]}, "fields": ["item_values#m"]})
+    plan(detail, row, _dIu, _confI4)
+    t("★★照合に使った表示値だけを控える（約500枚 だけ・500枚 は控えない）★★",
+      [x for x in (_dIu["additions"][0].get("_number_sources") or []) if "|item" in x] == ["約500枚|item:item_values#m"])
+    t("★★設定示唆の欄の表に丸数字・漢数字は書けない（設定⑦・九十九％）★★（Codex review309 の3）",
+      bool(_tr({"text": "設定⑦以上濃厚", "badge": "mid"})["problems"])
+      and bool(_tr({"text": "設定4以上で九十九％です", "badge": "mid"})["problems"])
+      and bool(_tr("設定４以上濃厚")["problems"]))
     print(f"\n{ok[0]}/{sum(ok)} 合格")
     return 0 if ok[1] == 0 else 1
 

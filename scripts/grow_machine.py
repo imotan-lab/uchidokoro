@@ -1861,7 +1861,7 @@ def carry_rumor_section(old_detail: dict, detail: dict) -> bool:
     return True
 
 
-def _added_numbers_ok(sec: dict, detail: dict, row: dict, slug: str, confirmed=None) -> bool:
+def _added_numbers_ok(sec: dict, detail: dict, row: dict, slug: str, confirmed=None, gone=()) -> bool:
     """★足した欄の数字が、作り直した記事・機種行・いまの確定値（照合済みの値）にまだ在るか★
 
     （2026-11-10・洗い出し4回目＝根拠3欄と同じく、土台の数字が変わったら古い数字の欄を持ち越さない）
@@ -1873,6 +1873,9 @@ def _added_numbers_ok(sec: dict, detail: dict, row: dict, slug: str, confirmed=N
     # ★★足したときに確定値から来た数字は、今の名指しした確定値に在ること★★（2026-11-10・Codexの指摘＝
     #   記事のほかの欄に同じ数字があると、確定値が直っても古い数字の欄が持ち越されていた）。控えが無ければ今までどおり
     srcs, fields = added_basis(slug, sec.get("title"))
+    # ★★名指しした確定値が出典から消えた（gone）なら持ち越さない★★（Codex review310 の3＝別の欄に同じ数があると通っていた）
+    if set(fields) & {str(g) for g in (gone or ())}:
+        return False
     for tb in (sec.get("tables") or []):
         if isinstance(tb, dict):
             texts += [h for h in (tb.get("headers") or []) if isinstance(h, str)]
@@ -1884,7 +1887,13 @@ def _added_numbers_ok(sec: dict, detail: dict, row: dict, slug: str, confirmed=N
         conf = _cv.for_slug(slug) if confirmed is None else confirmed
     except Exception:                     # noqa: BLE001
         conf = {}
+    # ★★出典から記録した文が消えた項目（gone）は、2AIが答えるまで数えない★★（2026-11-27・Codex review309 の4＝
+    #   消えた値を使った足した欄が、そのまま持ち越されていた）
+    _gone = {str(g) for g in (gone or ())}
+    conf = {f: r0 for f, r0 in (conf or {}).items() if f not in _gone}
     for f, r0 in (conf or {}).items():
+        if _cv.base_field(f) == _ai.ITEM_FIELD:
+            continue                      # ★数をばらして使わない★（下の item_strings が表示値まるごとで見る）
         try:
             for st in _ai.record_strings(f, (r0 or {}).get("value")):
                 for tok, _u in _dn.numbers_with_unit(st):
@@ -1900,14 +1909,31 @@ def _added_numbers_ok(sec: dict, detail: dict, row: dict, slug: str, confirmed=N
             frec, _miss = _ai._record_pool(slug, fields, conf or {})
         except Exception:                 # noqa: BLE001
             return False
+        # ★名指しした確定値が取り消された（控えに無い・形が壊れた）なら持ち越さない★（Codex review311 の3）
+        if _miss:
+            return False
         rec |= set(frec)
+        _items_now = set(_ai.item_strings(fields, conf or {}))
         for sv in srcs:
-            num, _, src = str(sv).rpartition("|")
+            # ★項目名に「|」があっても読み違えない★（Codex review316 の2）＝「表示値|item:項目名」は最初の「|item:」で分ける
+            if "|item:" in str(sv):
+                num, _, _fld = str(sv).partition("|item:")
+                src = "item:" + _fld
+            else:
+                num, _, src = str(sv).rpartition("|")
+            if src == "item" or src.startswith("item:"):
+                # ★足したときに照合した表示値が、いまの控えにも在ること★（訂正されたら持ち越さない＝Codex review311 の3）
+                # ★項目が控えてあれば、その項目の控えに在ること★（別の項目の同じ値で訂正を隠さない＝Codex review315 の3）
+                _in = set(_ai.item_strings([src[5:]], conf or {})) if src.startswith("item:") else _items_now
+                if num not in _in:
+                    return False
+                continue
             if src == "fields":
                 toks = [nu[0] for nu in _dn1.numbers_with_unit(num)]
                 if not toks or not any(tk in frec or _ai._canon(tk) in frec for tk in toks):
                     return False
-    return not _ai._numbers_ok(texts, pool, frozenset(rec))
+    # ★item_values の数は、表示値がまるごと在るときだけ★（add_items と同じ照合・Codex review309 の1）
+    return not _ai._numbers_ok(texts, pool, frozenset(rec), _ai.item_strings(fields, conf or {}))
 
 
 def added_basis(slug: str, title, basis=None) -> tuple:
@@ -1927,7 +1953,7 @@ def added_basis(slug: str, title, basis=None) -> tuple:
 
 
 def carry_added_sections(old_detail: dict, detail: dict, slug: str, titles=None, row: dict = None,
-                         confirmed=None) -> list:
+                         confirmed=None, gone=()) -> list:
     """★大手と比べて2AIが足した欄（add_items）を、作り直した記事へ持ち越す★（2026-11-10・運営者の指示）
 
     ★なぜ★＝育成は材料から記事を作り直すので、足した欄が翌朝消える（「前に載っていた内容が消える」で止まる）。
@@ -1951,7 +1977,7 @@ def carry_added_sections(old_detail: dict, detail: dict, slug: str, titles=None,
         if not isinstance(prev, dict) or prev.get("title") not in titles or prev.get("title") in have:
             continue
         # ★★数字が今のデータに無くなった欄は持ち越さない★★（翌朝の STEP 1-T の gap が書き直す。消失は text_kept が数えない）
-        if not _added_numbers_ok(prev, detail, row or {}, slug, confirmed):
+        if not _added_numbers_ok(prev, detail, row or {}, slug, confirmed, gone):
             _log(f"{slug}: 足した欄「{prev.get('title')}」の数字が今のデータに無いので持ち越しません")
             continue
         names = [sx.get("title") if isinstance(sx, dict) else "" for sx in secs]
@@ -2141,8 +2167,94 @@ def _carry_meta_tests(t) -> None:
         globals()["added_basis"] = _keep_ab
     t("★★設定ごとの確定値から来た設定の番号（設定6）も、足したときと同じ数え方で照らす★★（代役の指摘＝毎朝落ちていた）",
       _got_s == ["高設定の機械割"])
-    t("　（配線）育成が足した欄を持ち越している",
-      "carry_added_sections(old_detail, detail, slug, row=machine)" in inspect.getsource(plan_one))
+    t("　（配線）育成が足した欄を持ち越している（出典から消えた項目も渡す）",
+      "carry_added_sections(old_detail, detail, slug, row=machine, gone=_rv_gone)" in inspect.getsource(plan_one))
+    # ★★出典から記録した文が消えた項目（gone）の数字で足した欄は持ち越さない★★（2026-11-27・Codex review309 の4）
+    # ★★item_values の数は、表示値がまるごと在るときだけ★★（Codex review309 の1）
+    _conf_iv = {"item_values#red": {"value": {"values": ["1/8192"]}}}
+    _old_iv = {"sections": [{"title": "天井・恩恵", "body": ["a"]},
+                            {"title": "赤BB直撃", "type": "table",
+                             "tables": [{"headers": ["項目", "確率"], "rows": [["赤BB直撃", "1/8192"]]}]}]}
+    try:
+        globals()["added_basis"] = lambda s, ti, basis=None: (["1/8192|article"], ["item_values#red"])
+        _new_iv1 = {"sections": [{"title": "天井・恩恵", "body": ["a"]}]}
+        _got_iv1 = carry_added_sections(_old_iv, _new_iv1, "zzz_a", titles={"赤BB直撃"}, confirmed=_conf_iv)
+        _new_iv2 = {"sections": [{"title": "天井・恩恵", "body": ["a"]}]}
+        _got_iv2 = carry_added_sections(_old_iv, _new_iv2, "zzz_a", titles={"赤BB直撃"}, confirmed=_conf_iv,
+                                        gone=["item_values#red"])
+        _old_iv3 = json.loads(json.dumps(_old_iv))
+        _old_iv3["sections"][1]["tables"][0]["rows"] = [["赤BB直撃", "1/819255"]]
+        _new_iv3 = {"sections": [{"title": "天井・恩恵", "body": ["a"]}]}
+        _got_iv3 = carry_added_sections(_old_iv3, _new_iv3, "zzz_a", titles={"赤BB直撃"}, confirmed=_conf_iv)
+    finally:
+        globals()["added_basis"] = _keep_ab
+    t("★★item_values の表示値で足した欄を持ち越す★★", _got_iv1 == ["赤BB直撃"])
+    t("　出典から記録した文が消えた項目（gone）の数字なら持ち越さない", _got_iv2 == [])
+    t("　表示値の続きに数がある（1/819255）なら持ち越さない", _got_iv3 == [])
+    # ★★名指しした確定値が gone なら、記事の別の欄に同じ数があっても持ち越さない★★（Codex review310 の3）
+    try:
+        globals()["added_basis"] = lambda s, ti, basis=None: (["1/8192|article"], ["item_values#red"])
+        _new_iv4 = {"sections": [{"title": "天井・恩恵", "body": ["赤BB直撃は1/8192です。"]}]}
+        _got_iv4 = carry_added_sections(_old_iv, _new_iv4, "zzz_a", titles={"赤BB直撃"}, confirmed=_conf_iv,
+                                        gone=["item_values#red"])
+    finally:
+        globals()["added_basis"] = _keep_ab
+    t("★★名指しした確定値が出典から消えたら、別の欄に同じ数があっても持ち越さない★★", _got_iv4 == [])
+    # ★★名指しした確定値を訂正・取り消したら、別の欄に同じ数があっても持ち越さない★★（Codex review311 の3）
+    try:
+        globals()["added_basis"] = lambda s, ti, basis=None: (["1/8192|item", "1/8192|article"], ["item_values#red"])
+        _new_iv5 = {"sections": [{"title": "天井・恩恵", "body": ["赤BB直撃は1/8192です。"]}]}
+        _got_iv5 = carry_added_sections(_old_iv, _new_iv5, "zzz_a", titles={"赤BB直撃"},
+                                        confirmed={"item_values#red": {"value": {"values": ["1/4096"]}}})
+        _new_iv6 = {"sections": [{"title": "天井・恩恵", "body": ["赤BB直撃は1/8192です。"]}]}
+        _got_iv6 = carry_added_sections(_old_iv, _new_iv6, "zzz_a", titles={"赤BB直撃"}, confirmed={})
+        _new_iv7 = {"sections": [{"title": "天井・恩恵", "body": ["a"]}]}
+        _got_iv7 = carry_added_sections(_old_iv, _new_iv7, "zzz_a", titles={"赤BB直撃"}, confirmed=_conf_iv)
+    finally:
+        globals()["added_basis"] = _keep_ab
+    t("★★名指しした item_values を訂正したら、別の欄に同じ数があっても持ち越さない★★", _got_iv5 == [])
+    t("　名指しした確定値を取り消したら持ち越さない", _got_iv6 == [])
+    t("　訂正も取り消しも無ければ持ち越す（対照）", _got_iv7 == ["赤BB直撃"])
+    # ★★別の項目に同じ値があっても、訂正した項目の値で照らす★★（Codex review315 の3）
+    _conf_two = {"item_values#red": {"value": {"values": ["1/4096"]}},
+                 "item_values#blue": {"value": {"values": ["1/8192"]}}}
+    try:
+        globals()["added_basis"] = lambda s, ti, basis=None: (
+            ["1/8192|item:item_values#red", "1/8192|item:item_values#blue"], ["item_values#red", "item_values#blue"])
+        _new_iv9 = {"sections": [{"title": "天井・恩恵", "body": ["a"]}]}
+        _got_iv9 = carry_added_sections(_old_iv, _new_iv9, "zzz_a", titles={"赤BB直撃"}, confirmed=_conf_two)
+    finally:
+        globals()["added_basis"] = _keep_ab
+    t("★★別の項目の同じ値が、訂正した項目の訂正を隠さない★★", _got_iv9 == [])
+    # ★★項目名に「|」があっても、その項目の控えで照らす★★（Codex review316 の2）
+    try:
+        globals()["added_basis"] = lambda s, ti, basis=None: (
+            ["1/8192|item:item_values#赤BB|通常", "1/8192|article"], ["item_values#赤BB|通常", "item_values#blue"])
+        _new_iv10 = {"sections": [{"title": "天井・恩恵", "body": ["赤BB直撃は1/8192です。"]}]}
+        _got_iv10 = carry_added_sections(_old_iv, _new_iv10, "zzz_a", titles={"赤BB直撃"},
+                                         confirmed={"item_values#赤BB|通常": {"value": {"values": ["1/4096"]}},
+                                                    "item_values#blue": {"value": {"values": ["1/8192"]}}})
+    finally:
+        globals()["added_basis"] = _keep_ab
+    t("　項目名に「|」があっても読み違えず、訂正を見る", _got_iv10 == [])
+    try:
+        globals()["added_basis"] = lambda s, ti, basis=None: (["1/8192|article"], ["item_values#red"])
+        _new_iv8 = {"sections": [{"title": "天井・恩恵", "body": ["赤BB直撃は1/8192です。"]}]}
+        _got_iv8 = carry_added_sections(_old_iv, _new_iv8, "zzz_a", titles={"赤BB直撃"}, confirmed={})
+    finally:
+        globals()["added_basis"] = _keep_ab
+    t("　名指しした確定値が取り消されたら、出どころが記事の数でも持ち越さない", _got_iv8 == [])
+    t("　（配線）持ち越した欄があれば、項目に結び付かない問題（公式URLが別の機種）でも書かない（Codex review312 の3）",
+      '    if _carried_f:\n        _bad_c += [x for x in (_rv.get("invalid_global") or [])'
+      in inspect.getsource(plan_one).replace("\r\n", "\n"))
+    _src_po = inspect.getsource(plan_one)
+    t("　（配線）持ち越した欄が名指しした確定値を確かめ直せなければ書かない（Codex review311 の4）",
+      '_bad_c = [x for f in _carried_f for x in ((_rv.get("invalid_fields") or {}).get(f) or [])' in _src_po
+      and '    if _bad_c:\n        out["problems"] += [f"控えを確かめ直せません: {x}" for x in _bad_c]\n        return out'
+      in _src_po.replace("\r\n", "\n"))
+    t("　（配線）持ち越した欄が名指しした確定値も、書く直前の確かめ直し（late_gone）の対象に入れる",
+      "for f in added_basis(slug, ti)[1]}" in inspect.getsource(plan_one)
+      and "| set(_carried_f))" in inspect.getsource(plan_one))
     _new = {"aliases": [], "info": ""}
     carry_machine_meta({"aliases": ["リコリコ"], "info": "スマスロAT"}, _new)
     t("★★2AIが決めた通称とタイプを、作り直した機種行へ持ち越す★★",
@@ -3470,7 +3582,22 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     # ★噂の欄（rumor_verdict）を持ち越す★（2026-11-10・新台にも噂を書くようにした）
     carry_rumor_section(old_detail, detail)
     # ★大手と比べて2AIが足した欄（add_items）も持ち越す★（2026-11-10）＝噂の欄の前へ
-    carry_added_sections(old_detail, detail, slug, row=machine)
+    _carried = carry_added_sections(old_detail, detail, slug, row=machine, gone=_rv_gone)
+    # ★★持ち越した欄が名指しした確定値も「書く中身に使った項目」に数える★★（2026-11-27・Codex review310 の3＝
+    #   書く直前の確かめ直しで初めて消えた項目を late_gone が見られるように。item_values は材料に合流しない）
+    _carried_f = sorted({f for ti in (_carried or []) for f in added_basis(slug, ti)[1]})
+    out["cv_added"] = sorted(set(out.get("cv_added") or [])
+                             | set(_carried_f))
+    # ★★持ち越した欄が名指しした確定値を確かめ直せなかったら書かない★★（Codex review311 の4＝item_values は材料に合流しないので、
+    #   合流した項目だけを見る used_invalid の対象に入っていなかった）
+    _bad_c = [x for f in _carried_f for x in ((_rv.get("invalid_fields") or {}).get(f) or [])
+              if x not in (_rv.get("invalid") or [])]
+    # ★項目に結び付かない問題（公式URLが別の機種など）も、持ち越した欄が確定値を名指ししていれば止める★（Codex review312 の3）
+    if _carried_f:
+        _bad_c += [x for x in (_rv.get("invalid_global") or []) if x not in (_rv.get("invalid") or []) and x not in _bad_c]
+    if _bad_c:
+        out["problems"] += [f"控えを確かめ直せません: {x}" for x in _bad_c]
+        return out
     # ★2AIが書いた「狙い目の根拠・ヤメ時・立ち回り」は derived_sections の持ち物なので持ち越す★（2026-11-10）
     carry_written_sections(old_detail, detail, machine)
     out["problems"] += claims_grew(cur.get("page_decision"), mat,

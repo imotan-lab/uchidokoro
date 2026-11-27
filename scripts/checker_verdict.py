@@ -217,7 +217,41 @@ def _lead_int(v):
     return n if n is not None and 0 < n <= MAX_VALUE else None
 
 
-def known_ceilings(slug: str, m: dict | None = None) -> set:
+# ★★受け取れるチェッカーの単位★★（2026-11-27・朝タスクの後回し＝yajikita_mairu の天井は999まいるで、
+#   チェッカーの道具がG数の機種しか受け取らず、狙い目の線を書く道が無かった）
+#   ★まいるはG数と同じく「ここまで深ければ座る」1本の数え方★なので、線と天井の筋（caution ≦ good ≦ excellent ≦ ceiling）は同じに見られる。
+#   ★天井は同じ単位で確かめた記録だけ★（known_ceilings）。数字の読み方ではまいるの前の数は単位なしと読まれる（ひらがなは単位でない）。
+#   pt・周期・あべし は要るようになったら、そのとき実データで足す（罠㉖）
+UNITS_OK = ("G", "まいる")
+
+
+def checker_unit(m: dict | None, dec: dict | None = None) -> str:
+    """★その機種のチェッカーの単位★＝チェッカーがあればその単位／無くて決定が単位を書いていればそれ／どちらも無ければG"""
+    ck = (m or {}).get("checker")
+    if isinstance(ck, dict) and ck.get("unit"):
+        return str(ck["unit"])
+    if not (isinstance(ck, dict) and ck) and isinstance(dec, dict) and dec.get("unit"):
+        return str(dec["unit"])
+    return "G"
+
+
+def line_forms(v, unit: str) -> set:
+    """★線・天井の数を、文の中で書いてよい形★＝G数の機種は「500G」と単位なし、まいるの機種は単位なしだけ
+    （「500まいる」はひらがなの前なので単位なしと読まれる。まいるの線を「500G」と書かせない＝Codex review310 の6）"""
+    return {(str(v), "G"), (str(v), "")} if unit == "G" else {(str(v), "")}
+
+
+def g_written(text, unit: str) -> list:
+    """★G数でない機種の文に「500G」「500 G」の形がある★（Codex review310 の6・review311 の6＝空白を挟むと単位なしと読まれて通った）"""
+    if unit == "G" or not isinstance(text, str):
+        return []
+    import unicodedata as _ud_g
+    # ★半角・全角が混ざった書き方（ゲｰム）もそろえてから見る★（Codex review314 の5）
+    text = _ud_g.normalize("NFKC", text)
+    return ["G表記（" + mo.group(0) + "）" for mo in re.finditer(r"[0-9０-９]\s*(?:[GＧgｇ]|ゲーム|ｹﾞｰﾑ)", text)]
+
+
+def known_ceilings(slug: str, m: dict | None = None, unit: str | None = None) -> set:
     """★その機種で「天井」として確かめてある数字★（天井を発明させないため）
 
     ★★記事データの全文から数字を拾ってはいけない★★
@@ -250,15 +284,17 @@ def known_ceilings(slug: str, m: dict | None = None) -> set:
     except Exception:                                        # noqa: BLE001
         got = {}                          # ★読めなければ「無い」扱い（断る側へ倒す）★
         _cv = None
+    unit = unit or checker_unit(m)
     v = ((got.get("checker_ceiling") or {}).get("value") or {}).get("games")
-    if (n := _lead_int(v)) is not None:
-        out.add(n)
+    if unit == "G" and (n := _lead_int(v)) is not None:
+        out.add(n)                         # ★早見表の天井はG数だけ★
     for _key in sorted(got):
         if _cv is None or _cv.base_field(_key) != "ceiling":
             continue
         c = (got.get(_key) or {}).get("value") or {}
-        if str(c.get("kind") or "") != "GAME" or str(c.get("unit") or "") != "G":
-            continue                       # ★pt・周期・スルーは混ぜない★
+        # ★チェッカーと同じ単位の天井だけ★（G数はGAME・まいるはPOINT。pt・周期・スルーは混ぜない）
+        if (str(c.get("kind") or ""), str(c.get("unit") or "")) != ("GAME" if unit == "G" else "POINT", unit):
+            continue
         if (n := _lead_int(c.get("amount"))) is not None:
             out.add(n)
     ck = (m or {}).get("checker") or {}
@@ -317,8 +353,14 @@ def decision_problems(dec, ms=None) -> list:
     #   ★そういう機種は、確かめた天井が0件になって下で断られる★が、
     #   別の欄のG数天井がたまたま記録されていると通ってしまうので明示的に断る。
     #   ★要るようになったら、そのとき実データで作る★（罠㉖）。
-    if str(ck.get("unit") or "G") != "G":
-        ng.append(f"{slug}: G数以外の機種（{ck.get('unit')}）はまだ受け取れません")
+    # ★★まいるも受け取る★★（2026-11-27・UNITS_OK）＝単位を書けるのはチェッカーを新しく作るときだけ
+    _unit = checker_unit(m, dec)
+    # ★反映したあとの再実行（同じ単位）は通す★（Codex review311 の7＝作ったあとの作り直しの道が止まっていた）
+    if "unit" in dec and ((ck and str(dec.get("unit") or "") != str(ck.get("unit") or "G"))
+                          or str(dec.get("unit") or "") not in UNITS_OK):
+        ng.append(f"{slug}: 単位（unit）はチェッカーを新しく作るときに書きます（あるならいまの単位と同じ）・{'/'.join(UNITS_OK)} のどれかです")
+    if _unit not in UNITS_OK:
+        ng.append(f"{slug}: この単位の機種（{_unit}）はまだ受け取れません（{'/'.join(UNITS_OK)} だけ）")
     # ★★交換率ごとの線（byRate）も受け取る★★（2026-10-02・#428）
     #   ★直す前は交換率を持つ機種を一律に断っていた★ので、交換率が良いほうが
     #   深い狙い目になっている機種（monkeyv・onimusha3）を、2AIが決めても直せなかった。
@@ -335,8 +377,14 @@ def decision_problems(dec, ms=None) -> list:
     #   ★直す前は「天井が1つも確かめられていなければ断る」だった★＝
     #   既存の機種は天井を構造化して持っていないことが多く、2AIが決めても書けなかった。
     #   ★上限は、天井が分かっている欄でだけ見る★（線を何Gにするかは2AIの判断）。
-    nums = known_ceilings(slug, m)
+    nums = known_ceilings(slug, m, _unit)
     cap = max(nums) if nums else None
+    # ★★チェッカーを新しく作るときは、確かめた天井の単位とそろえる★★（Codex review310 の5＝999まいるの天井があるのに
+    #   単位を書かずにG数のチェッカーを作ると、天井の上限が効かず 1000 の線が通った）
+    if not ck and not nums:
+        _other = [u for u in UNITS_OK if u != _unit and known_ceilings(slug, m, u)]
+        if _other:
+            ng.append(f"{slug}: 確かめた天井は {'/'.join(_other)} です。決定の単位（unit）をそろえてください（いま {_unit}）")
     # ★★一覧の文（strategy）も2AIが決めてよい★★（2026-09-25）
     #   ★交換率の無い既存の機種は、一覧の文が手書き★（`target_display` は
     #   交換率を持つ機種しか作らない）ので、線だけ変えると一覧が古いまま残る。
@@ -360,9 +408,9 @@ def decision_problems(dec, ms=None) -> list:
             _vals = [md[lv] for md in (dec.get("modes") or []) if isinstance(md, dict)
                      for lv in LEVELS + ("ceiling",) if _int(md.get(lv)) is not None]
             for v in list(_vals) + list(nums):
-                allowed |= {(str(v), "G"), (str(v), "")}
+                allowed |= line_forms(v, _unit)
             made = [n + u for n, u in _dn_num.numbers_with_unit(st)
-                    if (n, u) not in allowed]
+                    if (n, u) not in allowed] + g_written(st, _unit)
             if made:
                 ng.append("一覧の文に、決定の線にも今の文にも無い数字があります: "
                           + " / ".join(made[:4]) + "（数字を作らない）")
@@ -452,8 +500,10 @@ def decision_problems(dec, ms=None) -> list:
             if limit is not None and lv in vals and vals[lv] > limit:
                 ng.append(f"{tag}: {lv}（{vals[lv]}）が、{why}（{limit}）を"
                           "超えています")
-        ng += by_rate_problems(tag, md, rates, limit, why, m, key, nums)
-        ng += rows_problems(tag, md, m, key, rates, limit, why, nums)
+        # ★チェッカーを新しく作るときは、決定の単位で見る★（Codex review311 の6＝作る前の機種行から既定のGを選んでいた）
+        _mu = m if ck else dict(m, checker={"unit": _unit})
+        ng += by_rate_problems(tag, md, rates, limit, why, _mu, key, nums)
+        ng += rows_problems(tag, md, _mu, key, rates, limit, why, nums)
     if ng:
         return ng
     # ★★当てたあとの完成形でも、もう一度だけ見る★★（2026-09-18）
@@ -551,8 +601,8 @@ def by_rate_problems(tag, md, rates, limit, why, m, key, nums) -> list:
                     if isinstance(_x, dict):
                         allowed |= set(_dn_num.numbers_with_unit(str(_x.get("label") or "")))
                 for v in [x for x in full.values() if x is not None] + list(nums):
-                    allowed |= {(str(v), "G"), (str(v), "")}
-                made = [n + u for n, u in _dn_num.numbers_with_unit(nt) if (n, u) not in allowed]
+                    allowed |= line_forms(v, checker_unit(m))
+                made = [n + u for n, u in _dn_num.numbers_with_unit(nt) if (n, u) not in allowed]                     + g_written(nt, checker_unit(m))
                 if made:
                     ng.append(f"{rt}: 注記に、線にも天井にも今の注記にも無い数字があります: "
                               + " / ".join(made[:4]) + "（数字を作らない）")
@@ -589,7 +639,7 @@ def _row_nums_allowed(m: dict, old_notes, values, nums, count) -> set:
         if isinstance(_x, dict):
             allowed |= set(_dn_num.numbers_with_unit(str(_x.get("label") or "")))
     for v in list(values) + list(nums):
-        allowed |= {(str(v), "G"), (str(v), "")}
+        allowed |= line_forms(v, checker_unit(m))
     return allowed
 
 
@@ -730,7 +780,7 @@ def rows_problems(tag, md, m, key, rates, limit, why, nums) -> list:
                             ok_n = _row_nums_allowed(m, [o2.get("note"), old.get("note")],
                                                      full + after_vals, nums, cnt)
                             made = [n + u for n, u in _dn_num.numbers_with_unit(nt)
-                                    if (n, u) not in ok_n and (n, u) != (str(cnt), cnt_unit)]
+                                    if (n, u) not in ok_n and (n, u) != (str(cnt), cnt_unit)]                                 + g_written(nt, checker_unit(m))
                             if made:
                                 ng.append(f"{rrt}: 注記に、線にも天井にも今の注記にも無い数字があります: "
                                           + " / ".join(made[:4]) + "（数字を作らない）")
@@ -741,7 +791,7 @@ def rows_problems(tag, md, m, key, rates, limit, why, nums) -> list:
             else:
                 ok_n = _row_nums_allowed(m, [old.get("note")], after_vals, nums, cnt)
                 made = [n + u for n, u in _dn_num.numbers_with_unit(nt)
-                        if (n, u) not in ok_n and (n, u) != (str(cnt), cnt_unit)]
+                        if (n, u) not in ok_n and (n, u) != (str(cnt), cnt_unit)] + g_written(nt, checker_unit(m))
                 if made:
                     ng.append(f"{rowt}: 注記に、線にも天井にも今の注記にも無い数字があります: "
                               + " / ".join(made[:4]) + "（数字を作らない）")
@@ -1032,7 +1082,7 @@ def merged(m: dict, dec: dict) -> dict:
     """★決定を当てた後の姿★（★書かずに作るだけ★＝見るだけの回と同じ答えにする）"""
     out = json.loads(json.dumps(m, ensure_ascii=False))
     ck = dict(out.get("checker") or {})
-    ck.setdefault("unit", "G")
+    ck.setdefault("unit", checker_unit(m, dec))
     modes = list(ck.get("modes") or [])
     have = {str(x.get("key") or "") for x in modes if isinstance(x, dict)}
     for md in dec.get("modes") or []:
@@ -1480,8 +1530,8 @@ def revise_problems(dec, ms=None) -> list:
                 _c0 = _mode_conf(_after0, str(_md.get("key") or ""))
                 for lv in LEVELS + ("ceiling",):
                     if _int(_c0.get(lv)) is not None:
-                        _ok |= {(str(_c0[lv]), "G"), (str(_c0[lv]), "")}
-            _made = [n + u for n, u in _dn_num.numbers_with_unit(st) if (n, u) not in _ok]
+                        _ok |= line_forms(_c0[lv], checker_unit(m))
+            _made = [n + u for n, u in _dn_num.numbers_with_unit(st) if (n, u) not in _ok]                 + g_written(st, checker_unit(m))
             if _made:
                 ng.append("一覧の文に、今の文にも残る欄の線にも無い数字があります: "
                           + " / ".join(_made[:4]) + "（数字を作らない）")
@@ -1578,7 +1628,7 @@ def _count_mode_tests(t) -> None:
     keep = (MACHINES, DETAILS, ADDS_STORE)
     tmpd = tempfile.mkdtemp(prefix="ckcount_")
     try:
-        globals()["known_ceilings"] = lambda s, m=None: {800}
+        globals()["known_ceilings"] = lambda s, m=None, unit=None: {800}
         globals()["_rebuild_target_text"] = lambda: 0
         DETAILS = os.path.join(tmpd, "details")
         os.makedirs(DETAILS)
@@ -1796,7 +1846,7 @@ def _count_mode_tests(t) -> None:
 def _rows_tests(t) -> None:
     """★回数の表の行を書き換える★（2026-10-29）＝バキの形（CZ間＋スルーの行に交換率ごとの線）"""
     _bak_kc = globals()["known_ceilings"]
-    globals()["known_ceilings"] = lambda s, m=None: set()
+    globals()["known_ceilings"] = lambda s, m=None, unit=None: set()
 
     def _row(c, g, ca, ex, by):
         return {"count": c, "excellent": ex, "good": g, "caution": ca, "note": f"{c}スルー。{g}G〜が目安です。",
@@ -3223,7 +3273,7 @@ def selftest() -> int:
     # ★確かめてある天井は、本物の読み取り関数を差し替えて渡す★
     #   （罠①＝自作の材料を自分で採点しない。読み取りそのものは下で本物を動かす）
     real = globals()["known_ceilings"]
-    globals()["known_ceilings"] = lambda s, m=None: {1000}
+    globals()["known_ceilings"] = lambda s, m=None, unit=None: {1000}
     try:
         t("ふつうの決定は通る", not decision_problems(dec(), base_ms))
         t("★判断者が1つだと通らない★",
@@ -3310,7 +3360,7 @@ def selftest() -> int:
                                        {"key": "at", "label": "AT間"}],
                              "normal": {"ceiling": 600},
                              "at": {"ceiling": 1000}}}]
-        globals()["known_ceilings"] = lambda s, m=None: {600, 1000}
+        globals()["known_ceilings"] = lambda s, m=None, unit=None: {600, 1000}
         # ★「当てたあと」の受け皿ではなく、欄ごとの検査が捕まえること★
         #   （罠③＝守りが二重だと、片方を壊しても試験が緑のまま）
         t("★★浅い欄に、その欄の天井を超える線は入れられない★★"
@@ -3334,7 +3384,7 @@ def selftest() -> int:
           not merged_problems(
               {"checker": {"modes": [{"key": "normal"}],
                            "normal": {"good": 900}}}))
-        globals()["known_ceilings"] = lambda s, m=None: {1000}
+        globals()["known_ceilings"] = lambda s, m=None, unit=None: {1000}
         t("★good が無いと通らない★",
           any("good" in x for x in decision_problems(
               dec(modes=[{"key": "normal", "label": "通常",
@@ -3413,7 +3463,7 @@ def selftest() -> int:
               base_ms)))
         t("★G数以外の機種（pt・周期）は、まだ受け取らない★"
           "（★単位の違う線が入る★）",
-          any("G数以外" in x for x in decision_problems(
+          any("この単位の機種" in x for x in decision_problems(
               dec(), [{"slug": "zzz_auto", "name": "試験機",
                        "publication_policy": "page-decision/v1",
                        "checker": {"unit": "pt",
@@ -3545,13 +3595,13 @@ def selftest() -> int:
         t("★2回当てても同じ姿になる★",
           merged(merged(base_ms[0], dec()), dec()) == merged(base_ms[0], dec()))
         # ★★天井が構造化されていなくても、2AIの線は受け取る★★（2026-09-25・鉄則0z）
-        globals()["known_ceilings"] = lambda s, m=None: set()
+        globals()["known_ceilings"] = lambda s, m=None, unit=None: set()
         t("★★天井が構造化されていない機種でも、2AIが決めた線は受け取る★★"
           "（★直す前は断っていたので、既存の機種の線を直せなかった★）",
           not decision_problems(dec(), base_ms))
         # ★★天井が2つ以上あって、その欄の天井が分からないとき★★
         #   （2026-09-18・Codexの3回目。★実データ＝ssb1 は 899G と 560G★）
-        globals()["known_ceilings"] = lambda s, m=None: {560, 899}
+        globals()["known_ceilings"] = lambda s, m=None, unit=None: {560, 899}
         _no_ce = [{"slug": "zzz_auto", "name": "試験機",
                    "publication_policy": "page-decision/v1",
                    "checker": {"unit": "G", "modes": [], }}]
@@ -3564,7 +3614,7 @@ def selftest() -> int:
           not decision_problems(
               dec(modes=[{"key": "normal", "label": "通常",
                           "ceiling": 560, "good": 500}]), _no_ce))
-        globals()["known_ceilings"] = lambda s, m=None: {1000}
+        globals()["known_ceilings"] = lambda s, m=None, unit=None: {1000}
         t("　天井が1つだけの機種では、いままでどおり書かなくてよい",
           not decision_problems(
               dec(modes=[{"key": "normal", "label": "通常", "good": 800}]),
@@ -3631,11 +3681,11 @@ def selftest() -> int:
     import tempfile as _tf
     _NAME = "L試験機ゼット"
     _Q = {"bonus": "ボーナス間の天井は899G", "cz": "CZ間の天井は560G",
-          "point": "思春期ポイントの天井は1000pt"}
+          "point": "思春期ポイントの天井は1000pt", "mairu": "通常時の天井は999まいる"}
 
     def _ff(url):
         q = _Q["bonus"] if "zzbonus" in url else (
-            _Q["cz"] if "zzcz" in url else _Q["point"])
+            _Q["cz"] if "zzcz" in url else (_Q["mairu"] if "zzmairu" in url else _Q["point"]))
         return ("<title>" + _NAME + " スロット 新台 天井 | 解析</title>"
                 "<body><h1>" + _NAME + "</h1><p>" + q + "。"
                 + ("説明。" * 30) + "</p></body>")
@@ -3649,7 +3699,8 @@ def selftest() -> int:
         _cvT.init_store()
         for _sfx, _kind, _amt, _unit in (("bonus", "GAME", "899", "G"),
                                          ("cz", "GAME", "560", "G"),
-                                         ("point", "POINT", "1000", "pt")):
+                                         ("point", "POINT", "1000", "pt"),
+                                         ("mairu", "POINT", "999", "まいる")):
             _cvT.record(
                 slug="zz_ceil", field="ceiling#" + _sfx,
                 official_url="https://m.example/products/slot/z/",
@@ -3661,11 +3712,24 @@ def selftest() -> int:
                         "https://nana-press.com/zz" + _sfx + "|" + _Q[_sfx])],
                 by=["claude", "codex"], name=_NAME, fetch=_ff,
                 why="同じ原文を読んで一致しました")
+        # ★早見表の天井（G数）も記録する★＝まいるの機種には混ぜないことを見るため（2026-11-27）
+        _cvT.record(
+            slug="zz_ceil", field="checker_ceiling",
+            official_url="https://m.example/products/slot/z/",
+            value={"games": "899"},
+            sources=[_cvT.parse_source("https://chonborista.com/zzbonus2|" + _Q["bonus"]),
+                     _cvT.parse_source("https://nana-press.com/zzbonus2|" + _Q["bonus"])],
+            by=["claude", "codex"], name=_NAME, fetch=_ff,
+            why="同じ原文を読んで一致しました")
         _rec = known_ceilings("zz_ceil")
         t("★★見出し付きの天井（ceiling#bonus / #cz）も読む★★"
           "（★直す前は0件で、その機種は永久に線を決められなかった★）",
           {560, 899} <= _rec)
-        t("　G数でない天井（pt）は混ぜない", 1000 not in _rec)
+        t("　G数でない天井（pt）は混ぜない", 1000 not in _rec and 999 not in _rec)
+        # ★★まいるのチェッカーは、まいるで確かめた天井だけ★★（2026-11-27）
+        t("★★まいるの機種は、まいるで確かめた天井だけを読む（G数・ptは混ぜない）★★",
+          known_ceilings("zz_ceil", unit="まいる") == {999}
+          and known_ceilings("zz_ceil", {"checker": {"unit": "まいる", "modes": []}}) == {999})
     finally:
         _cvT.STORE, _cvT.bind_machine = _keep_store, _keep_bind
     # ★★記事の全文から数字を拾っていないこと★★（Codexの指摘の対照実験）
@@ -3681,6 +3745,7 @@ def selftest() -> int:
         {"checker": {"modes": [{"key": "normal"}], "normal": {"ceiling": 888}}})
     t("　チェッカーに入っている天井は読める（対照）", _wired == {888})
 
+    _unit_tests(t)
     _no_line_tests(t)
     _coin_tests(t)
     _revise_tests(t)
@@ -3699,6 +3764,62 @@ def selftest() -> int:
       "targetProjection" not in _tp_after and _tp_m.get("targetProjection") == "aaaa")
     print(f"\n{ok[0]}/{ok[1]} 合格")
     return 0 if ok[0] == ok[1] else 1
+
+
+def _unit_tests(t) -> None:
+    """★まいるのチェッカー★（2026-11-27・yajikita_mairu）＝本番の machines.json には書かない"""
+    base = {"slug": "zzz_mairu", "judges": ["claude", "codex"], "why": "通常時の天井999まいるから線を決めた",
+            "modes": [{"key": "normal", "label": "通常", "caution": 400, "good": 500, "excellent": 700}]}
+    none = [{"slug": "zzz_mairu", "name": "試験機"}]
+    has = [{"slug": "zzz_mairu", "name": "試験機",
+            "checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}], "normal": {"good": 300}}}]
+    pt = [{"slug": "zzz_mairu", "name": "試験機",
+           "checker": {"unit": "pt", "modes": [{"key": "normal", "label": "通常"}], "normal": {"good": 300}}}]
+    _u = [x for x in decision_problems(dict(base, unit="まいる"), none) if "単位" in x]
+    t("★★チェッカーの無い機種に、まいるのチェッカーを作れる★★（直す前はG数の機種だけ）", _u == [])
+    t("　作ったチェッカーの単位はまいる", merged(none[0], dict(base, unit="まいる"))["checker"]["unit"] == "まいる")
+    t("　単位を書かなければ今までどおりG", merged(none[0], base)["checker"]["unit"] == "G")
+    t("　受け取れない単位（pt・周期）は断る",
+      any("単位" in x for x in decision_problems(dict(base, unit="pt"), none))
+      and any("単位" in x for x in decision_problems(dict(base, unit="周期"), none)))
+    t("　チェッカーがある機種の単位は書き換えられない",
+      any("単位" in x for x in decision_problems(dict(base, unit="まいる"), has)))
+    t("　pt の機種は今までどおり断る", any("単位" in x for x in decision_problems(base, pt)))
+    # ★★確かめた天井がまいるなのに、単位を書かずにG数のチェッカーを作れない★★（Codex review310 の5）
+    _keep_kc = globals()["known_ceilings"]
+    try:
+        globals()["known_ceilings"] = lambda s, m=None, unit=None: {999} if unit == "まいる" else set()
+        _hi = dict(base, modes=[{"key": "normal", "label": "通常", "good": 1000}])
+        t("★★確かめた天井がまいるなら、単位を書かないG数のチェッカーは作れない★★",
+          any("単位（unit）をそろえて" in x for x in decision_problems(_hi, none)))
+        t("　単位をまいるにそろえれば、天井999まいるを超える線は断る",
+          any("超え" in x or "天井" in x for x in decision_problems(dict(_hi, unit="まいる"), none)))
+        # ★★まいるの線を一覧の文に「G」と書けない★★（Codex review310 の6）
+        t("★★まいるの機種の一覧の文に、線の数を「G」で書けない★★",
+          any("無い数字" in x for x in decision_problems(dict(base, unit="まいる", strategy="500Gからです。"), none))
+          and not [x for x in decision_problems(dict(base, unit="まいる", strategy="500まいるからです。"), none)
+                   if "無い数字" in x])
+        # ★★新しく作るまいるのチェッカーの交換率ごとの注記に「500G」「500 G」を書けない★★（Codex review311 の6）
+        _rated = [{"slug": "zzz_mairu", "name": "試験機",
+                   "exchangeRates": [{"key": "eq56", "label": "5.6枚"}, {"key": "rate50", "label": "6.5枚"}]}]
+        _br = dict(base, unit="まいる", modes=[{"key": "normal", "label": "通常", "caution": 400, "good": 500,
+                                                "excellent": 700, "byRate": {"rate50": {"good": 550, "note": "550Gからです。"}}}])
+        t("★★新しく作るまいるのチェッカーの交換率ごとの注記に「550G」を書けない★★",
+          any("G表記" in x for x in decision_problems(_br, _rated)))
+        t("　一覧の文の「500 G」（空白つき）・「500ゲーム」も断る",
+          any("G表記" in x for x in decision_problems(dict(base, unit="まいる", strategy="500 Gからです。"), none))
+          and any("G表記" in x for x in decision_problems(dict(base, unit="まいる", strategy="500 ゲームからです。"), none))
+          and any("G表記" in x for x in decision_problems(dict(base, unit="まいる", strategy="500 ｹﾞｰﾑからです。"), none))
+          and any("G表記" in x for x in decision_problems(dict(base, unit="まいる", strategy="500 ゲｰムからです。"), none))
+          and any("G表記" in x for x in decision_problems(dict(base, unit="まいる", strategy="500 gからです。"), none)))
+    finally:
+        globals()["known_ceilings"] = _keep_kc
+    # ★★作ったあとに同じ決定（同じ単位）を再実行できる★★（Codex review311 の7）
+    _made_m = [{"slug": "zzz_mairu", "name": "試験機",
+                "checker": {"unit": "まいる", "modes": [{"key": "normal", "label": "通常"}], "normal": {"good": 500}}}]
+    t("★★作ったあとに同じ単位の決定を再実行できる（別の単位は断る）★★",
+      not [x for x in decision_problems(dict(base, unit="まいる"), _made_m) if "単位" in x]
+      and any("単位" in x for x in decision_problems(dict(base, unit="G"), _made_m)))
 
 
 def _coin_tests(t) -> None:

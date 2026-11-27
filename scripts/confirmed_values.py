@@ -170,6 +170,8 @@ FIELD_TOPICS = {
     "reset_state": "reset",
     "cz_state": "cz",
     "model_code": "",               # ★読者には出さない★
+    # ★材料には入らない★＝読者に出るのは add_items が足した欄だけ（その欄の数字の出どころとして読む）
+    "item_values": "",
 }
 
 
@@ -238,6 +240,13 @@ AI_ONLY_LABELS = {
 #   受け取れても記事に届かないもの＝答えが迷子になるので、入口で断る。
 CLOSED_FIELDS = ("net_increase",)
 
+# ★★記事に足す項目の数字だけを控える★★（2026-11-27・朝タスクの後回し4件＝赤BB直撃の設定別確率・
+#   ゴールド勝率約80%・継続ストック約42% などは決まった形の受け口が無く、2社で一致しても記録できなかった）
+#   ★値は出典の逐語にそのまま在る表示値の並びだけ★（独立2出典・どの言葉に付くかは2AIが決める）。
+#   読むのは add_items だけ（fields に名指しした数の出どころ）＝★新台の材料には入れない★（merge_into が飛ばす）。
+#   ★名前は item_values#<見出し>★（1機種に何件でも控えられるように）
+ITEM_ONLY_FIELDS = {"item_values": "add_items"}
+
 
 def allowed_fields() -> dict:
     """受け取ってよい項目 → 入れ先。
@@ -251,6 +260,7 @@ def allowed_fields() -> dict:
     out = {k: "adopted" for k in _sp.FIELDS}
     out.update(FIELD_TARGETS)
     out.update(AI_ONLY_FIELDS)
+    out.update(ITEM_ONLY_FIELDS)
     for _k in CLOSED_FIELDS:
         out.pop(_k, None)
     return out
@@ -266,6 +276,8 @@ VALUE_SHAPES = {
     #   なぜその値かを --why に必ず残す。
     "checker_ceiling": {"required": ("games",), "enums": {},
                         "quoted": ("games",)},
+    # ★記事に足す項目の数字★（2026-11-27）＝並びの1件ずつが、どの出典の逐語にもそのまま在ること
+    "item_values": {"required": ("values",), "enums": {}, "quoted": ("values",)},
     # ★天井はこれで全部か★（2026-08-24）
     #   ★辞書で持つ★＝この仕組みは値を辞書で扱う契約なので、
     #   真偽値そのものだと公式の登録口を通れない（Codexの6回目で判明）。
@@ -412,6 +424,11 @@ VALUE_PATTERNS = {
     "at_net_unmapped": {
         "values": (_re.compile(r"^\d{1,2}(\.\d)?$"),
                    "純増の数だけ（単位も「約」も書かない。例: 3.1）"),
+    },
+    # ★記事に足す項目の数字★（2026-11-27）＝1件ずつ、数を含む表示値（出典の書き方のまま）
+    "item_values": {
+        "values": (_re.compile(r"^(?=.*[0-9０-９])[^|]{1,40}$"),
+                   "数を含む表示値（出典の書き方のまま・40字まで。例: 1/8192 / 約80%）"),
     },
     # ★朝一・リセット★（2026-08-12）
     "reset": {
@@ -929,6 +946,74 @@ def token_in_quote(token: str, quote: str) -> bool:
     return any(_token_form_in_quote(f, q) for f in forms)
 
 
+_SIGN_CHARS = "+＋-−－‐‑–—―▲△"
+
+
+def unsigned_in_quote(token: str, quote: str) -> bool:
+    """★その値が、直前に符号の付かない形で引用に在るか★（item_values 用・2026-11-27・Codex review309 の2）
+
+    値そのものが符号で始まるなら今までどおり token_in_quote で見る。境目の判定も token_in_quote と同じ。
+    符号と数のあいだの空白は詰めて見る（「− 500枚」も符号つき）。分数は値がその分数を含むときだけ。
+    ★値が引用の端にあれば数えない★（本文で直前・直後にある符号や数が引用に入っていないため）。
+    """
+    t0 = unicodedata.normalize("NFKC", str(token or "")).strip()
+    if not t0:
+        return False
+    if t0[:1] in _SIGN_CHARS:
+        # ★符号で始まる値も、引用の端にあれば数えない★（Codex review312 の1＝「-500」で切った引用で -5000 を -500 にできた）
+        return _inner_occurrence(token, page_form(quote))
+    # ★符号つきの数は、続く数ごと（桁区切り・小数・分数・「42 %」の空白も）伏せる★（Codex review310 の2＝
+    #   値の原形だけを伏せると「−1,500枚」「−42 %」が 1500・42% として残っていた）
+    masked = _re.sub(r"[%s]\s*[0-9][0-9.,/]*" % _re.escape(_SIGN_CHARS), "〓", page_form(quote))
+    # ★分数は、値がその分数を含むときだけ残す★（「1/8192」「1 / 8192」から 8192 だけを値にしない）
+    masked = _re.sub(r"[0-9][0-9.,]*\s*/\s*[0-9][0-9.,]*",
+                     lambda mo: mo.group(0) if mo.group(0) in t0 else "〓", masked)
+    # ★★値の前後に、引用の中の字が1つ以上あること★★（Codex review311 の2＝引用を数から始めると、
+    #   本文で直前にある負号・分子が見えないまま 500枚 を受け取っていた）＝引用の両端の字を伏せてから探す
+    return _inner_occurrence(token, masked)
+
+
+def _inner_occurrence(token: str, q: str) -> bool:
+    """★値の「ひとつの出現」が、引用の端に触れず、境目も正しいか★（Codex review313 の1＝端の出現と別の出現の組み合わせで通っていた）
+
+    ★境目は引用全体の上で、その出現の位置で見る★（Codex review314 の1＝前後1字の切り出しでは「500.5」「1,500」の
+    続きが見えなかった）。書き方は token_in_quote と同じ形も探す（「42 %」・けた区切り＝Codex review314 の3）。
+    """
+    t1 = unicodedata.normalize("NFKC", str(token or "")).strip()
+    forms = [t1]
+    if _re.fullmatch(r"\d{4,}", t1):
+        forms.append(f"{int(t1):,}")
+    if _re.fullmatch(r"\d+(?:\.\d+)?%", t1):
+        forms.append(t1[:-1] + " %")
+    for f1 in forms:
+        for mo in _re.finditer(_re.escape(f1), q):
+            if mo.start() < 1 or mo.end() >= len(q):
+                continue                   # ★引用の端に触れる出現は数えない★
+            if f1[:1].isnumeric() and _num_edge(q, mo.start() - 1, -1):
+                continue                   # ★別の数の一部（左）★
+            if f1[-1:].isnumeric() and _num_edge(q, mo.end(), 1):
+                continue                   # ★別の数の一部（右）★
+            # ★符号で始まる値の前が数なら、範囲の区切り（100-500枚）であって符号ではない★（Codex review315 の1）
+            #   ★数と区切りのあいだに単位があっても同じ★（100枚-500枚＝Codex review316 の1）
+            if f1[:1] in _SIGN_CHARS and _re.search(ITEM_RANGE_BEFORE, q[:mo.start()]):
+                continue
+            # ★数で終わる値の後ろに単位・％が続くなら、単位を落とした値（42%→42）なので数えない★（Codex review315 の1）
+            if f1[-1:].isdigit() and _re.match(_ITEM_UNIT_NEXT, q[mo.end():]):
+                continue
+            # ★後ろに「/」が続くなら、複合単位（2.5枚/G）や分数の途中なので数えない★（Codex review318 の3）
+            if _re.match(r"\s*[/／]", q[mo.end():]):
+                continue
+            return True
+    return False
+
+
+# ★数で終わる値のすぐ後ろ（空白を挟んでも）にあれば、その数の単位とみなす字★（add_items._ITEM_UNIT_AFTER と同じ顔ぶれ＋％）
+_ITEM_UNIT_NEXT = r"\s*(?:[%％‰‱A-Za-zＡ-Ｚａ-ｚ枚回円個秒倍周十百千万億兆゠-ヺー-ヿｦ-ﾟ]|まいる)"   # ★まいるも単位★（Codex review316 の3）
+# ★符号で始まる値の前がこの形なら、範囲の区切り（100-500枚・100枚-500枚・100 枚 -500枚）★（Codex review316 の1・review317 の2）
+#   ★数のあとに続いてよいのは単位だけ★（「設定6の差枚は-500枚」の「の差枚は」は単位ではないので負の数として読む）
+ITEM_RANGE_BEFORE = r"[0-9]\s?(?:[%％‰‱A-Za-zＡ-Ｚａ-ｚ枚回円個秒倍周十百千万億兆゠-ヺー-ヿｦ-ﾟ]{1,4}|まいる)?\s?$"
+
+
 def _token_form_in_quote(t: str, q: str) -> bool:
     """★1つの書き方の値が、引用にその値として書かれているか★（境目の判定は token_in_quote の説明どおり）"""
     for m in _re.finditer(_re.escape(t), q):
@@ -1064,6 +1149,16 @@ def wording_problems(field: str, toks, sources) -> list:
                 continue                   # 控えの問題は上で挙げている
             ng.append(f"{field}: 値『{token}』が {who} の引用にありません"
                       "（★出典ごとに同じ値を支えている必要があります★）")
+    # ★★記事に足す項目の数字（item_values）は、引用で符号が付いていない形で在ること★★（2026-11-27・Codex review309 の2）
+    #   ＝引用が「−500枚」なのに値「500枚」で通ると、記事に符号の無い数が出る（境目の判定は前の符号を見ない）
+    if base_field(field) == "item_values":
+        for i, s in enumerate(src):
+            who = str(s.get("publisher") or "") or f"出典{i + 1}"
+            q = " ".join(str(s.get("quote") or "").split())
+            for token in toks:
+                if token_in_quote(token, q) and not unsigned_in_quote(token, q):
+                    ng.append(f"{field}: 値『{token}』は {who} の引用では符号（−・+・▲ など）つきか、分数の一部か、"
+                              "引用の端にあります（★符号・分数ごと値に書く／引用は値の前後の字も含める★）")
     # ★★値の字は、どれか1つの出典がそのまま書いていること★★
     #   ★これが無いと★＝どこにも書かれていない言葉を値にして、
     #   出典を全部「書き方の違い」で埋められる＝★2AIが値を作れる★。
@@ -2070,6 +2165,8 @@ def merge_into(material: dict, slug: str, skip=(), rows=None) -> list:
         if not where:
             # ★知らない項目は黙って捨てない★
             raise ConfirmedError(f"知らない項目です: {field}")
+        if where == "add_items":
+            continue                       # ★材料には入れない★（add_items だけが読む）
         stamped = {
             "value": rec["value"],
             "sources": [s["url"] for s in rec.get("sources") or []],
@@ -4482,6 +4579,73 @@ def selftest() -> int:
 
         t("　2AIだけが答える鍵にも値の形がある（何でも受け取らない）",
           all(k in VALUE_SHAPES for k in AI_ONLY_FIELDS))
+        # ★★記事に足す項目の数字（item_values）★★（2026-11-27）
+        t("★★item_values は受け取れて、照合する表示値は並びの1件ずつ★★",
+          "item_values" in allowed_fields()
+          and check_shape("item_values#red", {"values": ["1/8192", "約80%"]}) == ["1/8192", "約80%"])
+        for _bad_iv in ({"values": ["数字なし"]}, {"values": "1/8192"}, {"values": []},
+                        {"values": ["1" * 41]}):
+            try:
+                check_shape("item_values#red", _bad_iv)
+                _iv_ok = False
+            except ConfirmedError:
+                _iv_ok = True
+            t(f"　item_values の形の違いは断る（{str(_bad_iv)[:30]}）", _iv_ok)
+        _mat_iv = {}
+        try:
+            merge_into(_mat_iv, "zzz_iv", rows={"item_values#red": {
+                "value": {"values": ["1/8192"]}, "sources": [{"url": "https://example.invalid/a"}],
+                "agreed_by": ["claude", "codex"], "decided_at": "2026-11-27"}})
+        except Exception as _e_iv:                # noqa: BLE001  ★例外で落ちたら❌と数える★
+            _mat_iv = {"例外": type(_e_iv).__name__}
+        t("　item_values は新台の材料に入れない（add_items だけが読む）", _mat_iv == {})
+        # ★★引用で符号つきの数を、符号なしの値で受け取らない★★（Codex review309 の2）
+        t("★★item_values は、引用で符号が付いた数（−500枚）を符号なしの値で受け取らない★★",
+          bool(wording_problems("item_values#d", ["500枚"], [{"quote": "差枚は−500枚です"}]))
+          and bool(wording_problems("item_values#d", ["500枚"], [{"quote": "差枚は - 500枚です"}]))
+          and not wording_problems("item_values#d", ["500枚"], [{"quote": "平均500枚です"}])
+          and not wording_problems("item_values#d", ["-500枚"], [{"quote": "差枚は-500枚です"}]))
+        t("★★符号つきの数は桁区切り・％の空白ごと伏せ、分数の一部だけを値にしない★★（Codex review310 の2）",
+          bool(wording_problems("item_values#d", ["42%"], [{"quote": "期待値は−42 %です"}]))
+          and bool(wording_problems("item_values#d", ["1500"], [{"quote": "差枚は−1,500枚です"}]))
+          and bool(wording_problems("item_values#d", ["8192"], [{"quote": "赤BB直撃は1/8192です"}]))
+          and not wording_problems("item_values#d", ["1/8192"], [{"quote": "赤BB直撃は1/8192です"}])
+          and not wording_problems("item_values#d", ["約1/8192"], [{"quote": "赤BB直撃は約1/8192です"}]))
+        t("★★引用の端にある値・空白つきの分数の一部は受け取らない★★（Codex review311 の2）",
+          bool(wording_problems("item_values#d", ["500枚"], [{"quote": "500枚と解析されています"}]))
+          and bool(wording_problems("item_values#d", ["8192"], [{"quote": "赤BB直撃は1 / 8192です"}]))
+          and bool(wording_problems("item_values#d", ["1/8192"], [{"quote": "赤BB直撃は1/8192"}]))
+          and not wording_problems("item_values#d", ["1 / 8192"], [{"quote": "赤BB直撃は1 / 8192です"}]))
+        t("★★符号で始まる値も、引用の端にあれば受け取らない★★（Codex review312 の1）",
+          bool(wording_problems("item_values#d", ["-500"], [{"quote": "通常時の平均差枚は-500"}]))
+          and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
+          # ★端の出現と別の出現を組み合わせない★（Codex review313 の1）
+          and bool(wording_problems("item_values#d", ["-500"], [{"quote": "-500の場合および差枚は-5000"}]))
+          and bool(wording_problems("item_values#d", ["500"], [{"quote": "500の場合および差枚は5000"}]))
+          # ★小数・けた区切りの続きも引用全体で見る★（Codex review314 の1）
+          and bool(wording_problems("item_values#d", ["500"], [{"quote": "500の場合および差枚は500.5です"}]))
+          and bool(wording_problems("item_values#d", ["500"], [{"quote": "500の場合および差枚は1,500枚です"}]))
+          and bool(wording_problems("item_values#d", ["-500"], [{"quote": "-500の場合および差枚は-500.5です"}]))
+          # ★「42 %」の書き方も受け取る★（Codex review314 の3）
+          and not wording_problems("item_values#d", ["42%"], [{"quote": "継続率は42 %です"}])
+          # ★範囲の区切りを符号と読まない・単位を落とした値を受け取らない★（Codex review315 の1）
+          and bool(wording_problems("item_values#d", ["-500枚"], [{"quote": "獲得枚数は100-500枚です"}]))
+          and bool(wording_problems("item_values#d", ["-500枚"], [{"quote": "獲得枚数は100 -500枚です"}]))
+          and bool(wording_problems("item_values#d", ["42"], [{"quote": "継続率は42%です"}]))
+          # ★単位を挟んだ範囲・まいるを落とした値も受け取らない★（Codex review316 の1・3）
+          and bool(wording_problems("item_values#d", ["-500枚"], [{"quote": "獲得枚数は100枚-500枚です"}]))
+          and bool(wording_problems("item_values#d", ["-500枚"], [{"quote": "獲得枚数は100枚 -500枚です"}]))
+          and bool(wording_problems("item_values#d", ["999"], [{"quote": "天井は999まいるです"}]))
+          # ★複合単位の前半を値にしない（Codex review318 の3）★
+          and bool(wording_problems("item_values#d", ["2.5枚"], [{"quote": "純増は2.5枚/Gです"}]))
+          and not wording_problems("item_values#d", ["2.5枚/G"], [{"quote": "純増は2.5枚/Gです"}])
+          and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
+          # ★範囲の判定は「数＋単位」だけ（Codex review317 の2）★
+          and not wording_problems("item_values#d", ["-500枚"], [{"quote": "設定6の差枚は-500枚です"}])
+          and bool(wording_problems("item_values#d", ["-500枚"], [{"quote": "獲得枚数は100 枚-500枚です"}]))
+          and not wording_problems("item_values#d", ["42"], [{"quote": "継続率は42の倍です"}]))
+        t("　ほかの項目の照合は今までどおり（符号を見ない）",
+          not wording_problems("ceiling#d", ["500"], [{"quote": "差枚は−500枚です"}]))
 
         mat2 = {"ceilings": {"adopted": [{"kind": "GAME", "amount": "1000",
                                           "unit": "G", "benefit": "AT",
