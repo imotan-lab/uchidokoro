@@ -946,7 +946,7 @@ def token_in_quote(token: str, quote: str) -> bool:
     return any(_token_form_in_quote(f, q) for f in forms)
 
 
-_SIGN_CHARS = "+＋-−－‐‑–—―▲△"
+_SIGN_CHARS = "+＋-−－‐‑–—―▲△±"   # ★±も符号★（Codex review326 の3）
 
 
 def unsigned_in_quote(token: str, quote: str) -> bool:
@@ -1008,6 +1008,9 @@ def _inner_occurrence(token: str, q: str) -> bool:
             #   （値の後ろの漢字の続き〈500枚獲得〉は単位と決められないので、ここでは見ない＝どの語に付くかは2AI・Codex review322 の1）
             # ★「/」のある式では、値の単位の語がそこで終わること★（500回転/1000回転 の 500回・1回/500回転 の 1回/500回＝Codex review323）
             _rest = q[mo.end():]
+            # ★「〜」でつながった範囲の片側（150〜300枚 の 300枚）は数えない★（Codex review326 の1）
+            if _re.search(r"[〜~～]\s*$", q[:mo.start()]) or _re.match(r"\s*[〜~～]", _rest):
+                continue
             if _re.match(_UNIT_CONT, _rest) and (_re.search(r"[/／]", f1) or _re.match(_UNIT_CONT + r"+\s*[/／]", _rest)):
                 continue
             if _re.match(r"\s*[/／]", q[mo.end():]):
@@ -4688,6 +4691,12 @@ def selftest() -> int:
           # ★周期の途中（5周）も値にしない（Codex review325）★
           and bool(wording_problems("item_values#d", ["5周"], [{"quote": "CZは5周期/10周期で抽選します"}]))
           and bool(wording_problems("item_values#d", ["1回/5周"], [{"quote": "CZ当選頻度は1回/5周期です"}]))
+          # ★「〜」の範囲の片側・±つきの数も値にしない（Codex review326）★
+          and bool(wording_problems("item_values#d", ["300枚"], [{"quote": "獲得枚数は150〜300枚です"}]))
+          and bool(wording_problems("item_values#d", ["150"], [{"quote": "獲得枚数は150〜300枚です"}]))
+          and bool(wording_problems("item_values#d", ["1/300"], [{"quote": "確率は1/100〜1/300です"}]))
+          and bool(wording_problems("item_values#d", ["500枚"], [{"quote": "差枚は±500枚です"}]))
+          and not wording_problems("item_values#d", ["150〜300枚"], [{"quote": "獲得枚数は150〜300枚です"}])
           and bool(wording_problems("item_values#d", ["2.5枚"], [{"quote": "純増は2.5枚/1Gです"}]))
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
           # ★範囲の判定は「数＋単位」だけ（Codex review317 の2）★

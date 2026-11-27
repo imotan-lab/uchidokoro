@@ -13185,6 +13185,20 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
+        "why": "★確定値：item_values で、「〜」でつながった範囲の片側（150〜300枚 の 300枚）を値にできる★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if _re.search(r\"[〜~～]\\s*$\", q[:mo.start()]) or _re.match(r\"\\s*[〜~～]\", _rest):\n",
+        "after": "            if False:\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：item_values で、±つきの数を符号なしの値として受け取る★",
+        "file": "scripts/confirmed_values.py",
+        "before": "_SIGN_CHARS = \"+＋-−－‐‑–—―▲△±\"",
+        "after": "_SIGN_CHARS = \"+＋-−－‐‑–—―▲△\"",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
         "why": "★チェッカー：まいるの機種でも、早見表の天井（G数）を混ぜる★",
         "file": "scripts/checker_verdict.py",
         "before": "    if unit == \"G\" and (n := _lead_int(v)) is not None:\n",
