@@ -13157,6 +13157,13 @@ MUTATIONS = [
         "run": ["scripts/add_items.py"],
     },
     {
+        "why": "★確定値：item_values で、もっと長い単位の途中（500回転 の 500回）を値にできる★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if _u and _re.match(_UNIT_RUN, q[mo.end():]):\n",
+        "after": "            if False:\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
         "why": "★チェッカー：まいるの機種でも、早見表の天井（G数）を混ぜる★",
         "file": "scripts/checker_verdict.py",
         "before": "    if unit == \"G\" and (n := _lead_int(v)) is not None:\n",
