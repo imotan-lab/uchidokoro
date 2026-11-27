@@ -3570,7 +3570,7 @@
    "title": "スマスロ やじきた道中記参る！ 狙い目・天井・解析まとめ"
   },
   "info": "スマスロAT",
-  "strategy": "算定中（天井は999まいる／6スルー）",
+  "strategy": "675まいる〜（天井999まいる／6スルー）",
   "aliases": [
    "やじきた道中記参る",
    "やじきた",
@@ -3582,7 +3582,23 @@
   "limit": null,
   "tenjo_display": "999まいる",
   "tenjo_games": null,
-  "series": ""
+  "series": "",
+  "checker": {
+   "unit": "まいる",
+   "normal": {
+    "caution": 525,
+    "good": 675,
+    "excellent": 999,
+    "ceiling": 999,
+    "target": 675
+   },
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ]
+  }
  },
  {
   "slug": "world_dai_star",
