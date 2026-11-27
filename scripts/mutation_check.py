@@ -11847,8 +11847,8 @@ MUTATIONS = [
     {
         "why": "★大手との差：置き換えるとき古い欄の数字を「記事にある」に数える（代役）★",
         "file": "scripts/add_items.py",
-        "before": "                    pool = _ds.number_pool(dict(detail, sections=[\n",
-        "after": "                    pool = base_pool or _ds.number_pool(dict(detail, sections=[\n",
+        "before": "                    pool = number_pool(dict(detail, sections=[\n",
+        "after": "                    pool = base_pool or number_pool(dict(detail, sections=[\n",
         "run": ["scripts/add_items.py"],
     },
     {
@@ -13138,22 +13138,22 @@ MUTATIONS = [
     {
         "why": "★確定値：item_values で、複合単位の前半（2.5枚/G の 2.5枚）を値にできる★",
         "file": "scripts/confirmed_values.py",
-        "before": "            if _re.match(r\"\\s*[/／]\", q[mo.end():]):\n",
+        "before": "                if not (_u and _nx and _nx.group(1) == _u):\n",
         "after": "            if False:\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {
         "why": "★確定値：item_values で、複合単位や分数の後ろ半分（2.5枚/1G の 1G）を値にできる★",
         "file": "scripts/confirmed_values.py",
-        "before": "            if _re.search(r\"[/／]\\s*$\", q[:mo.start()]):\n",
+        "before": "                if not (_u and _pv and _pv.group(1) == _u):\n",
         "after": "            if False:\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {
-        "why": "★大手との差：伏せる表示値が無いときも文の空白を詰める（記事と同じ書き方が通らない）★",
+        "why": "★大手との差：記事の側の数を、足す文と違う空白の形で読む（- 500枚 を 500枚 から作れる）★",
         "file": "scripts/add_items.py",
-        "before": "    if not strs:\n        return text                       # ★伏せる表示値が無ければ文はそのまま★",
-        "after": "    if False:\n        return text                       # ★伏せる表示値が無ければ文はそのまま★",
+        "before": "    return _ds.number_pool(_ws(detail), _ws(row))\n",
+        "after": "    return _ds.number_pool(detail, row)\n",
         "run": ["scripts/add_items.py"],
     },
     {

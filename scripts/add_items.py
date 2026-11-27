@@ -147,8 +147,6 @@ def mask_items(text: str, strs) -> str:
     """
     if not isinstance(text, str):
         return text                       # ★文字でないものは形の検査が断る★（ここで例外にしない＝Codex review314 の4）
-    if not strs:
-        return text                       # ★伏せる表示値が無ければ文はそのまま★（記事の側の数の読み方とそろえる＝Codex review319 の2）
     # ★空白の連なりは1つに詰めてから見る★（「-  500枚」の空白2つで符号を飛び越えさせない＝Codex review311 の1）
     #   ★改行しない空白（U+00A0）なども空白として詰める★（Codex review318 の2）
     text = re.sub(r"[\s　]+", " ", text)
@@ -164,6 +162,23 @@ def mask_items(text: str, strs) -> str:
                       % (_ITEM_BEFORE, _ITEM_BEFORE, re.escape(s1), after, unit_tail),
                       lambda mo, _s=s1: mo.group(0) if _ranged(_s, mo) else "〓", text)
     return text
+
+
+def _ws(o):
+    """★文字の空白の連なりを1つの半角にそろえた写し★（記事の側も足す文と同じ形で数を読む＝Codex review319 の2・review320 の1）"""
+    if isinstance(o, str):
+        return re.sub(r"[\s　]+", " ", o)
+    if isinstance(o, list):
+        return [_ws(x) for x in o]
+    if isinstance(o, dict):
+        return {k: _ws(v) for k, v in o.items()}
+    return o
+
+
+def number_pool(detail, row) -> tuple:
+    """★記事と機種行の数★＝空白をそろえてから読む（改行しない空白を挟んだ符号を、足す文と同じに読む）"""
+    import derived_sections as _ds
+    return _ds.number_pool(_ws(detail), _ws(row))
 
 
 def _ranged(s1: str, mo) -> bool:
@@ -297,7 +312,7 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
         return {"problems": p + ["additions は1件以上の並びで書きます"]}
     auto = _pd.is_auto(row or {})
     secs = json.loads(json.dumps(detail.get("sections") or []))
-    base_pool = _ds.number_pool(detail, row or {})
+    base_pool = number_pool(detail, row or {})
     done, new_facts, fix_facts = [], [], {}
     for i, a in enumerate(adds):
         w = f"additions[{i}]"
@@ -339,7 +354,7 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
             if miss:
                 p.append(f"{w}: 確定値の記録がありません・形が違います: {'・'.join(miss)}")
             # ★直すときは、古い行の数字を「記事にある」に数えない★
-            _pool_f = _ds.number_pool(dict(detail, factTable=[x for x in (ft or []) if x not in _same]), row or {}) \
+            _pool_f = number_pool(dict(detail, factTable=[x for x in (ft or []) if x not in _same]), row or {}) \
                 if _mine else base_pool
             made = _numbers_ok([x for x in rw if isinstance(x, str)], _pool_f, rec_toks,
                                item_strings(a.get("fields") or [], confirmed))
@@ -386,7 +401,7 @@ def plan(detail: dict, row: dict, dec: dict, confirmed: dict) -> dict:
                     # ★★置き換えるときは、古い欄の数字を「記事にある」に数えない★★（2026-11-10・代役の指摘＝
                     #   数えると、確定値が直っても古い数字のまま「直した」ことにできた）
                     #   ★この道具で足したほかの欄の数字も数えない★（代役の指摘＝同じ古い確定値から足した別の欄があると抜けた）
-                    pool = _ds.number_pool(dict(detail, sections=[
+                    pool = number_pool(dict(detail, sections=[
                         s for s in (detail.get("sections") or [])
                         if not (isinstance(s, dict) and s.get("title") in (_added_all | {title}))]),
                         row or {})
@@ -1220,6 +1235,14 @@ def selftest() -> int:
     t("　確定値を名指ししない足す文は、記事と同じ書き方（改行しない空白つき）のまま通る（Codex review319 の2）",
       not plan(_detN, row, dec({"op": "add_section", "title": "差枚",
                                 "table": {"headers": ["項目", "値"], "rows": [["差枚", "-\u00a0500枚"]]}}), conf)["problems"])
+    _detP = {"slug": "zzz_g", "sections": [{"title": "天井・恩恵", "body": ["平均差枚は500枚です。"]},
+                                           {"title": "噂・未確定情報", "type": "rumor", "body": ["噂です。"]}]}
+    t("★★記事の 500枚 から、改行しない空白を挟んだ負の値（- 500枚）は作れない★★（Codex review320 の1）",
+      any("無い数字" in x for x in plan(_detP, row, dec({"op": "add_section", "title": "差枚",
+          "table": {"headers": ["項目", "値"], "rows": [["差枚", "-\u00a0500枚"]]}}), conf)["problems"]))
+    _confI8 = dict(conf, **{"item_values#u": {"value": {"values": ["約800枚", "500枚"]}}})
+    t("★★空白を詰めただけで、使っていない表示値を出どころに記録しない★★（Codex review320 の2）",
+      items_used("平均は  500枚です", item_strings(["item_values#u"], _confI8)) == ["500枚"])
     t("★★改行しない空白を挟んだ符号（- 500枚）も足せない★★",
       any("無い数字" in x for x in _ivs("平均差枚は- 500枚です")))
     _dIk = dec({"op": "add_section", "title": "差枚",

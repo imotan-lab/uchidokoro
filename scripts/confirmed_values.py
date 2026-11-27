@@ -1000,12 +1000,17 @@ def _inner_occurrence(token: str, q: str) -> bool:
             # ★数で終わる値の後ろに単位・％が続くなら、単位を落とした値（42%→42）なので数えない★（Codex review315 の1）
             if f1[-1:].isdigit() and _re.match(_ITEM_UNIT_NEXT, q[mo.end():]):
                 continue
-            # ★後ろに「/」が続くなら、複合単位（2.5枚/G）や分数の途中なので数えない★（Codex review318 の3）
+            # ★「/」の前後★＝分数（1/8192 の 8192）・単位の違う複合単位（2.5枚/G・2.5枚/1G）の片側は数えない
+            #   （Codex review318 の3・review319 の1）。★同じ単位を「/」で並べた書き方（100G/200G/300G）は数える★（review320 の3）
+            _u = "" if f1[-1:].isdigit() else f1[-1:]
             if _re.match(r"\s*[/／]", q[mo.end():]):
-                continue
-            # ★前に「/」があるなら、複合単位や分数の後ろ半分（2.5枚/1G の 1G）なので数えない★（Codex review319 の1）
+                _nx = _re.match(r"\s*[/／]\s*[0-9][0-9.,]*([^\s0-9]?)", q[mo.end():])
+                if not (_u and _nx and _nx.group(1) == _u):
+                    continue
             if _re.search(r"[/／]\s*$", q[:mo.start()]):
-                continue
+                _pv = _re.search(r"[0-9]([^\s0-9]?)\s*[/／]\s*$", q[:mo.start()])
+                if not (_u and _pv and _pv.group(1) == _u):
+                    continue
             return True
     return False
 
@@ -4645,6 +4650,11 @@ def selftest() -> int:
           and not wording_problems("item_values#d", ["2.5枚/G"], [{"quote": "純増は2.5枚/Gです"}])
           and bool(wording_problems("item_values#d", ["1G"], [{"quote": "純増は2.5枚/1Gです"}]))
           and bool(wording_problems("item_values#d", ["1G"], [{"quote": "純増は2.5枚 / 1Gです"}]))
+          # ★同じ単位を「/」で並べた書き方は数える★（Codex review320 の3）
+          and not wording_problems("item_values#d", ["300G"], [{"quote": "100G/200G/300GでCZ抽選があります"}])
+          and not wording_problems("item_values#d", ["1500G"], [{"quote": "600G / 1000G / 1500Gから抽選"}])
+          and not wording_problems("item_values#d", ["100G"], [{"quote": "天井は100G/200G/300Gです"}])
+          and bool(wording_problems("item_values#d", ["2.5枚"], [{"quote": "純増は2.5枚/1Gです"}]))
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
           # ★範囲の判定は「数＋単位」だけ（Codex review317 の2）★
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "設定6の差枚は-500枚です"}])

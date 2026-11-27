@@ -1881,7 +1881,7 @@ def _added_numbers_ok(sec: dict, detail: dict, row: dict, slug: str, confirmed=N
             texts += [h for h in (tb.get("headers") or []) if isinstance(h, str)]
             texts += [c for r in (tb.get("rows") or []) if isinstance(r, list) for c in r if isinstance(c, str)]
             texts += [tb.get(k) for k in ("note", "label") if isinstance(tb.get(k), str)]
-    pool = _ds.number_pool(detail, row or {})
+    pool = _ai.number_pool(detail, row or {})   # ★足すときと同じく空白をそろえて読む★（Codex review320 の1）
     rec = set()
     try:
         conf = _cv.for_slug(slug) if confirmed is None else confirmed
