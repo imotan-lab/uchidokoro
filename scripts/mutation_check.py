@@ -13180,7 +13180,7 @@ MUTATIONS = [
     {
         "why": "★確定値：item_values で、単位の続きの字に普通の漢字（程度）まで含める★",
         "file": "scripts/confirmed_values.py",
-        "before": "_UNIT_CONT = r\"[A-Za-zＡ-Ｚａ-ｚ%％‰‱枚回円個秒倍周転点ァ-ヺー]\"\n",
+        "before": "_UNIT_CONT = r\"[A-Za-zＡ-Ｚａ-ｚ%％‰‱枚回円個秒倍周期転点ァ-ヺー]\"\n",
         "after": "_UNIT_CONT = r\"[A-Za-zＡ-Ｚａ-ｚ%％‰‱一-龥ァ-ヺー]\"\n",
         "run": ["scripts/confirmed_values.py"],
     },

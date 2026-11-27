@@ -1027,7 +1027,7 @@ def _inner_occurrence(token: str, q: str) -> bool:
 # ★単位の語をつくる字★＝英字・％・漢字・カタカナ（ひらがな・数字・空白・句読点・括弧は入らない）
 _UNIT_RUN = r"[A-Za-zＡ-Ｚａ-ｚ%％‰‱一-龥ァ-ヺー]"
 # ★値の単位の続きとみなす字★＝単位に使う字だけ（「程度」「獲得」などの漢字は続きと見ない＝Codex review324）
-_UNIT_CONT = r"[A-Za-zＡ-Ｚａ-ｚ%％‰‱枚回円個秒倍周転点ァ-ヺー]"
+_UNIT_CONT = r"[A-Za-zＡ-Ｚａ-ｚ%％‰‱枚回円個秒倍周期転点ァ-ヺー]"
 
 
 # ★数で終わる値のすぐ後ろ（空白を挟んでも）にあれば、その数の単位とみなす字★（add_items._ITEM_UNIT_AFTER と同じ顔ぶれ＋％）
@@ -4685,6 +4685,9 @@ def selftest() -> int:
           # ★「程度」などの普通の語は単位の続きと見ない（Codex review324）★
           and not wording_problems("item_values#d", ["1回/500回転"], [{"quote": "ボーナス当選頻度は1回/500回転程度です"}])
           and not wording_problems("item_values#d", ["1/8192"], [{"quote": "赤BB直撃は1/8192程度です"}])
+          # ★周期の途中（5周）も値にしない（Codex review325）★
+          and bool(wording_problems("item_values#d", ["5周"], [{"quote": "CZは5周期/10周期で抽選します"}]))
+          and bool(wording_problems("item_values#d", ["1回/5周"], [{"quote": "CZ当選頻度は1回/5周期です"}]))
           and bool(wording_problems("item_values#d", ["2.5枚"], [{"quote": "純増は2.5枚/1Gです"}]))
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
           # ★範囲の判定は「数＋単位」だけ（Codex review317 の2）★
