@@ -11531,7 +11531,7 @@
    "title": "バジリスク絆2 天膳 狙い目・天井・期待値まとめ"
   },
   "info": "スマスロAT（BT機）",
-  "strategy": "チェッカー基準 BC間230G〜",
+  "strategy": "チェッカー基準 BC間230G〜 / BCスルー回数 0スルー230G〜／3スルー0G〜",
   "aliases": [
    "バジリスク天膳",
    "絆2天膳",
@@ -11547,6 +11547,11 @@
     {
      "key": "normal",
      "label": "BC間"
+    },
+    {
+     "key": "through",
+     "label": "BCスルー回数",
+     "hasSuru": true
     }
    ],
    "normal": {
@@ -11556,11 +11561,57 @@
     "note": "BC間333G+αで天井（BC当選）。BC7スルー後8回目でBT確定。"
    },
    "through": {
-    "excellent": 7,
-    "good": 3,
-    "caution": 2,
-    "note": "BC7スルー後8回目でBT確定（天井）。BC3スルー以上でG数不問から狙い目。",
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+    "suru": [
+     {
+      "count": 0,
+      "caution": 150,
+      "good": 230,
+      "excellent": 333
+     },
+     {
+      "count": 1,
+      "caution": 150,
+      "good": 190,
+      "excellent": 333
+     },
+     {
+      "count": 2,
+      "caution": 0,
+      "good": 150,
+      "excellent": 333
+     },
+     {
+      "count": 3,
+      "caution": 0,
+      "good": 0,
+      "excellent": 0
+     },
+     {
+      "count": 4,
+      "caution": 0,
+      "good": 0,
+      "excellent": 0
+     },
+     {
+      "count": 5,
+      "caution": 0,
+      "good": 0,
+      "excellent": 0
+     },
+     {
+      "count": 6,
+      "caution": 0,
+      "good": 0,
+      "excellent": 0
+     },
+     {
+      "count": 7,
+      "caution": 0,
+      "good": 0,
+      "excellent": 0
+     }
+    ],
+    "suruMax": 7
    }
   },
   "limit": 333,

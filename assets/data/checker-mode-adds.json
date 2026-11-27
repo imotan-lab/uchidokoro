@@ -60,6 +60,18 @@
    "at": "2026-11-20",
    "seq": 7,
    "had_checker": true
+  },
+  {
+   "slug": "basilisk_tenzen",
+   "mode": "through",
+   "why": "BCスルー回数ごとの打ち出しG数（0スルー230G〜、1・2スルー190G〜、2スルーでBT天井併用なら150G〜、等価は3スルーから0G〜）が出典にあり、2AIで読みが一致した。BC8回目でBT確定のため上限は7スルー",
+   "judges": [
+    "claude",
+    "codex"
+   ],
+   "at": "2026-11-27",
+   "seq": 8,
+   "had_checker": true
   }
  ]
 }
