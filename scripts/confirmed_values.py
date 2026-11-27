@@ -966,7 +966,8 @@ def unsigned_in_quote(token: str, quote: str) -> bool:
     #   値の原形だけを伏せると「−1,500枚」「−42 %」が 1500・42% として残っていた）
     #   ★値そのものに入っている符号つきの部分（500枚±50枚 の ±50）は伏せない★（Codex review327 の2）
     #   ★値の中で数として切れている形だけ★（+500 の中の +50 で引用の +50 を残さない＝Codex review328 の1）
-    masked = _re.sub(r"[%s]\s*[0-9][0-9.,/]*" % _re.escape(_SIGN_CHARS),
+    #   ★符号つきの分数は空白ごと1つとして見る★（+50 / 100＝Codex review331 の2）
+    masked = _re.sub(r"[%s]\s*[0-9][0-9.,]*(?:\s*[/／]\s*[0-9][0-9.,]*)?" % _re.escape(_SIGN_CHARS),
                      lambda mo: mo.group(0) if _re.search(_re.escape(mo.group(0)) + r"(?!\s*[0-9.,/／])", t0) else "〓",
                      page_form(quote))
     # （分数の片側〈1/8192 の 8192〉は _inner_occurrence が「/」の前後で断る＝ここで伏せると守りが二重になる）
@@ -1014,7 +1015,9 @@ def _inner_occurrence(token: str, q: str) -> bool:
             #   ★「〜」と値のあいだに「約」などの短い語があっても同じ★（約150枚〜約300枚＝Codex review327 の1）
             #   ★句読点・空白はまたがない★（月曜〜金曜。300枚 の 300枚 は範囲ではない＝Codex review328 の3）
             #   ★後ろに範囲・誤差が続く数（100-500枚 の 100・500枚±50枚 の 500枚）も片側なので数えない★
-            if _re.search(r"[〜~～]\s?[^0-9〜~～。、,，.．!！?？\s）)」』】\]]{0,3}\s?$", q[:mo.start()]) \
+            #   ★閉じ括弧のあとに空白があれば、そこで切れる★（（月曜〜金曜） 300枚 は範囲ではない・〜（約）300枚 は範囲＝Codex review331 の1）
+            if (_re.search(r"[〜~～]\s?[^0-9〜~～。、,，.．!！?？\s]{0,4}\s?$", q[:mo.start()])
+                    and not _re.search(r"[）)」』】\]]\s+$", q[:mo.start()])) \
                     or _re.match(r"\s*(?:[〜~～±〓]|[-−－‐‑–—―]\s*[0-9])", _rest):
                 continue
             if _re.match(_UNIT_CONT, _rest) and (_re.search(r"[/／]", f1) or _re.match(_UNIT_CONT + r"+\s*[/／]", _rest)):
@@ -4718,6 +4721,9 @@ def selftest() -> int:
           # ★Codex review330★
           and bool(wording_problems("item_values#d", ["50%（+50 / 100）"], [{"quote": "増加率は+50%（+50 / 100）です"}]))
           and not wording_problems("item_values#d", ["300枚"], [{"quote": "対象期間（月曜〜金曜） 300枚プレゼント！"}])
+          # ★Codex review331★
+          and bool(wording_problems("item_values#d", ["300枚"], [{"quote": "獲得枚数は150枚〜（約）300枚です"}]))
+          and not wording_problems("item_values#d", ["50%（+50 / 100）"], [{"quote": "増加率は50%（+50 / 100）です"}])
           and bool(wording_problems("item_values#d", ["2.5枚"], [{"quote": "純増は2.5枚/1Gです"}]))
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
           # ★範囲の判定は「数＋単位」だけ（Codex review317 の2）★

@@ -12907,8 +12907,8 @@ MUTATIONS = [
     {
         "why": "★確定値：item_values で、符号つきの数を続く数ごと伏せない（−1,500枚 から 1500）★",
         "file": "scripts/confirmed_values.py",
-        "before": "    masked = _re.sub(r\"[%s]\\s*[0-9][0-9.,/]*\" % _re.escape(_SIGN_CHARS),\n",
-        "after": "    masked = page_form(quote) if True else _re.sub(r\"[%s]\\s*[0-9][0-9.,/]*\" % _re.escape(_SIGN_CHARS),\n",
+        "before": "    masked = _re.sub(r\"[%s]\\s*[0-9][0-9.,]*(?:\\s*[/／]\\s*[0-9][0-9.,]*)?\" % _re.escape(_SIGN_CHARS),\n",
+        "after": "    masked = page_form(quote) if True else _re.sub(r\"[%s]\\s*[0-9][0-9.,]*(?:\\s*[/／]\\s*[0-9][0-9.,]*)?\" % _re.escape(_SIGN_CHARS),\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -13173,8 +13173,8 @@ MUTATIONS = [
     {
         "why": "★確定値：item_values で、「〜」でつながった範囲の片側（150〜300枚 の 300枚）を値にできる★",
         "file": "scripts/confirmed_values.py",
-        "before": "            if _re.search(r\"[〜~～]\\s?[^0-9〜~～。、,，.．!！?？\\s）)」』】\\]]{0,3}\\s?$\", q[:mo.start()]) \\\n",
-        "after": "            if False \\\n",
+        "before": "            if (_re.search(r\"[〜~～]\\s?[^0-9〜~～。、,，.．!！?？\\s]{0,4}\\s?$\", q[:mo.start()])\n",
+        "after": "            if (False\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -13206,20 +13206,6 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
-        "why": "★確定値：item_values で、「〜」の判定が句読点をまたぐ（月曜〜金曜。300枚 を断る）★",
-        "file": "scripts/confirmed_values.py",
-        "before": "            if _re.search(r\"[〜~～]\\s?[^0-9〜~～。、,，.．!！?？\\s）)」』】\\]]{0,3}\\s?$\", q[:mo.start()]) \\\n",
-        "after": "            if _re.search(r\"[〜~～][^0-9〜~～]{0,3}$\", q[:mo.start()]) \\\n",
-        "run": ["scripts/confirmed_values.py"],
-    },
-    {
-        "why": "★確定値：item_values で、「〜」の後ろの空白で範囲の判定が途切れる（150枚 〜 300枚 の 300枚）★",
-        "file": "scripts/confirmed_values.py",
-        "before": "            if _re.search(r\"[〜~～]\\s?[^0-9〜~～。、,，.．!！?？\\s）)」』】\\]]{0,3}\\s?$\", q[:mo.start()]) \\\n",
-        "after": "            if _re.search(r\"[〜~～][^0-9〜~～。、,，.．!！?？\\s]{0,3}\\s?$\", q[:mo.start()]) \\\n",
-        "run": ["scripts/confirmed_values.py"],
-    },
-    {
         "why": "★確定値：item_values で、値の中の分数の分子（+50/100 の +50）で引用の符号つきの数を残す★",
         "file": "scripts/confirmed_values.py",
         "before": "                     lambda mo: mo.group(0) if _re.search(_re.escape(mo.group(0)) + r\"(?!\\s*[0-9.,/／])\", t0) else \"〓\",\n",
@@ -13234,10 +13220,31 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
-        "why": "★確定値：item_values で、「〜」の判定が閉じ括弧をまたぐ（（月曜〜金曜） 300枚 を断る）★",
+        "why": "★確定値：item_values で、「〜」の判定が句読点・空白をまたぐ（月曜〜金曜。300枚 を断る）★",
         "file": "scripts/confirmed_values.py",
-        "before": "            if _re.search(r\"[〜~～]\\s?[^0-9〜~～。、,，.．!！?？\\s）)」』】\\]]{0,3}\\s?$\", q[:mo.start()]) \\\n",
-        "after": "            if _re.search(r\"[〜~～]\\s?[^0-9〜~～。、,，.．!！?？\\s]{0,3}\\s?$\", q[:mo.start()]) \\\n",
+        "before": "            if (_re.search(r\"[〜~～]\\s?[^0-9〜~～。、,，.．!！?？\\s]{0,4}\\s?$\", q[:mo.start()])\n",
+        "after": "            if (_re.search(r\"[〜~～][^0-9〜~～]{0,4}\\s?$\", q[:mo.start()])\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：item_values で、「〜」の後ろの空白で範囲の判定が途切れる（150枚 〜 300枚 の 300枚）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if (_re.search(r\"[〜~～]\\s?[^0-9〜~～。、,，.．!！?？\\s]{0,4}\\s?$\", q[:mo.start()])\n",
+        "after": "            if (_re.search(r\"[〜~～][^0-9〜~～。、,，.．!！?？\\s]{0,4}$\", q[:mo.start()])\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：item_values で、閉じ括弧のあとの空白でも範囲を切らない（（月曜〜金曜） 300枚 を断る）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "                    and not _re.search(r\"[）)」』】\\]]\\s+$\", q[:mo.start()])) \\\n",
+        "after": "                    and True) \\\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：item_values で、符号つきの分数を空白ごと1つとして見ない（50%（+50 / 100）を断る）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "    masked = _re.sub(r\"[%s]\\s*[0-9][0-9.,]*(?:\\s*[/／]\\s*[0-9][0-9.,]*)?\" % _re.escape(_SIGN_CHARS),\n",
+        "after": "    masked = _re.sub(r\"[%s]\\s*[0-9][0-9.,/]*\" % _re.escape(_SIGN_CHARS),\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {
