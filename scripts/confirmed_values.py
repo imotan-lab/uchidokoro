@@ -967,9 +967,19 @@ def unsigned_in_quote(token: str, quote: str) -> bool:
     #   ★値そのものに入っている符号つきの部分（500枚±50枚 の ±50）は伏せない★（Codex review327 の2）
     #   ★値の中で数として切れている形だけ★（+500 の中の +50 で引用の +50 を残さない＝Codex review328 の1）
     #   ★符号つきの分数は空白ごと1つとして見る★（+50 / 100＝Codex review331 の2）
+    #   ★残すのは、値の中に出てくる回数まで★（引用に同じ符号つきの数が2回あっても、片方は伏せる＝Codex review332 の1）
+    _left = {}
+
+    def _keep(mo):
+        g = mo.group(0)
+        if g not in _left:
+            _left[g] = len(_re.findall(_re.escape(g) + r"(?!\s*[0-9.,/／])", t0))
+        if _left[g] > 0:
+            _left[g] -= 1
+            return g
+        return "〓"
     masked = _re.sub(r"[%s]\s*[0-9][0-9.,]*(?:\s*[/／]\s*[0-9][0-9.,]*)?" % _re.escape(_SIGN_CHARS),
-                     lambda mo: mo.group(0) if _re.search(_re.escape(mo.group(0)) + r"(?!\s*[0-9.,/／])", t0) else "〓",
-                     page_form(quote))
+                     _keep, page_form(quote))
     # （分数の片側〈1/8192 の 8192〉は _inner_occurrence が「/」の前後で断る＝ここで伏せると守りが二重になる）
     # ★★値の前後に、引用の中の字が1つ以上あること★★（Codex review311 の2＝引用を数から始めると、
     #   本文で直前にある負号・分子が見えないまま 500枚 を受け取っていた）＝引用の両端の字を伏せてから探す
@@ -1015,9 +1025,11 @@ def _inner_occurrence(token: str, q: str) -> bool:
             #   ★「〜」と値のあいだに「約」などの短い語があっても同じ★（約150枚〜約300枚＝Codex review327 の1）
             #   ★句読点・空白はまたがない★（月曜〜金曜。300枚 の 300枚 は範囲ではない＝Codex review328 の3）
             #   ★後ろに範囲・誤差が続く数（100-500枚 の 100・500枚±50枚 の 500枚）も片側なので数えない★
-            #   ★閉じ括弧のあとに空白があれば、そこで切れる★（（月曜〜金曜） 300枚 は範囲ではない・〜（約）300枚 は範囲＝Codex review331 の1）
-            if (_re.search(r"[〜~～]\s?[^0-9〜~～。、,，.．!！?？\s]{0,4}\s?$", q[:mo.start()])
-                    and not _re.search(r"[）)」』】\]]\s+$", q[:mo.start()])) \
+            #   ★「〜」より前に開いた括弧が、値の前で閉じていれば範囲ではない★（（月曜〜金曜） 300枚・（月曜〜金曜）300枚 は数える・
+            #   〜（約） 300枚 は範囲＝Codex review331 の1・review332 の2）
+            _gm = _re.search(r"[〜~～](\s?[^0-9〜~～。、,，.．!！?？\s]{0,4}\s?)$", q[:mo.start()])
+            if (_gm and not (_re.search(r"[）)」』】\]]", _gm.group(1))
+                             and not _re.search(r"[（(「『【\[]", _gm.group(1)))) \
                     or _re.match(r"\s*(?:[〜~～±〓]|[-−－‐‑–—―]\s*[0-9])", _rest):
                 continue
             if _re.match(_UNIT_CONT, _rest) and (_re.search(r"[/／]", f1) or _re.match(_UNIT_CONT + r"+\s*[/／]", _rest)):
@@ -4724,6 +4736,10 @@ def selftest() -> int:
           # ★Codex review331★
           and bool(wording_problems("item_values#d", ["300枚"], [{"quote": "獲得枚数は150枚〜（約）300枚です"}]))
           and not wording_problems("item_values#d", ["50%（+50 / 100）"], [{"quote": "増加率は50%（+50 / 100）です"}])
+          # ★Codex review332★
+          and bool(wording_problems("item_values#d", ["50 / 100（前回−50 / 100）"], [{"quote": "変化率は−50 / 100（前回−50 / 100）です"}]))
+          and bool(wording_problems("item_values#d", ["300枚"], [{"quote": "獲得枚数は150枚〜（約） 300枚です"}]))
+          and not wording_problems("item_values#d", ["300枚"], [{"quote": "対象期間（月曜〜金曜）300枚プレゼント！"}])
           and bool(wording_problems("item_values#d", ["2.5枚"], [{"quote": "純増は2.5枚/1Gです"}]))
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
           # ★範囲の判定は「数＋単位」だけ（Codex review317 の2）★
