@@ -12905,13 +12905,6 @@ MUTATIONS = [
         "run": ["scripts/add_items.py"],
     },
     {
-        "why": "★確定値：item_values で、符号つきの数を続く数ごと伏せない（−1,500枚 から 1500）★",
-        "file": "scripts/confirmed_values.py",
-        "before": "    masked = _re.sub(r\"[%s]\\s*[0-9][0-9.,]*(?:\\s*[/／]\\s*[0-9][0-9.,]*)?\" % _re.escape(_SIGN_CHARS),\n",
-        "after": "    masked = page_form(quote) if True else _re.sub(r\"[%s]\\s*[0-9][0-9.,]*(?:\\s*[/／]\\s*[0-9][0-9.,]*)?\" % _re.escape(_SIGN_CHARS),\n",
-        "run": ["scripts/confirmed_values.py"],
-    },
-    {
         "why": "★育成：名指しした確定値が出典から消えても、別の欄の同じ数で足した欄を持ち越す★",
         "file": "scripts/grow_machine.py",
         "before": "    if set(fields) & {str(g) for g in (gone or ())}:\n",
@@ -12973,13 +12966,6 @@ MUTATIONS = [
         "before": "        s1 = re.sub(r\"[\\s　]+\", \" \", s0)\n",
         "after": "        s1 = s0\n",
         "run": ["scripts/add_items.py"],
-    },
-    {
-        "why": "★確定値：item_values で、符号で始まる値が引用の端にあっても受け取る★",
-        "file": "scripts/confirmed_values.py",
-        "before": "        return _inner_occurrence(token, page_form(quote))\n",
-        "after": "        return token_in_quote(token, quote)\n",
-        "run": ["scripts/confirmed_values.py"],
     },
     {
         "why": "★育成：持ち越した欄があっても、項目に結び付かない問題（公式URLが別の機種）で止めない★",
@@ -13185,34 +13171,6 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
-        "why": "★確定値：item_values で、符号つきの分数を空白ごと1つとして見ない（50%（+50 / 100）を断る）★",
-        "file": "scripts/confirmed_values.py",
-        "before": "    masked = _re.sub(r\"[%s]\\s*[0-9][0-9.,]*(?:\\s*[/／]\\s*[0-9][0-9.,]*)?\" % _re.escape(_SIGN_CHARS),\n",
-        "after": "    masked = _re.sub(r\"[%s]\\s*[0-9][0-9.,/]*\" % _re.escape(_SIGN_CHARS),\n",
-        "run": ["scripts/confirmed_values.py"],
-    },
-    {
-        "why": "★確定値：item_values で、値そのものに入っている符号つきの部分まで伏せる（500枚±50枚 が通らない）★",
-        "file": "scripts/confirmed_values.py",
-        "before": "        if _left[g] > 0:\n",
-        "after": "        if False:\n",
-        "run": ["scripts/confirmed_values.py"],
-    },
-    {
-        "why": "★確定値：item_values で、値の中の別の数の一部・分数の分子（+500 の +50・+50 / 100 の +50）で引用の符号つきの数を残す★",
-        "file": "scripts/confirmed_values.py",
-        "before": "            _left[g] = len(_re.findall(_re.escape(g) + r\"(?!\\s*[0-9.,/／])\", t0))\n",
-        "after": "            _left[g] = len(_re.findall(_re.escape(g), t0))\n",
-        "run": ["scripts/confirmed_values.py"],
-    },
-    {
-        "why": "★確定値：item_values で、引用の同じ符号つきの数を、値の中の回数より多く残す（前回−50 / 100）★",
-        "file": "scripts/confirmed_values.py",
-        "before": "            _left[g] -= 1\n",
-        "after": "            pass\n",
-        "run": ["scripts/confirmed_values.py"],
-    },
-    {
         "why": "★確定値：item_values で、「〜」でつながった範囲の片側（150〜300枚 の 300枚）を値にできる★",
         "file": "scripts/confirmed_values.py",
         "before": "            _gm = _re.search(r\"[〜~～](\\s?[^0-9〜~～。、,，.．!！?？\\s]{0,4}\\s?)$\", q[:mo.start()])\n",
@@ -13245,6 +13203,13 @@ MUTATIONS = [
         "file": "scripts/confirmed_values.py",
         "before": "                             and not _re.search(r\"[（(「『【\\[]\", _gm.group(1)))) \\\n",
         "after": "                             and True)) \\\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：item_values で、符号で始まらない値の直前に符号があっても受け取る（−500枚 から 500枚）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if f1[:1] not in _SIGN_CHARS and _re.search(\"[%s]\\\\s*$\" % _re.escape(_SIGN_CHARS), q[:mo.start()]):\n",
+        "after": "            if False:\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {

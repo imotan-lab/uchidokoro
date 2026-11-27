@@ -950,40 +950,17 @@ _SIGN_CHARS = "+＋-−－‐‑–—―▲△±"   # ★±も符号★（Codex
 
 
 def unsigned_in_quote(token: str, quote: str) -> bool:
-    """★その値が、直前に符号の付かない形で引用に在るか★（item_values 用・2026-11-27・Codex review309 の2）
+    """★その値が、引用の中にその値として在るか★（item_values 用・2026-11-27・Codex review309〜333）
 
-    値そのものが符号で始まるなら今までどおり token_in_quote で見る。境目の判定も token_in_quote と同じ。
-    符号と数のあいだの空白は詰めて見る（「− 500枚」も符号つき）。分数は値がその分数を含むときだけ。
-    ★値が引用の端にあれば数えない★（本文で直前・直後にある符号や数が引用に入っていないため）。
+    判定は `_inner_occurrence` の1か所＝値の出現ごとに、引用の端に触れないこと・前後に数の続きが無いこと・
+    ★符号で始まらない値の直前に符号が無いこと★（−500枚 から 500枚・+50枚〜+500枚 から 50枚〜+500枚 を作らせない）・
+    範囲・誤差・分数・単位の違う複合単位の片側でないこと、を引用全体の上で見る。
+    ★伏せてから探すやり方はやめた★（Codex review333＝書き順しだいで正しい値まで伏せていた）。値の中の符号は値の一部として残る。
     """
     t0 = unicodedata.normalize("NFKC", str(token or "")).strip()
     if not t0:
         return False
-    if t0[:1] in _SIGN_CHARS:
-        # ★符号で始まる値も、引用の端にあれば数えない★（Codex review312 の1＝「-500」で切った引用で -5000 を -500 にできた）
-        return _inner_occurrence(token, page_form(quote))
-    # ★符号つきの数は、続く数ごと（桁区切り・小数・分数・「42 %」の空白も）伏せる★（Codex review310 の2＝
-    #   値の原形だけを伏せると「−1,500枚」「−42 %」が 1500・42% として残っていた）
-    #   ★値そのものに入っている符号つきの部分（500枚±50枚 の ±50）は伏せない★（Codex review327 の2）
-    #   ★値の中で数として切れている形だけ★（+500 の中の +50 で引用の +50 を残さない＝Codex review328 の1）
-    #   ★符号つきの分数は空白ごと1つとして見る★（+50 / 100＝Codex review331 の2）
-    #   ★残すのは、値の中に出てくる回数まで★（引用に同じ符号つきの数が2回あっても、片方は伏せる＝Codex review332 の1）
-    _left = {}
-
-    def _keep(mo):
-        g = mo.group(0)
-        if g not in _left:
-            _left[g] = len(_re.findall(_re.escape(g) + r"(?!\s*[0-9.,/／])", t0))
-        if _left[g] > 0:
-            _left[g] -= 1
-            return g
-        return "〓"
-    masked = _re.sub(r"[%s]\s*[0-9][0-9.,]*(?:\s*[/／]\s*[0-9][0-9.,]*)?" % _re.escape(_SIGN_CHARS),
-                     _keep, page_form(quote))
-    # （分数の片側〈1/8192 の 8192〉は _inner_occurrence が「/」の前後で断る＝ここで伏せると守りが二重になる）
-    # ★★値の前後に、引用の中の字が1つ以上あること★★（Codex review311 の2＝引用を数から始めると、
-    #   本文で直前にある負号・分子が見えないまま 500枚 を受け取っていた）＝引用の両端の字を伏せてから探す
-    return _inner_occurrence(token, masked)
+    return _inner_occurrence(token, page_form(quote))
 
 
 def _inner_occurrence(token: str, q: str) -> bool:
@@ -1002,6 +979,9 @@ def _inner_occurrence(token: str, q: str) -> bool:
         for mo in _re.finditer(_re.escape(f1), q):
             if mo.start() < 1 or mo.end() >= len(q):
                 continue                   # ★引用の端に触れる出現は数えない★
+            # ★符号で始まらない値の直前（空白を挟んでも）に符号があれば、符号を落とした値なので数えない★（Codex review310 の2・review333）
+            if f1[:1] not in _SIGN_CHARS and _re.search("[%s]\\s*$" % _re.escape(_SIGN_CHARS), q[:mo.start()]):
+                continue
             if f1[:1].isnumeric() and _num_edge(q, mo.start() - 1, -1):
                 continue                   # ★別の数の一部（左）★
             if f1[-1:].isnumeric() and _num_edge(q, mo.end(), 1):
@@ -4740,6 +4720,8 @@ def selftest() -> int:
           and bool(wording_problems("item_values#d", ["50 / 100（前回−50 / 100）"], [{"quote": "変化率は−50 / 100（前回−50 / 100）です"}]))
           and bool(wording_problems("item_values#d", ["300枚"], [{"quote": "獲得枚数は150枚〜（約） 300枚です"}]))
           and not wording_problems("item_values#d", ["300枚"], [{"quote": "対象期間（月曜〜金曜）300枚プレゼント！"}])
+          # ★Codex review333★
+          and not wording_problems("item_values#d", ["500枚±50枚"], [{"quote": "試算の誤差は±50枚です。平均差枚の目安は500枚±50枚です。"}])
           and bool(wording_problems("item_values#d", ["2.5枚"], [{"quote": "純増は2.5枚/1Gです"}]))
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
           # ★範囲の判定は「数＋単位」だけ（Codex review317 の2）★
