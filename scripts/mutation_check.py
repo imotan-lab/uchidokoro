@@ -12907,15 +12907,8 @@ MUTATIONS = [
     {
         "why": "★確定値：item_values で、符号つきの数を続く数ごと伏せない（−1,500枚 から 1500）★",
         "file": "scripts/confirmed_values.py",
-        "before": "    masked = _re.sub(r\"[%s]\\s*[0-9][0-9.,/]*\" % _re.escape(_SIGN_CHARS), \"〓\", page_form(quote))\n",
-        "after": "    masked = page_form(quote)\n",
-        "run": ["scripts/confirmed_values.py"],
-    },
-    {
-        "why": "★確定値：item_values で、分数の一部（1/8192 の 8192）を値にできる★",
-        "file": "scripts/confirmed_values.py",
-        "before": "                     lambda mo: mo.group(0) if mo.group(0) in t0 else \"〓\", masked)\n",
-        "after": "                     lambda mo: mo.group(0), masked)\n",
+        "before": "    masked = _re.sub(r\"[%s]\\s*[0-9][0-9.,/]*\" % _re.escape(_SIGN_CHARS),\n",
+        "after": "    masked = page_form(quote) if True else _re.sub(r\"[%s]\\s*[0-9][0-9.,/]*\" % _re.escape(_SIGN_CHARS),\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -13014,13 +13007,6 @@ MUTATIONS = [
         "file": "scripts/confirmed_values.py",
         "before": "            if f1[:1].isnumeric() and _num_edge(q, mo.start() - 1, -1):\n                continue                   # ★別の数の一部（左）★\n",
         "after": "            if False:\n                continue                   # ★別の数の一部（左）★\n",
-        "run": ["scripts/confirmed_values.py"],
-    },
-    {
-        "why": "★確定値：item_values で、空白つきの分数（1 / 8192）の一部を値にできる★",
-        "file": "scripts/confirmed_values.py",
-        "before": "    masked = _re.sub(r\"[0-9][0-9.,]*\\s*/\\s*[0-9][0-9.,]*\",\n",
-        "after": "    masked = _re.sub(r\"[0-9][0-9.,]*/[0-9][0-9.,]*\",\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -13187,8 +13173,8 @@ MUTATIONS = [
     {
         "why": "★確定値：item_values で、「〜」でつながった範囲の片側（150〜300枚 の 300枚）を値にできる★",
         "file": "scripts/confirmed_values.py",
-        "before": "            if _re.search(r\"[〜~～]\\s*$\", q[:mo.start()]) or _re.match(r\"\\s*[〜~～]\", _rest):\n",
-        "after": "            if False:\n",
+        "before": "            if _re.search(r\"[〜~～][^0-9〜~～]{0,3}$\", q[:mo.start()]) \\\n",
+        "after": "            if False \\\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -13196,6 +13182,20 @@ MUTATIONS = [
         "file": "scripts/confirmed_values.py",
         "before": "_SIGN_CHARS = \"+＋-−－‐‑–—―▲△±\"",
         "after": "_SIGN_CHARS = \"+＋-−－‐‑–—―▲△\"",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：item_values で、後ろに範囲・誤差が続く数（100-500枚 の 100・500枚±50枚 の 500枚）を値にできる★",
+        "file": "scripts/confirmed_values.py",
+        "before": "                    or _re.match(r\"\\s*(?:[〜~～±〓]|[-−－‐‑–—―]\\s*[0-9])\", _rest):\n",
+        "after": "                    or False:\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：item_values で、値そのものに入っている符号つきの部分まで伏せる（500枚±50枚 が通らない）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "                     lambda mo: mo.group(0) if mo.group(0) in t0 else \"〓\", page_form(quote))\n",
+        "after": "                     lambda mo: \"〓\", page_form(quote))\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {

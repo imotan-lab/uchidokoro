@@ -964,10 +964,10 @@ def unsigned_in_quote(token: str, quote: str) -> bool:
         return _inner_occurrence(token, page_form(quote))
     # ★符号つきの数は、続く数ごと（桁区切り・小数・分数・「42 %」の空白も）伏せる★（Codex review310 の2＝
     #   値の原形だけを伏せると「−1,500枚」「−42 %」が 1500・42% として残っていた）
-    masked = _re.sub(r"[%s]\s*[0-9][0-9.,/]*" % _re.escape(_SIGN_CHARS), "〓", page_form(quote))
-    # ★分数は、値がその分数を含むときだけ残す★（「1/8192」「1 / 8192」から 8192 だけを値にしない）
-    masked = _re.sub(r"[0-9][0-9.,]*\s*/\s*[0-9][0-9.,]*",
-                     lambda mo: mo.group(0) if mo.group(0) in t0 else "〓", masked)
+    #   ★値そのものに入っている符号つきの部分（500枚±50枚 の ±50）は伏せない★（Codex review327 の2）
+    masked = _re.sub(r"[%s]\s*[0-9][0-9.,/]*" % _re.escape(_SIGN_CHARS),
+                     lambda mo: mo.group(0) if mo.group(0) in t0 else "〓", page_form(quote))
+    # （分数の片側〈1/8192 の 8192〉は _inner_occurrence が「/」の前後で断る＝ここで伏せると守りが二重になる）
     # ★★値の前後に、引用の中の字が1つ以上あること★★（Codex review311 の2＝引用を数から始めると、
     #   本文で直前にある負号・分子が見えないまま 500枚 を受け取っていた）＝引用の両端の字を伏せてから探す
     return _inner_occurrence(token, masked)
@@ -1009,7 +1009,10 @@ def _inner_occurrence(token: str, q: str) -> bool:
             # ★「/」のある式では、値の単位の語がそこで終わること★（500回転/1000回転 の 500回・1回/500回転 の 1回/500回＝Codex review323）
             _rest = q[mo.end():]
             # ★「〜」でつながった範囲の片側（150〜300枚 の 300枚）は数えない★（Codex review326 の1）
-            if _re.search(r"[〜~～]\s*$", q[:mo.start()]) or _re.match(r"\s*[〜~～]", _rest):
+            #   ★「〜」と値のあいだに「約」などの短い語があっても同じ★（約150枚〜約300枚＝Codex review327 の1）
+            #   ★後ろに範囲・誤差が続く数（100-500枚 の 100・500枚±50枚 の 500枚）も片側なので数えない★
+            if _re.search(r"[〜~～][^0-9〜~～]{0,3}$", q[:mo.start()]) \
+                    or _re.match(r"\s*(?:[〜~～±〓]|[-−－‐‑–—―]\s*[0-9])", _rest):
                 continue
             if _re.match(_UNIT_CONT, _rest) and (_re.search(r"[/／]", f1) or _re.match(_UNIT_CONT + r"+\s*[/／]", _rest)):
                 continue
@@ -4697,6 +4700,11 @@ def selftest() -> int:
           and bool(wording_problems("item_values#d", ["1/300"], [{"quote": "確率は1/100〜1/300です"}]))
           and bool(wording_problems("item_values#d", ["500枚"], [{"quote": "差枚は±500枚です"}]))
           and not wording_problems("item_values#d", ["150〜300枚"], [{"quote": "獲得枚数は150〜300枚です"}])
+          # ★Codex review327★
+          and bool(wording_problems("item_values#d", ["300枚"], [{"quote": "獲得枚数は約150枚〜約300枚です"}]))
+          and not wording_problems("item_values#d", ["500枚±50枚"], [{"quote": "差枚の目安は500枚±50枚です"}])
+          and bool(wording_problems("item_values#d", ["500枚"], [{"quote": "差枚の目安は500枚±50枚です"}]))
+          and bool(wording_problems("item_values#d", ["100"], [{"quote": "獲得は100-500枚です"}]))
           and bool(wording_problems("item_values#d", ["2.5枚"], [{"quote": "純増は2.5枚/1Gです"}]))
           and not wording_problems("item_values#d", ["-500枚"], [{"quote": "平均差枚は-500枚です"}])
           # ★範囲の判定は「数＋単位」だけ（Codex review317 の2）★
