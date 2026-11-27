@@ -12830,7 +12830,7 @@ MUTATIONS = [
     {
         "why": "★確定値：数を含まない表示値も item_values に受け取る★",
         "file": "scripts/confirmed_values.py",
-        "before": "        \"values\": (_re.compile(r\"^(?=.*[0-9０-９])[^|]{1,40}$\"),\n",
+        "before": "        \"values\": (_re.compile(r\"^(?=.*[0-9０-９])(?![/／])[^|]{1,40}(?<![/／])$\"),\n",
         "after": "        \"values\": (_re.compile(r\"^.{1,40}$\"),\n",
         "run": ["scripts/confirmed_values.py"],
     },
@@ -13173,7 +13173,7 @@ MUTATIONS = [
     {
         "why": "★確定値：item_values で、「〜」でつながった範囲の片側（150〜300枚 の 300枚）を値にできる★",
         "file": "scripts/confirmed_values.py",
-        "before": "            if _re.search(r\"[〜~～][^0-9〜~～]{0,3}$\", q[:mo.start()]) \\\n",
+        "before": "            if _re.search(r\"[〜~～][^0-9〜~～。、,，.．!！?？\\s]{0,3}$\", q[:mo.start()]) \\\n",
         "after": "            if False \\\n",
         "run": ["scripts/confirmed_values.py"],
     },
@@ -13194,8 +13194,22 @@ MUTATIONS = [
     {
         "why": "★確定値：item_values で、値そのものに入っている符号つきの部分まで伏せる（500枚±50枚 が通らない）★",
         "file": "scripts/confirmed_values.py",
-        "before": "                     lambda mo: mo.group(0) if mo.group(0) in t0 else \"〓\", page_form(quote))\n",
-        "after": "                     lambda mo: \"〓\", page_form(quote))\n",
+        "before": "                     lambda mo: mo.group(0) if _re.search(_re.escape(mo.group(0)) + r\"(?![0-9.,])\", t0) else \"〓\",\n",
+        "after": "                     lambda mo: \"〓\" if True else _re.search(_re.escape(mo.group(0)) + r\"(?![0-9.,])\", t0),\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：item_values で、値の中の別の数の一部（+500 の +50）で引用の符号つきの数を残す★",
+        "file": "scripts/confirmed_values.py",
+        "before": "                     lambda mo: mo.group(0) if _re.search(_re.escape(mo.group(0)) + r\"(?![0-9.,])\", t0) else \"〓\",\n",
+        "after": "                     lambda mo: mo.group(0) if _re.search(_re.escape(mo.group(0)), t0) else \"〓\",\n",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値：item_values で、「〜」の判定が句読点をまたぐ（月曜〜金曜。300枚 を断る）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if _re.search(r\"[〜~～][^0-9〜~～。、,，.．!！?？\\s]{0,3}$\", q[:mo.start()]) \\\n",
+        "after": "            if _re.search(r\"[〜~～][^0-9〜~～]{0,3}$\", q[:mo.start()]) \\\n",
         "run": ["scripts/confirmed_values.py"],
     },
     {
