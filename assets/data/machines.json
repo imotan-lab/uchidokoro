@@ -10609,7 +10609,11 @@
    "title": "GOD EATER",
    "kind": "ゲーム",
    "search": "ゴッドイーター ゲーム"
-  }
+  },
+  "release_date": "2024-07-22",
+  "tenjo_games": 1000,
+  "tenjo_display": "通常1000G+α（設定変更後・漆黒の捕喰者終了後は600G+α）",
+  "series": "ゴッドイーター"
  },
  {
   "slug": "okidoki_black",
