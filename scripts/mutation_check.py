@@ -11383,6 +11383,20 @@ MUTATIONS = [
         "run": ["scripts/machine_turn.py"],
     },
     {
+        "why": "★担当機種：始めた日が古くそろい済みの点検表へ書き足せる（kabaneri の🟡が毎朝続いた形）★",
+        "file": "scripts/machine_turn.py",
+        "before": "    if str(tr.get(\"started\") or \"\") < _lo and not missing(slug, tr, rows):\n",
+        "after": "    if False:\n",
+        "run": ["scripts/machine_turn.py"],
+    },
+    {
+        "why": "★担当機種：そろっていない古い点検表まで書き足しを断る（前の日の担当を仕上げられない）★",
+        "file": "scripts/machine_turn.py",
+        "before": "    if str(tr.get(\"started\") or \"\") < _lo and not missing(slug, tr, rows):\n",
+        "after": "    if str(tr.get(\"started\") or \"\") < _lo:\n",
+        "run": ["scripts/machine_turn.py"],
+    },
+    {
         "why": "★担当機種：LATER・NA に理由を求めない★",
         "file": "scripts/machine_turn.py",
         "before": "    if result in NEED_NOTE and len(str(note or \"\").strip()) < 10:\n",

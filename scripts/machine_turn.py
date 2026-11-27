@@ -207,6 +207,13 @@ def done(slug: str, item: str, result: str, note: str = "", rows=None, today: st
     tr = d["turns"].get(slug)
     if tr is None:
         raise TurnError(f"{slug} の担当が始まっていません（先に --start）")
+    # ★★始めた日が REVIEW_TURN_DAYS 日より古く、そろい済みの点検表へは書き足さない★★（2026-11-27）＝
+    #   11/24 の朝タスクが kabaneri の --start を抜かし、11/18 の点検表へ書き足した。中身は済んでいるのに
+    #   見張り番は「点検表を始めていない」と読み、🟡が毎朝続いた。★そろっていない古い表は続きを書ける★
+    _lo = (_dt.date.fromisoformat(today) - _dt.timedelta(days=REVIEW_TURN_DAYS)).isoformat()
+    if str(tr.get("started") or "") < _lo and not missing(slug, tr, rows):
+        raise TurnError(f"{slug} の担当は {tr.get('started')} に始めてそろい済みです。今日の担当なら先に --start {slug}"
+                        "（古い点検表へ書き足すと、見張り番が「点検表を始めていない」と読みます）")
     tr["items"][item] = {"at": today, "result": result, "note": str(note or "").strip()[:300]}
     if codex_limited:
         tr["items"][item]["codex_limited"] = True
@@ -527,6 +534,26 @@ def selftest() -> int:
     except TurnError:
         _wrong = True
     t("　その機種に無い項目は記録できない（昔の機種の derived）", _wrong)
+    done("zzz_l", "article", "FIXED", rows=rows, today="2026-11-12", path=p)
+    _stale_why = ""
+    try:
+        done("zzz_l", "article", "FIXED", rows=rows, today="2026-11-17", path=p)
+        _stale = False
+    except TurnError as e:
+        _stale, _stale_why = True, str(e)
+    t("★★始めた日が3日より古く、そろい済みの点検表へは書き足せない（先に --start）★★（2026-11-27・kabaneri）"
+      "＝3日以内なら書ける・★断った理由まで見る★",
+      _stale and "--start" in _stale_why and read(p)["turns"]["zzz_l"]["items"]["article"]["at"] == "2026-11-12")
+    _p6 = p + ".old.json"
+    with io.open(_p6, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"turns": {"zzz_l": {"started": "2026-11-01", "items": {
+            k: {"at": "2026-11-01", "result": "OK", "note": ""} for k in kl if k != "mode"}}}}))
+    try:
+        done("zzz_l", "mode", "FIXED", rows=rows, today="2026-11-17", path=_p6)
+        _cont = read(_p6)["turns"]["zzz_l"]["items"]["mode"]["at"] == "2026-11-17"
+    except TurnError:
+        _cont = False
+    t("　古くても、そろっていない点検表は続きを書ける（前の日の担当を仕上げる）", _cont)
     start("zzz_l", today="2026-11-17", path=p)
     t("★次に担当が回ってきたら、全項目を数え直す★（あとから足した項目は、足した日より前に始めた担当には数えない）",
       len(pending(rows, p)[0][1]) == len([k for k in kl if not (k in ITEM_SINCE and "2026-11-17" < ITEM_SINCE[k])]))
