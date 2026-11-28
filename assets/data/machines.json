@@ -6021,7 +6021,9 @@
       "note": "7.0枚交換ならBIG後550Gから。"
      }
     },
-    "note": "BIG後天井799G+α。"
+    "note": "BIG後天井799G+α。",
+    "ceiling": 799,
+    "target": 480
    },
    "reg": {
     "excellent": 600,
@@ -6053,7 +6055,9 @@
       "note": "7.0枚交換ならREG後400Gから。"
      }
     },
-    "note": "REG後天井649G+α。BIG後より150G短縮。"
+    "note": "REG後天井649G+α。BIG後より150G短縮。",
+    "ceiling": 649,
+    "target": 330
    },
    "reset": {
     "excellent": 450,
@@ -6086,7 +6090,8 @@
      }
     },
     "note": "リセット時は天井499G+αに短縮。"
-   }
+   },
+   "coinRate": 32
   },
   "limit": 799,
   "tenjo_display": "BIG後799G+α／REG後649G+α",
